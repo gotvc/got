@@ -11,3 +11,7 @@ func IDFromBytes(x []byte) ID {
 	copy(id[:], x)
 	return id
 }
+
+func NewMem() *blobs.MemStore {
+	return blobs.NewMem()
+}

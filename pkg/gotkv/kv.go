@@ -2,47 +2,44 @@ package gotkv
 
 import (
 	"context"
+	"errors"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
 )
 
+var (
+	ErrKeyNotFound = errors.New("key not found")
+)
+
+func errInvalidNode() error {
+	return errors.New("invalid node")
+}
+
 type Store = cadata.Store
 type ID = cadata.ID
 
-type Node struct {
-	Entries  []Entry
-	Children []ChildRef
-}
-
-type ChildRef struct {
-	Prefix []byte
-	Ref    Ref
-}
-
-type Entry struct {
-	Suffix []byte
-	Value  []byte
-}
-
 func New(ctx context.Context, store Store) (*Ref, error) {
-	return PostNode(ctx, store, &Node{})
+	n := newChildNode()
+	return postNode(ctx, store, n)
 }
 
-func PostNode(ctx context.Context, store Store, n *Node) (*Ref, error) {
-	panic("")
-}
-
-func GetNode(ctx context.Context, store Store, ref Ref) (*Node, error) {
-	panic("")
-}
-
-// Put, puts the data from reader at offest, overwriting what's there
-func Put(ctx context.Context, s Store, x Ref, key, data []byte) (*Ref, error) {
-	panic("")
+// Put adds an entry for key -> value overwriting what's there
+func Put(ctx context.Context, s Store, x Ref, key, value []byte) (*Ref, error) {
+	return put(ctx, s, x, key, value)
 }
 
 func GetF(ctx context.Context, s Store, x Ref, key []byte, fn func(data []byte) error) error {
-	panic("")
+	return getF(ctx, s, x, key, fn)
+}
+
+func Get(ctx context.Context, s Store, x Ref, key []byte) (ret []byte, err error) {
+	err = GetF(ctx, s, x, key, func(v []byte) error {
+		if v != nil {
+			ret = append([]byte{}, v...)
+		}
+		return nil
+	})
+	return ret, err
 }
 
 func MaxKey(ctx context.Context, s Store, x Ref, prefix []byte) ([]byte, error) {
@@ -59,7 +56,7 @@ func DeletePrefix(ctx context.Context, s Store, x Ref, prefix []byte) (*Ref, err
 	panic("")
 }
 
-// Prefix returns a new KV with all the keys from x prefixed with prefix
-func Prefix(ctx context.Context, s Store, x Ref, prefix []byte) (*Ref, error) {
+// AddPrefix returns a new KV with all the keys from x prefixed with prefix
+func AddPrefix(ctx context.Context, s Store, x Ref, prefix []byte) (*Ref, error) {
 	panic("")
 }

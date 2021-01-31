@@ -27,8 +27,15 @@ func (p *Part) Marshal() []byte {
 	return data
 }
 
+func ParsePart(data []byte) (*Part, error) {
+	var p Part
+	if err := json.Unmarshal(data, &p); err != nil {
+		return nil, err
+	}
+	return &p, nil
+}
+
 func New(ctx context.Context, s Store) (*Ref, error) {
-	return gotkv.New(ctx, s)
 	x, err := gotkv.New(ctx, s)
 	if err != nil {
 		return nil, err
@@ -128,4 +135,13 @@ func appendUint64(buf []byte, n uint64) []byte {
 	nbytes := [8]byte{}
 	binary.BigEndian.PutUint64(nbytes[:], n)
 	return append(buf, nbytes[:]...)
+}
+
+func splitKey(k []byte) (p string, offset uint64, err error) {
+	if len(k) < 8 {
+		return "", 0, errors.Errorf("key too short")
+	}
+	p = string(k[:len(k)-8])
+	offset = binary.BigEndian.Uint64(k[len(k)-8:])
+	return p, offset, nil
 }

@@ -8,8 +8,11 @@ require (
 	github.com/inet256/inet256 v0.0.0-20210104021234-0c1ccf946885
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v0.0.5
+	github.com/stretchr/testify v1.6.1
+	github.com/tinylib/msgp v1.1.5 // indirect
 	go.etcd.io/bbolt v1.3.4
 	golang.org/x/crypto v0.0.0-20201117144127-c1f2f97bffc9
-	golang.org/x/net v0.0.0-20201110031124-69a78807bb2b
-	golang.org/x/sync v0.0.0-20190911185100-cd5d95a43a6e
+	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
+	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
+	zombiezen.com/go/capnproto2 v2.18.0+incompatible
 )
