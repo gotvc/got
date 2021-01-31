@@ -6,7 +6,7 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type ReduceFunc func(key []byte, lv, rv []byte) ([]byte, error)
+type ReduceFunc = func(key []byte, lv, rv []byte) ([]byte, error)
 
 // Reduce performs a key wise reduction on xs.
 // ReduceFunc is assumed to be associative, and non-commutative
@@ -46,4 +46,24 @@ func reduce2(ctx context.Context, s Store, left, right Ref, fn ReduceFunc) (*Ref
 	rightIter := NewIterator(ctx, s, right)
 	panic(leftIter)
 	panic(rightIter)
+}
+
+var _ ReduceFunc = Concat
+
+// Concat is a Reducer which concatenates values
+func Concat(k, l, r []byte) ([]byte, error) {
+	x := make([]byte, 0, len(l)+len(r))
+	x = append(x, l...)
+	x = append(x, r...)
+	return x, nil
+}
+
+// TakeRight is a Reducer which always takes the right value.
+func TakeRight(k, l, r []byte) ([]byte, error) {
+	return r, nil
+}
+
+// TakeLeft is a Reducer which always takes the left value.
+func TakeLeft(k, l, r []byte) ([]byte, error) {
+	return l, nil
 }

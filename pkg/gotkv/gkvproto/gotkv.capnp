@@ -10,8 +10,8 @@ struct Ref {
 
 struct Node {
     union {
-        child @0: Child;
-        parent @1: Parent;
+        leaf @0: Leaf;
+        tree @1: Tree;
     }
 }
 
@@ -20,16 +20,16 @@ struct Entry {
     value @1: Data;
 }
 
-struct Child {
+struct Leaf {
     entries @0: List(Entry);
 }
 
 struct ChildRef {
-    commonPrefix @0: Data;
+    prefix @0: Data;
     ref @1: Ref;
 }
 
-struct Parent {
-    entry @0: Entry;
+struct Tree {
+    entries @0: List(Entry);
     children @1: List(ChildRef);
 }

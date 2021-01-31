@@ -2,6 +2,7 @@ package gotkv
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
@@ -25,6 +26,29 @@ func TestPutGet(t *testing.T) {
 	actualValue, err := Get(ctx, s, *x, key)
 	require.NoError(t, err)
 	require.Equal(t, value, actualValue)
+}
+
+func TestPutGetMany(t *testing.T) {
+	ctx, s, x := testSetup(t)
+	const N = 200
+	makeKey := func(i int) []byte {
+		return []byte(fmt.Sprintf("%d-key", i))
+	}
+	makeValue := func(i int) []byte {
+		return []byte(fmt.Sprintf("%d-value", i))
+	}
+	for i := 0; i < N; i++ {
+		key, value := makeKey(i), makeValue(i)
+		var err error
+		x, err = Put(ctx, s, *x, key, value)
+		require.NoError(t, err)
+	}
+	for i := 0; i < N; i++ {
+		key, value := makeKey(i), makeValue(i)
+		actualValue, err := Get(ctx, s, *x, key)
+		require.NoError(t, err)
+		require.Equal(t, string(value), string(actualValue))
+	}
 }
 
 func testSetup(t *testing.T) (context.Context, cadata.Store, *Ref) {

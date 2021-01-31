@@ -3,37 +3,16 @@ package gotfs
 import (
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"io"
 
 	"github.com/brendoncarroll/got/pkg/gotkv"
 	"github.com/pkg/errors"
 )
 
+const maxPartSize = 1 << 15
+
 type Ref = gotkv.Ref
 type Store = gotkv.Store
-
-type Part struct {
-	Ref    Ref
-	Offset uint32
-	Length uint32
-}
-
-func (p *Part) Marshal() []byte {
-	data, err := json.Marshal(p)
-	if err != nil {
-		panic(err)
-	}
-	return data
-}
-
-func ParsePart(data []byte) (*Part, error) {
-	var p Part
-	if err := json.Unmarshal(data, &p); err != nil {
-		return nil, err
-	}
-	return &p, nil
-}
 
 func New(ctx context.Context, s Store) (*Ref, error) {
 	x, err := gotkv.New(ctx, s)
@@ -74,9 +53,8 @@ func CreateFileFrom(ctx context.Context, s Store, x Ref, p string, r io.Reader) 
 			Offset: 0,
 			Length: uint32(n),
 		}
-		key := []byte(p)
-		key = appendUint64(key, total)
-		x2, err = gotkv.Put(ctx, s, *x2, key, part.Marshal())
+		key := makePartKey(p, total)
+		x2, err = gotkv.Put(ctx, s, *x2, key, part.marshal())
 		if err != nil {
 			return nil, err
 		}
@@ -104,12 +82,36 @@ func SizeOfFile(ctx context.Context, s Store, x Ref, p string) (int, error) {
 	return int(offset) + size, nil
 }
 
-func ReadFileAt(ctx context.Context, s Store, x Ref, p string, start uint64, data []byte) (int, error) {
-	md, err := GetFileMetadata(ctx, s, x, p)
+func ReadFileAt(ctx context.Context, s Store, x Ref, p string, start uint64, buf []byte) (int, error) {
+	_, err := GetFileMetadata(ctx, s, x, p)
 	if err != nil {
 		return 0, err
 	}
-	panic(md)
+	offset := start - (start % maxPartSize)
+	key := makePartKey(p, offset)
+	var n int
+	err = gotkv.GetF(ctx, s, x, key, func(data []byte) error {
+		part, err := parsePart(data)
+		if err != nil {
+			return err
+		}
+		return gotkv.GetRawF(ctx, s, part.Ref, func(data []byte) error {
+			begin := int(part.Offset)
+			if begin >= len(data) {
+				return errors.Errorf("incorrect offset")
+			}
+			end := int(part.Offset + part.Length)
+			if end > len(data) {
+				return errors.Errorf("incorrect length")
+			}
+			n = copy(buf, data[begin:end])
+			return nil
+		})
+	})
+	if err == gotkv.ErrKeyNotFound {
+		err = io.EOF
+	}
+	return n, err
 }
 
 func WriteFileAt(ctx context.Context, s Store, x Ref, p string, start uint64, data []byte) (*Ref, error) {
@@ -144,4 +146,10 @@ func splitKey(k []byte) (p string, offset uint64, err error) {
 	p = string(k[:len(k)-8])
 	offset = binary.BigEndian.Uint64(k[len(k)-8:])
 	return p, offset, nil
+}
+
+func makePartKey(p string, offset uint64) []byte {
+	x := []byte(p)
+	x = appendUint64(x, offset)
+	return x
 }

@@ -6,6 +6,10 @@ type Store = blobs.Store
 
 type ID = blobs.ID
 
+func Hash(data []byte) blobs.ID {
+	return blobs.Hash(data)
+}
+
 func IDFromBytes(x []byte) ID {
 	id := ID{}
 	copy(id[:], x)

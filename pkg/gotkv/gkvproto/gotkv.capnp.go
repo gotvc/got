@@ -92,17 +92,17 @@ type Node struct{ capnp.Struct }
 type Node_Which uint16
 
 const (
-	Node_Which_child  Node_Which = 0
-	Node_Which_parent Node_Which = 1
+	Node_Which_leaf Node_Which = 0
+	Node_Which_tree Node_Which = 1
 )
 
 func (w Node_Which) String() string {
-	const s = "childparent"
+	const s = "leaftree"
 	switch w {
-	case Node_Which_child:
-		return s[0:5]
-	case Node_Which_parent:
-		return s[5:11]
+	case Node_Which_leaf:
+		return s[0:4]
+	case Node_Which_tree:
+		return s[4:8]
 
 	}
 	return "Node_Which(" + strconv.FormatUint(uint64(w), 10) + ")"
@@ -134,15 +134,15 @@ func (s Node) String() string {
 func (s Node) Which() Node_Which {
 	return Node_Which(s.Struct.Uint16(0))
 }
-func (s Node) Child() (Child, error) {
+func (s Node) Leaf() (Leaf, error) {
 	if s.Struct.Uint16(0) != 0 {
-		panic("Which() != child")
+		panic("Which() != leaf")
 	}
 	p, err := s.Struct.Ptr(0)
-	return Child{Struct: p.Struct()}, err
+	return Leaf{Struct: p.Struct()}, err
 }
 
-func (s Node) HasChild() bool {
+func (s Node) HasLeaf() bool {
 	if s.Struct.Uint16(0) != 0 {
 		return false
 	}
@@ -150,32 +150,32 @@ func (s Node) HasChild() bool {
 	return p.IsValid() || err != nil
 }
 
-func (s Node) SetChild(v Child) error {
+func (s Node) SetLeaf(v Leaf) error {
 	s.Struct.SetUint16(0, 0)
 	return s.Struct.SetPtr(0, v.Struct.ToPtr())
 }
 
-// NewChild sets the child field to a newly
-// allocated Child struct, preferring placement in s's segment.
-func (s Node) NewChild() (Child, error) {
+// NewLeaf sets the leaf field to a newly
+// allocated Leaf struct, preferring placement in s's segment.
+func (s Node) NewLeaf() (Leaf, error) {
 	s.Struct.SetUint16(0, 0)
-	ss, err := NewChild(s.Struct.Segment())
+	ss, err := NewLeaf(s.Struct.Segment())
 	if err != nil {
-		return Child{}, err
+		return Leaf{}, err
 	}
 	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
 	return ss, err
 }
 
-func (s Node) Parent() (Parent, error) {
+func (s Node) Tree() (Tree, error) {
 	if s.Struct.Uint16(0) != 1 {
-		panic("Which() != parent")
+		panic("Which() != tree")
 	}
 	p, err := s.Struct.Ptr(0)
-	return Parent{Struct: p.Struct()}, err
+	return Tree{Struct: p.Struct()}, err
 }
 
-func (s Node) HasParent() bool {
+func (s Node) HasTree() bool {
 	if s.Struct.Uint16(0) != 1 {
 		return false
 	}
@@ -183,18 +183,18 @@ func (s Node) HasParent() bool {
 	return p.IsValid() || err != nil
 }
 
-func (s Node) SetParent(v Parent) error {
+func (s Node) SetTree(v Tree) error {
 	s.Struct.SetUint16(0, 1)
 	return s.Struct.SetPtr(0, v.Struct.ToPtr())
 }
 
-// NewParent sets the parent field to a newly
-// allocated Parent struct, preferring placement in s's segment.
-func (s Node) NewParent() (Parent, error) {
+// NewTree sets the tree field to a newly
+// allocated Tree struct, preferring placement in s's segment.
+func (s Node) NewTree() (Tree, error) {
 	s.Struct.SetUint16(0, 1)
-	ss, err := NewParent(s.Struct.Segment())
+	ss, err := NewTree(s.Struct.Segment())
 	if err != nil {
-		return Parent{}, err
+		return Tree{}, err
 	}
 	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
 	return ss, err
@@ -226,12 +226,12 @@ func (p Node_Promise) Struct() (Node, error) {
 	return Node{s}, err
 }
 
-func (p Node_Promise) Child() Child_Promise {
-	return Child_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
+func (p Node_Promise) Leaf() Leaf_Promise {
+	return Leaf_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
 }
 
-func (p Node_Promise) Parent() Parent_Promise {
-	return Parent_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
+func (p Node_Promise) Tree() Tree_Promise {
+	return Tree_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
 }
 
 type Entry struct{ capnp.Struct }
@@ -313,48 +313,48 @@ func (p Entry_Promise) Struct() (Entry, error) {
 	return Entry{s}, err
 }
 
-type Child struct{ capnp.Struct }
+type Leaf struct{ capnp.Struct }
 
-// Child_TypeID is the unique identifier for the type Child.
-const Child_TypeID = 0xb5f5b4a9f6f67b57
+// Leaf_TypeID is the unique identifier for the type Leaf.
+const Leaf_TypeID = 0xb14340ce42286afd
 
-func NewChild(s *capnp.Segment) (Child, error) {
+func NewLeaf(s *capnp.Segment) (Leaf, error) {
 	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
-	return Child{st}, err
+	return Leaf{st}, err
 }
 
-func NewRootChild(s *capnp.Segment) (Child, error) {
+func NewRootLeaf(s *capnp.Segment) (Leaf, error) {
 	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1})
-	return Child{st}, err
+	return Leaf{st}, err
 }
 
-func ReadRootChild(msg *capnp.Message) (Child, error) {
+func ReadRootLeaf(msg *capnp.Message) (Leaf, error) {
 	root, err := msg.RootPtr()
-	return Child{root.Struct()}, err
+	return Leaf{root.Struct()}, err
 }
 
-func (s Child) String() string {
-	str, _ := text.Marshal(0xb5f5b4a9f6f67b57, s.Struct)
+func (s Leaf) String() string {
+	str, _ := text.Marshal(0xb14340ce42286afd, s.Struct)
 	return str
 }
 
-func (s Child) Entries() (Entry_List, error) {
+func (s Leaf) Entries() (Entry_List, error) {
 	p, err := s.Struct.Ptr(0)
 	return Entry_List{List: p.List()}, err
 }
 
-func (s Child) HasEntries() bool {
+func (s Leaf) HasEntries() bool {
 	p, err := s.Struct.Ptr(0)
 	return p.IsValid() || err != nil
 }
 
-func (s Child) SetEntries(v Entry_List) error {
+func (s Leaf) SetEntries(v Entry_List) error {
 	return s.Struct.SetPtr(0, v.List.ToPtr())
 }
 
 // NewEntries sets the entries field to a newly
 // allocated Entry_List, preferring placement in s's segment.
-func (s Child) NewEntries(n int32) (Entry_List, error) {
+func (s Leaf) NewEntries(n int32) (Entry_List, error) {
 	l, err := NewEntry_List(s.Struct.Segment(), n)
 	if err != nil {
 		return Entry_List{}, err
@@ -363,30 +363,30 @@ func (s Child) NewEntries(n int32) (Entry_List, error) {
 	return l, err
 }
 
-// Child_List is a list of Child.
-type Child_List struct{ capnp.List }
+// Leaf_List is a list of Leaf.
+type Leaf_List struct{ capnp.List }
 
-// NewChild creates a new list of Child.
-func NewChild_List(s *capnp.Segment, sz int32) (Child_List, error) {
+// NewLeaf creates a new list of Leaf.
+func NewLeaf_List(s *capnp.Segment, sz int32) (Leaf_List, error) {
 	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 1}, sz)
-	return Child_List{l}, err
+	return Leaf_List{l}, err
 }
 
-func (s Child_List) At(i int) Child { return Child{s.List.Struct(i)} }
+func (s Leaf_List) At(i int) Leaf { return Leaf{s.List.Struct(i)} }
 
-func (s Child_List) Set(i int, v Child) error { return s.List.SetStruct(i, v.Struct) }
+func (s Leaf_List) Set(i int, v Leaf) error { return s.List.SetStruct(i, v.Struct) }
 
-func (s Child_List) String() string {
-	str, _ := text.MarshalList(0xb5f5b4a9f6f67b57, s.List)
+func (s Leaf_List) String() string {
+	str, _ := text.MarshalList(0xb14340ce42286afd, s.List)
 	return str
 }
 
-// Child_Promise is a wrapper for a Child promised by a client call.
-type Child_Promise struct{ *capnp.Pipeline }
+// Leaf_Promise is a wrapper for a Leaf promised by a client call.
+type Leaf_Promise struct{ *capnp.Pipeline }
 
-func (p Child_Promise) Struct() (Child, error) {
+func (p Leaf_Promise) Struct() (Leaf, error) {
 	s, err := p.Pipeline.Struct()
-	return Child{s}, err
+	return Leaf{s}, err
 }
 
 type ChildRef struct{ capnp.Struct }
@@ -414,23 +414,23 @@ func (s ChildRef) String() string {
 	return str
 }
 
-func (s ChildRef) CommonPrefix() ([]byte, error) {
+func (s ChildRef) Prefix() ([]byte, error) {
 	p, err := s.Struct.Ptr(0)
 	return []byte(p.Data()), err
 }
 
-func (s ChildRef) HasCommonPrefix() bool {
+func (s ChildRef) HasPrefix() bool {
 	p, err := s.Struct.Ptr(0)
 	return p.IsValid() || err != nil
 }
 
-func (s ChildRef) SetCommonPrefix(v []byte) error {
+func (s ChildRef) SetPrefix(v []byte) error {
 	return s.Struct.SetData(0, v)
 }
 
-func (s ChildRef) Ref() ([]byte, error) {
+func (s ChildRef) Ref() (Ref, error) {
 	p, err := s.Struct.Ptr(1)
-	return []byte(p.Data()), err
+	return Ref{Struct: p.Struct()}, err
 }
 
 func (s ChildRef) HasRef() bool {
@@ -438,8 +438,19 @@ func (s ChildRef) HasRef() bool {
 	return p.IsValid() || err != nil
 }
 
-func (s ChildRef) SetRef(v []byte) error {
-	return s.Struct.SetData(1, v)
+func (s ChildRef) SetRef(v Ref) error {
+	return s.Struct.SetPtr(1, v.Struct.ToPtr())
+}
+
+// NewRef sets the ref field to a newly
+// allocated Ref struct, preferring placement in s's segment.
+func (s ChildRef) NewRef() (Ref, error) {
+	ss, err := NewRef(s.Struct.Segment())
+	if err != nil {
+		return Ref{}, err
+	}
+	err = s.Struct.SetPtr(1, ss.Struct.ToPtr())
+	return ss, err
 }
 
 // ChildRef_List is a list of ChildRef.
@@ -468,73 +479,77 @@ func (p ChildRef_Promise) Struct() (ChildRef, error) {
 	return ChildRef{s}, err
 }
 
-type Parent struct{ capnp.Struct }
+func (p ChildRef_Promise) Ref() Ref_Promise {
+	return Ref_Promise{Pipeline: p.Pipeline.GetPipeline(1)}
+}
 
-// Parent_TypeID is the unique identifier for the type Parent.
-const Parent_TypeID = 0x9650c61a6432125a
+type Tree struct{ capnp.Struct }
 
-func NewParent(s *capnp.Segment) (Parent, error) {
+// Tree_TypeID is the unique identifier for the type Tree.
+const Tree_TypeID = 0xdf88e570869a255c
+
+func NewTree(s *capnp.Segment) (Tree, error) {
 	st, err := capnp.NewStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2})
-	return Parent{st}, err
+	return Tree{st}, err
 }
 
-func NewRootParent(s *capnp.Segment) (Parent, error) {
+func NewRootTree(s *capnp.Segment) (Tree, error) {
 	st, err := capnp.NewRootStruct(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2})
-	return Parent{st}, err
+	return Tree{st}, err
 }
 
-func ReadRootParent(msg *capnp.Message) (Parent, error) {
+func ReadRootTree(msg *capnp.Message) (Tree, error) {
 	root, err := msg.RootPtr()
-	return Parent{root.Struct()}, err
+	return Tree{root.Struct()}, err
 }
 
-func (s Parent) String() string {
-	str, _ := text.Marshal(0x9650c61a6432125a, s.Struct)
+func (s Tree) String() string {
+	str, _ := text.Marshal(0xdf88e570869a255c, s.Struct)
 	return str
 }
 
-func (s Parent) Entry() (Entry, error) {
+func (s Tree) Entries() (Entry_List, error) {
 	p, err := s.Struct.Ptr(0)
-	return Entry{Struct: p.Struct()}, err
+	return Entry_List{List: p.List()}, err
 }
 
-func (s Parent) HasEntry() bool {
+func (s Tree) HasEntries() bool {
 	p, err := s.Struct.Ptr(0)
 	return p.IsValid() || err != nil
 }
 
-func (s Parent) SetEntry(v Entry) error {
-	return s.Struct.SetPtr(0, v.Struct.ToPtr())
+func (s Tree) SetEntries(v Entry_List) error {
+	return s.Struct.SetPtr(0, v.List.ToPtr())
 }
 
-// NewEntry sets the entry field to a newly
-// allocated Entry struct, preferring placement in s's segment.
-func (s Parent) NewEntry() (Entry, error) {
-	ss, err := NewEntry(s.Struct.Segment())
+// NewEntries sets the entries field to a newly
+// allocated Entry_List, preferring placement in s's segment.
+func (s Tree) NewEntries(n int32) (Entry_List, error) {
+	l, err := NewEntry_List(s.Struct.Segment(), n)
 	if err != nil {
-		return Entry{}, err
+		return Entry_List{}, err
 	}
-	err = s.Struct.SetPtr(0, ss.Struct.ToPtr())
-	return ss, err
+	err = s.Struct.SetPtr(0, l.List.ToPtr())
+	return l, err
 }
 
-func (s Parent) Children() (ChildRef_List, error) {
+func (s Tree) Children() (ChildRef_List, error) {
 	p, err := s.Struct.Ptr(1)
 	return ChildRef_List{List: p.List()}, err
 }
 
-func (s Parent) HasChildren() bool {
+func (s Tree) HasChildren() bool {
 	p, err := s.Struct.Ptr(1)
 	return p.IsValid() || err != nil
 }
 
-func (s Parent) SetChildren(v ChildRef_List) error {
+func (s Tree) SetChildren(v ChildRef_List) error {
 	return s.Struct.SetPtr(1, v.List.ToPtr())
 }
 
 // NewChildren sets the children field to a newly
 // allocated ChildRef_List, preferring placement in s's segment.
-func (s Parent) NewChildren(n int32) (ChildRef_List, error) {
+func (s Tree) NewChildren(n int32) (ChildRef_List, error) {
 	l, err := NewChildRef_List(s.Struct.Segment(), n)
 	if err != nil {
 		return ChildRef_List{}, err
@@ -543,74 +558,69 @@ func (s Parent) NewChildren(n int32) (ChildRef_List, error) {
 	return l, err
 }
 
-// Parent_List is a list of Parent.
-type Parent_List struct{ capnp.List }
+// Tree_List is a list of Tree.
+type Tree_List struct{ capnp.List }
 
-// NewParent creates a new list of Parent.
-func NewParent_List(s *capnp.Segment, sz int32) (Parent_List, error) {
+// NewTree creates a new list of Tree.
+func NewTree_List(s *capnp.Segment, sz int32) (Tree_List, error) {
 	l, err := capnp.NewCompositeList(s, capnp.ObjectSize{DataSize: 0, PointerCount: 2}, sz)
-	return Parent_List{l}, err
+	return Tree_List{l}, err
 }
 
-func (s Parent_List) At(i int) Parent { return Parent{s.List.Struct(i)} }
+func (s Tree_List) At(i int) Tree { return Tree{s.List.Struct(i)} }
 
-func (s Parent_List) Set(i int, v Parent) error { return s.List.SetStruct(i, v.Struct) }
+func (s Tree_List) Set(i int, v Tree) error { return s.List.SetStruct(i, v.Struct) }
 
-func (s Parent_List) String() string {
-	str, _ := text.MarshalList(0x9650c61a6432125a, s.List)
+func (s Tree_List) String() string {
+	str, _ := text.MarshalList(0xdf88e570869a255c, s.List)
 	return str
 }
 
-// Parent_Promise is a wrapper for a Parent promised by a client call.
-type Parent_Promise struct{ *capnp.Pipeline }
+// Tree_Promise is a wrapper for a Tree promised by a client call.
+type Tree_Promise struct{ *capnp.Pipeline }
 
-func (p Parent_Promise) Struct() (Parent, error) {
+func (p Tree_Promise) Struct() (Tree, error) {
 	s, err := p.Pipeline.Struct()
-	return Parent{s}, err
+	return Tree{s}, err
 }
 
-func (p Parent_Promise) Entry() Entry_Promise {
-	return Entry_Promise{Pipeline: p.Pipeline.GetPipeline(0)}
-}
-
-const schema_bf31eccc5703e3c8 = "x\xda\x8c\x91?h\x13Q\x1c\xc7\xbf\xdfw\x89\xe9\x90" +
-	"\xd8\xbb\x9c\xa0\xb8\x04C\x85\x16\xaa$AD\xba\xd4?" +
-	"\x14EP\xef\x15\xa4(\x88\x84\xdc\x8b9\x93\\\xc2\xf5" +
-	"l\x0d\x0e\x82\xa3c\x07\x87\x0e.Nu\xb6\x83\x83\xe8" +
-	"\xa2\xf8o\x16\x9d\x1d\x15\x8aC\x0b\"\xf4\xe4\xaeI." +
-	"I#8\xdd\x8f\xc7\xf7>\xbf\xcf\xfb\xbeB\x96gE" +
-	"1yX\x00\xf2H\xf2@p3[\xb2\x8f\xbe\xb3\x9e" +
-	"\xc0H3x\xff][\xfa\xfc\xb3\xf8\x1aI\x91\x02\x8c" +
-	"_\xeb\xc6\xef\xf0\xbb\xbd\x0a\xfe)\xdc.|\xd9X~" +
-	"*\xd3\x1c\xc8-0%\x00S\xf1\xb1\xd9d\x0a0\x1d" +
-	"\xae\x82\xc1\xc5ko\xb6\x9c\xda\xd6\xb31P\xf3-\x1f" +
-	"\x99\x1f\xb87\x85\xd9\xa5\x07;;\x1b/\xb67G\xb2" +
-	"Q\xe2\x98X3g\xa2\xbf\x8e\x8by0\xa8\xac\x9f\xfe" +
-	"\xe1\xcd\xee~\x1a\xc7\xbd.\xd6\xcc[\xd1tC\x84\xdc" +
-	"\x8f\xe7\xae\xd4\xa6\xb3_\xbf\x8d\xcbn\x8a\xe7\xe6\xabh" +
-	"z\x19e\xef\xb4\xfc\xfa\xca\xc9J\x99m\xb7=g\x95" +
-	"=\xa5\xb9\xbeE\xca\x09-\x01$\x08\x183%@N" +
-	"i\x94\x05A\x83<\xc4\xf0\xf0\xc4e@\xcej\x94\x97" +
-	"\x04s\xca\xf5\xbd\x0e\xf5\xd8\x11\xa4\x1e:\xd7\x9c\x86\xed" +
-	")\x17\x00\x0f\x82\x96F\xea\xb1\x1c\x18\x1e\x0e\x0b\\m" +
-	"\xd9\x0a\xe8\xeeO\x07\xc1>\x81\x0cw\x83\xae\xc1\x1c " +
-	"\xa75\xcaS\x82\xb9h\x13\xf5\xb8\xd1=\x83\xf9v\xd9" +
-	"S\xaeO=~\xeb\xae\xda\xd0\xd6EU\xc5\xc8\x9d\xf3" +
-	"\xe3\xee\x9c\x8f7\xa6*\x8e\xcd\x0c\x043`\xcaV\xf5" +
-	"\xde<\x0c\xbePs\x1a\xb4Ct\xa2\x8f\xce\x9c\x07\xe4" +
-	"\x84F9%\xf80l\xceQ\xcbq;\x83\x15\xeek" +
-	"g\xc1\xf5=v\xfe\xc7\xb44`ZW\x9d\x9e]n" +
-	"\xa5\xdc\xb8\xa7\xfe\xed:i/\xaa\xea\x08\xffn\x8c\xea" +
-	"\xf3\x8b\xf9\xee\xeb\x9f\x11\x0c*\xadf\xb3\xe5Z\x1e&" +
-	"U\xd5\xb9\xdf/\xc5S\xd5\xde\xfc7\x00\x00\xff\xff@" +
-	"\xe3\xd4\xc2"
+const schema_bf31eccc5703e3c8 = "x\xda\x8c\x92?h\x13a\x18\xc6\x9f\xe7\xbb\xc4\xeb\x90" +
+	"\x98\x9c\xa7\xe8&\x94\x0aQTR\x11\x87\xa24M\x09" +
+	"\xa2\xf8\xa7_Qt\x10$\xe4\xbe3gB\x1a\xbe\xc6" +
+	"j'\xc1A$\xa3c\x07A\xc4\xa1\x82C\x07g\x1d" +
+	"E\xc5Qt\x12\x91\x0e\xa2P\x1c\x1cD\xec\xc9\xdd5" +
+	"\xb9\xa4\x1c\x98\xed\xe1\xe5\xc7\xf3<\xdf\xfb~\xc5=," +
+	"\x89\xc9\xf4^\x01\xc8}\xe9\x1d\x7f\x8a\xd7\x8b\x1fV\x17" +
+	"\x1f\xc9\x0c\xe9\xbf\xfej\\y\xf7c\xf2%*4\x05" +
+	"`\xfd\xecZ\xbfM\xc0\xfau\x1b\xf4O_|\xb5\xe1" +
+	"\xd57\x9e\xc0\xca\x0c\x90ia\x02\xb6\xe4=\xfb2#" +
+	"\x15\xb0\x7fo\x16\xca\xefK\xb3k\xdb\xd8\x90x\xce\xae" +
+	"\xfd\"Tk\x9c\x06\xfd\xda\xca\x89\xef\xfa\xf0\xe6\xdb$" +
+	"\xdf/|h\x7f\x0b\xd9\xf5\xd0\xf7\xcd\xcc\xf9za\xd7" +
+	"\xc7OI\xec\x8cxf\x9f\x09UE\x04\xec\xb5\x03+" +
+	"\xf7\xdb\xeb\x0f>'\xb1\x8fE\xd7^\x0d\xd5\xd3\x90\xbd" +
+	"\xb1\xd0i,\x1d\xadU\xd9n\xb5\xa7.,8\x0a\x98" +
+	"#\xe5\x98\x91\xca\xf8~\x8a\x80u\xf0\x10 '\x0c\xca" +
+	"\xa2`\x96\x9b\xfen\x06\xd3#\xc1\xb4`P\x1e\x17\xcc" +
+	"5U\xd5e>~;\xc8<\x98\xebh\xa5\x98\x8f\xeb" +
+	"D\xe3\xe1\xc8y\xe5\xf6\x02\x81(o<\xce\xb3\xc8\xad" +
+	"\xb8\xf18\xce\xacy\x0e\xb3\x10\xcc\x82\xa6\xa3\x1a==" +
+	"l|NU\xdd\xe8-\xa9\xbeu\xb6\x0c\xc81\x83r" +
+	"B\xf0\xaeju\xb4\xa7\x16\xb9\x13\x9c3\xc8||\x0e" +
+	"0\x18\x0e\xdbUZ\x1d\xcd\xe5Q\x9a\x1e\x1bh\xdaP" +
+	"\xcb\xbdv\xfb\x97\xaa\xcd[*\xb9\xebl\xddk\xe6\x9c" +
+	"y\xe5n\xf3\x9f\xfa\xcf&\xa6\xdbZ\xb9\xde\x9d\xfe2" +
+	"\xb4\x0a\xce\xd0\xff\xaeI\xfb\xbe\xa4U|\xe2^Ny" +
+	"+\xa74\x90s\xea, O\x1a\x94WG\xd9U\xad" +
+	"\xee5\x1d\xadZ\x00b\xa8\xffg#\xe8_\x00\x00\x00" +
+	"\xff\xff\\\x88\xd6V"
 
 func init() {
 	schemas.Register(schema_bf31eccc5703e3c8,
-		0x9650c61a6432125a,
 		0x9e73a9d630005f30,
 		0xa3ef6869efc04f47,
-		0xb5f5b4a9f6f67b57,
+		0xb14340ce42286afd,
 		0xcbfe2c72eb369a63,
-		0xd9d81228684d41ca)
+		0xd9d81228684d41ca,
+		0xdf88e570869a255c)
 }

@@ -6,9 +6,7 @@ import (
 
 	capnp "zombiezen.com/go/capnproto2"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/gotkv/gkvproto"
-	"github.com/pkg/errors"
 )
 
 type Node = gkvproto.Node
@@ -23,15 +21,6 @@ func newSegment() *capnp.Segment {
 	return seg
 }
 
-func newChildNode() Node {
-	n := newNode()
-	_, err := n.NewChild()
-	if err != nil {
-		panic(err)
-	}
-	return n
-}
-
 func newNode() Node {
 	seg := newSegment()
 	n, err := gkvproto.NewRootNode(seg)
@@ -41,6 +30,7 @@ func newNode() Node {
 	return n
 }
 
+// postNode attempts to post a node, without splitting.
 func postNode(ctx context.Context, store Store, n Node) (*Ref, error) {
 	buf := bytes.NewBuffer(nil)
 	if err := capnp.NewEncoder(buf).Encode(n.Segment().Message()); err != nil {
@@ -49,179 +39,59 @@ func postNode(ctx context.Context, store Store, n Node) (*Ref, error) {
 	return PostRaw(ctx, store, buf.Bytes())
 }
 
-func getNodeF(ctx context.Context, s Store, ref Ref, fn func(Node) error) error {
-	return GetRawF(ctx, s, ref, func(data []byte) error {
-		msg, err := capnp.Unmarshal(data)
+func nodeLCP(n Node) ([]byte, error) {
+	var lcp []byte
+	switch n.Which() {
+	case gkvproto.Node_Which_leaf:
+		leaf, err := n.Leaf()
 		if err != nil {
-			return errors.Wrap(err, "during unmarshal")
+			return nil, err
 		}
-		n, err := gkvproto.ReadRootNode(msg)
+		ents, err := leaf.Entries()
 		if err != nil {
-			return err
+			return nil, err
 		}
-		return fn(n)
-	})
-}
-
-func getF(ctx context.Context, s Store, x Ref, key []byte, fn func([]byte) error) error {
-	return getNodeF(ctx, s, x, func(n Node) error {
-		switch n.Which() {
-		case gkvproto.Node_Which_child:
-			child, err := n.Child()
-			if err != nil {
-				return err
-			}
-			ents, err := child.Entries()
-			if err != nil {
-				return err
-			}
-			for i := 0; i < ents.Len(); i++ {
-				ent := ents.At(i)
-				if c, err := compareEntWithKey(ent, key); err != nil {
-					return err
-				} else if c == 0 {
-					entValue, err := ent.Value()
-					if err != nil {
-						return err
-					}
-					return fn(entValue)
-				}
-			}
-			return ErrKeyNotFound
-		case gkvproto.Node_Which_parent:
-			par, err := n.Parent()
-			if err != nil {
-				return err
-			}
-			ent, err := par.Entry()
-			if err != nil {
-				return err
-			}
-			c, err := compareEntWithKey(ent, key)
-			if err != nil {
-				return err
-			}
-			if c == 0 {
-				v, err := ent.Value()
-				if err != nil {
-					return err
-				}
-				return fn(v)
-			}
-			return ErrKeyNotFound
-		default:
-			return errInvalidNode()
-		}
-	})
-}
-
-func put(ctx context.Context, s Store, x Ref, key, value []byte) (*Ref, error) {
-	var y *Ref
-	err := getNodeF(ctx, s, x, func(n Node) error {
-		n2 := newNode()
-		switch n.Which() {
-		case gkvproto.Node_Which_child:
-			curChild, err := n.Child()
-			if err != nil {
-				return err
-			}
-			newChild, err := n2.NewChild()
-			if err != nil {
-				return err
-			}
-			if err := childPut(curChild, newChild, key, value); err != nil {
-				return err
-			}
-			ref, err := postNode(ctx, s, n2)
-			if err != nil {
-				return err
-			}
-			y = ref
+		err = forEachEntries(ents, func(k, _ []byte) error {
+			lcp = longestCommonPrefix(lcp, k)
 			return nil
-		case gkvproto.Node_Which_parent:
-			panic("not implemented")
-
-		default:
-			n2 := newNode()
-			curChild, err := n.NewChild()
-			if err != nil {
-				return err
-			}
-			newChild, err := n2.NewChild()
-			if err != nil {
-				return err
-			}
-			if err := childPut(curChild, newChild, key, value); err != nil {
-				return err
-			}
-			ref, err := postNode(ctx, s, n2)
-			if err != nil {
-				return err
-			}
-			y = ref
-			return nil
+		})
+		if err != nil {
+			return nil, err
 		}
-	})
-	if err != nil {
-		return nil, err
+	case gkvproto.Node_Which_tree:
+		tree, err := n.Tree()
+		if err != nil {
+			return nil, err
+		}
+		children, err := tree.Children()
+		if err != nil {
+			return nil, err
+		}
+		for i := 0; i < children.Len(); i++ {
+			k, err := children.At(i).Prefix()
+			if err != nil {
+				return nil, err
+			}
+			lcp = longestCommonPrefix(lcp, k)
+		}
 	}
-	return y, nil
+	return lcp, nil
 }
 
-func childPut(base, n gkvproto.Child, key, value []byte) error {
-	baseEnts, err := base.Entries()
-	if err != nil {
-		return err
+func longestCommonPrefix(lcp, x []byte) []byte {
+	if lcp == nil {
+		return x
 	}
-	// determine size of entries
-	l := baseEnts.Len()
-	if yes, err := entsContainKey(baseEnts, key); err != nil {
-		return err
-	} else if !yes {
-		l++
+	l := len(lcp)
+	if len(x) < l {
+		l = len(x)
 	}
-	ents, err := n.NewEntries(int32(l))
-	if err != nil {
-		return err
-	}
-	var i, j int
-	// copy lower entries
-	for ; i < baseEnts.Len(); i++ {
-		ent := baseEnts.At(i)
-		cmp, err := compareEntWithKey(ent, key)
-		if err != nil {
-			return err
-		}
-		if cmp >= 0 {
-			if cmp == 0 {
-				i++
-			}
-			break
-		}
-		if err := ents.Set(j, ent); err != nil {
-			return err
-		}
-		j++
-	}
-	// copy entry
-	newEnt, err := gkvproto.NewEntry(newSegment())
-	if err != nil {
-		return err
-	}
-	newEnt.SetKey(key)
-	newEnt.SetValue(value)
-	if err := ents.Set(j, newEnt); err != nil {
-		return err
-	}
-	j++
-	// copy upper entries
-	for ; i < baseEnts.Len(); i++ {
-		ent := baseEnts.At(i)
-		if err := ents.Set(j, ent); err != nil {
-			return err
+	for i := 0; i < l; i++ {
+		if lcp[i] != x[i] {
+			return lcp[:i]
 		}
 	}
-	return nil
+	return []byte{}
 }
 
 func compareEntWithKey(ent gkvproto.Entry, key []byte) (int, error) {
@@ -243,45 +113,4 @@ func entsContainKey(ents gkvproto.Entry_List, key []byte) (bool, error) {
 		}
 	}
 	return false, nil
-}
-
-func splitChild(child gkvproto.Child) (left, right *gkvproto.Child, err error) {
-	panic("")
-}
-
-func nodeForEach(ctx context.Context, s cadata.Store, n Node, fn func(k, v []byte) error) error {
-	switch n.Which() {
-	case gkvproto.Node_Which_child:
-		child, err := n.Child()
-		if err != nil {
-			return err
-		}
-		return childForEach(child, fn)
-	case gkvproto.Node_Which_parent:
-		panic("")
-	default:
-		return errInvalidNode()
-	}
-}
-
-func childForEach(x gkvproto.Child, fn func(k, v []byte) error) error {
-	ents, err := x.Entries()
-	if err != nil {
-		return err
-	}
-	for i := 0; i < ents.Len(); i++ {
-		ent := ents.At(i)
-		k, err := ent.Key()
-		if err != nil {
-			return err
-		}
-		v, err := ent.Value()
-		if err != nil {
-			return err
-		}
-		if err := fn(k, v); err != nil {
-			return err
-		}
-	}
-	return nil
 }

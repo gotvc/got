@@ -19,13 +19,13 @@ type Store = cadata.Store
 type ID = cadata.ID
 
 func New(ctx context.Context, store Store) (*Ref, error) {
-	n := newChildNode()
+	n := newNode()
 	return postNode(ctx, store, n)
 }
 
 // Put adds an entry for key -> value overwriting what's there
 func Put(ctx context.Context, s Store, x Ref, key, value []byte) (*Ref, error) {
-	return put(ctx, s, x, key, value)
+	return putRoot(ctx, s, x, key, value)
 }
 
 func GetF(ctx context.Context, s Store, x Ref, key []byte, fn func(data []byte) error) error {
