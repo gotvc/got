@@ -1,8 +1,10 @@
 package gotfs
 
 import (
+	"bytes"
 	"context"
 	"io"
+	"log"
 	"math"
 	"os"
 	"strings"
@@ -120,17 +122,26 @@ func newDirIterator(ctx context.Context, s Store, x Ref, p string) (*dirIterator
 func (di *dirIterator) Next(ctx context.Context, fn func(de DirEnt) error) error {
 	var dirEnt DirEnt
 	var seekPast []byte
+	log.Println(string(di.iter.LastKey()))
 	if err := di.iter.Next(func(key, value []byte) error {
-		md, err := parseMetadata(value)
+		log.Println(string(key), string(value))
+		o, err := parseObject(value)
 		if err != nil {
 			return err
 		}
-		dirEnt = DirEnt{
-			Name: string(key[len(di.p):]),
-			Mode: md.Mode,
+		if o.Metadata == nil {
+			panic("")
 		}
 		seekPast = append([]byte{}, key...)
 		seekPast = appendUint64(seekPast, math.MaxUint64)
+		if !bytes.HasPrefix(key, []byte(di.p+"/")) {
+			return nil
+		}
+		md := o.Metadata
+		dirEnt = DirEnt{
+			Name: string(key[len(di.p)+1:]),
+			Mode: md.Mode,
+		}
 		return nil
 	}); err != nil {
 		return err

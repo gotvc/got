@@ -8,13 +8,14 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/c/httpcell"
 	"github.com/brendoncarroll/got/pkg/cells"
+	"github.com/brendoncarroll/got/pkg/gotnet"
 	"github.com/pkg/errors"
 )
 
 type StoreSpec struct {
-	Local     *LocalStoreSpec     `json:"local"`
-	Blobcache *BlobcacheStoreSpec `json:"blobcache"`
-	Peer      *PeerStoreSpec      `json:"peer"`
+	Local     *LocalStoreSpec     `json:"local,omitempty"`
+	Blobcache *BlobcacheStoreSpec `json:"blobcache,omitempty"`
+	Peer      *PeerStoreSpec      `json:"peer,omitempty"`
 }
 
 type LocalStoreSpec struct{}
@@ -22,6 +23,14 @@ type LocalStoreSpec struct{}
 type BlobcacheStoreSpec struct {
 	Addr     string             `json:"addr"`
 	PinSetID blobcache.PinSetID `json:"pinset_id"`
+}
+
+func DefaultBlobcacheSpec() StoreSpec {
+	return StoreSpec{
+		Blobcache: &BlobcacheStoreSpec{
+			Addr: "127.0.0.1:6025",
+		},
+	}
 }
 
 type PeerStoreSpec struct {
@@ -35,6 +44,23 @@ func (r *Repo) MakeStore(spec StoreSpec) (Store, error) {
 	default:
 		return nil, errors.Errorf("empty store spec")
 	}
+}
+
+type EnvSpec struct {
+	Cell  CellSpec  `json:"cell"`
+	Store StoreSpec `json:"store"`
+}
+
+func (r *Repo) MakeEnv(k string, spec EnvSpec) (*Env, error) {
+	cell, err := r.MakeCell(k, spec.Cell)
+	if err != nil {
+		return nil, err
+	}
+	store, err := r.MakeStore(spec.Store)
+	if err != nil {
+		return nil, err
+	}
+	return &Env{Cell: cell, Store: store}, nil
 }
 
 type CellSpec struct {
@@ -115,7 +141,7 @@ func (r *Repo) MakeCell(k string, spec CellSpec) (Cell, error) {
 	}
 }
 
-type CellSpaceSpec struct {
+type RealmSpec struct {
 	Peer *PeerCellSpaceSpec
 }
 
@@ -123,8 +149,14 @@ type PeerCellSpaceSpec struct {
 	ID p2p.PeerID `json:"id"`
 }
 
-func (r *Repo) MakeCellSpace(spec CellSpaceSpec) (CellSpace, error) {
+func (r *Repo) MakeRealm(spec RealmSpec) (Realm, error) {
 	switch {
+	case spec.Peer != nil:
+		swarm, err := r.getSwarm()
+		if err != nil {
+			return nil, err
+		}
+		return gotnet.NewClient(swarm, spec.Peer.ID), nil
 	default:
 		return nil, errors.Errorf("empty cell space spec")
 	}

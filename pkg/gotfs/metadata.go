@@ -6,7 +6,13 @@ import (
 	"os"
 
 	"github.com/brendoncarroll/got/pkg/gotkv"
+	"github.com/pkg/errors"
 )
+
+type Object struct {
+	Metadata *Metadata `json:"md,omitempty"`
+	Part     *Part     `json:"part,omitempty"`
+}
 
 type Metadata struct {
 	Mode   os.FileMode       `json:"mode"`
@@ -14,7 +20,8 @@ type Metadata struct {
 }
 
 func PutMetadata(ctx context.Context, s Store, x Ref, p string, md Metadata) (*Ref, error) {
-	data, err := json.Marshal(md)
+	o := Object{Metadata: &md}
+	data, err := json.Marshal(o)
 	if err != nil {
 		return nil, err
 	}
@@ -23,22 +30,35 @@ func PutMetadata(ctx context.Context, s Store, x Ref, p string, md Metadata) (*R
 
 func GetMetadata(ctx context.Context, s Store, x Ref, p string) (*Metadata, error) {
 	p = cleanPath(p)
-	var md Metadata
+	var md *Metadata
 	err := gotkv.GetF(ctx, s, x, []byte(p), func(data []byte) error {
-		return json.Unmarshal(data, &md)
+		var err error
+		md, err = parseMetadata(data)
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return &md, nil
+	return md, nil
+}
+
+func parseObject(data []byte) (*Object, error) {
+	var o Object
+	if err := json.Unmarshal(data, &o); err != nil {
+		return nil, err
+	}
+	return &o, nil
 }
 
 func parseMetadata(data []byte) (*Metadata, error) {
-	md := &Metadata{}
-	if err := json.Unmarshal(data, md); err != nil {
+	o, err := parseObject(data)
+	if err != nil {
 		return nil, err
 	}
-	return md, nil
+	if o.Metadata == nil {
+		return nil, errors.Errorf("object does not contain metadata")
+	}
+	return o.Metadata, nil
 }
 
 func checkNoEntry(ctx context.Context, s Store, x Ref, p string) error {

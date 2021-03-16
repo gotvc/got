@@ -34,14 +34,14 @@ For example: The file "test.txt" with 10B of data in it would produce the follow
 ```
                             -> Metadata (dir)
 test.txt                    -> Metadata (file)
-test.txt<64 bits of 0s>     -> Part
+test.txt/<64 bits of 0s>     -> Part
 ```
 
 A directory is stored as a metadata object.
 ```
                                     -> Metadata (dir)
-mydir                               -> Metadata (dir)
-mydir/myfile.txt                    -> Metadata (file)
+mydir/                               -> Metadata (dir)
+mydir/myfile.txt/                    -> Metadata (file)
 mydir/myfile.txt/<64 bits of 0s>    -> Part
 ```
 

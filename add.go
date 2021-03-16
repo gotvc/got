@@ -24,13 +24,13 @@ func (r *Repo) Add(ctx context.Context, p string) error {
 		return err
 	}
 	defer rc.Close()
-	return r.ApplyStaging(ctx, func(x Ref) (*Ref, error) {
-		return gotfs.CreateFileFrom(ctx, r.GetStore(), x, p, rc)
+	return r.ApplyStaging(ctx, func(s Store, x Ref) (*Ref, error) {
+		return gotfs.CreateFileFrom(ctx, s, x, p, rc)
 	})
 }
 
 func (r *Repo) Remove(ctx context.Context, p string) error {
-	return r.ApplyStaging(ctx, func(x Ref) (*Ref, error) {
-		return gotfs.RemoveAll(ctx, r.GetStore(), x, p)
+	return r.ApplyStaging(ctx, func(s Store, x Ref) (*Ref, error) {
+		return gotfs.RemoveAll(ctx, s, x, p)
 	})
 }

@@ -15,6 +15,7 @@ type FS interface {
 	ReadDir(p string, fn func(finfo os.FileInfo) error) error
 	Open(p string) (io.ReadCloser, error)
 	WriteFile(p string, r io.Reader) error
+	Remove(p string) error
 }
 
 type dirFS struct {
@@ -69,6 +70,11 @@ func (fs dirFS) WriteFile(p string, r io.Reader) error {
 	return f.Close()
 }
 
+func (fs dirFS) Remove(p string) error {
+	p = filepath.Join(fs.root, p)
+	return os.Remove(p)
+}
+
 type filterFS struct {
 	x    FS
 	pred func(string) bool
@@ -107,6 +113,13 @@ func (fs filterFS) WriteFile(p string, r io.Reader) error {
 		return errors.Errorf("cannot write to path %s", p)
 	}
 	return fs.x.WriteFile(p, r)
+}
+
+func (fs filterFS) Remove(p string) error {
+	if !fs.pred(p) {
+		return errors.Errorf("cannot remove path %s", p)
+	}
+	return fs.x.Remove(p)
 }
 
 func ReadFile(fs FS, p string) ([]byte, error) {

@@ -13,19 +13,7 @@ Config is stored under the `.got` directory
 .got/
     config
     {
-        "store": {
-            local: {},
-            blobcache: {
-                addr: "http://127.0.0.1:8025",
-                setID: 1234,
-            },
-            chain: {
-                write: [],
-                read: []
-            },
-            peer: "<peer_id>",
-        },
-        "cell_spaces": [
+        "realms": [
             {},
         ]
     }
@@ -49,4 +37,4 @@ Config is stored under the `.got` directory
     local.db
 ```
 
-CellSpaces are layered, with the cell-specs config directory being the highest priority CellSpace.
+Realms are layered, with the cell-specs config directory being the highest priority Realm.

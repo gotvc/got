@@ -6,13 +6,17 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/go-p2p"
+	"github.com/brendoncarroll/go-p2p/s/peerswarm"
 	"github.com/brendoncarroll/got/pkg/fs"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotnet"
+	"github.com/brendoncarroll/got/pkg/realms"
+	"github.com/inet256/inet256/pkg/inet256p2p"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -38,9 +42,12 @@ type Repo struct {
 	policy     *Policy
 	privateKey p2p.PrivateKey
 
-	store      blobs.Store
-	cellSpaces []CellSpace
+	realms     []Realm
 	workingDir FS
+	esd        *envSpecDir
+
+	mu     sync.Mutex
+	stores map[StoreSpec]blobs.Store
 }
 
 func InitRepo(p string) error {
@@ -99,10 +106,15 @@ func OpenRepo(p string) (*Repo, error) {
 		workingDir: fs.NewFilterFS(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
+		stores: make(map[StoreSpec]Store),
 	}
-	if _, err := r.GetCellSpace().Get(context.TODO(), nameMaster); os.IsNotExist(err) {
-		spec := CellSpec{Local: &LocalCellSpec{}}
-		if err := r.CreateCell("master", spec); err != nil {
+	r.esd = newEnvSpecDir(r.MakeCell, r.MakeStore, fs.NewDirFS(filepath.Join(r.rootPath, cellSpecPath)))
+	if _, err := r.GetRealm().Get(context.TODO(), nameMaster); os.IsNotExist(err) {
+		spec := EnvSpec{
+			Cell:  CellSpec{Local: &LocalCellSpec{}},
+			Store: StoreSpec{Local: &LocalStoreSpec{}},
+		}
+		if err := r.CreateEnv("master", spec); err != nil {
 			return nil, err
 		}
 	} else if err != nil {
@@ -126,12 +138,13 @@ func (r *Repo) WorkingDir() FS {
 	return r.workingDir
 }
 
-func (r *Repo) ApplyStaging(ctx context.Context, fn func(x Ref) (*Ref, error)) error {
+func (r *Repo) ApplyStaging(ctx context.Context, fn func(s Store, x Ref) (*Ref, error)) error {
+	store := r.GetDefaultStore()
 	return boltApply(r.db, bucketDefault, []byte(keyStaging), func(x []byte) ([]byte, error) {
 		var xRef *Ref
 		var err error
 		if len(x) < 1 {
-			xRef, err = gotfs.New(ctx, r.GetStore())
+			xRef, err = gotfs.New(ctx, store)
 			if err != nil {
 				return nil, err
 			}
@@ -141,7 +154,7 @@ func (r *Repo) ApplyStaging(ctx context.Context, fn func(x Ref) (*Ref, error)) e
 				return nil, err
 			}
 		}
-		yRef, err := fn(*xRef)
+		yRef, err := fn(store, *xRef)
 		if err != nil {
 			return nil, err
 		}
@@ -153,8 +166,20 @@ func (r *Repo) GetACL() gotnet.ACL {
 	return r.policy
 }
 
-func (r *Repo) GetStore() Store {
-	return r.store
+func (r *Repo) GetDefaultStore() Store {
+	store, err := r.MakeStore(StoreSpec{Local: &LocalStoreSpec{}})
+	if err != nil {
+		panic(err)
+	}
+	return store
+}
+
+func (r *Repo) GetRealm() Realm {
+	return realms.NewLayered(append(r.realms, r.esd)...)
+}
+
+func (r *Repo) getSwarm() (peerswarm.AskSwarm, error) {
+	return inet256p2p.NewSwarm("127.0.0.1:25600", r.privateKey)
 }
 
 func dbPath(x string) string {

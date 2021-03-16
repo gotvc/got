@@ -5,13 +5,12 @@ import (
 	"encoding/json"
 	"path/filepath"
 
-	"github.com/brendoncarroll/got/pkg/cells"
 	"github.com/brendoncarroll/got/pkg/fs"
 	bolt "go.etcd.io/bbolt"
 )
 
-func (r *Repo) CreateCell(name string, spec CellSpec) error {
-	_, err := r.MakeCell(name, spec)
+func (r *Repo) CreateEnv(name string, spec EnvSpec) error {
+	_, err := r.MakeEnv(name, spec)
 	if err != nil {
 		return err
 	}
@@ -24,13 +23,7 @@ func (r *Repo) CreateCell(name string, spec CellSpec) error {
 }
 
 func (r *Repo) DeleteCell(ctx context.Context, name string) error {
-	panic("not implemented")
-}
-
-func (r *Repo) GetCellSpace() CellSpace {
-	p := filepath.Join(r.rootPath, cellSpecPath)
-	csd := newCellSpecDir(r, fs.NewDirFS(p))
-	return cells.NewLayered(append(r.cellSpaces, csd)...)
+	return r.esd.Delete(ctx, name)
 }
 
 func (r *Repo) GetActiveCell(ctx context.Context) (string, Cell, error) {
@@ -38,15 +31,15 @@ func (r *Repo) GetActiveCell(ctx context.Context) (string, Cell, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	cell, err := r.GetCellSpace().Get(ctx, name)
+	env, err := r.GetRealm().Get(ctx, name)
 	if err != nil {
 		return "", nil, err
 	}
-	return name, cell, nil
+	return name, env.Cell, nil
 }
 
 func (r *Repo) SetActiveCell(ctx context.Context, name string) error {
-	_, err := r.GetCellSpace().Get(ctx, name)
+	_, err := r.GetRealm().Get(ctx, name)
 	if err != nil {
 		return err
 	}

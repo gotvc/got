@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 
 	"github.com/brendoncarroll/got"
+	"github.com/brendoncarroll/got/pkg/realms"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -35,11 +36,15 @@ var newCellCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		spec, err := got.ParseCellSpec(data)
+		cellSpec, err := got.ParseCellSpec(data)
 		if err != nil {
 			return err
 		}
-		return repo.CreateCell(cellName, *spec)
+		spec := got.EnvSpec{
+			Cell:  *cellSpec,
+			Store: got.StoreSpec{Local: &got.LocalStoreSpec{}},
+		}
+		return repo.CreateEnv(cellName, spec)
 	},
 }
 
@@ -53,10 +58,10 @@ var listCellCmd = &cobra.Command{
 	Short:   "lists the cells",
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		cs := repo.GetCellSpace()
+		r := repo.GetRealm()
 		w := cmd.OutOrStdout()
-		return cs.ForEach(ctx, "", func(name string) error {
-			fmt.Fprintf(w, "%s\n", name)
+		return realms.ForEach(ctx, r, func(k string) error {
+			fmt.Fprintf(w, "%s\n", k)
 			return nil
 		})
 	},
@@ -90,7 +95,11 @@ var branchCmd = &cobra.Command{
 		if cellName == "" {
 			return errors.Errorf("must specify cell name")
 		}
-		if err := repo.CreateCell(cellName, got.CellSpec{Local: &got.LocalCellSpec{}}); err != nil {
+		spec := got.EnvSpec{
+			Cell:  got.CellSpec{Local: &got.LocalCellSpec{}},
+			Store: got.StoreSpec{Local: &got.LocalStoreSpec{}},
+		}
+		if err := repo.CreateEnv(cellName, spec); err != nil {
 			return err
 		}
 		return repo.SetActiveCell(ctx, cellName)

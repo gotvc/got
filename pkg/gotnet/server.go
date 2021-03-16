@@ -24,7 +24,7 @@ type Server struct {
 }
 
 type Repo interface {
-	GetStore() cadata.Store
+	GetDefaultStore() cadata.Store
 	GetACL() ACL
 }
 
@@ -45,7 +45,7 @@ func (s *Server) Collection(peerID p2p.PeerID, name string) p2pkv.Collection {
 	}
 	switch name {
 	case "blobs":
-		return &blobCollection{store: s.r.GetStore()}
+		return &blobCollection{store: s.r.GetDefaultStore()}
 	case "cells":
 		return &cellCollection{}
 	default:

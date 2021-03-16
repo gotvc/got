@@ -9,8 +9,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-type Ref = gotkv.Ref
-
 type Commit struct {
 	Version uint
 	Parent  *Ref

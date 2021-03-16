@@ -7,16 +7,12 @@ import (
 )
 
 type Config struct {
-	Store      StoreSpec       `json:"store"`
-	CellSpaces []CellSpaceSpec `json:"cell_spaces"`
+	Realms []RealmSpec `json:"realms"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		Store: StoreSpec{
-			Local: &LocalStoreSpec{},
-		},
-		CellSpaces: []CellSpaceSpec{},
+		Realms: []RealmSpec{},
 	}
 }
 
