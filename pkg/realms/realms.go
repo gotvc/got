@@ -2,24 +2,25 @@ package realms
 
 import (
 	"context"
-	"os"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/cells"
 	"github.com/pkg/errors"
 )
 
-var ErrNotExist = os.ErrNotExist
+var ErrNotExist = errors.New("volume does not exist")
+var ErrExists = errors.New("a volume already exists by that name")
 var ErrTooMany = errors.Errorf("too many too list")
 
-type Env struct {
+// Volume is a (Cell, Store) pair
+type Volume struct {
 	cells.Cell
 	cadata.Store
 }
 
 // A Realm is a set of named keys, each of which points to a (Cell, Store) pair.
 type Realm interface {
-	Get(ctx context.Context, name string) (*Env, error)
+	Get(ctx context.Context, name string) (*Volume, error)
 	//Create(ctx context.Context, name string) error
 	//Delete(ctx context.Context, name string) error
 	List(ctx context.Context, prefix string) ([]string, error)

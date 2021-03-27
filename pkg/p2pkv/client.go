@@ -129,7 +129,7 @@ func (c *client) ask(ctx context.Context, req Request) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	respData, err := c.swarm.Ask(ctx, c.dst, reqData)
+	respData, err := c.swarm.Ask(ctx, c.dst, p2p.IOVec{reqData})
 	if err != nil {
 		return nil, err
 	}

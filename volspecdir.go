@@ -10,26 +10,26 @@ import (
 	"github.com/brendoncarroll/got/pkg/fs"
 )
 
-var _ Realm = &envSpecDir{}
+var _ Realm = &volSpecDir{}
 
 type cellFactory = func(name string, spec CellSpec) (Cell, error)
 type storeFactory = func(spec StoreSpec) (Store, error)
 
-type envSpecDir struct {
+type volSpecDir struct {
 	cf cellFactory
 	sf storeFactory
 	fs fs.FS
 }
 
-func newEnvSpecDir(cf cellFactory, sf storeFactory, fs fs.FS) *envSpecDir {
-	return &envSpecDir{
+func newVolSpecDir(cf cellFactory, sf storeFactory, fs fs.FS) *volSpecDir {
+	return &volSpecDir{
 		cf: cf,
 		sf: sf,
 		fs: fs,
 	}
 }
 
-func (esd *envSpecDir) List(ctx context.Context, prefix string) ([]string, error) {
+func (esd *volSpecDir) List(ctx context.Context, prefix string) ([]string, error) {
 	var ids []string
 	err := esd.fs.ReadDir("", func(finfo os.FileInfo) error {
 		name := finfo.Name()
@@ -45,15 +45,15 @@ func (esd *envSpecDir) List(ctx context.Context, prefix string) ([]string, error
 	return ids, nil
 }
 
-func (csd *envSpecDir) Create(ctx context.Context, name string) error {
-	spec := EnvSpec{
+func (csd *volSpecDir) Create(ctx context.Context, name string) error {
+	spec := VolumeSpec{
 		Cell:  CellSpec{Local: &LocalCellSpec{}},
 		Store: StoreSpec{Local: &LocalStoreSpec{}},
 	}
 	return csd.CreateEnvFromSpec(name, spec)
 }
 
-func (csd *envSpecDir) CreateEnvFromSpec(name string, spec EnvSpec) error {
+func (csd *volSpecDir) CreateEnvFromSpec(name string, spec VolumeSpec) error {
 	_, err := csd.cf(name, spec.Cell)
 	if err != nil {
 		return err
@@ -65,23 +65,23 @@ func (csd *envSpecDir) CreateEnvFromSpec(name string, spec EnvSpec) error {
 	return csd.fs.WriteFile(name, bytes.NewReader(data))
 }
 
-func (csd *envSpecDir) Delete(ctx context.Context, k string) error {
+func (csd *volSpecDir) Delete(ctx context.Context, k string) error {
 	return csd.fs.Remove(k)
 }
 
-func (esd *envSpecDir) Get(ctx context.Context, k string) (*Env, error) {
+func (esd *volSpecDir) Get(ctx context.Context, k string) (*Volume, error) {
 	data, err := fs.ReadFile(esd.fs, k)
 	if err != nil {
 		return nil, err
 	}
-	spec := EnvSpec{}
+	spec := VolumeSpec{}
 	if err := json.Unmarshal(data, &spec); err != nil {
 		return nil, err
 	}
 	return esd.makeEnv(k, spec)
 }
 
-func (esd *envSpecDir) makeEnv(k string, spec EnvSpec) (*Env, error) {
+func (esd *volSpecDir) makeEnv(k string, spec VolumeSpec) (*Volume, error) {
 	cell, err := esd.cf(k, spec.Cell)
 	if err != nil {
 		return nil, err
@@ -90,5 +90,5 @@ func (esd *envSpecDir) makeEnv(k string, spec EnvSpec) (*Env, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Env{Cell: cell, Store: store}, nil
+	return &Volume{Cell: cell, Store: store}, nil
 }

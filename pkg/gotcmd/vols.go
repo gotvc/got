@@ -13,19 +13,18 @@ import (
 var cellName string
 
 func init() {
-	rootCmd.AddCommand(newCellCmd)
-	// rootCmd.AddCommand(setupCellCmd)
-	rootCmd.AddCommand(listCellCmd)
+	rootCmd.AddCommand(newVolCmd)
+	// rootCmd.AddCommand(setupVolCmd)
+	rootCmd.AddCommand(listVolCmd)
+	rootCmd.AddCommand(rmVolCmd)
 	rootCmd.AddCommand(branchCmd)
 
-	newCellCmd.Flags().StringVar(&cellName, "name", "", "--name=cell-name")
-
-	branchCmd.Flags().StringVar(&cellName, "name", "", "--name=cell-name")
+	newVolCmd.Flags().StringVar(&cellName, "name", "", "--name=vol-name")
 }
 
-var newCellCmd = &cobra.Command{
-	Use:     "new-cell",
-	Short:   "creates a cell with the config from stdin",
+var newVolCmd = &cobra.Command{
+	Use:     "new-vol",
+	Short:   "creates a volume with the config from stdin",
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ParseFlags(args); err != nil {
@@ -40,22 +39,22 @@ var newCellCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		spec := got.EnvSpec{
+		spec := got.VolumeSpec{
 			Cell:  *cellSpec,
 			Store: got.StoreSpec{Local: &got.LocalStoreSpec{}},
 		}
-		return repo.CreateEnv(cellName, spec)
+		return repo.CreateVolume(cellName, spec)
 	},
 }
 
-var setupCellCmd = &cobra.Command{
-	Use:   "setup-cell",
-	Short: "generates a cell spec of the specified type",
+var setupVolCmd = &cobra.Command{
+	Use:   "setup-vol",
+	Short: "generates a volume spec of the specified type",
 }
 
-var listCellCmd = &cobra.Command{
-	Use:     "ls-cell",
-	Short:   "lists the cells",
+var listVolCmd = &cobra.Command{
+	Use:     "ls-vol",
+	Short:   "lists the volumes",
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		r := repo.GetRealm()
@@ -67,9 +66,9 @@ var listCellCmd = &cobra.Command{
 	},
 }
 
-var rmCellCmd = &cobra.Command{
-	Use:     "rm-cell",
-	Short:   "deletes a cell",
+var rmVolCmd = &cobra.Command{
+	Use:     "rm-vol",
+	Short:   "deletes a volume",
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var cellName string
@@ -79,29 +78,37 @@ var rmCellCmd = &cobra.Command{
 		if cellName == "" {
 			return errors.Errorf("must specify cell name")
 		}
-		return repo.DeleteCell(ctx, cellName)
+		return repo.DeleteVolume(ctx, cellName)
 	},
 }
 
 var branchCmd = &cobra.Command{
 	Use:     "branch",
-	Short:   "creates a local cell and switches to it",
+	Short:   "creates a local volume if it does not exist and switches to it",
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		var cellName string
-		if len(args[0]) > 0 {
-			cellName = args[0]
+		var name string
+		if len(args) > 0 {
+			name = args[0]
 		}
-		if cellName == "" {
-			return errors.Errorf("must specify cell name")
+		// if name is empty then print the active volume
+		if name == "" {
+			name, _, err := repo.GetActiveVolume(ctx)
+			if err != nil {
+				return err
+			}
+			w := cmd.OutOrStdout()
+			fmt.Fprintf(w, "ACTIVE VOLUME: %s\n", name)
+			return nil
 		}
-		spec := got.EnvSpec{
+
+		spec := got.VolumeSpec{
 			Cell:  got.CellSpec{Local: &got.LocalCellSpec{}},
 			Store: got.StoreSpec{Local: &got.LocalStoreSpec{}},
 		}
-		if err := repo.CreateEnv(cellName, spec); err != nil {
+		if err := repo.CreateVolume(name, spec); err != nil && err != realms.ErrExists {
 			return err
 		}
-		return repo.SetActiveCell(ctx, cellName)
+		return repo.SetActiveVolume(ctx, name)
 	},
 }

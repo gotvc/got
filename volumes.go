@@ -9,12 +9,12 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-func (r *Repo) CreateEnv(name string, spec EnvSpec) error {
+func (r *Repo) CreateVolume(name string, spec VolumeSpec) error {
 	_, err := r.MakeEnv(name, spec)
 	if err != nil {
 		return err
 	}
-	p := filepath.Join(cellSpecPath, name)
+	p := filepath.Join(specDirPath, name)
 	data, err := json.MarshalIndent(spec, "", " ")
 	if err != nil {
 		return err
@@ -22,31 +22,31 @@ func (r *Repo) CreateEnv(name string, spec EnvSpec) error {
 	return fs.WriteIfNotExists(r.repoFS, p, data)
 }
 
-func (r *Repo) DeleteCell(ctx context.Context, name string) error {
-	return r.esd.Delete(ctx, name)
+func (r *Repo) DeleteVolume(ctx context.Context, name string) error {
+	return r.specDir.Delete(ctx, name)
 }
 
-func (r *Repo) GetActiveCell(ctx context.Context) (string, Cell, error) {
-	name, err := getActiveCell(r.db)
+func (r *Repo) GetActiveVolume(ctx context.Context) (string, *Volume, error) {
+	name, err := getActiveVolume(r.db)
 	if err != nil {
 		return "", nil, err
 	}
-	env, err := r.GetRealm().Get(ctx, name)
+	vol, err := r.GetRealm().Get(ctx, name)
 	if err != nil {
 		return "", nil, err
 	}
-	return name, env.Cell, nil
+	return name, vol, nil
 }
 
-func (r *Repo) SetActiveCell(ctx context.Context, name string) error {
+func (r *Repo) SetActiveVolume(ctx context.Context, name string) error {
 	_, err := r.GetRealm().Get(ctx, name)
 	if err != nil {
 		return err
 	}
-	return setActiveCell(r.db, name)
+	return setActiveVolume(r.db, name)
 }
 
-func getActiveCell(db *bolt.DB) (string, error) {
+func getActiveVolume(db *bolt.DB) (string, error) {
 	name := nameMaster
 	if err := db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(bucketDefault))
@@ -64,7 +64,7 @@ func getActiveCell(db *bolt.DB) (string, error) {
 	return name, nil
 }
 
-func setActiveCell(db *bolt.DB, name string) error {
+func setActiveVolume(db *bolt.DB, name string) error {
 	return db.Update(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists([]byte(bucketDefault))
 		if err != nil {

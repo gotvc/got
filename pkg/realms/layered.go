@@ -11,7 +11,7 @@ func NewLayered(rs ...Realm) Realm {
 	return layered(rs)
 }
 
-func (r layered) Get(ctx context.Context, k string) (*Env, error) {
+func (r layered) Get(ctx context.Context, k string) (*Volume, error) {
 	for i := len(r) - 1; i >= 0; i-- {
 		env, err := r[i].Get(ctx, k)
 		if err == ErrNotExist {

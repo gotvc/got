@@ -18,8 +18,7 @@ var ops = map[Op]func(context.Context, Collection, []byte, *Response) error{
 }
 
 func Serve(ctx context.Context, s peerswarm.AskSwarm, srv Service) error {
-	defer s.OnAsk(nil)
-	s.OnAsk(func(ctx context.Context, msg *p2p.Message, w io.Writer) {
+	return p2p.ServeBoth(s, p2p.NoOpTellHandler, func(ctx context.Context, msg *p2p.Message, w io.Writer) {
 		err := func() error {
 			req := Request{}
 			if err := unmarshal(msg.Payload, &req); err != nil {
@@ -45,10 +44,6 @@ func Serve(ctx context.Context, s peerswarm.AskSwarm, srv Service) error {
 			log.Println(err)
 		}
 	})
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	}
 }
 
 func serveGet(ctx context.Context, col Collection, body []byte, res *Response) error {

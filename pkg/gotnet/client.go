@@ -21,7 +21,7 @@ func NewClient(swarm peerswarm.AskSwarm, dst p2p.PeerID) *Client {
 	}
 }
 
-func (c *Client) Get(ctx context.Context, k string) (*realms.Env, error) {
+func (c *Client) Get(ctx context.Context, k string) (*realms.Volume, error) {
 	panic("not implemented")
 }
 

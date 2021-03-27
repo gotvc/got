@@ -30,7 +30,7 @@ const (
 	gotPrefix      = ".got"
 	configPath     = ".got/config"
 	privateKeyPath = ".got/private.pem"
-	cellSpecPath   = ".got/cell_specs"
+	specDirPath    = ".got/volume_specs"
 	policyPath     = ".got/policy"
 )
 
@@ -44,7 +44,7 @@ type Repo struct {
 
 	realms     []Realm
 	workingDir FS
-	esd        *envSpecDir
+	specDir    *volSpecDir
 
 	mu     sync.Mutex
 	stores map[StoreSpec]blobs.Store
@@ -55,7 +55,7 @@ func InitRepo(p string) error {
 	if err := os.Mkdir(gotDir, 0o755); err != nil {
 		return err
 	}
-	if err := os.Mkdir(cellSpecPath, 0o755); err != nil {
+	if err := os.Mkdir(specDirPath, 0o755); err != nil {
 		return err
 	}
 	repoDirFS := fs.NewDirFS(p)
@@ -108,13 +108,13 @@ func OpenRepo(p string) (*Repo, error) {
 		}),
 		stores: make(map[StoreSpec]Store),
 	}
-	r.esd = newEnvSpecDir(r.MakeCell, r.MakeStore, fs.NewDirFS(filepath.Join(r.rootPath, cellSpecPath)))
+	r.specDir = newVolSpecDir(r.MakeCell, r.MakeStore, fs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
 	if _, err := r.GetRealm().Get(context.TODO(), nameMaster); os.IsNotExist(err) {
-		spec := EnvSpec{
+		spec := VolumeSpec{
 			Cell:  CellSpec{Local: &LocalCellSpec{}},
 			Store: StoreSpec{Local: &LocalStoreSpec{}},
 		}
-		if err := r.CreateEnv("master", spec); err != nil {
+		if err := r.CreateVolume("master", spec); err != nil {
 			return nil, err
 		}
 	} else if err != nil {
@@ -175,7 +175,7 @@ func (r *Repo) GetDefaultStore() Store {
 }
 
 func (r *Repo) GetRealm() Realm {
-	return realms.NewLayered(append(r.realms, r.esd)...)
+	return realms.NewLayered(append(r.realms, r.specDir)...)
 }
 
 func (r *Repo) getSwarm() (peerswarm.AskSwarm, error) {

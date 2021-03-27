@@ -15,7 +15,7 @@ var statusCmd = &cobra.Command{
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		w := cmd.OutOrStdout()
-		name, _, err := repo.GetActiveCell(ctx)
+		name, _, err := repo.GetActiveVolume(ctx)
 		if err != nil {
 			return err
 		}

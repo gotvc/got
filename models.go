@@ -15,7 +15,7 @@ type FS = fs.FS
 
 type Cell = cells.Cell
 
-type Env = realms.Env
+type Volume = realms.Volume
 
 type Realm = realms.Realm
 

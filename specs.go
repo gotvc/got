@@ -3,7 +3,6 @@ package got
 import (
 	"encoding/json"
 
-	"github.com/blobcache/blobcache/pkg/blobcache"
 	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/c/httpcell"
@@ -21,8 +20,9 @@ type StoreSpec struct {
 type LocalStoreSpec struct{}
 
 type BlobcacheStoreSpec struct {
-	Addr     string             `json:"addr"`
-	PinSetID blobcache.PinSetID `json:"pinset_id"`
+	Addr string `json:"addr"`
+	// TODO: add back once blobcache is working
+	// PinSetID blobcache.PinSetID `json:"pinset_id"`
 }
 
 func DefaultBlobcacheSpec() StoreSpec {
@@ -46,12 +46,12 @@ func (r *Repo) MakeStore(spec StoreSpec) (Store, error) {
 	}
 }
 
-type EnvSpec struct {
+type VolumeSpec struct {
 	Cell  CellSpec  `json:"cell"`
 	Store StoreSpec `json:"store"`
 }
 
-func (r *Repo) MakeEnv(k string, spec EnvSpec) (*Env, error) {
+func (r *Repo) MakeEnv(k string, spec VolumeSpec) (*Volume, error) {
 	cell, err := r.MakeCell(k, spec.Cell)
 	if err != nil {
 		return nil, err
@@ -60,7 +60,7 @@ func (r *Repo) MakeEnv(k string, spec EnvSpec) (*Env, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Env{Cell: cell, Store: store}, nil
+	return &Volume{Cell: cell, Store: store}, nil
 }
 
 type CellSpec struct {

@@ -143,7 +143,7 @@ func (r Rule) Denies(sub p2p.PeerID, method, obj string) bool {
 	return r.Matches(sub, method, obj) && !r.Allow
 }
 
-func (r Rule) Marshal() []byte {
+func (r Rule) MarshalText() ([]byte, error) {
 	var action string
 	if r.Allow {
 		action = "ALLOW"
@@ -152,5 +152,10 @@ func (r Rule) Marshal() []byte {
 	}
 	parts := []string{action, r.Subject.String(), r.Method, r.Object.String()}
 	s := strings.Join(parts, " ")
-	return []byte(s)
+	return []byte(s), nil
+}
+
+func (r Rule) Marshal() []byte {
+	data, _ := r.MarshalText()
+	return data
 }
