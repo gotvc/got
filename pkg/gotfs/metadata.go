@@ -4,10 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 
 	"github.com/brendoncarroll/got/pkg/gotkv"
 	"github.com/pkg/errors"
 )
+
+const MaxPathLen = 4096
 
 type Object struct {
 	Metadata *Metadata `json:"md,omitempty"`
@@ -19,19 +22,23 @@ type Metadata struct {
 	Labels map[string]string `json:"labels,omitempty"`
 }
 
-func PutMetadata(ctx context.Context, s Store, x Ref, p string, md Metadata) (*Ref, error) {
+// PutMetadata assigne metadata to p
+func PutMetadata(ctx context.Context, s Store, x Root, p string, md Metadata) (*Root, error) {
 	o := Object{Metadata: &md}
 	data, err := json.Marshal(o)
 	if err != nil {
 		return nil, err
 	}
+	gotkv := gotkv.NewOperator()
 	return gotkv.Put(ctx, s, x, []byte(p), data)
 }
 
-func GetMetadata(ctx context.Context, s Store, x Ref, p string) (*Metadata, error) {
+// GetMetadata retrieves the metadata at p if it exists and errors otherwise
+func GetMetadata(ctx context.Context, s Store, x Root, p string) (*Metadata, error) {
 	p = cleanPath(p)
 	var md *Metadata
-	err := gotkv.GetF(ctx, s, x, []byte(p), func(data []byte) error {
+	op := gotkv.NewOperator()
+	err := op.GetF(ctx, s, x, []byte(p), func(data []byte) error {
 		var err error
 		md, err = parseMetadata(data)
 		return err
@@ -40,6 +47,26 @@ func GetMetadata(ctx context.Context, s Store, x Ref, p string) (*Metadata, erro
 		return nil, err
 	}
 	return md, nil
+}
+
+// GetDirMetadata returns directory metadata at p if it exists, and errors otherwise
+func GetDirMetadata(ctx context.Context, s Store, x Root, p string) (*Metadata, error) {
+	md, err := GetMetadata(ctx, s, x, p)
+	if err != nil {
+		return nil, err
+	}
+	if !md.Mode.IsDir() {
+		return nil, errors.Errorf("%s is not a directory", p)
+	}
+	return md, nil
+}
+
+func marshalObject(o *Object) []byte {
+	data, err := json.Marshal(o)
+	if err != nil {
+		panic(err)
+	}
+	return data
 }
 
 func parseObject(data []byte) (*Object, error) {
@@ -61,7 +88,7 @@ func parseMetadata(data []byte) (*Metadata, error) {
 	return o.Metadata, nil
 }
 
-func checkNoEntry(ctx context.Context, s Store, x Ref, p string) error {
+func checkNoEntry(ctx context.Context, s Store, x Root, p string) error {
 	_, err := GetMetadata(ctx, s, x, p)
 	switch {
 	case err == gotkv.ErrKeyNotFound:
@@ -71,4 +98,14 @@ func checkNoEntry(ctx context.Context, s Store, x Ref, p string) error {
 	default:
 		return err
 	}
+}
+
+func checkPath(p string) error {
+	if len(p) > MaxPathLen {
+		return errors.Errorf("path too long: %q", p)
+	}
+	if strings.ContainsAny(p, "\x00") {
+		return errors.Errorf("path cannot contain null")
+	}
+	return nil
 }

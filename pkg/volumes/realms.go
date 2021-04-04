@@ -1,4 +1,4 @@
-package realms
+package volumes
 
 import (
 	"context"
@@ -18,12 +18,24 @@ type Volume struct {
 	cadata.Store
 }
 
-// A Realm is a set of named keys, each of which points to a (Cell, Store) pair.
+// A Realm is a set of named volumes.
 type Realm interface {
 	Get(ctx context.Context, name string) (*Volume, error)
-	//Create(ctx context.Context, name string) error
-	//Delete(ctx context.Context, name string) error
+	Create(ctx context.Context, name string) error
+	Delete(ctx context.Context, name string) error
 	List(ctx context.Context, prefix string) ([]string, error)
+}
+
+func CreateIfNotExists(ctx context.Context, r Realm, k string) error {
+	if _, err := r.Get(context.TODO(), k); err != nil {
+		if err == ErrNotExist {
+			if err := r.Create(context.TODO(), k); err != nil {
+				return err
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func ForEach(ctx context.Context, r Realm, fn func(string) error) error {

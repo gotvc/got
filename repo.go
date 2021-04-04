@@ -6,32 +6,42 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"time"
 
-	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/s/peerswarm"
+	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/got/pkg/cells"
 	"github.com/brendoncarroll/got/pkg/fs"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotnet"
-	"github.com/brendoncarroll/got/pkg/realms"
+	"github.com/brendoncarroll/got/pkg/volumes"
 	"github.com/inet256/inet256/pkg/inet256p2p"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
 
+// default bucket
 const (
 	bucketDefault = "default"
 	keyStaging    = "STAGING"
 	keyActive     = "ACTIVE"
 	nameMaster    = "master"
+)
 
+const (
+	bucketCellData = "cells"
+	bucketStores   = "stores"
+)
+
+// fs paths
+const (
 	gotPrefix      = ".got"
 	configPath     = ".got/config"
 	privateKeyPath = ".got/private.pem"
 	specDirPath    = ".got/volume_specs"
 	policyPath     = ".got/policy"
+	storePath      = ".got/blobs"
 )
 
 type Repo struct {
@@ -42,12 +52,11 @@ type Repo struct {
 	policy     *Policy
 	privateKey p2p.PrivateKey
 
-	realms     []Realm
-	workingDir FS
-	specDir    *volSpecDir
-
-	mu     sync.Mutex
-	stores map[StoreSpec]blobs.Store
+	realms       []Realm
+	workingDir   FS
+	specDir      *volSpecDir
+	storeManager *storeManager
+	swarm        peerswarm.AskSwarm
 }
 
 func InitRepo(p string) error {
@@ -106,20 +115,13 @@ func OpenRepo(p string) (*Repo, error) {
 		workingDir: fs.NewFilterFS(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
-		stores: make(map[StoreSpec]Store),
 	}
 	r.specDir = newVolSpecDir(r.MakeCell, r.MakeStore, fs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
-	if _, err := r.GetRealm().Get(context.TODO(), nameMaster); os.IsNotExist(err) {
-		spec := VolumeSpec{
-			Cell:  CellSpec{Local: &LocalCellSpec{}},
-			Store: StoreSpec{Local: &LocalStoreSpec{}},
-		}
-		if err := r.CreateVolume("master", spec); err != nil {
-			return nil, err
-		}
-	} else if err != nil {
+	if err := volumes.CreateIfNotExists(context.TODO(), r.specDir, nameMaster); err != nil {
 		return nil, err
 	}
+	fsStore := cadata.NewFSStore(fs.NewDirFS(filepath.Join(r.rootPath, storePath)))
+	r.storeManager = newStoreManager(fsStore, r.db, bucketStores)
 	return r, nil
 }
 
@@ -138,23 +140,24 @@ func (r *Repo) WorkingDir() FS {
 	return r.workingDir
 }
 
-func (r *Repo) ApplyStaging(ctx context.Context, fn func(s Store, x Ref) (*Ref, error)) error {
-	store := r.GetDefaultStore()
-	return boltApply(r.db, bucketDefault, []byte(keyStaging), func(x []byte) ([]byte, error) {
-		var xRef *Ref
+func (r *Repo) ApplyStaging(ctx context.Context, fn func(s Store, x Root) (*Root, error)) error {
+	vol := r.GetStaging()
+	store := vol.Store
+	return cells.Apply(ctx, vol.Cell, func(x []byte) ([]byte, error) {
+		var xRoot *Root
 		var err error
 		if len(x) < 1 {
-			xRef, err = gotfs.New(ctx, store)
+			xRoot, err = gotfs.New(ctx, store)
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			xRef = &Ref{}
-			if err := json.Unmarshal(x, xRef); err != nil {
+			xRoot = &Root{}
+			if err := json.Unmarshal(x, xRoot); err != nil {
 				return nil, err
 			}
 		}
-		yRef, err := fn(store, *xRef)
+		yRef, err := fn(store, *xRoot)
 		if err != nil {
 			return nil, err
 		}
@@ -166,20 +169,30 @@ func (r *Repo) GetACL() gotnet.ACL {
 	return r.policy
 }
 
-func (r *Repo) GetDefaultStore() Store {
+func (r *Repo) GetStaging() Volume {
 	store, err := r.MakeStore(StoreSpec{Local: &LocalStoreSpec{}})
 	if err != nil {
 		panic(err)
 	}
-	return store
+	return Volume{
+		Store: store,
+	}
 }
 
 func (r *Repo) GetRealm() Realm {
-	return realms.NewLayered(append(r.realms, r.specDir)...)
+	return volumes.NewLayered(append(r.realms, r.specDir)...)
 }
 
 func (r *Repo) getSwarm() (peerswarm.AskSwarm, error) {
-	return inet256p2p.NewSwarm("127.0.0.1:25600", r.privateKey)
+	if r.swarm != nil {
+		return r.swarm, nil
+	}
+	swarm, err := inet256p2p.NewSwarm("127.0.0.1:25600", r.privateKey)
+	if err != nil {
+		return nil, err
+	}
+	r.swarm = swarm
+	return swarm, nil
 }
 
 func dbPath(x string) string {

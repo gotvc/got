@@ -3,23 +3,43 @@ package got
 import (
 	"context"
 	"encoding/json"
-	"path/filepath"
 
-	"github.com/brendoncarroll/got/pkg/fs"
+	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/got/pkg/cells"
+	"github.com/brendoncarroll/got/pkg/gotkv"
+	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
 
-func (r *Repo) CreateVolume(name string, spec VolumeSpec) error {
-	_, err := r.MakeEnv(name, spec)
+// SyncVolumes moves the commit in src and all it's data from to dst
+// if the commit in dst is not an ancestor of src then an error is returned.
+// that behavior can be disabled with force=true.
+func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
+	if err := cadata.CopyAll(ctx, dst, src); err != nil {
+		return err
+	}
+	srcRef, err := GetRef(ctx, src.Cell)
 	if err != nil {
 		return err
 	}
-	p := filepath.Join(specDirPath, name)
-	data, err := json.MarshalIndent(spec, "", " ")
-	if err != nil {
-		return err
-	}
-	return fs.WriteIfNotExists(r.repoFS, p, data)
+	return ApplyRef(ctx, dst.Cell, func(x Ref) (*Ref, error) {
+		hasAncestor, err := HasAncestor(ctx, src.Store, *srcRef, x)
+		if err != nil {
+			return nil, err
+		}
+		if !force && !hasAncestor {
+			return nil, errors.Errorf("cannot CAS, dst ref is not parent of src ref")
+		}
+		return srcRef, nil
+	})
+}
+
+func (r *Repo) CreateVolume(ctx context.Context, name string) error {
+	return r.GetRealm().Create(ctx, name)
+}
+
+func (r *Repo) CreateVolumeWithSpec(name string, spec VolumeSpec) error {
+	return r.specDir.CreateWithSpec(name, spec)
 }
 
 func (r *Repo) DeleteVolume(ctx context.Context, name string) error {
@@ -71,5 +91,42 @@ func setActiveVolume(db *bolt.DB, name string) error {
 			return err
 		}
 		return b.Put([]byte(keyActive), []byte(name))
+	})
+}
+
+func parseRef(data []byte) (*Ref, error) {
+	var ref gotkv.Ref
+	if len(data) == 0 {
+		return &ref, nil
+	}
+	if err := json.Unmarshal(data, &ref); err != nil {
+		return nil, err
+	}
+	return &ref, nil
+}
+
+func marshalRef(x Ref) ([]byte, error) {
+	return json.Marshal(x)
+}
+
+func GetRef(ctx context.Context, c cells.Cell) (*Ref, error) {
+	data, err := c.Get(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return parseRef(data)
+}
+
+func ApplyRef(ctx context.Context, c cells.Cell, fn func(Ref) (*Ref, error)) error {
+	return cells.Apply(ctx, c, func(x []byte) ([]byte, error) {
+		xRef, err := parseRef(x)
+		if err != nil {
+			return nil, err
+		}
+		yRef, err := fn(*xRef)
+		if err != nil {
+			return nil, err
+		}
+		return marshalRef(*yRef)
 	})
 }

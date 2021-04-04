@@ -4,36 +4,49 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
+	"runtime"
 
+	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/gotkv"
+	"github.com/brendoncarroll/got/pkg/refs"
 	"github.com/pkg/errors"
 )
 
 const maxPartSize = 1 << 15
 
-type Ref = gotkv.Ref
-type Store = gotkv.Store
+type (
+	Ref   = gotkv.Ref
+	Store = gotkv.Store
+	Root  = gotkv.Root
+)
 
-func New(ctx context.Context, s Store) (*Ref, error) {
-	x, err := gotkv.New(ctx, s)
+func New(ctx context.Context, s Store) (*Root, error) {
+	gotkv := gotkv.NewOperator()
+	x, err := gotkv.NewEmpty(ctx, s)
 	if err != nil {
 		return nil, err
 	}
 	return Mkdir(ctx, s, *x, "")
 }
 
-func CreateFileFrom(ctx context.Context, s Store, x Ref, p string, r io.Reader) (*Ref, error) {
+func CreateFileFrom(ctx context.Context, s Store, x Root, p string, r io.Reader) (*gotkv.Root, error) {
 	if err := checkNoEntry(ctx, s, x, p); err != nil {
 		return nil, err
 	}
-	x2, err := PutMetadata(ctx, s, x, p, Metadata{
+	op := gotkv.NewOperator()
+	as := cadata.NewAsyncStore(s, runtime.GOMAXPROCS(0))
+	// create metadata entry
+	md := Metadata{
 		Mode: 0o644,
-	})
-	if err != nil {
-		return nil, err
 	}
+	if x2, err := PutMetadata(ctx, s, x, p, md); err != nil {
+		return nil, err
+	} else {
+		x = *x2
+	}
+	// add file data
 	var total uint64
-	buf := make([]byte, 4096)
+	buf := make([]byte, maxPartSize)
 	for done := false; !done; {
 		n, err := r.Read(buf)
 		if err == io.EOF {
@@ -44,7 +57,7 @@ func CreateFileFrom(ctx context.Context, s Store, x Ref, p string, r io.Reader) 
 		if n < 1 {
 			continue
 		}
-		ref, err := gotkv.PostRaw(ctx, s, buf[:n])
+		ref, err := refs.Post(ctx, as, buf[:n])
 		if err != nil {
 			return nil, err
 		}
@@ -54,20 +67,29 @@ func CreateFileFrom(ctx context.Context, s Store, x Ref, p string, r io.Reader) 
 			Length: uint32(n),
 		}
 		key := makePartKey(p, total)
-		x2, err = gotkv.Put(ctx, s, *x2, key, part.marshal())
-		if err != nil {
+
+		if x2, err := op.Put(ctx, s, x, key, part.marshal()); err != nil {
 			return nil, err
+		} else {
+			x = *x2
 		}
 		total += uint64(n)
 	}
-	return x2, nil
+	return &x, as.Close()
 }
 
-func SizeOfFile(ctx context.Context, s Store, x Ref, p string) (int, error) {
+func SizeOfFile(ctx context.Context, s Store, x Root, p string) (int, error) {
+	gotkv := gotkv.NewOperator()
 	key, err := gotkv.MaxKey(ctx, s, x, []byte(p))
 	if err != nil {
 		return 0, err
 	}
+	// offset of key
+	if len(key) < 8 {
+		return 0, errors.Errorf("key too short")
+	}
+	offset := binary.BigEndian.Uint64(key[len(key)-8:])
+	// size of part at that key
 	var size int
 	if err := gotkv.GetF(ctx, s, x, []byte(p), func(v []byte) error {
 		size = len(v)
@@ -75,14 +97,11 @@ func SizeOfFile(ctx context.Context, s Store, x Ref, p string) (int, error) {
 	}); err != nil {
 		return 0, err
 	}
-	if len(key) < 8 {
-		return 0, errors.Errorf("key too short")
-	}
-	offset := binary.BigEndian.Uint64(key[len(key)-8:])
 	return int(offset) + size, nil
 }
 
-func ReadFileAt(ctx context.Context, s Store, x Ref, p string, start uint64, buf []byte) (int, error) {
+func ReadFileAt(ctx context.Context, s Store, x Root, p string, start uint64, buf []byte) (int, error) {
+	op := gotkv.NewOperator()
 	_, err := GetFileMetadata(ctx, s, x, p)
 	if err != nil {
 		return 0, err
@@ -90,12 +109,12 @@ func ReadFileAt(ctx context.Context, s Store, x Ref, p string, start uint64, buf
 	offset := start - (start % maxPartSize)
 	key := makePartKey(p, offset)
 	var n int
-	err = gotkv.GetF(ctx, s, x, key, func(data []byte) error {
+	err = op.GetF(ctx, s, x, key, func(data []byte) error {
 		part, err := parsePart(data)
 		if err != nil {
 			return err
 		}
-		return gotkv.GetRawF(ctx, s, part.Ref, func(data []byte) error {
+		return refs.GetF(ctx, s, part.Ref, func(data []byte) error {
 			begin := int(part.Offset)
 			if begin >= len(data) {
 				return errors.Errorf("incorrect offset")
@@ -114,7 +133,7 @@ func ReadFileAt(ctx context.Context, s Store, x Ref, p string, start uint64, buf
 	return n, err
 }
 
-func WriteFileAt(ctx context.Context, s Store, x Ref, p string, start uint64, data []byte) (*Ref, error) {
+func WriteFileAt(ctx context.Context, s Store, x Root, p string, start uint64, data []byte) (*Ref, error) {
 	md, err := GetFileMetadata(ctx, s, x, p)
 	if err != nil {
 		return nil, err
@@ -122,7 +141,7 @@ func WriteFileAt(ctx context.Context, s Store, x Ref, p string, start uint64, da
 	panic(md)
 }
 
-func GetFileMetadata(ctx context.Context, s Store, x Ref, p string) (*Metadata, error) {
+func GetFileMetadata(ctx context.Context, s Store, x Root, p string) (*Metadata, error) {
 	md, err := GetMetadata(ctx, s, x, p)
 	if err != nil {
 		return nil, err

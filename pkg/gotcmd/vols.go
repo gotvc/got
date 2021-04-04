@@ -5,12 +5,12 @@ import (
 	"io/ioutil"
 
 	"github.com/brendoncarroll/got"
-	"github.com/brendoncarroll/got/pkg/realms"
+	"github.com/brendoncarroll/got/pkg/volumes"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
-var cellName string
+var name string
 
 func init() {
 	rootCmd.AddCommand(newVolCmd)
@@ -19,7 +19,7 @@ func init() {
 	rootCmd.AddCommand(rmVolCmd)
 	rootCmd.AddCommand(branchCmd)
 
-	newVolCmd.Flags().StringVar(&cellName, "name", "", "--name=vol-name")
+	newVolCmd.Flags().StringVar(&name, "name", "", "--name=vol-name")
 }
 
 var newVolCmd = &cobra.Command{
@@ -35,15 +35,11 @@ var newVolCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		cellSpec, err := got.ParseCellSpec(data)
+		volSpec, err := got.ParseVolumeSpec(data)
 		if err != nil {
 			return err
 		}
-		spec := got.VolumeSpec{
-			Cell:  *cellSpec,
-			Store: got.StoreSpec{Local: &got.LocalStoreSpec{}},
-		}
-		return repo.CreateVolume(cellName, spec)
+		return repo.CreateVolumeWithSpec(name, *volSpec)
 	},
 }
 
@@ -59,7 +55,7 @@ var listVolCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		r := repo.GetRealm()
 		w := cmd.OutOrStdout()
-		return realms.ForEach(ctx, r, func(k string) error {
+		return volumes.ForEach(ctx, r, func(k string) error {
 			fmt.Fprintf(w, "%s\n", k)
 			return nil
 		})
@@ -106,7 +102,7 @@ var branchCmd = &cobra.Command{
 			Cell:  got.CellSpec{Local: &got.LocalCellSpec{}},
 			Store: got.StoreSpec{Local: &got.LocalStoreSpec{}},
 		}
-		if err := repo.CreateVolume(name, spec); err != nil && err != realms.ErrExists {
+		if err := repo.CreateVolumeWithSpec(name, spec); err != nil && err != volumes.ErrExists {
 			return err
 		}
 		return repo.SetActiveVolume(ctx, name)

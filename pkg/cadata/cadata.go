@@ -1,8 +1,18 @@
 package cadata
 
-import "github.com/blobcache/blobcache/pkg/blobs"
+import (
+	"context"
 
-type Store = blobs.Store
+	"github.com/blobcache/blobcache/pkg/blobs"
+	"golang.org/x/sync/errgroup"
+)
+
+type (
+	Store  = blobs.Store
+	Lister = blobs.Lister
+	Getter = blobs.Getter
+	Poster = blobs.Poster
+)
 
 type ID = blobs.ID
 
@@ -18,4 +28,50 @@ func IDFromBytes(x []byte) ID {
 
 func NewMem() *blobs.MemStore {
 	return blobs.NewMem()
+}
+
+func ForEach(ctx context.Context, s blobs.Lister, fn func(id ID) error) error {
+	return blobs.ForEach(ctx, s, fn)
+}
+
+func Copy(ctx context.Context, dst blobs.Poster, src blobs.Getter, id ID) error {
+	return src.GetF(ctx, id, func(data []byte) error {
+		_, err := dst.Post(ctx, data)
+		return err
+	})
+}
+
+type CopyAllFrom interface {
+	CopyAllFrom(ctx context.Context, src Store) error
+}
+
+func CopyAll(ctx context.Context, dst, src Store) error {
+	if caf, ok := dst.(CopyAllFrom); ok {
+		return caf.CopyAllFrom(ctx, src)
+	}
+
+	const numWorkers = 16
+	ch := make(chan blobs.ID)
+	eg, ctx := errgroup.WithContext(ctx)
+	eg.Go(func() error {
+		return ForEach(ctx, src, func(id ID) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case ch <- id:
+			}
+			return nil
+		})
+	})
+	for i := 0; i < numWorkers; i++ {
+		eg.Go(func() error {
+			for id := range ch {
+				if err := Copy(ctx, src, dst, id); err != nil {
+					return err
+				}
+			}
+			return nil
+		})
+	}
+	return eg.Wait()
 }

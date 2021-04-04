@@ -3,11 +3,10 @@ package got
 import (
 	"encoding/json"
 
-	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/c/httpcell"
 	"github.com/brendoncarroll/got/pkg/cells"
-	"github.com/brendoncarroll/got/pkg/gotnet"
+	"github.com/brendoncarroll/got/pkg/volumes"
 	"github.com/pkg/errors"
 )
 
@@ -17,7 +16,9 @@ type StoreSpec struct {
 	Peer      *PeerStoreSpec      `json:"peer,omitempty"`
 }
 
-type LocalStoreSpec struct{}
+type LocalStoreSpec struct {
+	ID uint64 `json:"id"`
+}
 
 type BlobcacheStoreSpec struct {
 	Addr string `json:"addr"`
@@ -40,7 +41,7 @@ type PeerStoreSpec struct {
 func (r *Repo) MakeStore(spec StoreSpec) (Store, error) {
 	switch {
 	case spec.Local != nil:
-		return blobs.NewMem(), nil // TODO: persistant
+		return r.storeManager.GetStore(spec.Local.ID), nil
 	default:
 		return nil, errors.Errorf("empty store spec")
 	}
@@ -51,7 +52,15 @@ type VolumeSpec struct {
 	Store StoreSpec `json:"store"`
 }
 
-func (r *Repo) MakeEnv(k string, spec VolumeSpec) (*Volume, error) {
+func ParseVolumeSpec(data []byte) (*VolumeSpec, error) {
+	var spec VolumeSpec
+	if err := json.Unmarshal(data, &spec); err != nil {
+		return nil, err
+	}
+	return &spec, nil
+}
+
+func (r *Repo) MakeVolume(k string, spec VolumeSpec) (*Volume, error) {
 	cell, err := r.MakeCell(k, spec.Cell)
 	if err != nil {
 		return nil, err
@@ -102,7 +111,7 @@ func ParseCellSpec(data []byte) (*CellSpec, error) {
 func (r *Repo) MakeCell(k string, spec CellSpec) (Cell, error) {
 	switch {
 	case spec.Local != nil:
-		return newBoltCell(r.db, k), nil
+		return cells.NewBoltCell(r.db, []string{bucketCellData, k}), nil
 
 	case spec.HTTP != nil:
 		return httpcell.New(*spec.HTTP), nil
@@ -142,21 +151,33 @@ func (r *Repo) MakeCell(k string, spec CellSpec) (Cell, error) {
 }
 
 type RealmSpec struct {
-	Peer *PeerCellSpaceSpec
+	Prefixed *PrefixedRealmSpec `json:"prefixed"`
+	Peer     *PeerRealmSpec     `json:"peer"`
 }
 
-type PeerCellSpaceSpec struct {
+type PrefixedRealmSpec struct {
+	Prefix string    `json:"prefix"`
+	Inner  RealmSpec `json:"inner"`
+}
+
+type PeerRealmSpec struct {
 	ID p2p.PeerID `json:"id"`
 }
 
 func (r *Repo) MakeRealm(spec RealmSpec) (Realm, error) {
 	switch {
-	case spec.Peer != nil:
-		swarm, err := r.getSwarm()
+	case spec.Prefixed != nil:
+		if spec.Prefixed.Prefix == "" {
+			return nil, errors.Errorf("refusing to make prefixed realm with empty prefix")
+		}
+		inner, err := r.MakeRealm(spec.Prefixed.Inner)
 		if err != nil {
 			return nil, err
 		}
-		return gotnet.NewClient(swarm, spec.Peer.ID), nil
+		return volumes.NewPrefixed(inner, spec.Prefixed.Prefix), nil
+
+	case spec.Peer != nil:
+		panic("not implemented")
 	default:
 		return nil, errors.Errorf("empty cell space spec")
 	}

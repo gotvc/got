@@ -19,18 +19,18 @@ func (r *Repo) Add(ctx context.Context, p string) error {
 			return r.Add(ctx, p2)
 		})
 	}
-	rc, err := r.workingDir.Open(p)
-	if err != nil {
-		return err
-	}
-	defer rc.Close()
-	return r.ApplyStaging(ctx, func(s Store, x Ref) (*Ref, error) {
+	return r.ApplyStaging(ctx, func(s Store, x Root) (*Root, error) {
+		rc, err := r.workingDir.Open(p)
+		if err != nil {
+			return nil, err
+		}
+		defer rc.Close()
 		return gotfs.CreateFileFrom(ctx, s, x, p, rc)
 	})
 }
 
 func (r *Repo) Remove(ctx context.Context, p string) error {
-	return r.ApplyStaging(ctx, func(s Store, x Ref) (*Ref, error) {
+	return r.ApplyStaging(ctx, func(s Store, x Root) (*Root, error) {
 		return gotfs.RemoveAll(ctx, s, x, p)
 	})
 }

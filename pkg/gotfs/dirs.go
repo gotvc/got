@@ -1,11 +1,8 @@
 package gotfs
 
 import (
-	"bytes"
 	"context"
 	"io"
-	"log"
-	"math"
 	"os"
 	"strings"
 
@@ -15,23 +12,12 @@ import (
 
 const Sep = '/'
 
-func GetDirMetadata(ctx context.Context, s Store, x Ref, p string) (*Metadata, error) {
-	md, err := GetMetadata(ctx, s, x, p)
-	if err != nil {
-		return nil, err
-	}
-	if !md.Mode.IsDir() {
-		return nil, errors.Errorf("%s is not a directory", p)
-	}
-	return md, nil
-}
-
 type DirEnt struct {
 	Name string
 	Mode os.FileMode
 }
 
-func Mkdir(ctx context.Context, s Store, x Ref, p string) (*Ref, error) {
+func Mkdir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
 	if err := checkNoEntry(ctx, s, x, p); err != nil {
 		return nil, err
 	}
@@ -41,7 +27,7 @@ func Mkdir(ctx context.Context, s Store, x Ref, p string) (*Ref, error) {
 	return PutMetadata(ctx, s, x, p, md)
 }
 
-func EnsureDir(ctx context.Context, s Store, x Ref, p string) (*Ref, error) {
+func EnsureDir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
 	parts := strings.Split(p, string(Sep))
 	for i := range parts {
 		p2 := strings.Join(parts[:i+1], string(Sep))
@@ -59,37 +45,31 @@ func EnsureDir(ctx context.Context, s Store, x Ref, p string) (*Ref, error) {
 	return &x, nil
 }
 
-func ReadDir(ctx context.Context, s Store, x Ref, p string, fn func(e DirEnt) error) error {
+func ReadDir(ctx context.Context, s Store, x Root, p string, fn func(e DirEnt) error) error {
 	p = cleanPath(p)
 	di, err := newDirIterator(ctx, s, x, p)
 	if err != nil {
 		return err
 	}
 	for {
-		err := di.Next(ctx, fn)
+		dirEnt, err := di.Next(ctx)
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			return err
 		}
+		if err := fn(*dirEnt); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func RemoveAll(ctx context.Context, s Store, x Ref, p string) (*Ref, error) {
-	return gotkv.DeletePrefix(ctx, s, x, []byte(p))
-}
-
-func PrependDirs(ctx context.Context, s Store, x Ref, prefix string) (*Ref, error) {
-	// TODO: add dir metadata
-	return gotkv.AddPrefix(ctx, s, x, []byte(prefix))
-}
-
-func Merge(ctx context.Context, s Store, xs []Ref) (*Ref, error) {
-	return gotkv.Reduce(ctx, s, xs, func(key []byte, v1, v2 []byte) ([]byte, error) {
-		panic("")
-	})
+func RemoveAll(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+	op := gotkv.NewOperator()
+	span := gotkv.PrefixSpan([]byte(p))
+	return op.DeleteSpan(ctx, s, x, span)
 }
 
 func cleanPath(p string) string {
@@ -99,18 +79,21 @@ func cleanPath(p string) string {
 
 type dirIterator struct {
 	s    Store
-	x    Ref
+	x    Root
 	p    string
-	iter *gotkv.Iterator
+	iter gotkv.Iterator
 }
 
-func newDirIterator(ctx context.Context, s Store, x Ref, p string) (*dirIterator, error) {
+func newDirIterator(ctx context.Context, s Store, x Root, p string) (*dirIterator, error) {
 	_, err := GetDirMetadata(ctx, s, x, p)
 	if err != nil {
 		return nil, err
 	}
-	iter := gotkv.NewIterator(ctx, s, x)
-	iter.SeekPast([]byte(p))
+	span := gotkv.PrefixSpan([]byte(p))
+	iter := gotkv.NewOperator().NewIterator(s, x, span)
+	if _, err := iter.Next(ctx); err != nil && err != io.EOF {
+		return nil, err
+	}
 	return &dirIterator{
 		s:    s,
 		x:    x,
@@ -119,36 +102,27 @@ func newDirIterator(ctx context.Context, s Store, x Ref, p string) (*dirIterator
 	}, nil
 }
 
-func (di *dirIterator) Next(ctx context.Context, fn func(de DirEnt) error) error {
-	var dirEnt DirEnt
-	var seekPast []byte
-	log.Println(string(di.iter.LastKey()))
-	if err := di.iter.Next(func(key, value []byte) error {
-		log.Println(string(key), string(value))
-		o, err := parseObject(value)
-		if err != nil {
-			return err
-		}
-		if o.Metadata == nil {
-			panic("")
-		}
-		seekPast = append([]byte{}, key...)
-		seekPast = appendUint64(seekPast, math.MaxUint64)
-		if !bytes.HasPrefix(key, []byte(di.p+"/")) {
-			return nil
-		}
-		md := o.Metadata
-		dirEnt = DirEnt{
-			Name: string(key[len(di.p)+1:]),
-			Mode: md.Mode,
-		}
-		return nil
-	}); err != nil {
-		return err
+func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
+	ent, err := di.iter.Next(ctx)
+	if err != nil {
+		return nil, err
 	}
-	if err := fn(dirEnt); err != nil {
-		return err
+	o, err := parseObject(ent.Value)
+	if err != nil {
+		return nil, err
 	}
-	di.iter.SeekPast(seekPast)
-	return nil
+	if o.Metadata == nil {
+		return nil, errors.Errorf("expected metadata")
+	}
+	// now we have to advance through the file or directory to fully consume it.
+	if err := di.iter.Seek(ctx, gotkv.PrefixEnd(ent.Key)); err != nil {
+		return nil, err
+	}
+	md := o.Metadata
+	name := string(ent.Key[len(di.p)+1:])
+	dirEnt := DirEnt{
+		Name: name,
+		Mode: md.Mode,
+	}
+	return &dirEnt, nil
 }

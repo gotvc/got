@@ -11,8 +11,8 @@ import (
 )
 
 const (
-	methodCAS = "CAS"
-	methodGET = "GET"
+	methodWrite = "WRITE"
+	methodRead  = "READ"
 )
 
 var _ gotnet.ACL = Policy{}
@@ -21,28 +21,28 @@ type Policy struct {
 	rules []Rule
 }
 
-func (p Policy) CanCASAny(peerID p2p.PeerID) (ret bool) {
+func (p Policy) CanWriteAny(peerID p2p.PeerID) (ret bool) {
 	// can cas any cell
 	for _, r := range p.rules {
-		ret = ret || (r.Subject == peerID && r.Method == methodCAS)
+		ret = ret || (r.Subject == peerID && r.Method == methodWrite)
 	}
 	return ret
 }
 
-func (p Policy) CanGetAny(peerID p2p.PeerID) (ret bool) {
+func (p Policy) CanReadAny(peerID p2p.PeerID) (ret bool) {
 	// can get any cell
 	for _, r := range p.rules {
-		ret = ret || (r.Subject == peerID && r.Method == methodGET)
+		ret = ret || (r.Subject == peerID && r.Method == methodRead)
 	}
 	return ret
 }
 
-func (p Policy) CanGetCell(peerID p2p.PeerID, name string) (ret bool) {
-	return p.canDo(peerID, methodGET, name)
+func (p Policy) CanWrite(peerID p2p.PeerID, name string) (ret bool) {
+	return p.canDo(peerID, methodWrite, name)
 }
 
-func (p Policy) CanCASCell(peerID p2p.PeerID, name string) (ret bool) {
-	return p.canDo(peerID, methodCAS, name)
+func (p Policy) CanRead(peerID p2p.PeerID, name string) (ret bool) {
+	return p.canDo(peerID, methodRead, name)
 }
 
 func (p Policy) canDo(peerID p2p.PeerID, method, object string) (ret bool) {
@@ -115,7 +115,7 @@ func ParseRule(data []byte) (*Rule, error) {
 	r.Subject = id
 	// Verb
 	switch string(parts[2]) {
-	case "CAS", "GET":
+	case methodWrite, methodRead:
 		r.Method = string(parts[1])
 	default:
 		return nil, errors.Errorf("invalid method %s", string(parts[0]))

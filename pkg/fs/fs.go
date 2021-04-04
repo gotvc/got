@@ -2,6 +2,7 @@ package fs
 
 import (
 	"bytes"
+	"context"
 	"io"
 	"io/ioutil"
 	"os"
@@ -145,4 +146,14 @@ func WriteIfNotExists(fs FS, p string, data []byte) error {
 		return os.ErrExist
 	}
 	return WriteFile(fs, p, data)
+}
+
+func WalkFiles(ctx context.Context, fs FS, p string, fn func(p string) error) error {
+	return fs.ReadDir(p, func(finfo os.FileInfo) error {
+		p2 := filepath.Join(p, finfo.Name())
+		if finfo.IsDir() {
+			return WalkFiles(ctx, fs, p2, fn)
+		}
+		return fn(p2)
+	})
 }

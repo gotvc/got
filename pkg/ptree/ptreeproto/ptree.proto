@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+option go_package = "github.com/brendoncarroll/got/pkg/ptree/ptreeproto";
+
+message Entry {
+    bytes key = 1;
+    bytes value = 2;
+
+    uint32 prev_prefix = 3;
+}

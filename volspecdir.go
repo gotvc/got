@@ -3,6 +3,8 @@ package got
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"os"
 	"strings"
@@ -46,14 +48,15 @@ func (esd *volSpecDir) List(ctx context.Context, prefix string) ([]string, error
 }
 
 func (csd *volSpecDir) Create(ctx context.Context, name string) error {
+	x := randomUint64()
 	spec := VolumeSpec{
 		Cell:  CellSpec{Local: &LocalCellSpec{}},
-		Store: StoreSpec{Local: &LocalStoreSpec{}},
+		Store: StoreSpec{Local: &LocalStoreSpec{ID: x}},
 	}
-	return csd.CreateEnvFromSpec(name, spec)
+	return csd.CreateWithSpec(name, spec)
 }
 
-func (csd *volSpecDir) CreateEnvFromSpec(name string, spec VolumeSpec) error {
+func (csd *volSpecDir) CreateWithSpec(name string, spec VolumeSpec) error {
 	_, err := csd.cf(name, spec.Cell)
 	if err != nil {
 		return err
@@ -78,10 +81,10 @@ func (esd *volSpecDir) Get(ctx context.Context, k string) (*Volume, error) {
 	if err := json.Unmarshal(data, &spec); err != nil {
 		return nil, err
 	}
-	return esd.makeEnv(k, spec)
+	return esd.makeVol(k, spec)
 }
 
-func (esd *volSpecDir) makeEnv(k string, spec VolumeSpec) (*Volume, error) {
+func (esd *volSpecDir) makeVol(k string, spec VolumeSpec) (*Volume, error) {
 	cell, err := esd.cf(k, spec.Cell)
 	if err != nil {
 		return nil, err
@@ -91,4 +94,12 @@ func (esd *volSpecDir) makeEnv(k string, spec VolumeSpec) (*Volume, error) {
 		return nil, err
 	}
 	return &Volume{Cell: cell, Store: store}, nil
+}
+
+func randomUint64() uint64 {
+	buf := [8]byte{}
+	if _, err := rand.Read(buf[:]); err != nil {
+		panic(err)
+	}
+	return binary.BigEndian.Uint64(buf[:])
 }

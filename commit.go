@@ -5,28 +5,26 @@ import (
 	"encoding/json"
 
 	"github.com/brendoncarroll/got/pkg/gotfs"
-	"github.com/brendoncarroll/got/pkg/gotkv"
+	"github.com/brendoncarroll/got/pkg/refs"
 	"github.com/pkg/errors"
 )
 
 type Commit struct {
-	Version uint
-	Parent  *Ref
-	Root    Ref
+	Version uint `json:"version"`
+	Parent  *Ref `json:"parent"`
+	Root    Root `json:"root"`
 }
 
 func PostCommit(ctx context.Context, s Store, x Commit) (*Ref, error) {
-	data, err := json.Marshal(x)
-	if err != nil {
-		return nil, err
-	}
-	return gotkv.PostRaw(ctx, s, data)
+	return refs.Post(ctx, s, marshalCommit(x))
 }
 
 func GetCommit(ctx context.Context, s Store, ref Ref) (*Commit, error) {
-	x := &Commit{}
-	if err := gotkv.GetRawF(ctx, s, ref, func(data []byte) error {
-		return json.Unmarshal(data, x)
+	var x *Commit
+	if err := refs.GetF(ctx, s, ref, func(data []byte) error {
+		var err error
+		x, err = parseCommit(data)
+		return err
 	}); err != nil {
 		return nil, err
 	}
@@ -37,11 +35,11 @@ func Squash(ctx context.Context, s Store, xs []Commit) (*Commit, error) {
 	if len(xs) < 1 {
 		return nil, errors.Errorf("cannot squash 0 commits")
 	}
-	refs := make([]Ref, len(xs))
+	roots := make([]Root, len(xs))
 	for i := range xs {
-		refs[i] = xs[i].Root
+		roots[i] = xs[i].Root
 	}
-	root, err := gotfs.Merge(ctx, s, refs)
+	root, err := gotfs.Merge(ctx, s, roots)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +55,7 @@ func Rebase(ctx context.Context, s Store, xs []Commit, onto Commit) ([]Commit, e
 		if i > 0 {
 			onto = xs[i-1]
 		}
-		y, err := ReplaceParent(ctx, s, xs[i], onto)
+		y, err := RebaseOne(ctx, s, xs[i], onto)
 		if err != nil {
 			return nil, err
 		}
@@ -66,6 +64,37 @@ func Rebase(ctx context.Context, s Store, xs []Commit, onto Commit) ([]Commit, e
 	return ys, nil
 }
 
-func ReplaceParent(ctx context.Context, s Store, x Commit, newParent Commit) (*Commit, error) {
-	panic("")
+func RebaseOne(ctx context.Context, s Store, x Commit, onto Commit) (*Commit, error) {
+	panic("not implemented")
+}
+
+// HasAncestor returns whether x has a as an ancestor
+func HasAncestor(ctx context.Context, s Store, x, a Ref) (bool, error) {
+	if refs.Equal(x, a) {
+		return true, nil
+	}
+	commit, err := GetCommit(ctx, s, x)
+	if err != nil {
+		return false, err
+	}
+	if commit.Parent == nil {
+		return false, nil
+	}
+	return HasAncestor(ctx, s, *commit.Parent, a)
+}
+
+func marshalCommit(c Commit) []byte {
+	data, err := json.Marshal(c)
+	if err != nil {
+		panic(err)
+	}
+	return data
+}
+
+func parseCommit(data []byte) (*Commit, error) {
+	var commit Commit
+	if err := json.Unmarshal(data, &commit); err != nil {
+		return nil, err
+	}
+	return &commit, nil
 }

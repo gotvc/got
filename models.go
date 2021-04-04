@@ -6,22 +6,23 @@ import (
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/cells"
 	"github.com/brendoncarroll/got/pkg/fs"
+	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotkv"
-	"github.com/brendoncarroll/got/pkg/realms"
+	"github.com/brendoncarroll/got/pkg/volumes"
 	"github.com/pkg/errors"
 )
 
-type FS = fs.FS
+type (
+	FS = fs.FS
 
-type Cell = cells.Cell
+	Cell   = cells.Cell
+	Volume = volumes.Volume
+	Realm  = volumes.Realm
+	Store  = cadata.Store
 
-type Volume = realms.Volume
-
-type Realm = realms.Realm
-
-type Store = cadata.Store
-
-type Ref = gotkv.Ref
+	Ref  = gotkv.Ref
+	Root = gotfs.Root
+)
 
 func MarshalPEM(x interface{}) ([]byte, error) {
 	ty, err := getPEMType(x)

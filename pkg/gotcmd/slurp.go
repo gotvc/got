@@ -15,8 +15,8 @@ var slurpCmd = &cobra.Command{
 	Short:   "imports a file or directory and returns a ref",
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		store := repo.GetDefaultStore()
-		ref, err := gotfs.New(ctx, store)
+		vol := repo.GetStaging()
+		ref, err := gotfs.New(ctx, vol.Store)
 		if err != nil {
 			return err
 		}

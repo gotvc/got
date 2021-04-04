@@ -1,4 +1,4 @@
-package realms
+package volumes
 
 import (
 	"context"
@@ -9,6 +9,14 @@ type layered []Realm
 // NewLayered creates a layered CellSpace
 func NewLayered(rs ...Realm) Realm {
 	return layered(rs)
+}
+
+func (r layered) Create(ctx context.Context, k string) error {
+	panic("cannot call Create on layered realm")
+}
+
+func (r layered) Delete(ctx context.Context, k string) error {
+	panic("cannot call Delete on layered realm")
 }
 
 func (r layered) Get(ctx context.Context, k string) (*Volume, error) {

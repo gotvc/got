@@ -5,13 +5,13 @@ import "context"
 type FileReader struct {
 	ctx context.Context
 	s   Store
-	x   Ref
+	x   Root
 	p   string
 
 	offset uint64
 }
 
-func NewReader(ctx context.Context, s Store, x Ref, p string) *FileReader {
+func NewReader(ctx context.Context, s Store, x Root, p string) *FileReader {
 	return &FileReader{
 		ctx: ctx,
 		s:   s,
