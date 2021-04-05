@@ -21,8 +21,8 @@ type (
 )
 
 func New(ctx context.Context, s Store) (*Root, error) {
-	gotkv := gotkv.NewOperator()
-	x, err := gotkv.NewEmpty(ctx, s)
+	op := gotkv.NewOperator()
+	x, err := op.NewEmpty(ctx, s)
 	if err != nil {
 		return nil, err
 	}

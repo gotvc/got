@@ -56,7 +56,7 @@ func (r *Ref) UnmarshalText(data []byte) error {
 func ParseRef(x []byte) (Ref, error) {
 	var ref Ref
 	if len(x) != len(ref.CID)+len(ref.DEK) {
-		return Ref{}, errors.Errorf("wrong length for ref")
+		return Ref{}, errors.Errorf("wrong length for ref %d %q", len(x), x)
 	}
 	copy(ref.CID[:], x[:len(ref.CID)])
 	copy(ref.DEK[:], x[len(ref.CID):])

@@ -3,6 +3,7 @@ package ptree
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"log"
 
@@ -22,6 +23,8 @@ type Root struct {
 }
 
 // A span of keys [First, Last)
+// If you want to include a specific last key, use the KeyAfter function.
+// nil is interpretted as no bound, not as 0 length key.  This behaviour is only releveant for Last.
 type Span struct {
 	First, Last []byte
 }
@@ -91,28 +94,7 @@ func MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, 
 	return MaxKey(ctx, s, Root{Ref: ref, Depth: x.Depth - 1}, under)
 }
 
-// func maxKeyFromIterator(ctx context.Context, it StreamIterator, under []byte) ([]byte, error) {
-// 	var ent *Entry
-// 	for {
-// 		ent2, err := it.Next(ctx)
-// 		if err != nil {
-// 			if err == io.EOF {
-// 				break
-// 			}
-// 			return nil, err
-// 		}
-// 		if bytes.Compare(ent2.Key, under) >= 0 {
-// 			break
-// 		}
-// 		ent = ent2
-// 	}
-// 	if ent == nil {
-// 		return nil, io.EOF
-// 	}
-// 	return ent.Key, nil
-// }
-
-func DebufRef(s cadata.Store, x Ref) {
+func DebugRef(s cadata.Store, x Ref) {
 	ctx := context.TODO()
 	sr := NewStreamReader(s, x)
 	log.Println("DUMP ref:", x.CID.String())
@@ -124,6 +106,50 @@ func DebufRef(s cadata.Store, x Ref) {
 		if err != nil {
 			panic(err)
 		}
-		log.Println("entry:", string(ent.Key), "->", ent.Value)
+		log.Println("entry:", string(ent.Key), "->", string(ent.Value))
 	}
+}
+
+func DebugTree(s cadata.Store, x Root) {
+	max := x.Depth
+
+	var debugTree func(Root)
+	debugTree = func(x Root) {
+		indent := ""
+		for i := 0; i < int(max-x.Depth); i++ {
+			indent += "  "
+		}
+		ctx := context.TODO()
+		sr := NewStreamReader(s, x.Ref)
+		fmt.Printf("%sTREE NODE: %s %d\n", indent, x.Ref.CID.String(), x.Depth)
+		if x.Depth == 0 {
+			for {
+				ent, err := sr.Next(ctx)
+				if err != nil {
+					if err == io.EOF {
+						break
+					}
+					panic(err)
+				}
+				fmt.Printf("%s ENTRY key=%q value=%q\n", indent, string(ent.Key), string(ent.Value))
+			}
+		} else {
+			for {
+				ent, err := sr.Next(ctx)
+				if err != nil {
+					if err == io.EOF {
+						break
+					}
+					panic(err)
+				}
+				ref, err := refs.ParseRef(ent.Value)
+				if err != nil {
+					panic(err)
+				}
+				fmt.Printf("%s INDEX first=%q -> ref=%s\n", indent, string(ent.Key), ref.CID.String())
+				debugTree(Root{Ref: ref, Depth: x.Depth - 1})
+			}
+		}
+	}
+	debugTree(x)
 }

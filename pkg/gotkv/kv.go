@@ -87,8 +87,11 @@ func (o *operator) Put(ctx context.Context, s cadata.Store, x Root, key, value [
 func (o *operator) GetF(ctx context.Context, s cadata.Store, x Root, key []byte, fn func([]byte) error) error {
 	it := o.NewIterator(s, x, ptree.SingleItemSpan(key))
 	ent, err := it.Next(ctx)
-	if err == io.EOF {
-		return ErrKeyNotFound
+	if err != nil {
+		if err == io.EOF {
+			err = ErrKeyNotFound
+		}
+		return err
 	}
 	return fn(ent.Value)
 }

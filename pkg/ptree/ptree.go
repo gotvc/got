@@ -14,6 +14,8 @@ type Builder struct {
 	levels []*StreamWriter
 	isDone bool
 	root   *Root
+
+	ctx context.Context
 }
 
 func NewBuilder(s cadata.Store) *Builder {
@@ -27,11 +29,11 @@ func NewBuilder(s cadata.Store) *Builder {
 }
 
 func (b *Builder) getWriter(i int) *StreamWriter {
-	return NewStreamWriter(b.s, func(ctx context.Context, ref refs.Ref, firstKey []byte) error {
+	return NewStreamWriter(b.s, func(idx Index) error {
 		switch {
 		case b.isDone && i == len(b.levels)-1:
 			b.root = &Root{
-				Ref:   ref,
+				Ref:   idx.Ref,
 				Depth: uint(i),
 			}
 			return nil
@@ -39,15 +41,17 @@ func (b *Builder) getWriter(i int) *StreamWriter {
 			b.levels = append(b.levels, b.getWriter(i+1))
 			fallthrough
 		default:
-			return b.levels[i+1].Append(ctx, Entry{
-				Key:   firstKey,
-				Value: refs.MarshalRef(ref),
+			return b.levels[i+1].Append(b.ctx, Entry{
+				Key:   idx.First,
+				Value: refs.MarshalRef(idx.Ref),
 			})
 		}
 	})
 }
 
 func (b *Builder) Put(ctx context.Context, key, value []byte) error {
+	b.ctx = ctx
+	defer func() { b.ctx = nil }()
 	if b.isDone {
 		return errors.Errorf("builder is closed")
 	}
@@ -62,6 +66,8 @@ func (b *Builder) Put(ctx context.Context, key, value []byte) error {
 }
 
 func (b *Builder) Finish(ctx context.Context) (*Root, error) {
+	b.ctx = ctx
+	defer func() { b.ctx = nil }()
 	if b.isDone {
 		return nil, errors.Errorf("builder is closed")
 	}
@@ -194,69 +200,136 @@ func deleteMutation(k []byte) Mutation {
 	}
 }
 
-// type editor struct {
-// 	s      cadata.Store
-// 	span   Span
-// 	root   Root
-// 	levels []*StreamEditor
-// }
+type editor struct {
+	s cadata.Store
 
-// in the editFn, need to parseRef then feed to the next editor down.
-// at the bottom (level 0), apply the mutator that was given.
-// when a new ref is produced, feed it back up towards the root.
-// to kick the whole thing off, call Process on the root editor.
+	root Root
+	span Span
+	fn   func(*Entry) []Entry
 
-// func newEditor(s cadata.Store, root Root, mut Mutation) *editor {
-// 	levels := make([]*StreamEditor, root.Depth)
-// 	for i := range levels {
+	editors    []*StreamEditor
+	newIndexes [][]Index
 
-// 		editFn := func(*Entry) ([]Entry, error) {
+	ctx context.Context
+}
 
-// 		}
-// 		onRef := func(ctx context.Context, ref refs.Ref, firstKey []byte) error {
+func newEditor(s cadata.Store, root Root, mut Mutation) *editor {
+	e := &editor{
+		s: s,
 
-// 		}
-// 		levels[i] = NewStreamEditor(s, mut.Span, editFn, onRef)
-// 	}
-// 	return &editor{
-// 		levels: make([]*StreamEditor, root.Depth),
-// 	}
-// }
+		root: root,
+		span: mut.Span,
+		fn:   mut.Fn,
 
-// func (e *editor) run(ctx context.Context) error {
-// 	e.levels[]
-// }
+		editors:    make([]*StreamEditor, root.Depth+1),
+		newIndexes: make([][]Index, root.Depth+1),
+	}
+	return e
+}
 
-// func (e *editor) getStreamEditor(level int) *StreamEditor {
-// 	if level == len(e.levels) {
-// 		NewStreamEditor(e.span, func(Entry) (Entry, error) {
+func (e *editor) getStreamEditor(level int) (ret *StreamEditor) {
+	if e.editors[level] != nil {
+		return e.editors[level]
+	}
+	defer func() { e.editors[level] = ret }()
 
-// 		})
-// 		return e.root.Ref
-// 	}
+	onIndex := func(idx Index) error {
+		e.newIndexes[level] = append(e.newIndexes[level], idx)
+		return nil
+	}
+	if level == 0 {
+		return NewStreamEditor(e.s, e.span, func(ent *Entry) ([]Entry, error) {
+			return e.fn(ent), nil
+		}, onIndex)
+	}
+	span := Span{}
+	return NewStreamEditor(e.s, span, func(ent *Entry) ([]Entry, error) {
+		se2 := e.getStreamEditor(level - 1)
+		if ent != nil {
+			ref, err := refs.ParseRef(ent.Value)
+			if err != nil {
+				return nil, err
+			}
+			idx := Index{First: ent.Key, Ref: ref}
+			if err := se2.Process(e.ctx, idx); err != nil {
+				return nil, err
+			}
+		}
+		idxs := e.newIndexes[level-1]
+		e.newIndexes[level-1] = nil
+		return indexesToEntries(idxs), nil
+	}, onIndex)
+}
 
-// }
+func (e *editor) run(ctx context.Context) (*Root, error) {
+	e.ctx = ctx
+	defer func() { e.ctx = nil }()
+	se := e.getStreamEditor(int(e.root.Depth))
+	// put the root through, and flush
+	if err := se.Process(ctx, Index{Ref: e.root.Ref}); err != nil {
+		return nil, err
+	}
+	for i := len(e.editors) - 1; i >= 0; i-- {
+		if err := e.editors[i].Flush(ctx); err != nil {
+			return nil, err
+		}
+	}
+	// write up the levels
+	for i := range e.newIndexes {
+		if len(e.newIndexes[i]) > 0 && i < len(e.newIndexes)-1 {
+			idxs, err := writeIndexes(ctx, e.s, e.newIndexes[i])
+			if err != nil {
+				return nil, err
+			}
+			e.newIndexes[i] = nil
+			e.newIndexes[i+1] = append(e.newIndexes[i+1], idxs...)
+		}
+	}
+	level := len(e.newIndexes)
+	finalIdxs := e.newIndexes[len(e.newIndexes)-1]
+	for len(finalIdxs) > 1 {
+		var err error
+		if finalIdxs, err = writeIndexes(ctx, e.s, finalIdxs); err != nil {
+			return nil, err
+		}
+		level++
+	}
+	return &Root{Ref: finalIdxs[0].Ref, Depth: uint(level) - 1}, nil
+}
+
+func indexToEntry(idx Index) Entry {
+	return Entry{
+		Key:   idx.First,
+		Value: refs.MarshalRef(idx.Ref),
+	}
+}
+
+func indexesToEntries(idxs []Index) []Entry {
+	var ents []Entry
+	for _, idx := range idxs {
+		ents = append(ents, indexToEntry(idx))
+	}
+	return ents
+}
 
 func Mutate(ctx context.Context, s cadata.Store, root Root, m Mutation) (*Root, error) {
-	var ret *Root
-	if root.Depth == 0 {
-		se := NewStreamEditor(s, m.Span, func(ent *Entry) ([]Entry, error) {
-			return m.Fn(ent), nil
-		}, func(ctx context.Context, ref Ref, firstKey []byte) error {
-			if ret != nil {
-				panic("not implemented")
-			}
-			ret = &Root{Ref: ref}
-			return nil
-		})
-		if err := se.Process(ctx, root.Ref); err != nil {
+	e := newEditor(s, root, m)
+	return e.run(ctx)
+}
+
+func writeIndexes(ctx context.Context, s cadata.Store, idxs []Index) ([]Index, error) {
+	var ret []Index
+	w := NewStreamWriter(s, func(idx Index) error {
+		ret = append(ret, idx)
+		return nil
+	})
+	for _, idx := range idxs {
+		if err := w.Append(ctx, indexToEntry(idx)); err != nil {
 			return nil, err
 		}
-		if err := se.Finish(ctx); err != nil {
-			return nil, err
-		}
-		return ret, nil
 	}
-	panic("not implemented")
-	return nil, nil
+	if err := w.Flush(ctx); err != nil {
+		return nil, err
+	}
+	return ret, nil
 }

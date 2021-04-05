@@ -82,6 +82,11 @@ func peekFirstKey(ctx context.Context, s cadata.Store, ref Ref) ([]byte, error) 
 	return ret, nil
 }
 
+type Index struct {
+	Ref   Ref
+	First []byte
+}
+
 type StreamReader struct {
 	s   cadata.Store
 	ref Ref
@@ -152,6 +157,8 @@ func (r *StreamReader) getByteReader(ctx context.Context) (*bytes.Reader, error)
 	return r.br, nil
 }
 
+type IndexHandler = func(Index) error
+
 type StreamWriter struct {
 	s       cadata.Store
 	chunker *Chunker
@@ -160,7 +167,7 @@ type StreamWriter struct {
 	ctx     context.Context
 }
 
-func NewStreamWriter(s cadata.Store, onRef func(context.Context, Ref, []byte) error) *StreamWriter {
+func NewStreamWriter(s cadata.Store, onIndex IndexHandler) *StreamWriter {
 	w := &StreamWriter{
 		s: s,
 	}
@@ -174,7 +181,8 @@ func NewStreamWriter(s cadata.Store, onRef func(context.Context, Ref, []byte) er
 		if err != nil {
 			panic(err) // we just wrote this
 		}
-		return onRef(w.ctx, *ref, ent.Key)
+		idx := Index{Ref: *ref, First: ent.Key}
+		return onIndex(idx)
 	})
 	return w
 }
@@ -202,16 +210,14 @@ func (w *StreamWriter) setLastKey(k []byte) {
 	w.lastKey = append(w.lastKey[:0], k...)
 }
 
-type refHandler = func(ctx context.Context, ref Ref, firstKey []byte) error
-
 type entryMutator = func(*Entry) ([]Entry, error)
 
 type StreamEditor struct {
 	s cadata.Store
 
-	span  Span
-	fn    entryMutator
-	onRef refHandler
+	span    Span
+	fn      entryMutator
+	onIndex IndexHandler
 
 	inputRefs    map[Ref]struct{}
 	w            *StreamWriter
@@ -220,23 +226,23 @@ type StreamEditor struct {
 	fnCalled     bool
 }
 
-func NewStreamEditor(s cadata.Store, span Span, fn entryMutator, onRef refHandler) *StreamEditor {
+func NewStreamEditor(s cadata.Store, span Span, fn entryMutator, onIndex IndexHandler) *StreamEditor {
 	e := &StreamEditor{
 		s: s,
 
-		span:  span,
-		fn:    fn,
-		onRef: onRef,
+		span:    span,
+		fn:      fn,
+		onIndex: onIndex,
 
 		inputRefs: make(map[Ref]struct{}),
 	}
-	e.w = NewStreamWriter(s, func(ctx context.Context, ref Ref, firstKey []byte) error {
-		if _, exists := e.inputRefs[ref]; exists {
+	e.w = NewStreamWriter(s, func(idx Index) error {
+		if _, exists := e.inputRefs[idx.Ref]; exists {
 			e.syncCount++
 		} else {
 			e.syncCount = 0
 		}
-		return e.onRef(ctx, ref, firstKey)
+		return e.onIndex(idx)
 	})
 	return e
 }
@@ -249,18 +255,10 @@ func (e *StreamEditor) Done() bool {
 		e.syncCount > 1
 }
 
-func (e *StreamEditor) Process(ctx context.Context, x Ref) error {
-	if e.Done() {
-		firstKey, err := peekFirstKey(ctx, e.s, x)
-		if err != nil {
-			return err
-		}
-		return e.onRef(ctx, x, firstKey)
-	}
-	e.inputRefs[x] = struct{}{}
-	defer delete(e.inputRefs, x)
-
-	r := NewStreamReader(e.s, x)
+func (e *StreamEditor) Process(ctx context.Context, x Index) error {
+	e.inputRefs[x.Ref] = struct{}{}
+	defer delete(e.inputRefs, x.Ref)
+	r := NewStreamReader(e.s, x.Ref)
 	for {
 		xEnt, err := r.Next(ctx)
 		if err == io.EOF {
@@ -273,7 +271,9 @@ func (e *StreamEditor) Process(ctx context.Context, x Ref) error {
 			if err := e.processEntry(ctx, nil); err != nil {
 				return err
 			}
-		} else if e.span.Contains(xEnt.Key) {
+		}
+		// either edit the key or copy it
+		if e.span.Contains(xEnt.Key) {
 			if err := e.processEntry(ctx, xEnt); err != nil {
 				return err
 			}
@@ -301,7 +301,7 @@ func (e *StreamEditor) processEntry(ctx context.Context, xEnt *Entry) error {
 	return nil
 }
 
-func (e *StreamEditor) Finish(ctx context.Context) error {
+func (e *StreamEditor) Flush(ctx context.Context) error {
 	if !e.fnCalled {
 		e.processEntry(ctx, nil)
 	}
