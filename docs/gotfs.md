@@ -32,24 +32,24 @@ File data is stored in a content-addressed store, and references to the data are
 
 For example: The file "test.txt" with 10B of data in it would produce the following key value pairs.
 ```
-                            -> Metadata (dir)
-test.txt                    -> Metadata (file)
-test.txt/<64 bits of 0s>     -> Part
+                                -> Metadata (dir)
+test.txt                        -> Metadata (file)
+test.txt<NULL><64 bits of 0s>   -> Part
 ```
 
 A directory is stored as a metadata object.
 ```
-                                    -> Metadata (dir)
-mydir/                               -> Metadata (dir)
-mydir/myfile.txt/                    -> Metadata (file)
-mydir/myfile.txt/<64 bits of 0s>    -> Part
+                                        -> Metadata (dir)
+mydir/                                  -> Metadata (dir)
+mydir/myfile.txt                        -> Metadata (file)
+mydir/myfile.txt<NULL><64 bits of 0s>   -> Part
 ```
 
 It is possible for a file to be at the root
 ```
-                    -> Metadata (file)
-<NULL><64 bits of 0s>     -> Part
-<NULL>< next offset >     -> Part
+                            -> Metadata (file)
+<NULL><64 bits of 0s>       -> Part
+<NULL>< next offset >       -> Part
 ```
 
 Keys for metadata objects contain no NULL characters.
@@ -62,7 +62,7 @@ If there is not an entry at the path or the entry is not for a regular file, the
 Then convert the offset to read from to a key.
 Keys for file parts are
 ```
-key = path + bigEndian(offset - (offset % maxPartSize))
+key = path + NULL + bigEndian(offset - (offset % maxPartSize))
 
 bigEndian(x uint64) -> [8]byte
 ```
