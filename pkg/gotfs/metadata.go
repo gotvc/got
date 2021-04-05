@@ -12,25 +12,23 @@ import (
 
 const MaxPathLen = 4096
 
-type Object struct {
-	Metadata *Metadata `json:"md,omitempty"`
-	Part     *Part     `json:"part,omitempty"`
-}
-
 type Metadata struct {
 	Mode   os.FileMode       `json:"mode"`
 	Labels map[string]string `json:"labels,omitempty"`
 }
 
+func (m Metadata) marshal() []byte {
+	data, err := json.Marshal(m)
+	if err != nil {
+		panic(err)
+	}
+	return data
+}
+
 // PutMetadata assigne metadata to p
 func PutMetadata(ctx context.Context, s Store, x Root, p string, md Metadata) (*Root, error) {
-	o := Object{Metadata: &md}
-	data, err := json.Marshal(o)
-	if err != nil {
-		return nil, err
-	}
 	gotkv := gotkv.NewOperator()
-	return gotkv.Put(ctx, s, x, []byte(p), data)
+	return gotkv.Put(ctx, s, x, []byte(p), md.marshal())
 }
 
 // GetMetadata retrieves the metadata at p if it exists and errors otherwise
@@ -61,31 +59,12 @@ func GetDirMetadata(ctx context.Context, s Store, x Root, p string) (*Metadata, 
 	return md, nil
 }
 
-func marshalObject(o *Object) []byte {
-	data, err := json.Marshal(o)
-	if err != nil {
-		panic(err)
-	}
-	return data
-}
-
-func parseObject(data []byte) (*Object, error) {
-	var o Object
-	if err := json.Unmarshal(data, &o); err != nil {
-		return nil, err
-	}
-	return &o, nil
-}
-
 func parseMetadata(data []byte) (*Metadata, error) {
-	o, err := parseObject(data)
-	if err != nil {
+	var md Metadata
+	if err := json.Unmarshal(data, &md); err != nil {
 		return nil, err
 	}
-	if o.Metadata == nil {
-		return nil, errors.Errorf("object does not contain metadata")
-	}
-	return o.Metadata, nil
+	return &md, nil
 }
 
 func checkNoEntry(ctx context.Context, s Store, x Root, p string) error {

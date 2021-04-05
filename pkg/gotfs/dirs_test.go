@@ -15,7 +15,11 @@ func TestReadDir(t *testing.T) {
 	s := cadata.NewMem()
 	x, err := New(ctx, s)
 	require.NoError(t, err)
+	x, err = Mkdir(ctx, s, *x, "dir0")
+	require.NoError(t, err)
 	x, err = Mkdir(ctx, s, *x, "dir1")
+	require.NoError(t, err)
+	x, err = Mkdir(ctx, s, *x, "dir2")
 	require.NoError(t, err)
 	ps := []string{"file1.txt", "file2.txt", "file3.txt"}
 	for i := range ps {
@@ -23,6 +27,11 @@ func TestReadDir(t *testing.T) {
 		x, err = CreateFileFrom(ctx, s, *x, p, bytes.NewReader(nil))
 		require.NoError(t, err)
 	}
+	x, err = Mkdir(ctx, s, *x, "dir1/subdir")
+	require.NoError(t, err)
+	x, err = CreateFileFrom(ctx, s, *x, "dir1/subdir/file.txt", bytes.NewReader(nil))
+	require.NoError(t, err)
+	ps = append(ps, "subdir")
 	var i int
 	err = ReadDir(ctx, s, *x, "dir1", func(de DirEnt) error {
 		t.Log(de)

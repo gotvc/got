@@ -48,9 +48,12 @@ mydir/myfile.txt/<64 bits of 0s>    -> Part
 It is possible for a file to be at the root
 ```
                     -> Metadata (file)
-<64 bits of 0s>     -> Part
-< next offset >     -> Part
+<NULL><64 bits of 0s>     -> Part
+<NULL>< next offset >     -> Part
 ```
+
+Keys for metadata objects contain no NULL characters.
+Keys for parts contain exactly 1 NULL character 9 bytes from the end of key, separating the path from the offset.
 
 ## Reading A File
 To read from a file in GotFS you first lookup the metadata entry for the path of the file.

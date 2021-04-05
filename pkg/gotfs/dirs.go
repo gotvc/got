@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/brendoncarroll/got/pkg/gotkv"
-	"github.com/pkg/errors"
 )
 
 const Sep = '/'
@@ -107,18 +106,14 @@ func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
 	if err != nil {
 		return nil, err
 	}
-	o, err := parseObject(ent.Value)
+	md, err := parseMetadata(ent.Value)
 	if err != nil {
 		return nil, err
-	}
-	if o.Metadata == nil {
-		return nil, errors.Errorf("expected metadata")
 	}
 	// now we have to advance through the file or directory to fully consume it.
 	if err := di.iter.Seek(ctx, gotkv.PrefixEnd(ent.Key)); err != nil {
 		return nil, err
 	}
-	md := o.Metadata
 	name := string(ent.Key[len(di.p)+1:])
 	dirEnt := DirEnt{
 		Name: name,
