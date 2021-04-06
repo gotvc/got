@@ -4,6 +4,7 @@ import (
 	"github.com/brendoncarroll/got/pkg/ptree"
 )
 
+// PrefixSpan returns a Span that includes all keys with prefix p
 func PrefixSpan(p []byte) Span {
 	return Span{
 		First: []byte(p),
@@ -11,6 +12,7 @@ func PrefixSpan(p []byte) Span {
 	}
 }
 
+// PrefixEnd return the key > all the keys with prefix p, but < any other key
 func PrefixEnd(prefix []byte) []byte {
 	if len(prefix) == 0 {
 		return nil

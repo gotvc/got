@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,7 +16,8 @@ func TestBuilder(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	s := cadata.NewMem()
-	b := NewBuilder(s)
+	op := gdat.NewOperator()
+	b := NewBuilder(s, op)
 
 	generateEntries(1e4, func(ent Entry) {
 		err := b.Put(ctx, ent.Key, ent.Value)
@@ -30,7 +32,8 @@ func TestBuildIterate(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	s := cadata.NewMem()
-	b := NewBuilder(s)
+	op := gdat.NewOperator()
+	b := NewBuilder(s, op)
 
 	const N = 1e4
 	generateEntries(N, func(ent Entry) {
@@ -55,7 +58,8 @@ func TestMutate(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	s := cadata.NewMem()
-	b := NewBuilder(s)
+	op := gdat.NewOperator()
+	b := NewBuilder(s, op)
 
 	const N = 1e4
 	generateEntries(N, func(ent Entry) {
@@ -68,7 +72,7 @@ func TestMutate(t *testing.T) {
 
 	k := keyFromInt(int(N) / 3)
 	v := []byte("new changed value")
-	root, err = Mutate(ctx, s, *root, Mutation{
+	root, err = Mutate(ctx, s, op, *root, Mutation{
 		Span: SingleItemSpan(k),
 		Fn:   func(*Entry) []Entry { return []Entry{{Key: k, Value: v}} },
 	})

@@ -5,12 +5,13 @@ import (
 	"context"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
-	"github.com/brendoncarroll/got/pkg/refs"
+	"github.com/brendoncarroll/got/pkg/gdat"
 	"golang.org/x/sync/errgroup"
 )
 
 type Uploader struct {
 	s       cadata.Store
+	op      *gdat.Operator
 	onRef   func(Ref) error
 	chunker *Chunker
 
@@ -22,6 +23,7 @@ type Uploader struct {
 func NewUploader(s cadata.Store, numWorkers int, onRef func(Ref) error) *Uploader {
 	u := &Uploader{
 		s:     s,
+		op:    gdat.NewOperator(),
 		onRef: onRef,
 		todo:  make(chan *bytes.Buffer),
 		done:  make(chan struct{}),
@@ -63,7 +65,7 @@ func (u *Uploader) coordinator(numWorkers int) error {
 			for task := range tasks {
 				if err := func() error {
 					defer close(task.resp)
-					ref, err := refs.Post(ctx, u.s, task.buf.Bytes())
+					ref, err := u.op.Post(ctx, u.s, task.buf.Bytes())
 					if err != nil {
 						return err
 					}

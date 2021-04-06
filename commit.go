@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
-	"github.com/brendoncarroll/got/pkg/refs"
 	"github.com/pkg/errors"
 )
 
@@ -16,12 +16,14 @@ type Commit struct {
 }
 
 func PostCommit(ctx context.Context, s Store, x Commit) (*Ref, error) {
-	return refs.Post(ctx, s, marshalCommit(x))
+	dop := gdat.NewOperator()
+	return dop.Post(ctx, s, marshalCommit(x))
 }
 
 func GetCommit(ctx context.Context, s Store, ref Ref) (*Commit, error) {
+	dop := gdat.NewOperator()
 	var x *Commit
-	if err := refs.GetF(ctx, s, ref, func(data []byte) error {
+	if err := dop.GetF(ctx, s, ref, func(data []byte) error {
 		var err error
 		x, err = parseCommit(data)
 		return err
@@ -70,7 +72,7 @@ func RebaseOne(ctx context.Context, s Store, x Commit, onto Commit) (*Commit, er
 
 // HasAncestor returns whether x has a as an ancestor
 func HasAncestor(ctx context.Context, s Store, x, a Ref) (bool, error) {
-	if refs.Equal(x, a) {
+	if gdat.Equal(x, a) {
 		return true, nil
 	}
 	commit, err := GetCommit(ctx, s, x)

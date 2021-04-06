@@ -10,6 +10,7 @@ import (
 
 	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,10 +30,11 @@ func TestEntry(t *testing.T) {
 func TestStreamRW(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
+	op := gdat.NewOperator()
 	var refs []Ref
 
 	s := cadata.NewMem()
-	sw := NewStreamWriter(s, func(idx Index) error {
+	sw := NewStreamWriter(s, op, func(idx Index) error {
 		refs = append(refs, idx.Ref)
 		return nil
 	})
@@ -50,7 +52,7 @@ func TestStreamRW(t *testing.T) {
 		if sr == nil {
 			ref := refs[0]
 			refs = refs[1:]
-			sr = NewStreamReader(s, ref)
+			sr = NewStreamReader(s, Index{Ref: ref})
 		}
 		ent, err := sr.Next(ctx)
 		if err == io.EOF {
@@ -82,18 +84,15 @@ func BenchmarkStreamWriter(b *testing.B) {
 	b.ReportAllocs()
 
 	ctx := context.Background()
+	op := gdat.NewOperator()
 	s := blobs.Void{}
-	sw := NewStreamWriter(s, func(idx Index) error {
+	sw := NewStreamWriter(s, op, func(idx Index) error {
 		return nil
 	})
-	const N = 1e4
-	key := []byte("sample key")
-	value := make([]byte, 128)
-	for i := 0; i < N; i++ {
-		ent := Entry{Key: key, Value: value}
+	generateEntries(b.N, func(ent Entry) {
 		err := sw.Append(ctx, ent)
 		require.NoError(b, err)
-	}
+	})
 	require.NoError(b, sw.Flush(ctx))
 }
 
@@ -101,9 +100,11 @@ func TestStreamEditor(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	s := cadata.NewMem()
+	op := gdat.NewOperator()
+
 	// construct initial stream
 	var refs1 []Ref
-	w := NewStreamWriter(s, func(idx Index) error {
+	w := NewStreamWriter(s, op, func(idx Index) error {
 		refs1 = append(refs1, idx.Ref)
 		return nil
 	})
@@ -118,7 +119,7 @@ func TestStreamEditor(t *testing.T) {
 	putFn := put(key, []byte("the new inserted value"))
 
 	var refs2 []Ref
-	se := NewStreamEditor(s, SingleItemSpan(key), putFn, func(idx Index) error {
+	se := NewStreamEditor(s, op, SingleItemSpan(key), putFn, func(idx Index) error {
 		refs2 = append(refs2, idx.Ref)
 		return nil
 	})

@@ -6,6 +6,7 @@ require (
 	github.com/blobcache/blobcache v0.0.0-20210124234842-1989e208deea
 	github.com/brendoncarroll/go-p2p v0.0.0-20210329002125-fc78dc087301
 	github.com/chmduquesne/rollinghash v0.0.0-20180912150627-a60f8e7142b5
+	github.com/hashicorp/golang-lru v0.5.1
 	github.com/inet256/inet256 v0.0.0-20210327162439-515b41f3ced9
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.7.0

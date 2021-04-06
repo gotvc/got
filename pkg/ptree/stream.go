@@ -10,7 +10,7 @@ import (
 
 	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/got/pkg/cadata"
-	"github.com/brendoncarroll/got/pkg/refs"
+	"github.com/brendoncarroll/got/pkg/gdat"
 )
 
 const (
@@ -66,22 +66,6 @@ func writeEntry(w *bytes.Buffer, ent Entry) {
 	w.Write(data)
 }
 
-func peekFirstKey(ctx context.Context, s cadata.Store, ref Ref) ([]byte, error) {
-	var ret []byte
-	err := refs.GetF(ctx, s, ref, func(data []byte) error {
-		ent, err := readEntry(bytes.NewReader(data))
-		if err != nil {
-			return err
-		}
-		ret = append([]byte{}, ent.Key...)
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return ret, nil
-}
-
 type Index struct {
 	Ref   Ref
 	First []byte
@@ -89,14 +73,16 @@ type Index struct {
 
 type StreamReader struct {
 	s   cadata.Store
-	ref Ref
+	op  *gdat.Operator
+	idx Index
 	br  *bytes.Reader
 }
 
-func NewStreamReader(s cadata.Store, ref Ref) *StreamReader {
+func NewStreamReader(s cadata.Store, idx Index) *StreamReader {
 	return &StreamReader{
 		s:   s,
-		ref: ref,
+		op:  gdat.NewOperator(),
+		idx: idx,
 	}
 }
 
@@ -146,7 +132,7 @@ func (r *StreamReader) Seek(ctx context.Context, k []byte) error {
 
 func (r *StreamReader) getByteReader(ctx context.Context) (*bytes.Reader, error) {
 	if r.br == nil {
-		err := refs.GetF(ctx, r.s, r.ref, func(data []byte) error {
+		err := r.op.GetF(ctx, r.s, r.idx.Ref, func(data []byte) error {
 			r.br = bytes.NewReader(append([]byte{}, data...))
 			return nil
 		})
@@ -161,18 +147,20 @@ type IndexHandler = func(Index) error
 
 type StreamWriter struct {
 	s       cadata.Store
+	op      *gdat.Operator
 	chunker *Chunker
 
 	lastKey []byte
 	ctx     context.Context
 }
 
-func NewStreamWriter(s cadata.Store, onIndex IndexHandler) *StreamWriter {
+func NewStreamWriter(s cadata.Store, op *gdat.Operator, onIndex IndexHandler) *StreamWriter {
 	w := &StreamWriter{
-		s: s,
+		s:  s,
+		op: op,
 	}
 	w.chunker = NewChunker(defaultAvgSize, defaultMaxSize, func(data []byte) error {
-		ref, err := refs.Post(w.ctx, w.s, data)
+		ref, err := op.Post(w.ctx, w.s, data)
 		if err != nil {
 			return err
 		}
@@ -198,6 +186,10 @@ func (w *StreamWriter) Append(ctx context.Context, ent Entry) error {
 	writeEntry(buf, ent)
 	w.setLastKey(ent.Key)
 	return w.chunker.WriteNoSplit(buf.Bytes())
+}
+
+func (w *StreamWriter) Buffered() int {
+	return w.chunker.Buffered()
 }
 
 func (w *StreamWriter) Flush(ctx context.Context) error {
@@ -226,7 +218,7 @@ type StreamEditor struct {
 	fnCalled     bool
 }
 
-func NewStreamEditor(s cadata.Store, span Span, fn entryMutator, onIndex IndexHandler) *StreamEditor {
+func NewStreamEditor(s cadata.Store, op *gdat.Operator, span Span, fn entryMutator, onIndex IndexHandler) *StreamEditor {
 	e := &StreamEditor{
 		s: s,
 
@@ -236,7 +228,7 @@ func NewStreamEditor(s cadata.Store, span Span, fn entryMutator, onIndex IndexHa
 
 		inputRefs: make(map[Ref]struct{}),
 	}
-	e.w = NewStreamWriter(s, func(idx Index) error {
+	e.w = NewStreamWriter(s, op, func(idx Index) error {
 		if _, exists := e.inputRefs[idx.Ref]; exists {
 			e.syncCount++
 		} else {
@@ -258,7 +250,7 @@ func (e *StreamEditor) Done() bool {
 func (e *StreamEditor) Process(ctx context.Context, x Index) error {
 	e.inputRefs[x.Ref] = struct{}{}
 	defer delete(e.inputRefs, x.Ref)
-	r := NewStreamReader(e.s, x.Ref)
+	r := NewStreamReader(e.s, Index{Ref: x.Ref})
 	for {
 		xEnt, err := r.Next(ctx)
 		if err == io.EOF {

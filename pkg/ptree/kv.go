@@ -8,7 +8,7 @@ import (
 	"log"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
-	"github.com/brendoncarroll/got/pkg/refs"
+	"github.com/brendoncarroll/got/pkg/gdat"
 )
 
 // Entry is a single entry in a stream/tree
@@ -66,7 +66,7 @@ func put(k, v []byte) entryMutator {
 }
 
 func MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, error) {
-	sr := NewStreamReader(s, x.Ref)
+	sr := NewStreamReader(s, Index{Ref: x.Ref})
 	var ent *Entry
 	for {
 		ent2, err := sr.Next(ctx)
@@ -87,16 +87,16 @@ func MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, 
 	if x.Depth == 0 {
 		return ent.Key, nil
 	}
-	ref, err := refs.ParseRef(ent.Value)
+	ref, err := gdat.ParseRef(ent.Value)
 	if err != nil {
 		return nil, err
 	}
-	return MaxKey(ctx, s, Root{Ref: ref, Depth: x.Depth - 1}, under)
+	return MaxKey(ctx, s, Root{Ref: *ref, Depth: x.Depth - 1}, under)
 }
 
 func DebugRef(s cadata.Store, x Ref) {
 	ctx := context.TODO()
-	sr := NewStreamReader(s, x)
+	sr := NewStreamReader(s, Index{Ref: x})
 	log.Println("DUMP ref:", x.CID.String())
 	for {
 		ent, err := sr.Next(ctx)
@@ -120,7 +120,7 @@ func DebugTree(s cadata.Store, x Root) {
 			indent += "  "
 		}
 		ctx := context.TODO()
-		sr := NewStreamReader(s, x.Ref)
+		sr := NewStreamReader(s, Index{Ref: x.Ref})
 		fmt.Printf("%sTREE NODE: %s %d\n", indent, x.Ref.CID.String(), x.Depth)
 		if x.Depth == 0 {
 			for {
@@ -142,12 +142,12 @@ func DebugTree(s cadata.Store, x Root) {
 					}
 					panic(err)
 				}
-				ref, err := refs.ParseRef(ent.Value)
+				ref, err := gdat.ParseRef(ent.Value)
 				if err != nil {
 					panic(err)
 				}
 				fmt.Printf("%s INDEX first=%q -> ref=%s\n", indent, string(ent.Key), ref.CID.String())
-				debugTree(Root{Ref: ref, Depth: x.Depth - 1})
+				debugTree(Root{Ref: *ref, Depth: x.Depth - 1})
 			}
 		}
 	}

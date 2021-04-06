@@ -4,8 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-
-	"github.com/brendoncarroll/got/pkg/gotfs"
 )
 
 func (r *Repo) Add(ctx context.Context, p string) error {
@@ -25,12 +23,12 @@ func (r *Repo) Add(ctx context.Context, p string) error {
 			return nil, err
 		}
 		defer rc.Close()
-		return gotfs.CreateFileFrom(ctx, s, x, p, rc)
+		return r.getFSOp().CreateFileFrom(ctx, s, x, p, rc)
 	})
 }
 
 func (r *Repo) Remove(ctx context.Context, p string) error {
 	return r.ApplyStaging(ctx, func(s Store, x Root) (*Root, error) {
-		return gotfs.RemoveAll(ctx, s, x, p)
+		return r.getFSOp().RemoveAll(ctx, s, x, p)
 	})
 }

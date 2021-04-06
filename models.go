@@ -38,8 +38,8 @@ func MarshalPEM(x interface{}) ([]byte, error) {
 
 func getPEMType(x interface{}) (string, error) {
 	switch x := x.(type) {
-	case Ref, *Ref:
-		return "GOT REF", nil
+	case Root, *Root:
+		return "GOTFS ROOT", nil
 	case Commit, *Commit:
 		return "GOT COMMIT", nil
 	default:

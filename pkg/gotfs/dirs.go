@@ -16,23 +16,29 @@ type DirEnt struct {
 	Mode os.FileMode
 }
 
-func Mkdir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
-	if err := checkNoEntry(ctx, s, x, p); err != nil {
+// NewEmpty creates a new filesystem with nothing in it.
+func (o *Operator) NewEmpty(ctx context.Context, s Store) (*Root, error) {
+	return o.gotkv.NewEmpty(ctx, s)
+}
+
+// Mkdir creates a directory at path p
+func (o *Operator) Mkdir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+	if err := o.checkNoEntry(ctx, s, x, p); err != nil {
 		return nil, err
 	}
 	md := Metadata{
 		Mode: 0o755 | os.ModeDir,
 	}
-	return PutMetadata(ctx, s, x, p, md)
+	return o.PutMetadata(ctx, s, x, p, md)
 }
 
-func EnsureDir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+func (o *Operator) EnsureDir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
 	parts := strings.Split(p, string(Sep))
 	for i := range parts {
 		p2 := strings.Join(parts[:i+1], string(Sep))
-		_, err := GetDirMetadata(ctx, s, x, p2)
+		_, err := o.GetDirMetadata(ctx, s, x, p2)
 		if os.IsNotExist(err) {
-			x2, err := Mkdir(ctx, s, x, parts[0])
+			x2, err := o.Mkdir(ctx, s, x, parts[0])
 			if err != nil {
 				return nil, err
 			}
@@ -44,9 +50,9 @@ func EnsureDir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
 	return &x, nil
 }
 
-func ReadDir(ctx context.Context, s Store, x Root, p string, fn func(e DirEnt) error) error {
+func (o *Operator) ReadDir(ctx context.Context, s Store, x Root, p string, fn func(e DirEnt) error) error {
 	p = cleanPath(p)
-	di, err := newDirIterator(ctx, s, x, p)
+	di, err := o.newDirIterator(ctx, s, x, p)
 	if err != nil {
 		return err
 	}
@@ -65,10 +71,9 @@ func ReadDir(ctx context.Context, s Store, x Root, p string, fn func(e DirEnt) e
 	return nil
 }
 
-func RemoveAll(ctx context.Context, s Store, x Root, p string) (*Root, error) {
-	op := gotkv.NewOperator()
+func (o *Operator) RemoveAll(ctx context.Context, s Store, x Root, p string) (*Root, error) {
 	span := gotkv.PrefixSpan([]byte(p))
-	return op.DeleteSpan(ctx, s, x, span)
+	return o.gotkv.DeleteSpan(ctx, s, x, span)
 }
 
 func cleanPath(p string) string {
@@ -83,8 +88,8 @@ type dirIterator struct {
 	iter gotkv.Iterator
 }
 
-func newDirIterator(ctx context.Context, s Store, x Root, p string) (*dirIterator, error) {
-	_, err := GetDirMetadata(ctx, s, x, p)
+func (o *Operator) newDirIterator(ctx context.Context, s Store, x Root, p string) (*dirIterator, error) {
+	_, err := o.GetDirMetadata(ctx, s, x, p)
 	if err != nil {
 		return nil, err
 	}

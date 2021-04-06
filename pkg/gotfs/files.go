@@ -4,43 +4,27 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
-	"runtime"
 
-	"github.com/blobcache/blobcache/pkg/blobs"
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotkv"
-	"github.com/brendoncarroll/got/pkg/refs"
 	"github.com/pkg/errors"
 )
 
-const maxPartSize = blobs.MaxSize
-
-type (
-	Ref   = gotkv.Ref
-	Store = gotkv.Store
-	Root  = gotkv.Root
-)
-
-func New(ctx context.Context, s Store) (*Root, error) {
-	op := gotkv.NewOperator()
-	x, err := op.NewEmpty(ctx, s)
-	if err != nil {
+// CreateFileFrom creates a file at p with data from r
+func (o *Operator) CreateFileFrom(ctx context.Context, s Store, x Root, p string, r io.Reader) (*gotkv.Root, error) {
+	if err := o.checkNoEntry(ctx, s, x, p); err != nil {
 		return nil, err
 	}
-	return Mkdir(ctx, s, *x, "")
-}
-
-func CreateFileFrom(ctx context.Context, s Store, x Root, p string, r io.Reader) (*gotkv.Root, error) {
-	if err := checkNoEntry(ctx, s, x, p); err != nil {
-		return nil, err
-	}
-	op := gotkv.NewOperator()
-	as := cadata.NewAsyncStore(s, runtime.GOMAXPROCS(0))
+	// TODO: add this back after we have migrated to the builder.
+	// as := cadata.NewAsyncStore(s, runtime.GOMAXPROCS(0))
+	// s = as
+	kvop := gotkv.NewOperator()
+	dop := gdat.NewOperator()
 	// create metadata entry
 	md := Metadata{
 		Mode: 0o644,
 	}
-	if x2, err := PutMetadata(ctx, s, x, p, md); err != nil {
+	if x2, err := o.PutMetadata(ctx, s, x, p, md); err != nil {
 		return nil, err
 	} else {
 		x = *x2
@@ -58,7 +42,7 @@ func CreateFileFrom(ctx context.Context, s Store, x Root, p string, r io.Reader)
 		if n < 1 {
 			continue
 		}
-		ref, err := refs.Post(ctx, as, buf[:n])
+		ref, err := dop.Post(ctx, s, buf[:n])
 		if err != nil {
 			return nil, err
 		}
@@ -69,17 +53,17 @@ func CreateFileFrom(ctx context.Context, s Store, x Root, p string, r io.Reader)
 		}
 		key := makePartKey(p, total)
 
-		if x2, err := op.Put(ctx, s, x, key, part.marshal()); err != nil {
+		if x2, err := kvop.Put(ctx, s, x, key, part.marshal()); err != nil {
 			return nil, err
 		} else {
 			x = *x2
 		}
 		total += uint64(n)
 	}
-	return &x, as.Close()
+	return &x, nil
 }
 
-func SizeOfFile(ctx context.Context, s Store, x Root, p string) (int, error) {
+func (o *Operator) SizeOfFile(ctx context.Context, s Store, x Root, p string) (int, error) {
 	gotkv := gotkv.NewOperator()
 	key, err := gotkv.MaxKey(ctx, s, x, []byte(p))
 	if err != nil {
@@ -101,21 +85,22 @@ func SizeOfFile(ctx context.Context, s Store, x Root, p string) (int, error) {
 	return int(offset) + size, nil
 }
 
-func ReadFileAt(ctx context.Context, s Store, x Root, p string, start uint64, buf []byte) (int, error) {
-	op := gotkv.NewOperator()
-	_, err := GetFileMetadata(ctx, s, x, p)
+func (o *Operator) ReadFileAt(ctx context.Context, s Store, x Root, p string, start uint64, buf []byte) (int, error) {
+	kvo := gotkv.NewOperator()
+	do := gdat.NewOperator()
+	_, err := o.GetFileMetadata(ctx, s, x, p)
 	if err != nil {
 		return 0, err
 	}
 	offset := start - (start % maxPartSize)
 	key := makePartKey(p, offset)
 	var n int
-	err = op.GetF(ctx, s, x, key, func(data []byte) error {
+	err = kvo.GetF(ctx, s, x, key, func(data []byte) error {
 		part, err := parsePart(data)
 		if err != nil {
 			return err
 		}
-		return refs.GetF(ctx, s, part.Ref, func(data []byte) error {
+		return do.GetF(ctx, s, part.Ref, func(data []byte) error {
 			begin := int(part.Offset)
 			if begin >= len(data) {
 				return errors.Errorf("incorrect offset")
@@ -134,23 +119,12 @@ func ReadFileAt(ctx context.Context, s Store, x Root, p string, start uint64, bu
 	return n, err
 }
 
-func WriteFileAt(ctx context.Context, s Store, x Root, p string, start uint64, data []byte) (*Ref, error) {
-	md, err := GetFileMetadata(ctx, s, x, p)
+func (o *Operator) WriteFileAt(ctx context.Context, s Store, x Root, p string, start uint64, data []byte) (*Ref, error) {
+	md, err := o.GetFileMetadata(ctx, s, x, p)
 	if err != nil {
 		return nil, err
 	}
 	panic(md)
-}
-
-func GetFileMetadata(ctx context.Context, s Store, x Root, p string) (*Metadata, error) {
-	md, err := GetMetadata(ctx, s, x, p)
-	if err != nil {
-		return nil, err
-	}
-	if !md.Mode.IsRegular() {
-		return nil, errors.Errorf("%s is not a regular file", p)
-	}
-	return md, nil
 }
 
 func appendUint64(buf []byte, n uint64) []byte {

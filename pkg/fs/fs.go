@@ -60,6 +60,9 @@ func (fs dirFS) Open(p string) (io.ReadCloser, error) {
 
 func (fs dirFS) WriteFile(p string, r io.Reader) error {
 	p = filepath.Join(fs.root, p)
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		return err
+	}
 	f, err := os.Create(p)
 	if err != nil {
 		return err

@@ -5,12 +5,14 @@ import (
 	"io"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
-	"github.com/brendoncarroll/got/pkg/refs"
+	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/pkg/errors"
 )
 
 type Builder struct {
-	s      cadata.Store
+	s  cadata.Store
+	op *gdat.Operator
+
 	levels []*StreamWriter
 	isDone bool
 	root   *Root
@@ -18,9 +20,10 @@ type Builder struct {
 	ctx context.Context
 }
 
-func NewBuilder(s cadata.Store) *Builder {
+func NewBuilder(s cadata.Store, op *gdat.Operator) *Builder {
 	b := &Builder{
-		s: s,
+		s:  s,
+		op: op,
 	}
 	b.levels = []*StreamWriter{
 		b.getWriter(0),
@@ -29,7 +32,7 @@ func NewBuilder(s cadata.Store) *Builder {
 }
 
 func (b *Builder) getWriter(i int) *StreamWriter {
-	return NewStreamWriter(b.s, func(idx Index) error {
+	return NewStreamWriter(b.s, b.op, func(idx Index) error {
 		switch {
 		case b.isDone && i == len(b.levels)-1:
 			b.root = &Root{
@@ -43,7 +46,7 @@ func (b *Builder) getWriter(i int) *StreamWriter {
 		default:
 			return b.levels[i+1].Append(b.ctx, Entry{
 				Key:   idx.First,
-				Value: refs.MarshalRef(idx.Ref),
+				Value: gdat.MarshalRef(idx.Ref),
 			})
 		}
 	})
@@ -79,13 +82,42 @@ func (b *Builder) Finish(ctx context.Context) (*Root, error) {
 	}
 	// handle empty root
 	if b.root == nil {
-		ref, err := refs.Post(ctx, b.s, nil)
+		ref, err := b.op.Post(ctx, b.s, nil)
 		if err != nil {
 			return nil, err
 		}
 		b.root = &Root{Ref: *ref, Depth: 0}
 	}
 	return b.root, nil
+}
+
+func (b *Builder) SyncedBelow() int {
+	for i := range b.levels {
+		if b.levels[i].Buffered() > 0 {
+			return i
+		}
+	}
+	return len(b.levels) + 1
+}
+
+// CopyTree allows writing indexes to the > 0 levels.
+// An index is stored at the level above what it points to.
+// Index of level 0 is stored in level 1.
+// In order to write an index everything below the level must be synced.
+// depth MUST be < SyncedBelow()
+func (b *Builder) CopyTree(ctx context.Context, idx Index, depth int) error {
+	if b.isDone {
+		panic("builder is closed")
+	}
+	if depth >= b.SyncedBelow() {
+		panic("cannot copy tree; lower levels unsynced")
+	}
+	for len(b.levels) < depth+1 {
+		b.getWriter(len(b.levels))
+	}
+	w := b.getWriter(depth + 1)
+	ent := indexToEntry(idx)
+	return w.Append(ctx, ent)
 }
 
 type Iterator struct {
@@ -96,7 +128,7 @@ type Iterator struct {
 
 func NewIterator(s cadata.Store, root Root, span Span) *Iterator {
 	levels := make([]*StreamReader, root.Depth+1)
-	levels[root.Depth] = NewStreamReader(s, root.Ref)
+	levels[root.Depth] = NewStreamReader(s, Index{Ref: root.Ref})
 	return &Iterator{
 		s:      s,
 		levels: levels,
@@ -129,11 +161,11 @@ func (it *Iterator) getReader(ctx context.Context, depth int) (*StreamReader, er
 		}
 		break
 	}
-	ref, err := refs.ParseRef(ent.Value)
+	ref, err := gdat.ParseRef(ent.Value)
 	if err != nil {
 		return nil, err
 	}
-	it.levels[depth] = NewStreamReader(it.s, ref)
+	it.levels[depth] = NewStreamReader(it.s, Index{Ref: *ref})
 	return it.levels[depth], nil
 }
 
@@ -201,7 +233,8 @@ func deleteMutation(k []byte) Mutation {
 }
 
 type editor struct {
-	s cadata.Store
+	s  cadata.Store
+	op *gdat.Operator
 
 	root Root
 	span Span
@@ -213,9 +246,10 @@ type editor struct {
 	ctx context.Context
 }
 
-func newEditor(s cadata.Store, root Root, mut Mutation) *editor {
+func newEditor(s cadata.Store, op *gdat.Operator, root Root, mut Mutation) *editor {
 	e := &editor{
-		s: s,
+		s:  s,
+		op: op,
 
 		root: root,
 		span: mut.Span,
@@ -238,19 +272,19 @@ func (e *editor) getStreamEditor(level int) (ret *StreamEditor) {
 		return nil
 	}
 	if level == 0 {
-		return NewStreamEditor(e.s, e.span, func(ent *Entry) ([]Entry, error) {
+		return NewStreamEditor(e.s, e.op, e.span, func(ent *Entry) ([]Entry, error) {
 			return e.fn(ent), nil
 		}, onIndex)
 	}
 	span := Span{}
-	return NewStreamEditor(e.s, span, func(ent *Entry) ([]Entry, error) {
+	return NewStreamEditor(e.s, e.op, span, func(ent *Entry) ([]Entry, error) {
 		se2 := e.getStreamEditor(level - 1)
 		if ent != nil {
-			ref, err := refs.ParseRef(ent.Value)
+			ref, err := gdat.ParseRef(ent.Value)
 			if err != nil {
 				return nil, err
 			}
-			idx := Index{First: ent.Key, Ref: ref}
+			idx := Index{First: ent.Key, Ref: *ref}
 			if err := se2.Process(e.ctx, idx); err != nil {
 				return nil, err
 			}
@@ -277,7 +311,7 @@ func (e *editor) run(ctx context.Context) (*Root, error) {
 	// write up the levels
 	for i := range e.newIndexes {
 		if len(e.newIndexes[i]) > 0 && i < len(e.newIndexes)-1 {
-			idxs, err := writeIndexes(ctx, e.s, e.newIndexes[i])
+			idxs, err := writeIndexes(ctx, e.s, e.op, e.newIndexes[i])
 			if err != nil {
 				return nil, err
 			}
@@ -289,7 +323,7 @@ func (e *editor) run(ctx context.Context) (*Root, error) {
 	finalIdxs := e.newIndexes[len(e.newIndexes)-1]
 	for len(finalIdxs) > 1 {
 		var err error
-		if finalIdxs, err = writeIndexes(ctx, e.s, finalIdxs); err != nil {
+		if finalIdxs, err = writeIndexes(ctx, e.s, e.op, finalIdxs); err != nil {
 			return nil, err
 		}
 		level++
@@ -300,7 +334,7 @@ func (e *editor) run(ctx context.Context) (*Root, error) {
 func indexToEntry(idx Index) Entry {
 	return Entry{
 		Key:   idx.First,
-		Value: refs.MarshalRef(idx.Ref),
+		Value: gdat.MarshalRef(idx.Ref),
 	}
 }
 
@@ -312,14 +346,14 @@ func indexesToEntries(idxs []Index) []Entry {
 	return ents
 }
 
-func Mutate(ctx context.Context, s cadata.Store, root Root, m Mutation) (*Root, error) {
-	e := newEditor(s, root, m)
+func Mutate(ctx context.Context, s cadata.Store, op *gdat.Operator, root Root, m Mutation) (*Root, error) {
+	e := newEditor(s, op, root, m)
 	return e.run(ctx)
 }
 
-func writeIndexes(ctx context.Context, s cadata.Store, idxs []Index) ([]Index, error) {
+func writeIndexes(ctx context.Context, s cadata.Store, op *gdat.Operator, idxs []Index) ([]Index, error) {
 	var ret []Index
-	w := NewStreamWriter(s, func(idx Index) error {
+	w := NewStreamWriter(s, op, func(idx Index) error {
 		ret = append(ret, idx)
 		return nil
 	})

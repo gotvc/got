@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"math/bits"
 
-	"github.com/brendoncarroll/got/pkg/refs"
+	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/chmduquesne/rollinghash/buzhash64"
 	"github.com/pkg/errors"
 )
 
-type Ref = refs.Ref
+type Ref = gdat.Ref
 
 type Chunker struct {
 	log2AvgSize, maxSize int
@@ -37,7 +37,7 @@ func (c *Chunker) Write(data []byte) (int, error) {
 	var copied int
 	for n := range data {
 		c.rh.Roll(data[n])
-		if atChunkBoundary(c.rh.Sum64(), c.log2AvgSize) || n+c.Len() == c.maxSize {
+		if atChunkBoundary(c.rh.Sum64(), c.log2AvgSize) || n+c.Buffered() == c.maxSize {
 			n2, _ := c.buf.Write(data[copied:n])
 			copied += n2
 			if err := c.emit(); err != nil {
@@ -61,7 +61,7 @@ func (c *Chunker) emit() error {
 	return nil
 }
 
-func (c *Chunker) Len() int {
+func (c *Chunker) Buffered() int {
 	return c.buf.Len()
 }
 

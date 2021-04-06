@@ -28,7 +28,11 @@ type storeManager struct {
 }
 
 func newStoreManager(store Store, db *bolt.DB, bucketName string) *storeManager {
-	return &storeManager{store: store, db: db}
+	return &storeManager{
+		store:      store,
+		db:         db,
+		bucketName: bucketName,
+	}
 }
 
 func (sm *storeManager) CreateStore() StoreID {

@@ -1,8 +1,11 @@
 package gotcmd
 
 import (
+	"os"
+
 	"github.com/brendoncarroll/got"
 	"github.com/brendoncarroll/got/pkg/gotfs"
+	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -15,13 +18,28 @@ var slurpCmd = &cobra.Command{
 	Short:   "imports a file or directory and returns a ref",
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) < 1 {
+			return errors.Errorf("must provide target to ingest")
+		}
+		p := args[0]
+		f, err := os.Open(p)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+
 		vol := repo.GetStaging()
-		ref, err := gotfs.New(ctx, vol.Store)
+		fsop := gotfs.NewOperator()
+		root, err := fsop.NewEmpty(ctx, vol.Store)
+		if err != nil {
+			return err
+		}
+		root, err = fsop.CreateFileFrom(ctx, vol.Store, *root, "", f)
 		if err != nil {
 			return err
 		}
 		w := cmd.OutOrStdout()
-		data, err := got.MarshalPEM(ref)
+		data, err := got.MarshalPEM(root)
 		if err != nil {
 			return err
 		}

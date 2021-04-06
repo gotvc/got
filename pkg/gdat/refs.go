@@ -1,4 +1,4 @@
-package refs
+package gdat
 
 import (
 	"bytes"
@@ -48,19 +48,19 @@ func (r *Ref) UnmarshalText(data []byte) error {
 	return nil
 }
 
-// func (r Ref) String() string {
-// 	data, _ := r.MarshalText()
-// 	return string(data)
-// }
+func (r Ref) String() string {
+	data, _ := r.MarshalText()
+	return string(data)
+}
 
-func ParseRef(x []byte) (Ref, error) {
+func ParseRef(x []byte) (*Ref, error) {
 	var ref Ref
 	if len(x) != len(ref.CID)+len(ref.DEK) {
-		return Ref{}, errors.Errorf("wrong length for ref %d %q", len(x), x)
+		return nil, errors.Errorf("wrong length for ref %d %q", len(x), x)
 	}
 	copy(ref.CID[:], x[:len(ref.CID)])
 	copy(ref.DEK[:], x[len(ref.CID):])
-	return ref, nil
+	return &ref, nil
 }
 
 func MarshalRef(x Ref) []byte {

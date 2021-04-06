@@ -13,6 +13,7 @@ import (
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/cells"
 	"github.com/brendoncarroll/got/pkg/fs"
+	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotnet"
 	"github.com/brendoncarroll/got/pkg/volumes"
@@ -141,13 +142,14 @@ func (r *Repo) WorkingDir() FS {
 }
 
 func (r *Repo) ApplyStaging(ctx context.Context, fn func(s Store, x Root) (*Root, error)) error {
+	fsop := r.getFSOp()
 	vol := r.GetStaging()
 	store := vol.Store
 	return cells.Apply(ctx, vol.Cell, func(x []byte) ([]byte, error) {
 		var xRoot *Root
 		var err error
 		if len(x) < 1 {
-			xRoot, err = gotfs.New(ctx, store)
+			xRoot, err = fsop.NewEmpty(ctx, store)
 			if err != nil {
 				return nil, err
 			}
@@ -193,6 +195,14 @@ func (r *Repo) getSwarm() (peerswarm.AskSwarm, error) {
 	}
 	r.swarm = swarm
 	return swarm, nil
+}
+
+func (r *Repo) getFSOp() *gotfs.Operator {
+	return gotfs.NewOperator()
+}
+
+func (r *Repo) getDataOp() *gdat.Operator {
+	return gdat.NewOperator()
 }
 
 func dbPath(x string) string {
