@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/got/pkg/chunking"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"golang.org/x/sync/errgroup"
 )
@@ -13,7 +14,7 @@ type Uploader struct {
 	s       cadata.Store
 	op      *gdat.Operator
 	onRef   func(Ref) error
-	chunker *Chunker
+	chunker *chunking.ContentDefined
 
 	todo chan *bytes.Buffer
 	err  error
@@ -28,7 +29,7 @@ func NewUploader(s cadata.Store, numWorkers int, onRef func(Ref) error) *Uploade
 		todo:  make(chan *bytes.Buffer),
 		done:  make(chan struct{}),
 	}
-	u.chunker = NewChunker(defaultAvgSize, defaultMaxSize, func(data []byte) error {
+	u.chunker = chunking.NewContentDefined(defaultAvgSize, defaultMaxSize, func(data []byte) error {
 		buf := &bytes.Buffer{}
 		buf.Write(data)
 		u.todo <- buf

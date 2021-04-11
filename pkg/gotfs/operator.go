@@ -1,12 +1,9 @@
 package gotfs
 
 import (
-	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotkv"
 )
-
-const maxPartSize = blobs.MaxSize
 
 type (
 	Ref   = gotkv.Ref

@@ -1,4 +1,4 @@
-package ptree
+package chunking
 
 import (
 	"io"
@@ -12,12 +12,12 @@ import (
 func TestChunker(t *testing.T) {
 	t.Parallel()
 	const N = 1e7
-	avgSize := defaultAvgSize
-	maxSize := defaultMaxSize
+	avgSize := 1 << 13
+	maxSize := 1 << 20
 
 	var count int
 	var size int
-	c := NewChunker(avgSize, maxSize, func(data []byte) error {
+	c := NewContentDefined(avgSize, maxSize, func(data []byte) error {
 		count++
 		size += len(data)
 		require.LessOrEqual(t, len(data), maxSize)

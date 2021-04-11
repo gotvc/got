@@ -1,31 +1,32 @@
-package ptree
+package chunking
 
 import (
 	"bytes"
 	"math/bits"
 
-	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/chmduquesne/rollinghash/buzhash64"
 	"github.com/pkg/errors"
 )
 
-type Ref = gdat.Ref
+const (
+	DefaultAverageSize = 1 << 13
+)
 
-type Chunker struct {
+type ContentDefined struct {
 	log2AvgSize, maxSize int
 	onChunk              func(data []byte) error
 	rh                   *buzhash64.Buzhash64
 	buf                  bytes.Buffer
 }
 
-func NewChunker(avgSize, maxSize int, onChunk func(data []byte) error) *Chunker {
+func NewContentDefined(avgSize, maxSize int, onChunk func(data []byte) error) *ContentDefined {
 	if bits.OnesCount(uint(avgSize)) != 1 {
 		panic("avgSize must be power of 2")
 	}
 	log2AvgSize := bits.TrailingZeros64(uint64(avgSize))
 	rh := buzhash64.New()
 	rh.Write(make([]byte, 64))
-	return &Chunker{
+	return &ContentDefined{
 		log2AvgSize: log2AvgSize,
 		maxSize:     maxSize,
 		onChunk:     onChunk,
@@ -33,7 +34,7 @@ func NewChunker(avgSize, maxSize int, onChunk func(data []byte) error) *Chunker 
 	}
 }
 
-func (c *Chunker) Write(data []byte) (int, error) {
+func (c *ContentDefined) Write(data []byte) (int, error) {
 	var copied int
 	for n := range data {
 		c.rh.Roll(data[n])
@@ -49,7 +50,7 @@ func (c *Chunker) Write(data []byte) (int, error) {
 	return len(data), nil
 }
 
-func (c *Chunker) emit() error {
+func (c *ContentDefined) emit() error {
 	defer func() {
 		c.buf.Reset()
 		c.rh.Reset()
@@ -61,11 +62,11 @@ func (c *Chunker) emit() error {
 	return nil
 }
 
-func (c *Chunker) Buffered() int {
+func (c *ContentDefined) Buffered() int {
 	return c.buf.Len()
 }
 
-func (c *Chunker) WriteNoSplit(data []byte) error {
+func (c *ContentDefined) WriteNoSplit(data []byte) error {
 	if len(data) > c.maxSize {
 		return errors.Errorf("cannot write data larger than max size")
 	}
@@ -86,12 +87,12 @@ func (c *Chunker) WriteNoSplit(data []byte) error {
 }
 
 // WouldOverflow returns whether the data would exceed the maximum chunk size, given the buffered data.
-func (c *Chunker) WouldOverflow(data []byte) bool {
+func (c *ContentDefined) WouldOverflow(data []byte) bool {
 	return len(data)+c.buf.Len() > c.maxSize
 }
 
 // WouldSplit returns whether the data would be split by the chunking algorithm, given the buffered data.
-func (c *Chunker) WouldSplit(data []byte) bool {
+func (c *ContentDefined) WouldSplit(data []byte) bool {
 	rh := buzhash64.New()
 	rh.Write(make([]byte, 64))
 	for _, b := range c.buf.Bytes() {
@@ -106,7 +107,7 @@ func (c *Chunker) WouldSplit(data []byte) bool {
 	return false
 }
 
-func (c *Chunker) Flush() error {
+func (c *ContentDefined) Flush() error {
 	return c.emit()
 }
 

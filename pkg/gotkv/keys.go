@@ -7,8 +7,8 @@ import (
 // PrefixSpan returns a Span that includes all keys with prefix p
 func PrefixSpan(p []byte) Span {
 	return Span{
-		First: []byte(p),
-		Last:  PrefixEnd([]byte(p)),
+		Start: []byte(p),
+		End:   PrefixEnd([]byte(p)),
 	}
 }
 

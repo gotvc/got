@@ -22,11 +22,11 @@ type Root struct {
 	Depth uint
 }
 
-// A span of keys [First, Last)
-// If you want to include a specific last key, use the KeyAfter function.
-// nil is interpretted as no bound, not as 0 length key.  This behaviour is only releveant for Last.
+// A span of keys [Start, End)
+// If you want to include a specific end key, use the KeyAfter function.
+// nil is interpretted as no bound, not as a 0 length key.  This behaviour is only releveant for End.
 type Span struct {
-	First, Last []byte
+	Start, End []byte
 }
 
 func TotalSpan() Span {
@@ -35,19 +35,19 @@ func TotalSpan() Span {
 
 func SingleItemSpan(x []byte) Span {
 	return Span{
-		First: x,
-		Last:  KeyAfter(x),
+		Start: x,
+		End:   KeyAfter(x),
 	}
 }
 
 // LessThan returns true if every key in the Span is below key
 func (s Span) LessThan(key []byte) bool {
-	return s.Last != nil && bytes.Compare(s.Last, key) <= 0
+	return s.End != nil && bytes.Compare(s.End, key) <= 0
 }
 
 // GreaterThan returns true if every key in the span is greater than k
 func (s Span) GreaterThan(k []byte) bool {
-	return s.First != nil && bytes.Compare(s.First, k) > 0
+	return s.Start != nil && bytes.Compare(s.Start, k) > 0
 }
 
 func (s Span) Contains(k []byte) bool {

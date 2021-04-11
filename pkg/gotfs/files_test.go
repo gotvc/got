@@ -3,6 +3,7 @@ package gotfs
 import (
 	"bytes"
 	"context"
+	"strings"
 	"testing"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
@@ -16,14 +17,14 @@ func TestCreateFileFrom(t *testing.T) {
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	require.NotNil(t, x)
-	fileData := []byte("file contents\n")
-	x, err = op.CreateFileFrom(ctx, s, *x, "file.txt", bytes.NewReader(fileData))
+	fileData := "file contents\n"
+	x, err = op.CreateFileFrom(ctx, s, *x, "file.txt", strings.NewReader(fileData))
 	require.NoError(t, err)
 	require.NotNil(t, x)
 	buf := make([]byte, 128)
 	n, err := op.ReadFileAt(ctx, s, *x, "file.txt", 0, buf)
 	require.NoError(t, err)
-	require.Equal(t, string(fileData), string(buf[:n]))
+	require.Equal(t, fileData, string(buf[:n]))
 }
 
 func TestFileMetadata(t *testing.T) {

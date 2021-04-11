@@ -25,7 +25,7 @@ information about a file or directory.
 Most importantly the permissions and type of file.
 
 ## Key Layout 
-All objects are represented by a metadata entry at a specific key, and additional data stored under keys
+All objects are represented by a metadata entry at a specific key, and content stored under keys
 prefixed with the metadata key.
 
 File data is stored in a content-addressed store, and references to the data are stored in GotKV.
@@ -34,7 +34,7 @@ For example: The file "test.txt" with 10B of data in it would produce the follow
 ```
                                 -> Metadata (dir)
 test.txt                        -> Metadata (file)
-test.txt<NULL><64 bits of 0s>   -> Part
+test.txt<NULL>< 64 bit: 10 >   -> Part
 ```
 
 A directory is stored as a metadata object.
@@ -42,13 +42,13 @@ A directory is stored as a metadata object.
                                         -> Metadata (dir)
 mydir/                                  -> Metadata (dir)
 mydir/myfile.txt                        -> Metadata (file)
-mydir/myfile.txt<NULL><64 bits of 0s>   -> Part
+mydir/myfile.txt<NULL><64 bit offset>   -> Part
 ```
 
 It is possible for a file to be at the root
 ```
                             -> Metadata (file)
-<NULL><64 bits of 0s>       -> Part
+<NULL><64 bits      >       -> Part
 <NULL>< next offset >       -> Part
 ```
 
@@ -60,10 +60,6 @@ To read from a file in GotFS you first lookup the metadata entry for the path of
 If there is not an entry at the path or the entry is not for a regular file, then return an error.
 
 Then convert the offset to read from to a key.
-Keys for file parts are
-```
-key = path + NULL + bigEndian(offset - (offset % maxPartSize))
+Seek to the first part after that key.
+The extent referenced by that part will end at the offset in the key, and will contain data overlapping the target range.
 
-bigEndian(x uint64) -> [8]byte
-```
-Retrive the part at that key, copy the data it references into the callers buffer, and you're done.

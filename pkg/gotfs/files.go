@@ -5,10 +5,53 @@ import (
 	"encoding/binary"
 	"io"
 
+	"github.com/blobcache/blobcache/pkg/blobs"
+	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/got/pkg/chunking"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotkv"
 	"github.com/pkg/errors"
 )
+
+const (
+	minPartSize            = 1 << 12
+	maxPartSize            = blobs.MaxSize
+	partSizeDoublingPeriod = 1
+)
+
+type writer struct {
+	onPart  func(part Part) error
+	chunker *chunking.Exponential
+	ctx     context.Context
+}
+
+func (o *Operator) newWriter(ctx context.Context, s cadata.Store, onPart func(Part) error) *writer {
+	w := &writer{
+		onPart: onPart,
+		ctx:    ctx,
+	}
+	w.chunker = chunking.NewExponential(minPartSize, maxPartSize, partSizeDoublingPeriod, func(data []byte) error {
+		ref, err := o.dop.Post(ctx, s, data)
+		if err != nil {
+			return err
+		}
+		part := Part{
+			Offset: 0,
+			Length: uint32(len(data)),
+			Ref:    *ref,
+		}
+		return w.onPart(part)
+	})
+	return w
+}
+
+func (w *writer) Write(p []byte) (int, error) {
+	return w.chunker.Write(p)
+}
+
+func (w *writer) Flush() error {
+	return w.chunker.Flush()
+}
 
 // CreateFileFrom creates a file at p with data from r
 func (o *Operator) CreateFileFrom(ctx context.Context, s Store, x Root, p string, r io.Reader) (*gotkv.Root, error) {
@@ -18,8 +61,6 @@ func (o *Operator) CreateFileFrom(ctx context.Context, s Store, x Root, p string
 	// TODO: add this back after we have migrated to the builder.
 	// as := cadata.NewAsyncStore(s, runtime.GOMAXPROCS(0))
 	// s = as
-	kvop := gotkv.NewOperator()
-	dop := gdat.NewOperator()
 	// create metadata entry
 	md := Metadata{
 		Mode: 0o644,
@@ -29,36 +70,23 @@ func (o *Operator) CreateFileFrom(ctx context.Context, s Store, x Root, p string
 	} else {
 		x = *x2
 	}
-	// add file data
-	var total uint64
-	buf := make([]byte, maxPartSize)
-	for done := false; !done; {
-		n, err := r.Read(buf)
-		if err == io.EOF {
-			done = true
-		} else if err != nil {
-			return nil, err
-		}
-		if n < 1 {
-			continue
-		}
-		ref, err := dop.Post(ctx, s, buf[:n])
-		if err != nil {
-			return nil, err
-		}
-		part := Part{
-			Ref:    *ref,
-			Offset: 0,
-			Length: uint32(n),
-		}
-		key := makePartKey(p, total)
 
-		if x2, err := kvop.Put(ctx, s, x, key, part.marshal()); err != nil {
-			return nil, err
+	var total uint64
+	w := o.newWriter(ctx, s, func(part Part) error {
+		total += uint64(part.Length)
+		key := makePartKey(p, total)
+		if x2, err := o.gotkv.Put(ctx, s, x, key, part.marshal()); err != nil {
+			return err
 		} else {
 			x = *x2
 		}
-		total += uint64(n)
+		return nil
+	})
+	if _, err := io.Copy(w, r); err != nil {
+		return nil, err
+	}
+	if err := w.Flush(); err != nil {
+		return nil, err
 	}
 	return &x, nil
 }
@@ -86,37 +114,51 @@ func (o *Operator) SizeOfFile(ctx context.Context, s Store, x Root, p string) (i
 }
 
 func (o *Operator) ReadFileAt(ctx context.Context, s Store, x Root, p string, start uint64, buf []byte) (int, error) {
-	kvo := gotkv.NewOperator()
-	do := gdat.NewOperator()
+	kvop := gotkv.NewOperator()
+	dop := gdat.NewOperator()
 	_, err := o.GetFileMetadata(ctx, s, x, p)
 	if err != nil {
 		return 0, err
 	}
-	offset := start - (start % maxPartSize)
-	key := makePartKey(p, offset)
-	var n int
-	err = kvo.GetF(ctx, s, x, key, func(data []byte) error {
-		part, err := parsePart(data)
-		if err != nil {
-			return err
-		}
-		return do.GetF(ctx, s, part.Ref, func(data []byte) error {
-			begin := int(part.Offset)
-			if begin >= len(data) {
-				return errors.Errorf("incorrect offset")
-			}
-			end := int(part.Offset + part.Length)
-			if end > len(data) {
-				return errors.Errorf("incorrect length")
-			}
-			n = copy(buf, data[begin:end])
-			return nil
-		})
-	})
-	if err == gotkv.ErrKeyNotFound {
-		err = io.EOF
+	key := makePartKey(p, start)
+	span := gotkv.Span{
+		Start: key,
+		End:   fileSpanEnd(p),
 	}
-	return n, err
+	it := kvop.NewIterator(s, x, span)
+	var n int
+	for n < len(buf) {
+		ent, err := it.Next(ctx)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return 0, err
+		}
+		_, extentEnd, err := splitPartKey(ent.Key)
+		if err != nil {
+			return 0, err
+		}
+		if extentEnd <= start {
+			continue // this shouldn't happen
+		}
+		part, err := parsePart(ent.Value)
+		if err != nil {
+			return 0, err
+		}
+		extentStart := extentEnd - uint64(part.Length)
+		if err := dop.GetF(ctx, s, part.Ref, func(data []byte) error {
+			data = data[part.Offset : part.Offset+part.Length]
+			n += copy(buf, data[start-extentStart:])
+			return nil
+		}); err != nil {
+			return 0, err
+		}
+	}
+	if n > 0 {
+		return n, nil
+	}
+	return n, io.EOF
 }
 
 func (o *Operator) WriteFileAt(ctx context.Context, s Store, x Root, p string, start uint64, data []byte) (*Ref, error) {
@@ -125,10 +167,4 @@ func (o *Operator) WriteFileAt(ctx context.Context, s Store, x Root, p string, s
 		return nil, err
 	}
 	panic(md)
-}
-
-func appendUint64(buf []byte, n uint64) []byte {
-	nbytes := [8]byte{}
-	binary.BigEndian.PutUint64(nbytes[:], n)
-	return append(buf, nbytes[:]...)
 }

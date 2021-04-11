@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 
+	"github.com/brendoncarroll/got/pkg/gotkv"
 	"github.com/pkg/errors"
 )
 
@@ -46,4 +47,14 @@ func makePartKey(p string, offset uint64) []byte {
 	x = append(x, 0x00)
 	x = appendUint64(x, offset)
 	return x
+}
+
+func fileSpanEnd(p string) []byte {
+	return gotkv.PrefixEnd(append([]byte(p), 0x00))
+}
+
+func appendUint64(buf []byte, n uint64) []byte {
+	nbytes := [8]byte{}
+	binary.BigEndian.PutUint64(nbytes[:], n)
+	return append(buf, nbytes[:]...)
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/got/pkg/chunking"
 	"github.com/brendoncarroll/got/pkg/gdat"
 )
 
@@ -17,6 +18,13 @@ const (
 	defaultAvgSize = 1 << 13
 	defaultMaxSize = blobs.MaxSize
 )
+
+type Ref = gdat.Ref
+
+type Index struct {
+	Ref   Ref
+	First []byte
+}
 
 type StreamIterator interface {
 	Next(ctx context.Context) (*Entry, error)
@@ -64,11 +72,6 @@ func writeEntry(w *bytes.Buffer, ent Entry) {
 	n := binary.PutUvarint(buf[:], uint64(len(data)))
 	w.Write(buf[:n])
 	w.Write(data)
-}
-
-type Index struct {
-	Ref   Ref
-	First []byte
 }
 
 type StreamReader struct {
@@ -148,7 +151,7 @@ type IndexHandler = func(Index) error
 type StreamWriter struct {
 	s       cadata.Store
 	op      *gdat.Operator
-	chunker *Chunker
+	chunker *chunking.ContentDefined
 
 	lastKey []byte
 	ctx     context.Context
@@ -159,7 +162,7 @@ func NewStreamWriter(s cadata.Store, op *gdat.Operator, onIndex IndexHandler) *S
 		s:  s,
 		op: op,
 	}
-	w.chunker = NewChunker(defaultAvgSize, defaultMaxSize, func(data []byte) error {
+	w.chunker = chunking.NewContentDefined(defaultAvgSize, defaultMaxSize, func(data []byte) error {
 		ref, err := op.Post(w.ctx, w.s, data)
 		if err != nil {
 			return err

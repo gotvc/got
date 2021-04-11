@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"strconv"
 	"testing"
 
@@ -134,6 +135,11 @@ func TestStreamEditor(t *testing.T) {
 	similar := refSimilarity(refs1, refs2)
 	t.Log("refs1:", len(refs1), "refs2:", len(refs2), "common:", similar)
 	withinTolerance(t, len(refs1)+len(refs2), 2*similar, 0.25)
+}
+
+func withinTolerance(t *testing.T, x int, target int, tol float64) {
+	ok := math.Abs(float64(x)-float64(target)) < float64(target)*tol
+	require.True(t, ok)
 }
 
 func refSimilarity(as, bs []Ref) int {
