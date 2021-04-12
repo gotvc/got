@@ -16,10 +16,10 @@ type Entry struct {
 	Key, Value []byte
 }
 
-// Root it the root of the tree
+// Root is the root of the tree
 type Root struct {
 	Ref   Ref
-	Depth uint
+	Depth uint8
 }
 
 // A span of keys [Start, End)
@@ -57,12 +57,6 @@ func (s Span) Contains(k []byte) bool {
 func KeyAfter(x []byte) []byte {
 	y := append([]byte{}, x...)
 	return append(y, 0x00)
-}
-
-func put(k, v []byte) entryMutator {
-	return func(ent *Entry) ([]Entry, error) {
-		return []Entry{{Key: k, Value: v}}, nil
-	}
 }
 
 func MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, error) {

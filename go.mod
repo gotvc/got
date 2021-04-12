@@ -13,6 +13,8 @@ require (
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.6.1
 	go.etcd.io/bbolt v1.3.4
+	golang.org/x/crypto v0.0.0-20201221181555-eec23a3978ad
 	golang.org/x/net v0.0.0-20210119194325-5f4716e94777
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
+	lukechampine.com/blake3 v1.1.5
 )

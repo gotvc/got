@@ -35,7 +35,7 @@ func TestStreamRW(t *testing.T) {
 	var refs []Ref
 
 	s := cadata.NewMem()
-	sw := NewStreamWriter(s, op, func(idx Index) error {
+	sw := NewStreamWriter(s, op, defaultAvgSize, defaultMaxSize, func(idx Index) error {
 		refs = append(refs, idx.Ref)
 		return nil
 	})
@@ -87,7 +87,7 @@ func BenchmarkStreamWriter(b *testing.B) {
 	ctx := context.Background()
 	op := gdat.NewOperator()
 	s := blobs.Void{}
-	sw := NewStreamWriter(s, op, func(idx Index) error {
+	sw := NewStreamWriter(s, op, defaultAvgSize, defaultMaxSize, func(idx Index) error {
 		return nil
 	})
 	generateEntries(b.N, func(ent Entry) {
@@ -95,46 +95,6 @@ func BenchmarkStreamWriter(b *testing.B) {
 		require.NoError(b, err)
 	})
 	require.NoError(b, sw.Flush(ctx))
-}
-
-func TestStreamEditor(t *testing.T) {
-	t.Parallel()
-	ctx := context.Background()
-	s := cadata.NewMem()
-	op := gdat.NewOperator()
-
-	// construct initial stream
-	var refs1 []Ref
-	w := NewStreamWriter(s, op, func(idx Index) error {
-		refs1 = append(refs1, idx.Ref)
-		return nil
-	})
-	const N = 1e4
-	generateEntries(N, func(ent Entry) {
-		err := w.Append(ctx, ent)
-		require.NoError(t, err)
-	})
-
-	// we want to replace a single value at key 7
-	key := keyFromInt(N / 4)
-	putFn := put(key, []byte("the new inserted value"))
-
-	var refs2 []Ref
-	se := NewStreamEditor(s, op, SingleItemSpan(key), putFn, func(idx Index) error {
-		refs2 = append(refs2, idx.Ref)
-		return nil
-	})
-
-	for i := 0; i < len(refs1); i++ {
-		ref := refs1[i]
-		err := se.Process(ctx, Index{Ref: ref})
-		require.NoError(t, err)
-	}
-	require.NoError(t, se.Flush(ctx))
-
-	similar := refSimilarity(refs1, refs2)
-	t.Log("refs1:", len(refs1), "refs2:", len(refs2), "common:", similar)
-	withinTolerance(t, len(refs1)+len(refs2), 2*similar, 0.25)
 }
 
 func withinTolerance(t *testing.T, x int, target int, tol float64) {

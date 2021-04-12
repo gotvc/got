@@ -5,20 +5,15 @@ import (
 	"hash/crc64"
 	"io"
 
-	"github.com/blobcache/blobcache/pkg/bccrypto"
-	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/got/pkg/cadata"
 	lru "github.com/hashicorp/golang-lru"
-	"github.com/pkg/errors"
 )
-
-const maxNodeSize = blobs.MaxSize
 
 type Store = cadata.Store
 
 type Option = func(*Operator)
 
-func WithEncryptionKeyFunc(kf bccrypto.KeyFunc) Option {
+func WithEncryptionKeyFunc(kf KeyFunc) Option {
 	return func(o *Operator) {
 		o.kf = kf
 	}
@@ -31,7 +26,7 @@ func WithCacheSize(n int) Option {
 }
 
 type Operator struct {
-	kf bccrypto.KeyFunc
+	kf KeyFunc
 
 	cacheSize int
 	cache     *lru.ARCCache
@@ -39,7 +34,7 @@ type Operator struct {
 
 func NewOperator(opts ...Option) *Operator {
 	o := &Operator{
-		kf:        bccrypto.SaltedConvergent(nil),
+		kf:        Convergent,
 		cacheSize: 16,
 	}
 	for _, opt := range opts {
@@ -53,11 +48,7 @@ func NewOperator(opts ...Option) *Operator {
 }
 
 func (o *Operator) Post(ctx context.Context, s Store, data []byte) (*Ref, error) {
-	if len(data) > maxNodeSize {
-		return nil, errors.Errorf("data len=%d exceeds max size", len(data))
-	}
-	kf := bccrypto.SaltedConvergent(nil)
-	id, dek, err := bccrypto.Post(ctx, s, kf, data)
+	id, dek, err := postEncrypt(ctx, s, o.kf, data)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +62,7 @@ func (o *Operator) GetF(ctx context.Context, s Store, ref Ref, fn func(data []by
 	if data := o.checkCache(ref); data != nil {
 		return fn(data)
 	}
-	return bccrypto.GetF(ctx, s, ref.DEK, ref.CID, func(data []byte) error {
+	return getDecrypt(ctx, s, ref.DEK, ref.CID, func(data []byte) error {
 		o.loadCache(ref, data)
 		return fn(data)
 	})
@@ -81,7 +72,7 @@ func (o *Operator) Read(ctx context.Context, s Store, ref Ref, buf []byte) (int,
 	var n int
 	err := o.GetF(ctx, s, ref, func(data []byte) error {
 		n = copy(buf, data)
-		if n < len(buf) {
+		if n < len(data) {
 			return io.ErrShortBuffer
 		}
 		return nil

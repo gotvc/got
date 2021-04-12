@@ -23,18 +23,26 @@ func NewExponential(minSize, maxSize, period int, fn ChunkHandler) *Exponential 
 	}
 }
 
-func (e *Exponential) Write(p []byte) (int, error) {
-	if e.buf.Len()+len(p) < e.targetSize() {
-		return e.buf.Write(p)
+func (e *Exponential) Write(data []byte) (int, error) {
+	var n int
+	for n < len(data) {
+		spaceLeft := e.targetSize() - e.buf.Len()
+		end := n + spaceLeft
+		if len(data) < end {
+			end = len(data)
+		}
+		n2, err := e.buf.Write(data[n:end])
+		n += n2
+		if err != nil {
+			return n, err
+		}
+		if e.buf.Len() == e.targetSize() {
+			if err := e.emit(); err != nil {
+				return n, err
+			}
+		}
 	}
-	x := e.targetSize() - e.buf.Len()
-	if _, err := e.buf.Write(p[:x]); err != nil {
-		return 0, err
-	}
-	if err := e.emit(); err != nil {
-		return x, err
-	}
-	return e.Write(p[x:])
+	return n, nil
 }
 
 func (e *Exponential) WriteNoSplit(p []byte) (int, error) {
@@ -50,12 +58,16 @@ func (e *Exponential) Flush() error {
 }
 
 func (e *Exponential) targetSize() int {
-	size := e.minSize
-	size <<= (e.count / e.period)
-	if size > e.maxSize {
-		size = e.maxSize
+	size := uint64(e.minSize)
+	shift := uint64(e.count / e.period)
+	if shift >= 32 {
+		return e.maxSize
 	}
-	return size
+	size <<= shift
+	if size > uint64(e.maxSize) {
+		size = uint64(e.maxSize)
+	}
+	return int(size)
 }
 
 func (e *Exponential) emit() error {

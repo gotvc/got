@@ -157,12 +157,12 @@ type StreamWriter struct {
 	ctx     context.Context
 }
 
-func NewStreamWriter(s cadata.Store, op *gdat.Operator, onIndex IndexHandler) *StreamWriter {
+func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, onIndex IndexHandler) *StreamWriter {
 	w := &StreamWriter{
 		s:  s,
 		op: op,
 	}
-	w.chunker = chunking.NewContentDefined(defaultAvgSize, defaultMaxSize, func(data []byte) error {
+	w.chunker = chunking.NewContentDefined(avgSize, maxSize, func(data []byte) error {
 		ref, err := op.Post(w.ctx, w.s, data)
 		if err != nil {
 			return err
@@ -203,104 +203,6 @@ func (w *StreamWriter) Flush(ctx context.Context) error {
 
 func (w *StreamWriter) setLastKey(k []byte) {
 	w.lastKey = append(w.lastKey[:0], k...)
-}
-
-type entryMutator = func(*Entry) ([]Entry, error)
-
-type StreamEditor struct {
-	s cadata.Store
-
-	span    Span
-	fn      entryMutator
-	onIndex IndexHandler
-
-	inputRefs    map[Ref]struct{}
-	w            *StreamWriter
-	prevInputKey []byte
-	syncCount    int
-	fnCalled     bool
-}
-
-func NewStreamEditor(s cadata.Store, op *gdat.Operator, span Span, fn entryMutator, onIndex IndexHandler) *StreamEditor {
-	e := &StreamEditor{
-		s: s,
-
-		span:    span,
-		fn:      fn,
-		onIndex: onIndex,
-
-		inputRefs: make(map[Ref]struct{}),
-	}
-	e.w = NewStreamWriter(s, op, func(idx Index) error {
-		if _, exists := e.inputRefs[idx.Ref]; exists {
-			e.syncCount++
-		} else {
-			e.syncCount = 0
-		}
-		return e.onIndex(idx)
-	})
-	return e
-}
-
-// Done returns whether the editor has completed it's mutation to the stream
-// if Done returns true, all future calls to Process will emit exactly the same ref as passed in.
-func (e *StreamEditor) Done() bool {
-	return e.prevInputKey != nil &&
-		e.span.LessThan(e.prevInputKey) &&
-		e.syncCount > 1
-}
-
-func (e *StreamEditor) Process(ctx context.Context, x Index) error {
-	e.inputRefs[x.Ref] = struct{}{}
-	defer delete(e.inputRefs, x.Ref)
-	r := NewStreamReader(e.s, Index{Ref: x.Ref})
-	for {
-		xEnt, err := r.Next(ctx)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return err
-		}
-		if e.span.LessThan(xEnt.Key) && !e.fnCalled {
-			if err := e.processEntry(ctx, nil); err != nil {
-				return err
-			}
-		}
-		// either edit the key or copy it
-		if e.span.Contains(xEnt.Key) {
-			if err := e.processEntry(ctx, xEnt); err != nil {
-				return err
-			}
-		} else {
-			if err := e.w.Append(ctx, *xEnt); err != nil {
-				return err
-			}
-		}
-		e.prevInputKey = xEnt.Key
-	}
-	return nil
-}
-
-func (e *StreamEditor) processEntry(ctx context.Context, xEnt *Entry) error {
-	yEnts, err := e.fn(xEnt)
-	if err != nil {
-		return err
-	}
-	e.fnCalled = true
-	for _, yEnt := range yEnts {
-		if err := e.w.Append(ctx, yEnt); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (e *StreamEditor) Flush(ctx context.Context) error {
-	if !e.fnCalled {
-		e.processEntry(ctx, nil)
-	}
-	return e.w.Flush(ctx)
 }
 
 type StreamMerger struct {

@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/chunking"
 	"github.com/brendoncarroll/got/pkg/gdat"
@@ -15,7 +14,7 @@ import (
 
 const (
 	minPartSize            = 1 << 12
-	maxPartSize            = blobs.MaxSize
+	maxPartSize            = 1 << 20
 	partSizeDoublingPeriod = 1
 )
 

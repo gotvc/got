@@ -5,14 +5,13 @@ import (
 	"crypto/hmac"
 	"encoding/base64"
 
-	"github.com/blobcache/blobcache/pkg/bccrypto"
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/pkg/errors"
 )
 
 type Ref struct {
 	CID cadata.ID
-	DEK bccrypto.DEK
+	DEK DEK
 }
 
 func (r Ref) MarshalText() ([]byte, error) {

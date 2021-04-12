@@ -33,7 +33,7 @@ func TestPutGet(t *testing.T) {
 func TestPutGetMany(t *testing.T) {
 	ctx, s, x := testSetup(t)
 	op := NewOperator()
-	const N = 100
+	const N = 200
 	makeKey := func(i int) []byte {
 		return []byte(fmt.Sprintf("%d-key", i))
 	}
@@ -46,7 +46,7 @@ func TestPutGetMany(t *testing.T) {
 		x, err = op.Put(ctx, s, *x, key, value)
 		require.NoError(t, err)
 	}
-	//ptree.DebugTree(s, *x)
+	// ptree.DebugTree(s, *x)
 	for i := 0; i < N; i++ {
 		key, value := makeKey(i), makeValue(i)
 		actualValue, err := op.Get(ctx, s, *x, key)
