@@ -110,6 +110,11 @@ func (s virtualStore) Post(ctx context.Context, data []byte) (cadata.ID, error) 
 		if err != nil {
 			return err
 		}
+		if exists, err := isInSet(b, s.id, id); err != nil {
+			return err
+		} else if exists {
+			return nil
+		}
 		if err := addToSet(b, s.id, id); err != nil {
 			return err
 		}
@@ -145,6 +150,11 @@ func (s virtualStore) Delete(ctx context.Context, id cadata.ID) error {
 		b, err := tx.CreateBucketIfNotExists([]byte(setsBucketName))
 		if err != nil {
 			return err
+		}
+		if exists, err := isInSet(b, s.id, id); err != nil {
+			return err
+		} else if !exists {
+			return nil
 		}
 		if err := removeFromSet(b, s.id, id); err != nil {
 			return err

@@ -40,6 +40,7 @@ func (b *Builder) makeWriter(i int) *StreamWriter {
 		case b.isDone && i == len(b.levels)-1:
 			b.root = &Root{
 				Ref:   idx.Ref,
+				First: append([]byte{}, idx.First...),
 				Depth: uint8(i),
 			}
 			return nil
@@ -135,7 +136,7 @@ type Iterator struct {
 
 func NewIterator(s cadata.Store, root Root, span Span) *Iterator {
 	levels := make([]*StreamReader, root.Depth+1)
-	levels[root.Depth] = NewStreamReader(s, Index{Ref: root.Ref})
+	levels[root.Depth] = NewStreamReader(s, rootToIndex(root))
 	return &Iterator{
 		s:      s,
 		levels: levels,
@@ -168,11 +169,11 @@ func (it *Iterator) getReader(ctx context.Context, depth int) (*StreamReader, er
 		}
 		break
 	}
-	ref, err := gdat.ParseRef(ent.Value)
+	idx, err := entryToIndex(*ent)
 	if err != nil {
 		return nil, err
 	}
-	it.levels[depth] = NewStreamReader(it.s, Index{Ref: *ref})
+	it.levels[depth] = NewStreamReader(it.s, idx)
 	return it.levels[depth], nil
 }
 
@@ -227,7 +228,7 @@ func Mutate(ctx context.Context, s cadata.Store, op *gdat.Operator, root Root, m
 			return mut.Fn(x)
 		},
 	}
-	if err := mutate(ctx, b, Index{Ref: root.Ref}, int(root.Depth), mut2); err != nil {
+	if err := mutate(ctx, b, rootToIndex(root), int(root.Depth), mut2); err != nil {
 		return nil, err
 	}
 	if !fnCalled {
@@ -258,11 +259,10 @@ func mutateTree(ctx context.Context, b *Builder, idx Index, depth int, mut Mutat
 			}
 			return err
 		}
-		ref, err := gdat.ParseRef(ent.Value)
+		idx2, err := entryToIndex(*ent)
 		if err != nil {
 			return err
 		}
-		idx2 := Index{First: ent.Key, Ref: *ref}
 		if mut.Span.LessThan(ent.Key) && fnCalled {
 			// The entry references data after the span, just copy it.
 			if err := copyTree(ctx, b, depth, idx2); err != nil {
@@ -416,4 +416,19 @@ func entryToIndex(ent Entry) (Index, error) {
 		return Index{}, err
 	}
 	return Index{First: ent.Key, Ref: *ref}, nil
+}
+
+func indexToRoot(idx Index, depth uint8) Root {
+	return Root{
+		Ref:   idx.Ref,
+		First: idx.First,
+		Depth: depth,
+	}
+}
+
+func rootToIndex(r Root) Index {
+	return Index{
+		Ref:   r.Ref,
+		First: r.First,
+	}
 }

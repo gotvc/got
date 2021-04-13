@@ -83,7 +83,7 @@ func TestMutate(t *testing.T) {
 	it := NewIterator(s, *root, SingleItemSpan(k))
 	ent, err := it.Next(ctx)
 	require.NoError(t, err)
-	t.Log(ent)
+	t.Logf("%q %q", ent.Key, ent.Value)
 	require.Equal(t, ent.Key, k)
 	require.Equal(t, string(v), string(ent.Value))
 	_, err = it.Next(ctx)

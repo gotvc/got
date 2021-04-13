@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"io"
 	"log"
 
@@ -12,6 +11,9 @@ import (
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/chunking"
 	"github.com/brendoncarroll/got/pkg/gdat"
+	"github.com/brendoncarroll/got/pkg/ptree/ptreeproto"
+	"github.com/pkg/errors"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -50,7 +52,7 @@ func (s *StreamLiteral) Next(ctx context.Context) (*Entry, error) {
 	return ent, nil
 }
 
-func readEntry(br *bytes.Reader) (*Entry, error) {
+func readEntry(br *bytes.Reader, prevKey []byte) (*Entry, error) {
 	l, err := binary.ReadUvarint(br)
 	if err != nil {
 		return nil, err
@@ -59,26 +61,43 @@ func readEntry(br *bytes.Reader) (*Entry, error) {
 	if _, err := io.ReadFull(br, entBuf); err != nil {
 		return nil, err
 	}
-	var ent Entry
-	if err := json.Unmarshal(entBuf, &ent); err != nil {
+	var entproto ptreeproto.Entry
+	if err := proto.Unmarshal(entBuf, &entproto); err != nil {
 		return nil, err
 	}
-	return &ent, nil
+	if int(entproto.KeyBackspace) > len(prevKey) {
+		return nil, errors.Errorf("backspace is > len(prevKey): prevKey=%q bs=%d", prevKey, entproto.KeyBackspace)
+	}
+	end := len(prevKey) - int(entproto.KeyBackspace)
+	key := append([]byte{}, prevKey[:end]...)
+	key = append(key, entproto.KeySuffix...)
+	return &Entry{
+		Key:   key,
+		Value: entproto.Value,
+	}, nil
 }
 
-func writeEntry(w *bytes.Buffer, ent Entry) {
-	data, _ := json.Marshal(ent)
-	buf := [binary.MaxVarintLen64]byte{}
-	n := binary.PutUvarint(buf[:], uint64(len(data)))
-	w.Write(buf[:n])
+func writeEntry(w *bytes.Buffer, prevKey []byte, ent Entry) {
+	l := commonPrefix(prevKey, ent.Key)
+	keySuffix := ent.Key[l:]
+	backspace := uint32(len(prevKey) - l)
+	data, _ := proto.Marshal(&ptreeproto.Entry{
+		KeyBackspace: backspace,
+		KeySuffix:    keySuffix,
+		Value:        ent.Value,
+	})
+	lenBuf := [binary.MaxVarintLen64]byte{}
+	n := binary.PutUvarint(lenBuf[:], uint64(len(data)))
+	w.Write(lenBuf[:n])
 	w.Write(data)
 }
 
 type StreamReader struct {
-	s   cadata.Store
-	op  *gdat.Operator
-	idx Index
-	br  *bytes.Reader
+	s       cadata.Store
+	op      *gdat.Operator
+	idx     Index
+	br      *bytes.Reader
+	prevKey []byte
 }
 
 func NewStreamReader(s cadata.Store, idx Index) *StreamReader {
@@ -94,7 +113,12 @@ func (r *StreamReader) Next(ctx context.Context) (*Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return readEntry(br)
+	ent, err := readEntry(br, r.prevKey)
+	if err != nil {
+		return nil, err
+	}
+	r.setPrevKey(ent.Key)
+	return ent, nil
 }
 
 func (r *StreamReader) Peek(ctx context.Context) (*Entry, error) {
@@ -111,7 +135,7 @@ func (r *StreamReader) Peek(ctx context.Context) (*Entry, error) {
 			}
 		}
 	}()
-	return readEntry(br)
+	return readEntry(br, r.prevKey)
 }
 
 func (r *StreamReader) Seek(ctx context.Context, k []byte) error {
@@ -142,8 +166,13 @@ func (r *StreamReader) getByteReader(ctx context.Context) (*bytes.Reader, error)
 		if err != nil {
 			return nil, err
 		}
+		r.setPrevKey(r.idx.First)
 	}
 	return r.br, nil
+}
+
+func (r *StreamReader) setPrevKey(x []byte) {
+	r.prevKey = append(r.prevKey[:0], x...)
 }
 
 type IndexHandler = func(Index) error
@@ -153,8 +182,9 @@ type StreamWriter struct {
 	op      *gdat.Operator
 	chunker *chunking.ContentDefined
 
-	lastKey []byte
-	ctx     context.Context
+	firstKey []byte
+	prevKey  []byte
+	ctx      context.Context
 }
 
 func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, onIndex IndexHandler) *StreamWriter {
@@ -163,16 +193,15 @@ func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, on
 		op: op,
 	}
 	w.chunker = chunking.NewContentDefined(avgSize, maxSize, func(data []byte) error {
+		if w.firstKey == nil {
+			panic("firstKey should be set")
+		}
 		ref, err := op.Post(w.ctx, w.s, data)
 		if err != nil {
 			return err
 		}
-		br := bytes.NewReader(data)
-		ent, err := readEntry(br)
-		if err != nil {
-			panic(err) // we just wrote this
-		}
-		idx := Index{Ref: *ref, First: ent.Key}
+		idx := Index{Ref: *ref, First: w.firstKey}
+		w.firstKey = nil
 		return onIndex(idx)
 	})
 	return w
@@ -181,14 +210,44 @@ func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, on
 func (w *StreamWriter) Append(ctx context.Context, ent Entry) error {
 	w.ctx = ctx
 	defer func() { w.ctx = nil }()
-	if w.lastKey != nil && bytes.Compare(ent.Key, w.lastKey) <= 0 {
-		log.Println("prev:", string(w.lastKey), string(ent.Key))
+	if w.prevKey != nil && bytes.Compare(ent.Key, w.prevKey) <= 0 {
+		log.Println("prev:", string(w.prevKey), string(ent.Key))
 		panic("out of order key")
 	}
 	buf := &bytes.Buffer{}
-	writeEntry(buf, ent)
-	w.setLastKey(ent.Key)
-	return w.chunker.WriteNoSplit(buf.Bytes())
+	writeEntry(buf, w.prevKey, ent)
+	if w.chunker.WouldOverflow(buf.Bytes()) {
+		if err := w.chunker.Flush(); err != nil {
+			return err
+		}
+		return w.writeFirst(ctx, ent)
+	}
+	if w.firstKey == nil {
+		return w.writeFirst(ctx, ent)
+	}
+	if err := w.chunker.WriteNoSplit(buf.Bytes()); err != nil {
+		return err
+	}
+	w.setPrevKey(ent.Key)
+	return nil
+}
+
+func (w *StreamWriter) writeFirst(ctx context.Context, ent Entry) error {
+	if w.chunker.Buffered() > 0 {
+		panic("writeFirst called with partially full chunker")
+	}
+	if w.firstKey != nil {
+		panic("w.firstKey should be nil")
+	}
+	w.firstKey = append([]byte{}, ent.Key...)
+	buf := &bytes.Buffer{}
+	// the first key is always fully compressed.  It is provided from the layer above.
+	writeEntry(buf, ent.Key, ent)
+	if err := w.chunker.WriteNoSplit(buf.Bytes()); err != nil {
+		return err
+	}
+	w.setPrevKey(ent.Key)
+	return nil
 }
 
 func (w *StreamWriter) Buffered() int {
@@ -201,8 +260,8 @@ func (w *StreamWriter) Flush(ctx context.Context) error {
 	return w.chunker.Flush()
 }
 
-func (w *StreamWriter) setLastKey(k []byte) {
-	w.lastKey = append(w.lastKey[:0], k...)
+func (w *StreamWriter) setPrevKey(k []byte) {
+	w.prevKey = append(w.prevKey[:0], k...)
 }
 
 type StreamMerger struct {
@@ -270,4 +329,20 @@ func StreamCopy(ctx context.Context, dst *StreamWriter, src StreamIterator) erro
 			return err
 		}
 	}
+}
+
+func commonPrefix(a, b []byte) int {
+	for i := 0; i < len(a) && i < len(b); i++ {
+		if a[i] != b[i] {
+			return i
+		}
+	}
+	return min(len(a), len(b))
+}
+
+func min(a, b int) int {
+	if b < a {
+		return b
+	}
+	return a
 }

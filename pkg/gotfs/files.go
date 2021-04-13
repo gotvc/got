@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"io"
+	"runtime"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/chunking"
@@ -52,8 +53,44 @@ func (w *writer) Flush() error {
 	return w.chunker.Flush()
 }
 
+// CreateFileRoot creates a new filesystem with the contents read from r at the root
+func (o *Operator) CreateFileRoot(ctx context.Context, s Store, r io.Reader) (*Root, error) {
+	as := cadata.NewAsyncStore(s, runtime.GOMAXPROCS(0))
+	b := o.gotkv.NewBuilder(as)
+
+	// metadata entry
+	md := Metadata{
+		Mode: 0o644,
+	}
+	p := ""
+	if err := b.Put(ctx, []byte(p), md.marshal()); err != nil {
+		return nil, err
+	}
+	// content
+	var total uint64
+	w := o.newWriter(ctx, as, func(part Part) error {
+		total += uint64(part.Length)
+		key := makePartKey(p, total)
+		return b.Put(ctx, key, part.marshal())
+	})
+	if _, err := io.Copy(w, r); err != nil {
+		return nil, err
+	}
+	if err := w.Flush(); err != nil {
+		return nil, err
+	}
+	root, err := b.Finish(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := as.Close(); err != nil {
+		return nil, err
+	}
+	return root, nil
+}
+
 // CreateFileFrom creates a file at p with data from r
-func (o *Operator) CreateFileFrom(ctx context.Context, s Store, x Root, p string, r io.Reader) (*gotkv.Root, error) {
+func (o *Operator) CreateFileFrom(ctx context.Context, s Store, x Root, p string, r io.Reader) (*Root, error) {
 	if err := o.checkNoEntry(ctx, s, x, p); err != nil {
 		return nil, err
 	}

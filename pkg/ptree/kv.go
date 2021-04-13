@@ -5,10 +5,10 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/gdat"
+	"github.com/pkg/errors"
 )
 
 // Entry is a single entry in a stream/tree
@@ -20,6 +20,7 @@ type Entry struct {
 type Root struct {
 	Ref   Ref
 	Depth uint8
+	First []byte
 }
 
 // A span of keys [Start, End)
@@ -60,7 +61,7 @@ func KeyAfter(x []byte) []byte {
 }
 
 func MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, error) {
-	sr := NewStreamReader(s, Index{Ref: x.Ref})
+	sr := NewStreamReader(s, rootToIndex(x))
 	var ent *Entry
 	for {
 		ent2, err := sr.Next(ctx)
@@ -70,7 +71,7 @@ func MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, 
 			}
 			return nil, err
 		}
-		if bytes.Compare(ent2.Key, under) >= 0 {
+		if under != nil && bytes.Compare(ent2.Key, under) >= 0 {
 			break
 		}
 		ent = ent2
@@ -81,27 +82,54 @@ func MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, 
 	if x.Depth == 0 {
 		return ent.Key, nil
 	}
-	ref, err := gdat.ParseRef(ent.Value)
+	idx, err := entryToIndex(*ent)
 	if err != nil {
 		return nil, err
 	}
-	return MaxKey(ctx, s, Root{Ref: *ref, Depth: x.Depth - 1}, under)
+	return MaxKey(ctx, s, indexToRoot(idx, x.Depth-1), under)
 }
 
-func DebugRef(s cadata.Store, x Ref) {
-	ctx := context.TODO()
-	sr := NewStreamReader(s, Index{Ref: x})
-	log.Println("DUMP ref:", x.CID.String())
-	for {
-		ent, err := sr.Next(ctx)
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			panic(err)
-		}
-		log.Println("entry:", string(ent.Key), "->", string(ent.Value))
+// AddPrefix returns a new version of root with the prefix prepended to all the keys
+func AddPrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
+	var first []byte
+	first = append(first, prefix...)
+	first = append(first, x.First...)
+	y := Root{
+		First: first,
+		Ref:   x.Ref,
+		Depth: x.Depth,
 	}
+	return &y, nil
+}
+
+// RemovePrefix returns a new version of root with the prefix removed from all the keys
+func RemovePrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
+	if yes, err := HasPrefix(ctx, s, x, prefix); err != nil {
+		return nil, err
+	} else if yes {
+		return nil, errors.Errorf("tree does not have prefix %q", prefix)
+	}
+	y := Root{
+		First: append([]byte{}, x.First[len(prefix):]...),
+		Ref:   x.Ref,
+		Depth: x.Depth,
+	}
+	return &y, nil
+}
+
+// HasPrefix returns true if the tree rooted at x only has keys which are prefixed with prefix
+func HasPrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (bool, error) {
+	if !bytes.HasPrefix(x.First, prefix) {
+		return false, nil
+	}
+	lastKey, err := MaxKey(ctx, s, x, nil)
+	if err != nil {
+		return false, err
+	}
+	if !bytes.HasPrefix(lastKey, prefix) {
+		return false, nil
+	}
+	return true, nil
 }
 
 func DebugTree(s cadata.Store, x Root) {
@@ -114,7 +142,7 @@ func DebugTree(s cadata.Store, x Root) {
 			indent += "  "
 		}
 		ctx := context.TODO()
-		sr := NewStreamReader(s, Index{Ref: x.Ref})
+		sr := NewStreamReader(s, Index{Ref: x.Ref, First: x.First})
 		fmt.Printf("%sTREE NODE: %s %d\n", indent, x.Ref.CID.String(), x.Depth)
 		if x.Depth == 0 {
 			for {
@@ -141,7 +169,7 @@ func DebugTree(s cadata.Store, x Root) {
 					panic(err)
 				}
 				fmt.Printf("%s INDEX first=%q -> ref=%s\n", indent, string(ent.Key), ref.CID.String())
-				debugTree(Root{Ref: *ref, Depth: x.Depth - 1})
+				debugTree(Root{Ref: *ref, First: ent.Key, Depth: x.Depth - 1})
 			}
 		}
 	}

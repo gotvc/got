@@ -22,8 +22,8 @@ func TestEntry(t *testing.T) {
 		Key:   []byte("key1"),
 		Value: []byte("value1"),
 	}
-	writeEntry(buf, expected)
-	actual, err := readEntry(bytes.NewReader(buf.Bytes()))
+	writeEntry(buf, nil, expected)
+	actual, err := readEntry(bytes.NewReader(buf.Bytes()), nil)
 	require.NoError(t, err)
 	require.Equal(t, expected, *actual)
 }
@@ -33,9 +33,11 @@ func TestStreamRW(t *testing.T) {
 	ctx := context.Background()
 	op := gdat.NewOperator()
 	var refs []Ref
+	var idxs []Index
 
 	s := cadata.NewMem()
 	sw := NewStreamWriter(s, op, defaultAvgSize, defaultMaxSize, func(idx Index) error {
+		idxs = append(idxs, idx)
 		refs = append(refs, idx.Ref)
 		return nil
 	})
@@ -51,9 +53,9 @@ func TestStreamRW(t *testing.T) {
 	var sr *StreamReader
 	for i := 0; i < N; i++ {
 		if sr == nil {
-			ref := refs[0]
-			refs = refs[1:]
-			sr = NewStreamReader(s, Index{Ref: ref})
+			idx := idxs[0]
+			idxs = idxs[1:]
+			sr = NewStreamReader(s, idx)
 		}
 		ent, err := sr.Next(ctx)
 		if err == io.EOF {
