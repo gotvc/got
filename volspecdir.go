@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/brendoncarroll/got/pkg/fs"
+	"github.com/brendoncarroll/got/pkg/volumes"
 )
 
 var _ Realm = &volSpecDir{}
@@ -75,6 +76,9 @@ func (csd *volSpecDir) Delete(ctx context.Context, k string) error {
 func (esd *volSpecDir) Get(ctx context.Context, k string) (*Volume, error) {
 	data, err := fs.ReadFile(esd.fs, k)
 	if err != nil {
+		if fs.IsNotExist(err) {
+			return nil, volumes.ErrNotExist
+		}
 		return nil, err
 	}
 	spec := VolumeSpec{}

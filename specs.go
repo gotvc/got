@@ -6,7 +6,6 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/c/httpcell"
 	"github.com/brendoncarroll/got/pkg/cells"
-	"github.com/brendoncarroll/got/pkg/volumes"
 	"github.com/pkg/errors"
 )
 
@@ -151,34 +150,4 @@ func (r *Repo) MakeCell(k string, spec CellSpec) (Cell, error) {
 }
 
 type RealmSpec struct {
-	Prefixed *PrefixedRealmSpec `json:"prefixed"`
-	Peer     *PeerRealmSpec     `json:"peer"`
-}
-
-type PrefixedRealmSpec struct {
-	Prefix string    `json:"prefix"`
-	Inner  RealmSpec `json:"inner"`
-}
-
-type PeerRealmSpec struct {
-	ID p2p.PeerID `json:"id"`
-}
-
-func (r *Repo) MakeRealm(spec RealmSpec) (Realm, error) {
-	switch {
-	case spec.Prefixed != nil:
-		if spec.Prefixed.Prefix == "" {
-			return nil, errors.Errorf("refusing to make prefixed realm with empty prefix")
-		}
-		inner, err := r.MakeRealm(spec.Prefixed.Inner)
-		if err != nil {
-			return nil, err
-		}
-		return volumes.NewPrefixed(inner, spec.Prefixed.Prefix), nil
-
-	case spec.Peer != nil:
-		panic("not implemented")
-	default:
-		return nil, errors.Errorf("empty cell space spec")
-	}
 }

@@ -2,7 +2,6 @@ package got
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +10,6 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/s/peerswarm"
 	"github.com/brendoncarroll/got/pkg/cadata"
-	"github.com/brendoncarroll/got/pkg/cells"
 	"github.com/brendoncarroll/got/pkg/fs"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
@@ -61,14 +59,13 @@ type Repo struct {
 }
 
 func InitRepo(p string) error {
-	gotDir := filepath.Join(p, gotPrefix)
-	if err := os.Mkdir(gotDir, 0o755); err != nil {
-		return err
-	}
-	if err := os.Mkdir(specDirPath, 0o755); err != nil {
-		return err
-	}
 	repoDirFS := fs.NewDirFS(p)
+	if err := repoDirFS.Mkdir(gotPrefix, 0o755); err != nil {
+		return err
+	}
+	if err := repoDirFS.Mkdir(specDirPath, 0o755); err != nil {
+		return err
+	}
 	if _, err := repoDirFS.Stat(configPath); os.IsNotExist(err) {
 	} else if err != nil {
 		return err
@@ -139,32 +136,6 @@ func (r *Repo) Close() (retErr error) {
 
 func (r *Repo) WorkingDir() FS {
 	return r.workingDir
-}
-
-func (r *Repo) ApplyStaging(ctx context.Context, fn func(s Store, x Root) (*Root, error)) error {
-	fsop := r.getFSOp()
-	vol := r.GetStaging()
-	store := vol.Store
-	return cells.Apply(ctx, vol.Cell, func(x []byte) ([]byte, error) {
-		var xRoot *Root
-		var err error
-		if len(x) < 1 {
-			xRoot, err = fsop.NewEmpty(ctx, store)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			xRoot = &Root{}
-			if err := json.Unmarshal(x, xRoot); err != nil {
-				return nil, err
-			}
-		}
-		yRef, err := fn(store, *xRoot)
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(yRef)
-	})
 }
 
 func (r *Repo) GetACL() gotnet.ACL {

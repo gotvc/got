@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
-	"os"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/got/pkg/fs"
@@ -33,15 +32,7 @@ func LoadPrivateKey(fsx fs.FS, p string) (p2p.PrivateKey, error) {
 }
 
 func SavePrivateKey(fsx fs.FS, p string, privateKey p2p.PrivateKey) error {
-	f, err := os.OpenFile(p, os.O_EXCL|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if _, err = f.Write(marshalPrivateKey(privateKey)); err != nil {
-		return err
-	}
-	return f.Close()
+	return fs.WriteIfNotExists(fsx, p, marshalPrivateKey(privateKey))
 }
 
 func marshalPEM(ty string, data []byte) []byte {

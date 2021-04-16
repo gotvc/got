@@ -8,7 +8,7 @@ import (
 	"github.com/brendoncarroll/got/pkg/gdat"
 )
 
-// Merge performs a key wise merge on the tree
+// Merge performs a key-wise merge on the tree
 func Merge(ctx context.Context, s cadata.Store, op *gdat.Operator, roots []Root) (*Root, error) {
 	b := NewBuilder(s, op)
 	if err := merge(ctx, b, roots); err != nil {

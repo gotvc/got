@@ -27,11 +27,9 @@ type Realm interface {
 }
 
 func CreateIfNotExists(ctx context.Context, r Realm, k string) error {
-	if _, err := r.Get(context.TODO(), k); err != nil {
+	if _, err := r.Get(ctx, k); err != nil {
 		if err == ErrNotExist {
-			if err := r.Create(context.TODO(), k); err != nil {
-				return err
-			}
+			return r.Create(ctx, k)
 		}
 		return err
 	}

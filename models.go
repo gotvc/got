@@ -8,6 +8,7 @@ import (
 	"github.com/brendoncarroll/got/pkg/fs"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotkv"
+	"github.com/brendoncarroll/got/pkg/gotvc"
 	"github.com/brendoncarroll/got/pkg/volumes"
 	"github.com/pkg/errors"
 )
@@ -22,6 +23,8 @@ type (
 
 	Ref  = gotkv.Ref
 	Root = gotfs.Root
+
+	Commit = gotvc.Snapshot
 )
 
 func MarshalPEM(x interface{}) ([]byte, error) {

@@ -7,6 +7,7 @@ import (
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/cells"
 	"github.com/brendoncarroll/got/pkg/gotkv"
+	"github.com/brendoncarroll/got/pkg/gotvc"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -23,7 +24,7 @@ func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
 		return err
 	}
 	return ApplyRef(ctx, dst.Cell, func(x Ref) (*Ref, error) {
-		hasAncestor, err := HasAncestor(ctx, src.Store, *srcRef, x)
+		hasAncestor, err := gotvc.HasAncestor(ctx, src.Store, *srcRef, x)
 		if err != nil {
 			return nil, err
 		}
@@ -35,7 +36,7 @@ func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
 }
 
 func (r *Repo) CreateVolume(ctx context.Context, name string) error {
-	return r.GetRealm().Create(ctx, name)
+	return r.specDir.Create(ctx, name)
 }
 
 func (r *Repo) CreateVolumeWithSpec(name string, spec VolumeSpec) error {

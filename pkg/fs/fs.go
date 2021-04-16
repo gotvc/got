@@ -16,7 +16,16 @@ type FS interface {
 	ReadDir(p string, fn func(finfo os.FileInfo) error) error
 	Open(p string) (io.ReadCloser, error)
 	WriteFile(p string, r io.Reader) error
+	Mkdir(p string, mode os.FileMode) error
 	Remove(p string) error
+}
+
+func IsNotExist(err error) bool {
+	return os.IsNotExist(err)
+}
+
+func IsExist(err error) bool {
+	return os.IsExist(err)
 }
 
 type dirFS struct {
@@ -74,6 +83,11 @@ func (fs dirFS) WriteFile(p string, r io.Reader) error {
 	return f.Close()
 }
 
+func (fs dirFS) Mkdir(p string, mode os.FileMode) error {
+	p = filepath.Join(fs.root, p)
+	return os.Mkdir(p, mode)
+}
+
 func (fs dirFS) Remove(p string) error {
 	p = filepath.Join(fs.root, p)
 	return os.Remove(p)
@@ -117,6 +131,13 @@ func (fs filterFS) WriteFile(p string, r io.Reader) error {
 		return errors.Errorf("cannot write to path %s", p)
 	}
 	return fs.x.WriteFile(p, r)
+}
+
+func (fs filterFS) Mkdir(p string, mode os.FileMode) error {
+	if !fs.pred(p) {
+		return errors.Errorf("cannot write to path %s", p)
+	}
+	return fs.x.Mkdir(p, mode)
 }
 
 func (fs filterFS) Remove(p string) error {
