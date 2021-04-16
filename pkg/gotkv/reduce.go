@@ -3,6 +3,8 @@ package gotkv
 import (
 	"context"
 
+	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/got/pkg/ptree"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -66,4 +68,8 @@ func TakeRight(k, l, r []byte) ([]byte, error) {
 // TakeLeft is a Reducer which always takes the left value.
 func TakeLeft(k, l, r []byte) ([]byte, error) {
 	return l, nil
+}
+
+func (op *operator) Merge(ctx context.Context, s cadata.Store, roots []Root) (*Root, error) {
+	return ptree.Merge(ctx, s, op.dop, roots)
 }

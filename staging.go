@@ -23,7 +23,7 @@ func (r *Repo) Add(ctx context.Context, p string) error {
 			return nil, err
 		}
 		defer rc.Close()
-		return r.getFSOp().CreateFileFrom(ctx, s, x, p, rc)
+		return r.getFSOp().CreateFile(ctx, s, x, p, rc)
 	})
 }
 

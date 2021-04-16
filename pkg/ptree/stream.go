@@ -265,14 +265,11 @@ func (w *StreamWriter) setPrevKey(k []byte) {
 }
 
 type StreamMerger struct {
-	s cadata.Store
-
-	streams []*StreamReader
+	streams []StreamIterator
 }
 
-func NewStreamMerger(s cadata.Store, streams []*StreamReader) *StreamMerger {
+func NewStreamMerger(s cadata.Store, streams []StreamIterator) *StreamMerger {
 	return &StreamMerger{
-		s:       s,
 		streams: streams,
 	}
 }
@@ -282,7 +279,11 @@ func (sm *StreamMerger) Next(ctx context.Context) (*Entry, error) {
 	if err != nil {
 		return nil, err
 	}
-	return sr.Next(ctx)
+	ent, err := sr.Next(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return ent, sm.advancePast(ctx, ent.Key)
 }
 
 func (sm *StreamMerger) Peek(ctx context.Context) (*Entry, error) {
@@ -293,8 +294,26 @@ func (sm *StreamMerger) Peek(ctx context.Context) (*Entry, error) {
 	return sr.Peek(ctx)
 }
 
+func (sm *StreamMerger) advancePast(ctx context.Context, key []byte) error {
+	for _, sr := range sm.streams {
+		ent, err := sr.Peek(ctx)
+		if err != nil {
+			if err == io.EOF {
+				continue
+			}
+		}
+		// if the stream is behind, advance it.
+		if bytes.Compare(ent.Key, key) <= 0 {
+			if _, err := sr.Next(ctx); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 // selectStream will never return an ended stream
-func (sm *StreamMerger) selectStream(ctx context.Context) (*StreamReader, error) {
+func (sm *StreamMerger) selectStream(ctx context.Context) (StreamIterator, error) {
 	var minKey []byte
 	nextIndex := len(sm.streams)
 	for i, sr := range sm.streams {
@@ -314,21 +333,6 @@ func (sm *StreamMerger) selectStream(ctx context.Context) (*StreamReader, error)
 		return sm.streams[nextIndex], nil
 	}
 	return nil, io.EOF
-}
-
-func StreamCopy(ctx context.Context, dst *StreamWriter, src StreamIterator) error {
-	for {
-		ent, err := src.Next(ctx)
-		if err != nil {
-			if err == io.EOF {
-				err = nil
-			}
-			return err
-		}
-		if err := dst.Append(ctx, *ent); err != nil {
-			return err
-		}
-	}
 }
 
 func commonPrefix(a, b []byte) int {

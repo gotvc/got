@@ -33,12 +33,12 @@ type Operator interface {
 	Delete(ctx context.Context, s Store, x Root, key []byte) (*Root, error)
 	DeleteSpan(ctx context.Context, s Store, x Root, span Span) (*Root, error)
 
+	Merge(ctx context.Context, s Store, roots []Root) (*Root, error)
+
 	MaxKey(ctx context.Context, s Store, x Root, under []byte) ([]byte, error)
 
-	Reduce(ctx context.Context, s Store, xs []Root, fn ReduceFunc) (*Root, error)
-
-	// PrependKeys adds prefix in front of all the keys.
-	PrependKeys(ctx context.Context, s Store, x Root, prefix []byte) (*Root, error)
+	// AddPrefix adds prefix in front of all the keys.
+	AddPrefix(ctx context.Context, s Store, x Root, prefix []byte) (*Root, error)
 
 	NewBuilder(s Store) Builder
 	NewIterator(s Store, x Root, span Span) Iterator
@@ -117,20 +117,8 @@ func (o *operator) MaxKey(ctx context.Context, s cadata.Store, x Root, under []b
 	return ptree.MaxKey(ctx, s, x, under)
 }
 
-func (o *operator) PrependKeys(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
-	return ptree.Mutate(ctx, s, o.dop, x, ptree.Mutation{
-		Span: ptree.TotalSpan(),
-		Fn: func(ent *Entry) []Entry {
-			if ent == nil {
-				return nil
-			}
-			ent2 := Entry{
-				Key:   append(prefix, ent.Value...),
-				Value: ent.Value,
-			}
-			return []Entry{ent2}
-		},
-	})
+func (o *operator) AddPrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
+	return ptree.AddPrefix(ctx, s, x, prefix)
 }
 
 func (o *operator) NewBuilder(s Store) Builder {

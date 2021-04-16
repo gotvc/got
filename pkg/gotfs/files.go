@@ -62,15 +62,14 @@ func (o *Operator) CreateFileRoot(ctx context.Context, s Store, r io.Reader) (*R
 	md := Metadata{
 		Mode: 0o644,
 	}
-	p := ""
-	if err := b.Put(ctx, []byte(p), md.marshal()); err != nil {
+	if err := b.Put(ctx, []byte{}, md.marshal()); err != nil {
 		return nil, err
 	}
 	// content
 	var total uint64
 	w := o.newWriter(ctx, as, func(part Part) error {
 		total += uint64(part.Length)
-		key := makePartKey(p, total)
+		key := makePartKey("", total)
 		return b.Put(ctx, key, part.marshal())
 	})
 	if _, err := io.Copy(w, r); err != nil {
@@ -89,42 +88,20 @@ func (o *Operator) CreateFileRoot(ctx context.Context, s Store, r io.Reader) (*R
 	return root, nil
 }
 
-// CreateFileFrom creates a file at p with data from r
-func (o *Operator) CreateFileFrom(ctx context.Context, s Store, x Root, p string, r io.Reader) (*Root, error) {
+// CreateFile creates a file at p with data from r
+func (o *Operator) CreateFile(ctx context.Context, s Store, x Root, p string, r io.Reader) (*Root, error) {
 	if err := o.checkNoEntry(ctx, s, x, p); err != nil {
 		return nil, err
 	}
-	// TODO: add this back after we have migrated to the builder.
-	// as := cadata.NewAsyncStore(s, runtime.GOMAXPROCS(0))
-	// s = as
-	// create metadata entry
-	md := Metadata{
-		Mode: 0o644,
-	}
-	if x2, err := o.PutMetadata(ctx, s, x, p, md); err != nil {
-		return nil, err
-	} else {
-		x = *x2
-	}
-
-	var total uint64
-	w := o.newWriter(ctx, s, func(part Part) error {
-		total += uint64(part.Length)
-		key := makePartKey(p, total)
-		if x2, err := o.gotkv.Put(ctx, s, x, key, part.marshal()); err != nil {
-			return err
-		} else {
-			x = *x2
-		}
-		return nil
-	})
-	if _, err := io.Copy(w, r); err != nil {
+	fileRoot, err := o.CreateFileRoot(ctx, s, r)
+	if err != nil {
 		return nil, err
 	}
-	if err := w.Flush(); err != nil {
+	fileRoot, err = o.gotkv.AddPrefix(ctx, s, *fileRoot, []byte(p))
+	if err != nil {
 		return nil, err
 	}
-	return &x, nil
+	return o.gotkv.Merge(ctx, s, []gotkv.Root{x, *fileRoot})
 }
 
 func (o *Operator) SizeOfFile(ctx context.Context, s Store, x Root, p string) (int, error) {

@@ -18,7 +18,7 @@ func TestCreateFileFrom(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, x)
 	fileData := "file contents\n"
-	x, err = op.CreateFileFrom(ctx, s, *x, "file.txt", strings.NewReader(fileData))
+	x, err = op.CreateFile(ctx, s, *x, "file.txt", strings.NewReader(fileData))
 	require.NoError(t, err)
 	require.NotNil(t, x)
 	buf := make([]byte, 128)
@@ -34,7 +34,7 @@ func TestFileMetadata(t *testing.T) {
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	require.NotNil(t, x)
-	x, err = op.CreateFileFrom(ctx, s, *x, "file.txt", bytes.NewReader(nil))
+	x, err = op.CreateFile(ctx, s, *x, "file.txt", bytes.NewReader(nil))
 	require.NoError(t, err)
 	md, err := op.GetMetadata(ctx, s, *x, "file.txt")
 	require.NoError(t, err)

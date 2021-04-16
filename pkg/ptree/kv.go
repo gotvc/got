@@ -55,6 +55,8 @@ func (s Span) Contains(k []byte) bool {
 	return !s.GreaterThan(k) && !s.LessThan(k)
 }
 
+// KeyAfter returns the key immediately after x.
+// There will be no key less than the result and greater than x
 func KeyAfter(x []byte) []byte {
 	y := append([]byte{}, x...)
 	return append(y, 0x00)
