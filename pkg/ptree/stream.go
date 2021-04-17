@@ -11,9 +11,7 @@ import (
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/chunking"
 	"github.com/brendoncarroll/got/pkg/gdat"
-	"github.com/brendoncarroll/got/pkg/ptree/ptreeproto"
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -53,27 +51,32 @@ func (s *StreamLiteral) Next(ctx context.Context) (*Entry, error) {
 }
 
 func readEntry(br *bytes.Reader, prevKey []byte) (*Entry, error) {
-	l, err := binary.ReadUvarint(br)
+	entBuf, err := readLPBytes(br)
 	if err != nil {
 		return nil, err
 	}
-	entBuf := make([]byte, int(l))
-	if _, err := io.ReadFull(br, entBuf); err != nil {
+	br = bytes.NewReader(entBuf)
+	keyBackspace, err := binary.ReadUvarint(br)
+	if err != nil {
 		return nil, err
 	}
-	var entproto ptreeproto.Entry
-	if err := proto.Unmarshal(entBuf, &entproto); err != nil {
+	keySuffix, err := readLPBytes(br)
+	if err != nil {
 		return nil, err
 	}
-	if int(entproto.KeyBackspace) > len(prevKey) {
-		return nil, errors.Errorf("backspace is > len(prevKey): prevKey=%q bs=%d", prevKey, entproto.KeyBackspace)
+	value, err := readLPBytes(br)
+	if err != nil {
+		return nil, err
 	}
-	end := len(prevKey) - int(entproto.KeyBackspace)
+	if int(keyBackspace) > len(prevKey) {
+		return nil, errors.Errorf("backspace is > len(prevKey): prevKey=%q bs=%d", prevKey, keyBackspace)
+	}
+	end := len(prevKey) - int(keyBackspace)
 	key := append([]byte{}, prevKey[:end]...)
-	key = append(key, entproto.KeySuffix...)
+	key = append(key, keySuffix...)
 	return &Entry{
 		Key:   key,
-		Value: entproto.Value,
+		Value: value,
 	}, nil
 }
 
@@ -81,15 +84,22 @@ func writeEntry(w *bytes.Buffer, prevKey []byte, ent Entry) {
 	l := commonPrefix(prevKey, ent.Key)
 	keySuffix := ent.Key[l:]
 	backspace := uint32(len(prevKey) - l)
-	data, _ := proto.Marshal(&ptreeproto.Entry{
-		KeyBackspace: backspace,
-		KeySuffix:    keySuffix,
-		Value:        ent.Value,
-	})
-	lenBuf := [binary.MaxVarintLen64]byte{}
-	n := binary.PutUvarint(lenBuf[:], uint64(len(data)))
-	w.Write(lenBuf[:n])
-	w.Write(data)
+
+	w2 := &bytes.Buffer{}
+	if err := writeUvarint(w2, uint64(backspace)); err != nil {
+		panic(err)
+	}
+	if err := writeLPBytes(w2, keySuffix); err != nil {
+		panic(err)
+	}
+	if err := writeLPBytes(w2, ent.Value); err != nil {
+		panic(err)
+	}
+
+	if err := writeUvarint(w, uint64(w2.Len())); err != nil {
+		panic(err)
+	}
+	w.Write(w2.Bytes())
 }
 
 type StreamReader struct {
@@ -349,4 +359,36 @@ func min(a, b int) int {
 		return b
 	}
 	return a
+}
+
+const maxKeySize = 4096
+
+func writeUvarint(w *bytes.Buffer, x uint64) error {
+	lenBuf := [binary.MaxVarintLen64]byte{}
+	n := binary.PutUvarint(lenBuf[:], uint64(x))
+	_, err := w.Write(lenBuf[:n])
+	return err
+}
+
+func writeLPBytes(w *bytes.Buffer, x []byte) error {
+	if err := writeUvarint(w, uint64(len(x))); err != nil {
+		return err
+	}
+	_, err := w.Write(x)
+	return err
+}
+
+func readLPBytes(br *bytes.Reader) ([]byte, error) {
+	l, err := binary.ReadUvarint(br)
+	if err != nil {
+		return nil, err
+	}
+	if l > maxKeySize {
+		return nil, errors.Errorf("lp bytestring exceeds max size")
+	}
+	buf := make([]byte, int(l))
+	if _, err := io.ReadFull(br, buf[:]); err != nil {
+		return nil, err
+	}
+	return buf, nil
 }
