@@ -8,6 +8,7 @@ import (
 )
 
 func TestRepoInit(t *testing.T) {
+	t.Parallel()
 	ctx := context.Background()
 	dirpath := t.TempDir()
 	t.Log("testing in", dirpath)

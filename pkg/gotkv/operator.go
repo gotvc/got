@@ -39,6 +39,8 @@ type Operator interface {
 
 	// AddPrefix adds prefix in front of all the keys.
 	AddPrefix(ctx context.Context, s Store, x Root, prefix []byte) (*Root, error)
+	// RemovePrefix removes prefix from all the keys
+	RemovePrefix(ctx context.Context, s Store, x Root, prefix []byte) (*Root, error)
 
 	NewBuilder(s Store) Builder
 	NewIterator(s Store, x Root, span Span) Iterator
@@ -121,6 +123,10 @@ func (o *operator) MaxKey(ctx context.Context, s cadata.Store, x Root, under []b
 
 func (o *operator) AddPrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
 	return ptree.AddPrefix(ctx, s, x, prefix)
+}
+
+func (o *operator) RemovePrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
+	return ptree.RemovePrefix(ctx, s, x, prefix)
 }
 
 func (o *operator) NewBuilder(s Store) Builder {
