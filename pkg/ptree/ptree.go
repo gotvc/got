@@ -233,3 +233,44 @@ func (it *Iterator) Seek(ctx context.Context, k []byte) error {
 	}
 	return nil
 }
+
+// ListChildren returns the immediate children of root if any.
+func ListChildren(ctx context.Context, s cadata.Store, root Root) ([]Index, error) {
+	if root.Depth <= 1 {
+		return nil, nil
+	}
+	sr := NewStreamReader(s, rootToIndex(root))
+	var idxs []Index
+	for {
+		ent, err := sr.Next(ctx)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+		idx, err := entryToIndex(*ent)
+		if err != nil {
+			return nil, err
+		}
+		idxs = append(idxs, idx)
+	}
+	return idxs, nil
+}
+
+// ListEntries
+func ListEntries(ctx context.Context, s cadata.Store, idx Index) ([]Entry, error) {
+	var ents []Entry
+	sr := NewStreamReader(s, idx)
+	for {
+		ent, err := sr.Next(ctx)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return nil, err
+		}
+		ents = append(ents, *ent)
+	}
+	return ents, nil
+}

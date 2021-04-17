@@ -2,6 +2,7 @@ package gotcmd
 
 import (
 	"fmt"
+	"io"
 
 	"github.com/spf13/cobra"
 )
@@ -19,17 +20,44 @@ var statusCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(w, "Active Cell: %s\n", name)
+		var additions, deletions []string
+		if err := repo.StagingDiff(ctx,
+			func(p string) {
+				additions = append(additions, p)
+			}, func(p string) {
+				deletions = append(deletions, p)
+			}); err != nil {
+			return err
+		}
+
+		fmt.Fprintf(w, "ACTIVE: %s\n", name)
+
+		printToBeCommitted(w, additions, deletions)
 
 		fmt.Fprintf(w, "Changes not staged for commit:\n")
 		fmt.Fprintf(w, "  (use \"got add <file>...\" to update what will be commited)\n")
-		fmt.Fprintf(w, "  (use \"got export <file>...\" to discard changes in working directory)\n")
+		fmt.Fprintf(w, "  (use \"got clobber <file>...\" to discard changes in working directory)\n")
 		// TODO: list paths with staged versions
+		fmt.Fprintln(w, "    < TODO >")
 
 		fmt.Fprintf(w, "Untracked files:\n")
 		fmt.Fprintf(w, "  (use \"got add <file>...\" to include what will be commited)\n")
 		// TODO: list paths not in staging
+		fmt.Fprintln(w, "    < TODO >")
 
 		return nil
 	},
+}
+
+func printToBeCommitted(w io.Writer, additions, deletions []string) {
+	if len(additions) == 0 && len(deletions) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "Changes to be committed:\n")
+	for _, p := range additions {
+		fmt.Fprintf(w, "    modified: %s\n", p)
+	}
+	for _, p := range deletions {
+		fmt.Fprintf(w, "    deleted: %s\n", p)
+	}
 }

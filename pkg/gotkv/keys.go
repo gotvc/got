@@ -33,3 +33,11 @@ func PrefixEnd(prefix []byte) []byte {
 func KeyAfter(x []byte) []byte {
 	return ptree.KeyAfter(x)
 }
+
+func TotalSpan() Span {
+	return ptree.TotalSpan()
+}
+
+func SingleKeySpan(k []byte) Span {
+	return ptree.SingleItemSpan(k)
+}

@@ -8,8 +8,7 @@ import (
 )
 
 type Delta struct {
-	Put    gotfs.Root
-	Append gotfs.Root
+	Add    gotfs.Root
 	Delete gotkv.Root
 }
 
@@ -20,13 +19,16 @@ func NewEmptyDelta(ctx context.Context, s Store) (*Delta, error) {
 		return nil, err
 	}
 	return &Delta{
-		Put:    *emptyRoot,
-		Append: *emptyRoot,
+		Add:    *emptyRoot,
 		Delete: *emptyRoot,
 	}, nil
 }
 
 func Diff(ctx context.Context, s Store, a, b Snapshot) (*Delta, error) {
+	panic("not implemented")
+}
+
+func DiffRoots(ctx context.Context, s Store, a, b Root) (*Delta, error) {
 	panic("not implemented")
 }
 
@@ -37,8 +39,7 @@ func DiffWithNothing(ctx context.Context, s Store, a Snapshot) (*Delta, error) {
 		return nil, err
 	}
 	return &Delta{
-		Put:    a.Root,
-		Append: *emptyRoot,
+		Add:    a.Root,
 		Delete: *emptyRoot,
 	}, nil
 }

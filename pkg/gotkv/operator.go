@@ -42,6 +42,8 @@ type Operator interface {
 
 	NewBuilder(s Store) Builder
 	NewIterator(s Store, x Root, span Span) Iterator
+
+	Diff(ctx context.Context, s Store, left, right Root, span Span, fn ptree.DiffFn) error
 }
 
 type Option func(op *operator)
@@ -127,4 +129,8 @@ func (o *operator) NewBuilder(s Store) Builder {
 
 func (o *operator) NewIterator(s Store, root Root, span Span) Iterator {
 	return ptree.NewIterator(s, root, span)
+}
+
+func (o *operator) Diff(ctx context.Context, s cadata.Store, left, right Root, span Span, fn ptree.DiffFn) error {
+	return ptree.Diff(ctx, s, left, right, span, fn)
 }

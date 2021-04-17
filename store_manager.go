@@ -45,6 +45,25 @@ func (sm *storeManager) CreateStore() StoreID {
 	return id
 }
 
+func (sm *storeManager) ExistsStore(id StoreID) (bool, error) {
+	var exists bool
+	if err := sm.db.View(func(tx *bolt.Tx) error {
+		b, err := sm.bucket(tx)
+		if err != nil {
+			return err
+		}
+		yes, err := isNonEmpty(b, id)
+		if err != nil {
+			return err
+		}
+		exists = yes
+		return nil
+	}); err != nil {
+		return false, err
+	}
+	return exists, nil
+}
+
 func (sm *storeManager) GetStore(id StoreID) Store {
 	return virtualStore{
 		sm: sm,
@@ -218,6 +237,9 @@ func removeFromSet(b *bolt.Bucket, setID StoreID, id cadata.ID) error {
 
 func isInSet(b *bolt.Bucket, setID StoreID, id cadata.ID) (bool, error) {
 	b = b.Bucket([]byte(setsBucketName))
+	if b == nil {
+		return false, nil
+	}
 	var setIDBuf [8]byte
 	binary.BigEndian.PutUint64(setIDBuf[:], setID)
 	setBucket := b.Bucket(setIDBuf[:])
@@ -244,6 +266,21 @@ func forEachInSet(b *bolt.Bucket, setID StoreID, prefix []byte, fn func(cadata.I
 		}
 	}
 	return nil
+}
+
+func isNonEmpty(b *bolt.Bucket, setID StoreID) (bool, error) {
+	b = b.Bucket([]byte(setsBucketName))
+	var setIDBuf [8]byte
+	binary.BigEndian.PutUint64(setIDBuf[:], setID)
+	setBucket := b.Bucket(setIDBuf[:])
+	if setBucket == nil {
+		return false, nil
+	}
+	c := b.Cursor()
+	for k, _ := c.First(); k != nil; k, _ = c.Next() {
+		return true, nil
+	}
+	return false, nil
 }
 
 func incrCount(b *bolt.Bucket, id cadata.ID) error {

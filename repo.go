@@ -142,16 +142,6 @@ func (r *Repo) GetACL() gotnet.ACL {
 	return r.policy
 }
 
-func (r *Repo) GetStaging() Volume {
-	store, err := r.MakeStore(StoreSpec{Local: &LocalStoreSpec{}})
-	if err != nil {
-		panic(err)
-	}
-	return Volume{
-		Store: store,
-	}
-}
-
 func (r *Repo) GetRealm() Realm {
 	return volumes.NewLayered(append(r.realms, r.specDir)...)
 }

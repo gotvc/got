@@ -28,9 +28,9 @@ var slurpCmd = &cobra.Command{
 		}
 		defer f.Close()
 
-		vol := repo.GetStaging()
+		store := repo.StagingStore()
 		fsop := gotfs.NewOperator()
-		root, err := fsop.CreateFileRoot(ctx, vol.Store, f)
+		root, err := fsop.CreateFileRoot(ctx, store, f)
 		if err != nil {
 			return err
 		}

@@ -22,6 +22,25 @@ type Snapshot struct {
 	Parent *gdat.Ref  `json:"parent"`
 }
 
+func NewSnapshot(ctx context.Context, s cadata.Store, root Root, parentRef *gdat.Ref) (*Snapshot, error) {
+	if parentRef == nil {
+		return &Snapshot{
+			N:      0,
+			Root:   root,
+			Parent: nil,
+		}, nil
+	}
+	parent, err := GetSnapshot(ctx, s, *parentRef)
+	if err != nil {
+		return nil, err
+	}
+	return &Snapshot{
+		N:      parent.N + 1,
+		Root:   root,
+		Parent: parentRef,
+	}, nil
+}
+
 // PostSnapshot marshals the snapshot and posts it to the store
 func PostSnapshot(ctx context.Context, s Store, x Snapshot) (*Ref, error) {
 	dop := gdat.NewOperator()
@@ -139,4 +158,20 @@ func parseCommit(data []byte) (*Snapshot, error) {
 		return nil, err
 	}
 	return &snap, nil
+}
+
+func Copy(ctx context.Context, dst, src cadata.Store, ref gdat.Ref) error {
+	snap, err := GetSnapshot(ctx, src, ref)
+	if err != nil {
+		return err
+	}
+	if snap.Parent != nil {
+		if err := Copy(ctx, dst, src, *snap.Parent); err != nil {
+			return err
+		}
+	}
+	if err := gotfs.Copy(ctx, dst, src, snap.Root); err != nil {
+		return err
+	}
+	return cadata.Copy(ctx, dst, src, ref.CID)
 }
