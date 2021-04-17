@@ -16,23 +16,23 @@ type (
 
 type Option func(o *Operator)
 
-func WithDataOperator(dop *gdat.Operator) Option {
+func WithDataOperator(dop gdat.Operator) Option {
 	return func(o *Operator) {
 		o.dop = dop
 	}
 }
 
 type Operator struct {
-	dop   *gdat.Operator
+	dop   gdat.Operator
 	gotkv gotkv.Operator
 }
 
-func NewOperator(opts ...Option) *Operator {
-	o := &Operator{
+func NewOperator(opts ...Option) Operator {
+	o := Operator{
 		dop: gdat.NewOperator(),
 	}
 	for _, opt := range opts {
-		opt(o)
+		opt(&o)
 	}
 	o.gotkv = gotkv.NewOperator(gotkv.WithRefOperator(o.dop))
 	return o
@@ -66,4 +66,17 @@ func (o *Operator) deleteOutside(ctx context.Context, s cadata.Store, root Root,
 		return nil, err
 	}
 	return x, err
+}
+
+func (o *Operator) Walk(ctx context.Context, s cadata.Store, root Root, fn func(p string, md Metadata) error) error {
+	return o.gotkv.ForEach(ctx, s, root, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
+		if !isPartKey(ent.Key) {
+			md, err := parseMetadata(ent.Value)
+			if err != nil {
+				return err
+			}
+			return fn(string(ent.Key), *md)
+		}
+		return nil
+	})
 }

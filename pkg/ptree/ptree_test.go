@@ -17,7 +17,7 @@ func TestBuilder(t *testing.T) {
 	ctx := context.Background()
 	s := cadata.NewMem()
 	op := gdat.NewOperator()
-	b := NewBuilder(s, op)
+	b := NewBuilder(s, &op)
 
 	generateEntries(1e4, func(ent Entry) {
 		err := b.Put(ctx, ent.Key, ent.Value)
@@ -33,7 +33,7 @@ func TestBuildIterate(t *testing.T) {
 	ctx := context.Background()
 	s := cadata.NewMem()
 	op := gdat.NewOperator()
-	b := NewBuilder(s, op)
+	b := NewBuilder(s, &op)
 
 	const N = 1e4
 	generateEntries(N, func(ent Entry) {
@@ -46,7 +46,7 @@ func TestBuildIterate(t *testing.T) {
 
 	t.Logf("produced %d blobs", s.Len())
 
-	it := NewIterator(s, *root, Span{})
+	it := NewIterator(s, &op, *root, Span{})
 	for i := 0; i < N; i++ {
 		ent, err := it.Next(ctx)
 		require.NoError(t, err, "at %d", i)
@@ -59,7 +59,7 @@ func TestMutate(t *testing.T) {
 	ctx := context.Background()
 	s := cadata.NewMem()
 	op := gdat.NewOperator()
-	b := NewBuilder(s, op)
+	b := NewBuilder(s, &op)
 
 	const N = 1e4
 	generateEntries(N, func(ent Entry) {
@@ -72,7 +72,7 @@ func TestMutate(t *testing.T) {
 
 	k := keyFromInt(int(N) / 3)
 	v := []byte("new changed value")
-	root, err = Mutate(ctx, s, op, *root, Mutation{
+	root, err = Mutate(ctx, s, &op, *root, Mutation{
 		Span: SingleItemSpan(k),
 		Fn:   func(*Entry) []Entry { return []Entry{{Key: k, Value: v}} },
 	})
@@ -80,7 +80,7 @@ func TestMutate(t *testing.T) {
 	require.NotNil(t, root)
 
 	// check that our key is there
-	it := NewIterator(s, *root, SingleItemSpan(k))
+	it := NewIterator(s, &op, *root, SingleItemSpan(k))
 	ent, err := it.Next(ctx)
 	require.NoError(t, err)
 	t.Logf("%q %q", ent.Key, ent.Value)
@@ -90,7 +90,7 @@ func TestMutate(t *testing.T) {
 	require.Equal(t, err, io.EOF)
 
 	// check that all the other keys are there too
-	it = NewIterator(s, *root, TotalSpan())
+	it = NewIterator(s, &op, *root, TotalSpan())
 	generateEntries(N, func(expected Entry) {
 		ent, err := it.Next(ctx)
 		require.NoError(t, err)

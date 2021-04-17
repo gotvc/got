@@ -32,13 +32,13 @@ type Operator struct {
 	cache     *lru.ARCCache
 }
 
-func NewOperator(opts ...Option) *Operator {
-	o := &Operator{
+func NewOperator(opts ...Option) Operator {
+	o := Operator{
 		kf:        Convergent,
 		cacheSize: 16,
 	}
 	for _, opt := range opts {
-		opt(o)
+		opt(&o)
 	}
 	var err error
 	if o.cache, err = lru.NewARC(o.cacheSize); err != nil {

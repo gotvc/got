@@ -94,7 +94,7 @@ func (o *Operator) newDirIterator(ctx context.Context, s Store, x Root, p string
 		return nil, err
 	}
 	span := gotkv.PrefixSpan([]byte(p))
-	iter := gotkv.NewOperator().NewIterator(s, x, span)
+	iter := o.gotkv.NewIterator(s, x, span)
 	if _, err := iter.Next(ctx); err != nil && err != io.EOF {
 		return nil, err
 	}

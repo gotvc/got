@@ -6,14 +6,16 @@ import (
 	"io"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/got/pkg/gdat"
 )
 
 type DiffFn = func(key, leftValue, rightValue []byte) error
 
 // Diff calls fn with all the keys and values that are different between the two trees.
 func Diff(ctx context.Context, s cadata.Store, left, right Root, span Span, fn DiffFn) error {
-	leftIt := NewIterator(s, left, span)
-	rightIt := NewIterator(s, right, span)
+	op := gdat.NewOperator()
+	leftIt := NewIterator(s, &op, left, span)
+	rightIt := NewIterator(s, &op, right, span)
 
 	var leftEnt, rightEnt *Entry
 	emitLeft := func() {

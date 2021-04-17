@@ -12,41 +12,6 @@ import (
 	"github.com/brendoncarroll/got/pkg/gotvc"
 )
 
-func (r *Repo) ApplyStaging(ctx context.Context, fn func(s Store, x Root) (*gotvc.Root, error)) error {
-	store := r.stagingStore()
-	cell := r.stagingCell()
-	return cells.Apply(ctx, cell, func(data []byte) ([]byte, error) {
-		var x Root
-		var err error
-		if len(data) > 0 {
-			if err := json.Unmarshal(data, &x); err != nil {
-				return nil, err
-			}
-		} else {
-			// no root in staging cell, need to generate.
-			_, vol, err := r.GetActiveVolume(ctx)
-			if err != nil {
-				return nil, err
-			}
-			root, err := r.getRootFromVolume(ctx, *vol)
-			if err != nil {
-				return nil, err
-			}
-			if root == nil {
-				if root, err = r.createEmptyRoot(ctx, store); err != nil {
-					return nil, err
-				}
-			}
-			x = *root
-		}
-		y, err := fn(store, x)
-		if err != nil {
-			return nil, err
-		}
-		return json.Marshal(y)
-	})
-}
-
 func (r *Repo) Add(ctx context.Context, p string) error {
 	finfo, err := r.workingDir.Stat(p)
 	if err != nil {
@@ -58,30 +23,20 @@ func (r *Repo) Add(ctx context.Context, p string) error {
 			return r.Add(ctx, p2)
 		})
 	}
-	fsop := r.getFSOp()
-	return r.ApplyStaging(ctx, func(s Store, x Root) (*Root, error) {
-		rc, err := r.workingDir.Open(p)
-		if err != nil {
-			return nil, err
-		}
-		defer rc.Close()
-		root := &x
-		root, err = fsop.RemoveAll(ctx, s, *root, p)
-		if err != nil {
-			return nil, err
-		}
-		return r.getFSOp().CreateFile(ctx, s, *root, p, rc)
-	})
+	rc, err := r.workingDir.Open(p)
+	if err != nil {
+		return err
+	}
+	defer rc.Close()
+	return r.stage().Add(ctx, p, rc)	
 }
 
 func (r *Repo) Remove(ctx context.Context, p string) error {
-	return r.ApplyStaging(ctx, func(s Store, x Root) (*Root, error) {
-		return r.getFSOp().RemoveAll(ctx, s, x, p)
-	})
+	return r.stage().Remove(ctx, p)
 }
 
 func (r *Repo) Unstage(ctx context.Context, p string) error {
-	panic("not implemented")
+	return r.stage().Unstage(ctx, p)
 }
 
 func (r *Repo) StagingIsEmpty(ctx context.Context) (bool, error) {
@@ -91,6 +46,14 @@ func (r *Repo) StagingIsEmpty(ctx context.Context) (bool, error) {
 		return false, err
 	}
 	return len(data) == 0, nil
+}
+
+func (r *Repo) ClearStaging(ctx context.Context) error {
+	return r.stage().Clear(ctx)
+}
+
+func (r *Repo) StagingDiff(ctx context.Context) (*gotvc.Delta, error) {
+	return r.stage().Delta(ctx)
 }
 
 func (r *Repo) Commit(ctx context.Context) error {
@@ -129,35 +92,8 @@ func (r *Repo) Commit(ctx context.Context) error {
 	return r.ClearStaging(ctx)
 }
 
-func (r *Repo) ClearStaging(ctx context.Context) error {
-	return cells.Apply(ctx, r.stagingCell(), func([]byte) ([]byte, error) {
-		return nil, nil
-	})
-}
-
-func (r *Repo) StagingDiff(ctx context.Context, addFn, delFn func(string)) error {
-	rootData, err := r.stagingCell().Get(ctx)
-	if err != nil {
-		return err
-	}
-	var stagingRoot Root
-	if err := json.Unmarshal(rootData, &stagingRoot); err != nil {
-		return err
-	}
-	_, vol, err := r.GetActiveVolume(ctx)
-	if err != nil {
-		return err
-	}
-	prevRoot, err := r.getRootFromVolume(ctx, *vol)
-	if err != nil {
-		return err
-	}
-	if prevRoot == nil {
-		if prevRoot, err = r.createEmptyRoot(ctx, r.StagingStore()); err != nil {
-			return err
-		}
-	}
-	return r.getFSOp().DiffPaths(ctx, r.stagingStore(), *prevRoot, stagingRoot, addFn, delFn)
+func (r *Repo) stage() *gotvc.Stage {
+	return gotvc.NewStage(r.stagingCell(), r.stagingStore(), r.getFSOp())
 }
 
 func (r *Repo) stagingStore() cadata.Store {

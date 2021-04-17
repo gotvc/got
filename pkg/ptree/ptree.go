@@ -130,15 +130,17 @@ func (b *Builder) CopyTree(ctx context.Context, idx Index, depth int) error {
 
 type Iterator struct {
 	s      cadata.Store
+	op     *gdat.Operator
 	levels []*StreamReader
 	span   Span
 }
 
-func NewIterator(s cadata.Store, root Root, span Span) *Iterator {
+func NewIterator(s cadata.Store, op *gdat.Operator, root Root, span Span) *Iterator {
 	levels := make([]*StreamReader, root.Depth+1)
-	levels[root.Depth] = NewStreamReader(s, rootToIndex(root))
+	levels[root.Depth] = NewStreamReader(s, op, rootToIndex(root))
 	return &Iterator{
 		s:      s,
+		op:     op,
 		levels: levels,
 		span:   span,
 	}
@@ -173,7 +175,7 @@ func (it *Iterator) getReader(ctx context.Context, depth int) (*StreamReader, er
 	if err != nil {
 		return nil, err
 	}
-	it.levels[depth] = NewStreamReader(it.s, idx)
+	it.levels[depth] = NewStreamReader(it.s, it.op, idx)
 	return it.levels[depth], nil
 }
 
@@ -239,7 +241,8 @@ func ListChildren(ctx context.Context, s cadata.Store, root Root) ([]Index, erro
 	if root.Depth <= 1 {
 		return nil, nil
 	}
-	sr := NewStreamReader(s, rootToIndex(root))
+	op := gdat.NewOperator()
+	sr := NewStreamReader(s, &op, rootToIndex(root))
 	var idxs []Index
 	for {
 		ent, err := sr.Next(ctx)
@@ -261,7 +264,8 @@ func ListChildren(ctx context.Context, s cadata.Store, root Root) ([]Index, erro
 // ListEntries
 func ListEntries(ctx context.Context, s cadata.Store, idx Index) ([]Entry, error) {
 	var ents []Entry
-	sr := NewStreamReader(s, idx)
+	op := gdat.NewOperator()
+	sr := NewStreamReader(s, &op, idx)
 	for {
 		ent, err := sr.Next(ctx)
 		if err != nil {

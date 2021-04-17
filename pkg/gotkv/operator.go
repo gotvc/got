@@ -19,65 +19,39 @@ type Iterator interface {
 	Seek(ctx context.Context, key []byte) error
 }
 
-// Operator holds common configuration for operations on gotkv instances.
-// It has nothing to do with the state of a particular gotkv instance. It is NOT analagous to a collection object.
-// It is safe for use by multiple goroutines.
-type Operator interface {
-	// NewEmpty creates a new, empty instance and returns the root
-	NewEmpty(ctx context.Context, s Store) (*Root, error)
+type Option func(op *Operator)
 
-	Get(ctx context.Context, s Store, x Root, key []byte) ([]byte, error)
-	GetF(ctx context.Context, s Store, x Root, key []byte, fn func([]byte) error) error
-
-	Put(ctx context.Context, s Store, x Root, key, value []byte) (*Root, error)
-	Delete(ctx context.Context, s Store, x Root, key []byte) (*Root, error)
-	DeleteSpan(ctx context.Context, s Store, x Root, span Span) (*Root, error)
-
-	Merge(ctx context.Context, s Store, roots []Root) (*Root, error)
-
-	MaxKey(ctx context.Context, s Store, x Root, under []byte) ([]byte, error)
-
-	// AddPrefix adds prefix in front of all the keys.
-	AddPrefix(ctx context.Context, s Store, x Root, prefix []byte) (*Root, error)
-	// RemovePrefix removes prefix from all the keys
-	RemovePrefix(ctx context.Context, s Store, x Root, prefix []byte) (*Root, error)
-
-	NewBuilder(s Store) Builder
-	NewIterator(s Store, x Root, span Span) Iterator
-
-	Diff(ctx context.Context, s Store, left, right Root, span Span, fn ptree.DiffFn) error
-}
-
-type Option func(op *operator)
-
-func WithRefOperator(ro *gdat.Operator) Option {
-	return func(o *operator) {
+func WithRefOperator(ro gdat.Operator) Option {
+	return func(o *Operator) {
 		o.dop = ro
 	}
 }
 
-type operator struct {
-	dop *gdat.Operator
+// Operator holds common configuration for operations on gotkv instances.
+// It has nothing to do with the state of a particular gotkv instance. It is NOT analagous to a collection object.
+// It is safe for use by multiple goroutines.
+type Operator struct {
+	dop gdat.Operator
 }
 
 func NewOperator(opts ...Option) Operator {
-	op := &operator{
+	op := Operator{
 		dop: gdat.NewOperator(),
 	}
 	for _, opt := range opts {
-		opt(op)
+		opt(&op)
 	}
 	return op
 }
 
-func (o *operator) Put(ctx context.Context, s cadata.Store, x Root, key, value []byte) (*Root, error) {
-	return ptree.Mutate(ctx, s, o.dop, x, ptree.Mutation{
+func (o *Operator) Put(ctx context.Context, s cadata.Store, x Root, key, value []byte) (*Root, error) {
+	return ptree.Mutate(ctx, s, &o.dop, x, ptree.Mutation{
 		Span: ptree.SingleItemSpan(key),
 		Fn:   func(*Entry) []Entry { return []Entry{{Key: key, Value: value}} },
 	})
 }
 
-func (o *operator) GetF(ctx context.Context, s cadata.Store, x Root, key []byte, fn func([]byte) error) error {
+func (o *Operator) GetF(ctx context.Context, s cadata.Store, x Root, key []byte, fn func([]byte) error) error {
 	it := o.NewIterator(s, x, ptree.SingleItemSpan(key))
 	ent, err := it.Next(ctx)
 	if err != nil {
@@ -89,7 +63,7 @@ func (o *operator) GetF(ctx context.Context, s cadata.Store, x Root, key []byte,
 	return fn(ent.Value)
 }
 
-func (o *operator) Get(ctx context.Context, s cadata.Store, x Root, key []byte) ([]byte, error) {
+func (o *Operator) Get(ctx context.Context, s cadata.Store, x Root, key []byte) ([]byte, error) {
 	var ret []byte
 	if err := o.GetF(ctx, s, x, key, func(data []byte) error {
 		ret = append([]byte{}, data...)
@@ -100,43 +74,75 @@ func (o *operator) Get(ctx context.Context, s cadata.Store, x Root, key []byte) 
 	return ret, nil
 }
 
-func (o *operator) Delete(ctx context.Context, s cadata.Store, x Root, key []byte) (*Root, error) {
+func (o *Operator) Delete(ctx context.Context, s cadata.Store, x Root, key []byte) (*Root, error) {
 	span := ptree.SingleItemSpan(key)
 	return o.DeleteSpan(ctx, s, x, span)
 }
 
-func (o *operator) DeleteSpan(ctx context.Context, s cadata.Store, x Root, span Span) (*Root, error) {
-	return ptree.Mutate(ctx, s, o.dop, x, ptree.Mutation{
+func (o *Operator) DeleteSpan(ctx context.Context, s cadata.Store, x Root, span Span) (*Root, error) {
+	return ptree.Mutate(ctx, s, &o.dop, x, ptree.Mutation{
 		Span: span,
 		Fn:   func(*Entry) []Entry { return nil },
 	})
 }
 
-func (o *operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) {
+func (o *Operator) Filter(ctx context.Context, s cadata.Store, root Root, span Span, fn func(Entry) bool) (*Root, error) {
+	return ptree.Mutate(ctx, s, &o.dop, root, ptree.Mutation{
+		Span: span,
+		Fn: func(e *Entry) []Entry {
+			if e == nil {
+				return nil
+			}
+			if !fn(*e) {
+				return nil
+			}
+			return []Entry{*e}
+		},
+	})
+}
+
+func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) {
 	b := o.NewBuilder(s)
 	return b.Finish(ctx)
 }
 
-func (o *operator) MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, error) {
+func (o *Operator) MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, error) {
 	return ptree.MaxKey(ctx, s, x, under)
 }
 
-func (o *operator) AddPrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
+func (o *Operator) AddPrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
 	return ptree.AddPrefix(ctx, s, x, prefix)
 }
 
-func (o *operator) RemovePrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
+func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
 	return ptree.RemovePrefix(ctx, s, x, prefix)
 }
 
-func (o *operator) NewBuilder(s Store) Builder {
-	return ptree.NewBuilder(s, o.dop)
+func (o *Operator) NewBuilder(s Store) Builder {
+	return ptree.NewBuilder(s, &o.dop)
 }
 
-func (o *operator) NewIterator(s Store, root Root, span Span) Iterator {
-	return ptree.NewIterator(s, root, span)
+func (o *Operator) NewIterator(s Store, root Root, span Span) Iterator {
+	return ptree.NewIterator(s, &o.dop, root, span)
 }
 
-func (o *operator) Diff(ctx context.Context, s cadata.Store, left, right Root, span Span, fn ptree.DiffFn) error {
+func (o *Operator) ForEach(ctx context.Context, s Store, root Root, span Span, fn func(Entry) error) error {
+	it := o.NewIterator(s, root, span)
+	for {
+		ent, err := it.Next(ctx)
+		if err != nil {
+			if err == io.EOF {
+				break
+			}
+			return err
+		}
+		if err := fn(*ent); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (o *Operator) Diff(ctx context.Context, s cadata.Store, left, right Root, span Span, fn ptree.DiffFn) error {
 	return ptree.Diff(ctx, s, left, right, span, fn)
 }

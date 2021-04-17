@@ -18,9 +18,9 @@ type Entry struct {
 
 // Root is the root of the tree
 type Root struct {
-	Ref   Ref
-	Depth uint8
-	First []byte
+	Ref   Ref    `json:"ref"`
+	Depth uint8  `json:"depth"`
+	First []byte `json:"first,omitempty"`
 }
 
 // A span of keys [Start, End)
@@ -63,7 +63,8 @@ func KeyAfter(x []byte) []byte {
 }
 
 func MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, error) {
-	sr := NewStreamReader(s, rootToIndex(x))
+	op := gdat.NewOperator()
+	sr := NewStreamReader(s, &op, rootToIndex(x))
 	var ent *Entry
 	for {
 		ent2, err := sr.Next(ctx)
@@ -136,7 +137,7 @@ func HasPrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (bool
 
 func DebugTree(s cadata.Store, x Root) {
 	max := x.Depth
-
+	op := gdat.NewOperator()
 	var debugTree func(Root)
 	debugTree = func(x Root) {
 		indent := ""
@@ -144,7 +145,7 @@ func DebugTree(s cadata.Store, x Root) {
 			indent += "  "
 		}
 		ctx := context.TODO()
-		sr := NewStreamReader(s, Index{Ref: x.Ref, First: x.First})
+		sr := NewStreamReader(s, &op, Index{Ref: x.Ref, First: x.First})
 		fmt.Printf("%sTREE NODE: %s %d\n", indent, x.Ref.CID.String(), x.Depth)
 		if x.Depth == 0 {
 			for {

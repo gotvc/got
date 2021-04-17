@@ -89,6 +89,7 @@ func (o *Operator) CreateFileRoot(ctx context.Context, s Store, r io.Reader) (*R
 }
 
 // CreateFile creates a file at p with data from r
+// If there is an entry at p CreateFile returns an error
 func (o *Operator) CreateFile(ctx context.Context, s Store, x Root, p string, r io.Reader) (*Root, error) {
 	if err := o.checkNoEntry(ctx, s, x, p); err != nil {
 		return nil, err
@@ -101,12 +102,13 @@ func (o *Operator) CreateFile(ctx context.Context, s Store, x Root, p string, r 
 	if err != nil {
 		return nil, err
 	}
-	return o.gotkv.Merge(ctx, s, []gotkv.Root{x, *fileRoot})
+	return o.gotkv.Merge(ctx, s, x, *fileRoot)
 }
 
 func (o *Operator) SizeOfFile(ctx context.Context, s Store, x Root, p string) (int, error) {
 	gotkv := gotkv.NewOperator()
-	key, err := gotkv.MaxKey(ctx, s, x, []byte(p))
+	under := append([]byte(p), 0x01)
+	key, err := gotkv.MaxKey(ctx, s, x, under)
 	if err != nil {
 		return 0, err
 	}

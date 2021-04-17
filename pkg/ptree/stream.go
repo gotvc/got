@@ -100,10 +100,10 @@ type StreamReader struct {
 	prevKey []byte
 }
 
-func NewStreamReader(s cadata.Store, idx Index) *StreamReader {
+func NewStreamReader(s cadata.Store, op *gdat.Operator, idx Index) *StreamReader {
 	return &StreamReader{
 		s:   s,
-		op:  gdat.NewOperator(),
+		op:  op,
 		idx: idx,
 	}
 }

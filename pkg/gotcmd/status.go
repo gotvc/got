@@ -20,13 +20,16 @@ var statusCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		var additions, deletions []string
-		if err := repo.StagingDiff(ctx,
-			func(p string) {
-				additions = append(additions, p)
-			}, func(p string) {
-				deletions = append(deletions, p)
-			}); err != nil {
+		delta, err := repo.StagingDiff(ctx)
+		if err != nil {
+			return err
+		}
+		additions, err := delta.ListAdditionPaths(ctx, repo.StagingStore())
+		if err != nil {
+			return err
+		}
+		deletions, err := delta.ListDeletionPaths(ctx, repo.StagingStore())
+		if err != nil {
 			return err
 		}
 

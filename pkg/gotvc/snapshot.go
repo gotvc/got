@@ -120,7 +120,7 @@ func Rebase(ctx context.Context, s Store, xs []Snapshot, onto Snapshot) ([]Snaps
 		} else {
 			base = ys[i-1]
 		}
-		y, err := ApplyDelta(ctx, s, base, delta)
+		y, err := ApplyDelta(ctx, s, &base, delta)
 		if err != nil {
 			return nil, err
 		}

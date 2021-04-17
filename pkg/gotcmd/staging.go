@@ -8,6 +8,8 @@ import (
 func init() {
 	rootCmd.AddCommand(addCmd)
 	rootCmd.AddCommand(rmCmd)
+	rootCmd.AddCommand(unstageCmd)
+	rootCmd.AddCommand(clearCmd)
 }
 
 var addCmd = &cobra.Command{
@@ -43,5 +45,14 @@ var unstageCmd = &cobra.Command{
 			return errors.Errorf("must provide path")
 		}
 		return repo.Unstage(ctx, args[0])
+	},
+}
+
+var clearCmd = &cobra.Command{
+	Use:     "clear",
+	Short:   "clears staging",
+	PreRunE: loadRepo,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return repo.ClearStaging(ctx)
 	},
 }

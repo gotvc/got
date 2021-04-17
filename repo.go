@@ -159,11 +159,13 @@ func (r *Repo) getSwarm() (peerswarm.AskSwarm, error) {
 }
 
 func (r *Repo) getFSOp() *gotfs.Operator {
-	return gotfs.NewOperator()
+	o := gotfs.NewOperator()
+	return &o
 }
 
 func (r *Repo) getDataOp() *gdat.Operator {
-	return gdat.NewOperator()
+	o := gdat.NewOperator()
+	return &o
 }
 
 func dbPath(x string) string {

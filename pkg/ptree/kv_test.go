@@ -15,7 +15,7 @@ func TestAddPrefix(t *testing.T) {
 	ctx := context.Background()
 	s := cadata.NewMem()
 	op := gdat.NewOperator()
-	b := NewBuilder(s, op)
+	b := NewBuilder(s, &op)
 
 	const N = 1e4
 	generateEntries(N, func(ent Entry) {
@@ -33,7 +33,7 @@ func TestAddPrefix(t *testing.T) {
 
 	t.Logf("produced %d blobs", s.Len())
 
-	it := NewIterator(s, *root, Span{})
+	it := NewIterator(s, &op, *root, Span{})
 	for i := 0; i < N; i++ {
 		ent, err := it.Next(ctx)
 		require.NoError(t, err, "at %d", i)

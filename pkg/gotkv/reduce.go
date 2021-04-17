@@ -14,7 +14,7 @@ type ReduceFunc = func(key []byte, lv, rv []byte) ([]byte, error)
 // ReduceFunc is assumed to be associative, and non-commutative
 // If the same key exists in two xs, then ReduceFunc is called to get the final value for that key
 // Keys that only exist in one will have the value copied to the output
-func (op *operator) Reduce(ctx context.Context, s Store, xs []Root, fn ReduceFunc) (*Root, error) {
+func (op *Operator) Reduce(ctx context.Context, s Store, xs []Root, fn ReduceFunc) (*Root, error) {
 	switch len(xs) {
 	case 0:
 		return op.NewEmpty(ctx, s)
@@ -43,7 +43,7 @@ func (op *operator) Reduce(ctx context.Context, s Store, xs []Root, fn ReduceFun
 	}
 }
 
-func (o *operator) reduce2(ctx context.Context, s Store, left, right Root, fn ReduceFunc) (*Root, error) {
+func (o *Operator) reduce2(ctx context.Context, s Store, left, right Root, fn ReduceFunc) (*Root, error) {
 	leftIter := o.NewIterator(s, left, Span{})
 	rightIter := o.NewIterator(s, right, Span{})
 	panic(leftIter)
@@ -70,6 +70,6 @@ func TakeLeft(k, l, r []byte) ([]byte, error) {
 	return l, nil
 }
 
-func (op *operator) Merge(ctx context.Context, s cadata.Store, roots []Root) (*Root, error) {
-	return ptree.Merge(ctx, s, op.dop, roots)
+func (op *Operator) Merge(ctx context.Context, s cadata.Store, roots ...Root) (*Root, error) {
+	return ptree.Merge(ctx, s, &op.dop, roots)
 }

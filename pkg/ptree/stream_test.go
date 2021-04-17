@@ -36,7 +36,7 @@ func TestStreamRW(t *testing.T) {
 	var idxs []Index
 
 	s := cadata.NewMem()
-	sw := NewStreamWriter(s, op, defaultAvgSize, defaultMaxSize, func(idx Index) error {
+	sw := NewStreamWriter(s, &op, defaultAvgSize, defaultMaxSize, func(idx Index) error {
 		idxs = append(idxs, idx)
 		refs = append(refs, idx.Ref)
 		return nil
@@ -55,7 +55,7 @@ func TestStreamRW(t *testing.T) {
 		if sr == nil {
 			idx := idxs[0]
 			idxs = idxs[1:]
-			sr = NewStreamReader(s, idx)
+			sr = NewStreamReader(s, &op, idx)
 		}
 		ent, err := sr.Next(ctx)
 		if err == io.EOF {
@@ -89,7 +89,7 @@ func BenchmarkStreamWriter(b *testing.B) {
 	ctx := context.Background()
 	op := gdat.NewOperator()
 	s := blobs.Void{}
-	sw := NewStreamWriter(s, op, defaultAvgSize, defaultMaxSize, func(idx Index) error {
+	sw := NewStreamWriter(s, &op, defaultAvgSize, defaultMaxSize, func(idx Index) error {
 		return nil
 	})
 	generateEntries(b.N, func(ent Entry) {

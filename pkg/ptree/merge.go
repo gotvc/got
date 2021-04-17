@@ -21,7 +21,7 @@ func Merge(ctx context.Context, s cadata.Store, op *gdat.Operator, roots []Root)
 func merge(ctx context.Context, b *Builder, roots []Root) error {
 	streams := make([]StreamIterator, len(roots))
 	for i := range roots {
-		streams[i] = NewIterator(b.s, roots[i], TotalSpan())
+		streams[i] = NewIterator(b.s, b.op, roots[i], TotalSpan())
 	}
 	sm := NewStreamMerger(b.s, streams)
 	for {

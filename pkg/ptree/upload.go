@@ -12,7 +12,7 @@ import (
 
 type Uploader struct {
 	s       cadata.Store
-	op      *gdat.Operator
+	op      gdat.Operator
 	onRef   func(Ref) error
 	chunker *chunking.ContentDefined
 
