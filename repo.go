@@ -16,6 +16,7 @@ import (
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotnet"
+	"github.com/brendoncarroll/got/pkg/gotvc"
 	"github.com/brendoncarroll/got/pkg/volumes"
 	"github.com/inet256/inet256/pkg/inet256p2p"
 	"github.com/pkg/errors"
@@ -172,6 +173,21 @@ func (r *Repo) getDataOp() *gdat.Operator {
 
 func dbPath(x string) string {
 	return filepath.Join(x, gotPrefix, "local.db")
+}
+
+func (r *Repo) Log(ctx context.Context, fn func(ref Ref, s Commit) error) error {
+	_, vol, err := r.GetActiveVolume(ctx)
+	if err != nil {
+		return err
+	}
+	snap, err := getSnapshot(ctx, vol.Cell)
+	if err != nil {
+		return err
+	}
+	if snap == nil {
+		return nil
+	}
+	return gotvc.ForEachAncestor(ctx, vol.Store, *snap, fn)
 }
 
 func (r *Repo) DebugDB(ctx context.Context, w io.Writer) error {

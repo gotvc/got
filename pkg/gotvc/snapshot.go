@@ -179,3 +179,25 @@ func Copy(ctx context.Context, dst, src cadata.Store, ref gdat.Ref) error {
 	}
 	return cadata.Copy(ctx, dst, src, ref.CID)
 }
+
+// ForEachAncestor call fn once for each ancestor of snap, and snap in reverse order.
+func ForEachAncestor(ctx context.Context, s cadata.Store, snap Snapshot, fn func(Ref, Snapshot) error) error {
+	ref, err := PostSnapshot(ctx, s, snap)
+	if err != nil {
+		return err
+	}
+	for {
+		if err := fn(*ref, snap); err != nil {
+			return err
+		}
+		if snap.Parent == nil {
+			return nil
+		}
+		next, err := GetSnapshot(ctx, s, *snap.Parent)
+		if err != nil {
+			return err
+		}
+		snap = *next
+		ref = snap.Parent
+	}
+}
