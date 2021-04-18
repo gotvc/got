@@ -6,10 +6,7 @@ import (
 
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/cells"
-	"github.com/brendoncarroll/got/pkg/gotfs"
-	"github.com/brendoncarroll/got/pkg/gotkv"
 	"github.com/brendoncarroll/got/pkg/gotvc"
-	"github.com/brendoncarroll/got/pkg/volumes"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -21,22 +18,30 @@ func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
 	if err := cadata.CopyAll(ctx, dst, src); err != nil {
 		return err
 	}
-	srcRef, err := GetRef(ctx, src.Cell)
+	srcSnap, err := getSnapshot(ctx, src.Cell)
 	if err != nil {
 		return err
 	}
-	return ApplyRef(ctx, dst.Cell, func(x *Ref) (*Ref, error) {
+	srcRef, err := gotvc.PostSnapshot(ctx, src.Store, *srcSnap)
+	if err != nil {
+		return err
+	}
+	return applySnapshot(ctx, dst.Cell, func(x *Commit) (*Commit, error) {
 		if x == nil {
 			return nil, err
 		}
-		hasAncestor, err := gotvc.HasAncestor(ctx, src.Store, *srcRef, *x)
+		xRef, err := gotvc.PostSnapshot(ctx, src.Store, *srcSnap)
+		if err != nil {
+			return nil, err
+		}
+		hasAncestor, err := gotvc.HasAncestor(ctx, src.Store, *srcRef, *xRef)
 		if err != nil {
 			return nil, err
 		}
 		if !force && !hasAncestor {
 			return nil, errors.Errorf("cannot CAS, dst ref is not parent of src ref")
 		}
-		return srcRef, nil
+		return srcSnap, nil
 	})
 }
 
@@ -107,66 +112,37 @@ func setActiveVolume(db *bolt.DB, name string) error {
 	})
 }
 
-func parseRef(data []byte) (*Ref, error) {
-	var ref gotkv.Ref
-	if len(data) == 0 {
-		return &ref, nil
-	}
-	if err := json.Unmarshal(data, &ref); err != nil {
-		return nil, err
-	}
-	return &ref, nil
-}
-
-func marshalRef(x Ref) ([]byte, error) {
-	return json.Marshal(x)
-}
-
-func GetRef(ctx context.Context, c cells.Cell) (*Ref, error) {
+func getSnapshot(ctx context.Context, c cells.Cell) (*Commit, error) {
 	data, err := c.Get(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if len(data) < 1 {
+	if len(data) < 0 {
 		return nil, nil
 	}
-	return parseRef(data)
+	var x Commit
+	if err := json.Unmarshal(data, &x); err != nil {
+		return nil, err
+	}
+	return &x, nil
 }
 
-func ApplyRef(ctx context.Context, c cells.Cell, fn func(*Ref) (*Ref, error)) error {
-	return cells.Apply(ctx, c, func(x []byte) ([]byte, error) {
-		var xRef *Ref
-		if len(x) > 0 {
-			var err error
-			xRef, err = parseRef(x)
-			if err != nil {
+func applySnapshot(ctx context.Context, c cells.Cell, fn func(*Commit) (*Commit, error)) error {
+	return cells.Apply(ctx, c, func(data []byte) ([]byte, error) {
+		var x *Commit
+		if len(data) > 0 {
+			x = &Commit{}
+			if err := json.Unmarshal(data, &x); err != nil {
 				return nil, err
 			}
 		}
-		yRef, err := fn(xRef)
+		y, err := fn(x)
 		if err != nil {
 			return nil, err
 		}
-		return marshalRef(*yRef)
+		if y == nil {
+			return nil, nil
+		}
+		return json.Marshal(*y)
 	})
-}
-
-func (r *Repo) getRootFromVolume(ctx context.Context, vol volumes.Volume) (*gotfs.Root, error) {
-	snapRef, err := GetRef(ctx, vol.Cell)
-	if err != nil {
-		return nil, err
-	}
-	if snapRef != nil {
-		// use the root from the active volume
-		snap, err := gotvc.GetSnapshot(ctx, vol.Store, *snapRef)
-		if err != nil {
-			return nil, err
-		}
-		return &snap.Root, nil
-	}
-	return nil, nil
-}
-
-func (r *Repo) createEmptyRoot(ctx context.Context, s cadata.Store) (*gotfs.Root, error) {
-	return r.getFSOp().NewEmpty(ctx, s)
 }

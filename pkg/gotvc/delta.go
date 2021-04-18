@@ -102,8 +102,22 @@ func ApplyDelta(ctx context.Context, s Store, base *Snapshot, delta Delta) (*Sna
 			Parent: nil,
 		}, nil
 	}
-	panic("not implemented")
-	var root *Root
+
+	kvop := gotkv.NewOperator()
+	fsop := gotfs.NewOperator()
+	root := &base.Root
+	err := kvop.ForEach(ctx, s, delta.Deletions, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
+		var err error
+		root, err = fsop.RemoveAll(ctx, s, *root, string(ent.Key))
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	root, err = kvop.Merge(ctx, s, base.Root, delta.Additions)
+	if err != nil {
+		return nil, err
+	}
 
 	var parentRef *gdat.Ref
 	if base != nil {

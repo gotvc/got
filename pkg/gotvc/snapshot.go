@@ -3,6 +3,7 @@ package gotvc
 import (
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/gdat"
@@ -17,9 +18,12 @@ type (
 )
 
 type Snapshot struct {
-	N      uint       `json:"n"`
+	N      uint64     `json:"n"`
 	Root   gotfs.Root `json:"root"`
 	Parent *gdat.Ref  `json:"parent"`
+
+	Message   string     `json:"message,omitempty"`
+	CreatedAt *time.Time `json:"created_at,omitempty"`
 }
 
 func NewSnapshot(ctx context.Context, s cadata.Store, root Root, parentRef *gdat.Ref) (*Snapshot, error) {
@@ -134,14 +138,14 @@ func HasAncestor(ctx context.Context, s Store, x, a Ref) (bool, error) {
 	if gdat.Equal(x, a) {
 		return true, nil
 	}
-	commit, err := GetSnapshot(ctx, s, x)
+	snap, err := GetSnapshot(ctx, s, x)
 	if err != nil {
 		return false, err
 	}
-	if commit.Parent == nil {
+	if snap.Parent == nil {
 		return false, nil
 	}
-	return HasAncestor(ctx, s, *commit.Parent, a)
+	return HasAncestor(ctx, s, *snap.Parent, a)
 }
 
 func marshalSnapshot(x Snapshot) []byte {

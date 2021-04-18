@@ -2,9 +2,10 @@ package got
 
 import (
 	"context"
-	"encoding/json"
+	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/cells"
@@ -28,7 +29,7 @@ func (r *Repo) Add(ctx context.Context, p string) error {
 		return err
 	}
 	defer rc.Close()
-	return r.stage().Add(ctx, p, rc)	
+	return r.stage().Add(ctx, p, rc)
 }
 
 func (r *Repo) Remove(ctx context.Context, p string) error {
@@ -56,40 +57,37 @@ func (r *Repo) StagingDiff(ctx context.Context) (*gotvc.Delta, error) {
 	return r.stage().Delta(ctx)
 }
 
-func (r *Repo) Commit(ctx context.Context) error {
+func (r *Repo) Commit(ctx context.Context, message string, createdAt *time.Time) error {
+	if yes, err := r.StagingIsEmpty(ctx); err != nil {
+		return err
+	} else if yes {
+		log.Println("WARN: nothing to commit")
+		return nil
+	}
 	_, vol, err := r.GetActiveVolume(ctx)
 	if err != nil {
 		return err
 	}
-	rootData, err := r.stagingCell().Get(ctx)
-	if err != nil {
-		return err
-	}
-	var root gotfs.Root
-	if err := json.Unmarshal(rootData, &root); err != nil {
-		return err
-	}
-	if err := gotfs.Copy(ctx, vol.Store, r.stagingStore(), root); err != nil {
-		return err
-	}
-	err = ApplyRef(ctx, vol.Cell, func(ref *Ref) (*Ref, error) {
-		snap, err := gotvc.NewSnapshot(ctx, vol.Store, root, ref)
+	stage := r.stage()
+	err = applySnapshot(ctx, vol.Cell, func(x *Commit) (*Commit, error) {
+		y, err := stage.Snapshot(ctx, x, message, createdAt)
 		if err != nil {
 			return nil, err
 		}
-		ref, err = gotvc.PostSnapshot(ctx, r.stagingStore(), *snap)
-		if err != nil {
+		if y.Parent != nil {
+			if err := gotvc.Copy(ctx, vol.Store, r.stagingStore(), *y.Parent); err != nil {
+				return nil, err
+			}
+		}
+		if err := gotfs.Copy(ctx, vol.Store, r.stagingStore(), y.Root); err != nil {
 			return nil, err
 		}
-		if err := cadata.Copy(ctx, vol.Store, r.stagingStore(), ref.CID); err != nil {
-			return nil, err
-		}
-		return ref, nil
+		return y, nil
 	})
 	if err != nil {
 		return err
 	}
-	return r.ClearStaging(ctx)
+	return stage.Clear(ctx)
 }
 
 func (r *Repo) stage() *gotvc.Stage {

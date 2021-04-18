@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"time"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/cells"
@@ -101,12 +102,18 @@ func (s *Stage) Delta(ctx context.Context) (*Delta, error) {
 	return s.get(ctx)
 }
 
-func (s *Stage) Snapshot(ctx context.Context, base *Snapshot) (*Snapshot, error) {
+func (s *Stage) Snapshot(ctx context.Context, base *Snapshot, message string, createdAt *time.Time) (*Snapshot, error) {
 	delta, err := s.get(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return ApplyDelta(ctx, s.store, base, *delta)
+	snap, err := ApplyDelta(ctx, s.store, base, *delta)
+	if err != nil {
+		return nil, err
+	}
+	snap.Message = message
+	snap.CreatedAt = createdAt
+	return snap, nil
 }
 
 func (s *Stage) apply(ctx context.Context, fn func(delta Delta) (*Delta, error)) error {

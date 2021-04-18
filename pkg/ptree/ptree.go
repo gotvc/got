@@ -238,8 +238,8 @@ func (it *Iterator) Seek(ctx context.Context, k []byte) error {
 
 // ListChildren returns the immediate children of root if any.
 func ListChildren(ctx context.Context, s cadata.Store, root Root) ([]Index, error) {
-	if root.Depth <= 1 {
-		return nil, nil
+	if root.Depth < 1 {
+		return nil, errors.Errorf("cannot list children of root with depth=%d", root.Depth)
 	}
 	op := gdat.NewOperator()
 	sr := NewStreamReader(s, &op, rootToIndex(root))

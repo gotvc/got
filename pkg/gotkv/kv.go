@@ -32,7 +32,7 @@ func GetF(ctx context.Context, s Store, x Root, key []byte, fn func([]byte) erro
 }
 
 func Copy(ctx context.Context, dst, src Store, x Root, entryFn func(Entry) error) error {
-	if x.Depth <= 1 {
+	if x.Depth == 0 {
 		ents, err := ptree.ListEntries(ctx, src, ptree.Index{First: x.First, Ref: x.Ref})
 		if err != nil {
 			return err

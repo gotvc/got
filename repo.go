@@ -2,6 +2,8 @@ package got
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -170,4 +172,32 @@ func (r *Repo) getDataOp() *gdat.Operator {
 
 func dbPath(x string) string {
 	return filepath.Join(x, gotPrefix, "local.db")
+}
+
+func (r *Repo) DebugDB(ctx context.Context, w io.Writer) error {
+	return r.db.View(func(tx *bolt.Tx) error {
+		b := tx.Bucket([]byte(bucketDefault))
+		if b == nil {
+			return nil
+		}
+		fmt.Fprintf(w, "BUCKET: %s\n", bucketDefault)
+		dumpBucket(w, b)
+
+		b = tx.Bucket([]byte(bucketCellData))
+		if b == nil {
+			return nil
+		}
+		fmt.Fprintf(w, "BUCKET: %s\n", bucketDefault)
+		dumpBucket(w, b)
+
+		return nil
+	})
+}
+
+func dumpBucket(w io.Writer, b *bolt.Bucket) {
+	c := b.Cursor()
+	for k, v := c.First(); k != nil; k, v = c.Next() {
+		fmt.Fprintf(w, "%q -> %q\n", k, v)
+	}
+	fmt.Fprintln(w)
 }

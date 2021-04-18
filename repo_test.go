@@ -25,7 +25,7 @@ func TestRepoInit(t *testing.T) {
 	require.NotNil(t, vol)
 }
 
-func TestAdd(t *testing.T) {
+func TestCommit(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	dirpath := t.TempDir()
@@ -46,4 +46,7 @@ func TestAdd(t *testing.T) {
 	additions, err := delta.ListAdditionPaths(ctx, repo.StagingStore())
 	require.NoError(t, err)
 	require.Contains(t, additions, p)
+
+	err = repo.Commit(ctx, "", nil)
+	require.NoError(t, err)
 }
