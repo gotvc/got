@@ -1,9 +1,14 @@
 
-.PHONY: test
+.PHONY: test testv
 
-test:
-	go test -v ./...
+test: protobuf
+	go test ./...
+testv: protobuf
+	go test -v -count=1 ./...
 
-install:
+install: protobuf
 	go install ./cmd/got
+
+protobuf:
+	cd ./pkg/gotfs && ./build_protobuf.sh
 

@@ -2,20 +2,14 @@ package gotfs
 
 import (
 	"encoding/binary"
-	"encoding/json"
 
 	"github.com/brendoncarroll/got/pkg/gotkv"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/proto"
 )
 
-type Part struct {
-	Ref    Ref    `json:"ref"`
-	Offset uint32 `json:"offset,omitempty"`
-	Length uint32 `json:"length,omitempty"`
-}
-
 func (p *Part) marshal() []byte {
-	data, err := json.Marshal(p)
+	data, err := proto.Marshal(p)
 	if err != nil {
 		panic(err)
 	}
@@ -23,11 +17,11 @@ func (p *Part) marshal() []byte {
 }
 
 func parsePart(data []byte) (*Part, error) {
-	var p Part
-	if err := json.Unmarshal(data, &p); err != nil {
+	p := &Part{}
+	if err := proto.Unmarshal(data, p); err != nil {
 		return nil, err
 	}
-	return &p, nil
+	return p, nil
 }
 
 func splitPartKey(k []byte) (p string, offset uint64, err error) {

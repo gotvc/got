@@ -47,26 +47,52 @@ func (r *Ref) UnmarshalText(data []byte) error {
 	return nil
 }
 
+func (r Ref) MarshalBinary() ([]byte, error) {
+	buf := make([]byte, len(r.CID)+len(r.DEK))
+	n := copy(buf, r.CID[:])
+	copy(buf[n:], r.DEK[:])
+	return buf, nil
+}
+
+func (ref *Ref) UnmarshalBinary(x []byte) error {
+	if len(x) != len(ref.CID)+len(ref.DEK) {
+		return errors.Errorf("wrong length for ref %d %q", len(x), x)
+	}
+	copy(ref.CID[:], x[:len(ref.CID)])
+	copy(ref.DEK[:], x[len(ref.CID):])
+	return nil
+}
+
 func (r Ref) String() string {
 	data, _ := r.MarshalText()
 	return string(data)
 }
 
+func (r Ref) IsZero() bool {
+	for i := range r.CID {
+		if r.CID[i] != 0 {
+			return false
+		}
+	}
+	for i := range r.DEK {
+		if r.DEK[i] != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func ParseRef(x []byte) (*Ref, error) {
 	var ref Ref
-	if len(x) != len(ref.CID)+len(ref.DEK) {
-		return nil, errors.Errorf("wrong length for ref %d %q", len(x), x)
+	if err := ref.UnmarshalBinary(x); err != nil {
+		return nil, err
 	}
-	copy(ref.CID[:], x[:len(ref.CID)])
-	copy(ref.DEK[:], x[len(ref.CID):])
 	return &ref, nil
 }
 
 func MarshalRef(x Ref) []byte {
-	buf := make([]byte, len(x.CID)+len(x.DEK))
-	n := copy(buf, x.CID[:])
-	copy(buf[n:], x.DEK[:])
-	return buf
+	data, _ := x.MarshalBinary()
+	return data
 }
 
 func Equal(a, b Ref) bool {

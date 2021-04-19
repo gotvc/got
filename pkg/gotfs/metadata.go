@@ -2,23 +2,18 @@ package gotfs
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"strings"
 
 	"github.com/brendoncarroll/got/pkg/gotkv"
 	"github.com/pkg/errors"
+	"google.golang.org/protobuf/proto"
 )
 
 const MaxPathLen = 4096
 
-type Metadata struct {
-	Mode   os.FileMode       `json:"mode"`
-	Labels map[string]string `json:"labels,omitempty"`
-}
-
-func (m Metadata) marshal() []byte {
-	data, err := json.Marshal(m)
+func (m *Metadata) marshal() []byte {
+	data, err := proto.Marshal(m)
 	if err != nil {
 		panic(err)
 	}
@@ -26,15 +21,15 @@ func (m Metadata) marshal() []byte {
 }
 
 func parseMetadata(data []byte) (*Metadata, error) {
-	var md Metadata
-	if err := json.Unmarshal(data, &md); err != nil {
+	md := &Metadata{}
+	if err := proto.Unmarshal(data, md); err != nil {
 		return nil, err
 	}
-	return &md, nil
+	return md, nil
 }
 
 // PutMetadata assigne metadata to p
-func (o *Operator) PutMetadata(ctx context.Context, s Store, x Root, p string, md Metadata) (*Root, error) {
+func (o *Operator) PutMetadata(ctx context.Context, s Store, x Root, p string, md *Metadata) (*Root, error) {
 	gotkv := gotkv.NewOperator()
 	return gotkv.Put(ctx, s, x, []byte(p), md.marshal())
 }
@@ -50,6 +45,9 @@ func (o *Operator) GetMetadata(ctx context.Context, s Store, x Root, p string) (
 		return err
 	})
 	if err != nil {
+		if err == gotkv.ErrKeyNotFound {
+			err = os.ErrNotExist
+		}
 		return nil, err
 	}
 	return md, nil
@@ -61,7 +59,7 @@ func (o *Operator) GetDirMetadata(ctx context.Context, s Store, x Root, p string
 	if err != nil {
 		return nil, err
 	}
-	if !md.Mode.IsDir() {
+	if !os.FileMode(md.Mode).IsDir() {
 		return nil, errors.Errorf("%s is not a directory", p)
 	}
 	return md, nil
@@ -73,7 +71,7 @@ func (o *Operator) GetFileMetadata(ctx context.Context, s Store, x Root, p strin
 	if err != nil {
 		return nil, err
 	}
-	if !md.Mode.IsRegular() {
+	if !os.FileMode(md.Mode).IsRegular() {
 		return nil, errors.Errorf("%s is not a regular file", p)
 	}
 	return md, nil
@@ -82,7 +80,7 @@ func (o *Operator) GetFileMetadata(ctx context.Context, s Store, x Root, p strin
 func (o *Operator) checkNoEntry(ctx context.Context, s Store, x Root, p string) error {
 	_, err := o.GetMetadata(ctx, s, x, p)
 	switch {
-	case err == gotkv.ErrKeyNotFound:
+	case err == os.ErrNotExist:
 		return nil
 	case err == nil:
 		return os.ErrExist
@@ -99,4 +97,16 @@ func checkPath(p string) error {
 		return errors.Errorf("path cannot contain null")
 	}
 	return nil
+}
+
+func parentPath(x string) string {
+	x = cleanPath(x)
+	parts := strings.Split(x, string(Sep))
+	if len(parts) == 0 {
+		panic("no parent of empty path")
+	}
+	if len(parts) == 1 {
+		return ""
+	}
+	return strings.Join(parts[:len(parts)-1], string(Sep))
 }

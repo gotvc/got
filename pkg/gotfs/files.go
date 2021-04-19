@@ -20,12 +20,12 @@ const (
 )
 
 type writer struct {
-	onPart  func(part Part) error
+	onPart  func(part *Part) error
 	chunker *chunking.Exponential
 	ctx     context.Context
 }
 
-func (o *Operator) newWriter(ctx context.Context, s cadata.Store, onPart func(Part) error) *writer {
+func (o *Operator) newWriter(ctx context.Context, s cadata.Store, onPart func(*Part) error) *writer {
 	w := &writer{
 		onPart: onPart,
 		ctx:    ctx,
@@ -35,10 +35,10 @@ func (o *Operator) newWriter(ctx context.Context, s cadata.Store, onPart func(Pa
 		if err != nil {
 			return err
 		}
-		part := Part{
+		part := &Part{
 			Offset: 0,
 			Length: uint32(len(data)),
-			Ref:    *ref,
+			Ref:    gdat.MarshalRef(*ref),
 		}
 		return w.onPart(part)
 	})
@@ -67,7 +67,7 @@ func (o *Operator) CreateFileRoot(ctx context.Context, s Store, r io.Reader) (*R
 	}
 	// content
 	var total uint64
-	w := o.newWriter(ctx, as, func(part Part) error {
+	w := o.newWriter(ctx, as, func(part *Part) error {
 		total += uint64(part.Length)
 		key := makePartKey("", total)
 		return b.Put(ctx, key, part.marshal())
@@ -91,6 +91,7 @@ func (o *Operator) CreateFileRoot(ctx context.Context, s Store, r io.Reader) (*R
 // CreateFile creates a file at p with data from r
 // If there is an entry at p CreateFile returns an error
 func (o *Operator) CreateFile(ctx context.Context, s Store, x Root, p string, r io.Reader) (*Root, error) {
+	p = cleanPath(p)
 	if err := o.checkNoEntry(ctx, s, x, p); err != nil {
 		return nil, err
 	}
@@ -98,11 +99,18 @@ func (o *Operator) CreateFile(ctx context.Context, s Store, x Root, p string, r 
 	if err != nil {
 		return nil, err
 	}
+	if p == "" {
+		return fileRoot, nil
+	}
 	fileRoot, err = o.gotkv.AddPrefix(ctx, s, *fileRoot, []byte(p))
 	if err != nil {
 		return nil, err
 	}
-	return o.gotkv.Merge(ctx, s, x, *fileRoot)
+	y, err := o.EnsureDir(ctx, s, x, parentPath(p))
+	if err != nil {
+		return nil, err
+	}
+	return o.gotkv.Merge(ctx, s, *y, *fileRoot)
 }
 
 func (o *Operator) SizeOfFile(ctx context.Context, s Store, x Root, p string) (int, error) {
@@ -161,8 +169,12 @@ func (o *Operator) ReadFileAt(ctx context.Context, s Store, x Root, p string, st
 		if err != nil {
 			return 0, err
 		}
+		ref, err := gdat.ParseRef(part.Ref)
+		if err != nil {
+			return 0, err
+		}
 		extentStart := extentEnd - uint64(part.Length)
-		if err := dop.GetF(ctx, s, part.Ref, func(data []byte) error {
+		if err := dop.GetF(ctx, s, *ref, func(data []byte) error {
 			data = data[part.Offset : part.Offset+part.Length]
 			n += copy(buf, data[start-extentStart:])
 			return nil

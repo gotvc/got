@@ -16,13 +16,6 @@ type Entry struct {
 	Key, Value []byte
 }
 
-// Root is the root of the tree
-type Root struct {
-	Ref   Ref    `json:"ref"`
-	Depth uint8  `json:"depth"`
-	First []byte `json:"first,omitempty"`
-}
-
 // A span of keys [Start, End)
 // If you want to include a specific end key, use the KeyAfter function.
 // nil is interpretted as no bound, not as a 0 length key.  This behaviour is only releveant for End.

@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotkv"
 )
 
@@ -15,7 +16,11 @@ func Copy(ctx context.Context, dst, src Store, root Root) error {
 			if err != nil {
 				return err
 			}
-			return cadata.Copy(ctx, dst, src, part.Ref.CID)
+			ref, err := gdat.ParseRef(part.Ref)
+			if err != nil {
+				return err
+			}
+			return cadata.Copy(ctx, dst, src, ref.CID)
 		}
 		return nil
 	})

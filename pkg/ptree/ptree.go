@@ -1,13 +1,66 @@
 package ptree
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
 	"io"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/pkg/errors"
 )
+
+const maxTreeDepth = 255
+
+// Root is the root of the tree
+type Root struct {
+	Ref   Ref    `json:"ref"`
+	Depth uint8  `json:"depth"`
+	First []byte `json:"first,omitempty"`
+}
+
+func ParseRoot(x []byte) (*Root, error) {
+	br := bytes.NewReader(x)
+	refData, err := readLPBytes(br)
+	if err != nil {
+		return nil, err
+	}
+	ref, err := gdat.ParseRef(refData)
+	if err != nil {
+		return nil, err
+	}
+	depth, err := binary.ReadUvarint(br)
+	if err != nil {
+		return nil, err
+	}
+	if depth > maxTreeDepth {
+		return nil, errors.Errorf("tree exceeds max tree depth (%d > %d)", depth, maxTreeDepth)
+	}
+	first, err := readLPBytes(br)
+	if err != nil {
+		return nil, err
+	}
+	return &Root{
+		Ref:   *ref,
+		Depth: uint8(depth),
+		First: first,
+	}, nil
+}
+
+func MarshalRoot(r Root) []byte {
+	buf := &bytes.Buffer{}
+	if err := writeLPBytes(buf, gdat.MarshalRef(r.Ref)); err != nil {
+		panic(err)
+	}
+	if err := writeUvarint(buf, uint64(r.Depth)); err != nil {
+		panic(err)
+	}
+	if err := writeLPBytes(buf, r.First); err != nil {
+		panic(err)
+	}
+	return buf.Bytes()
+}
 
 type Builder struct {
 	s                cadata.Store

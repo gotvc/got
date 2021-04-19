@@ -203,7 +203,7 @@ func (r *Repo) DebugDB(ctx context.Context, w io.Writer) error {
 		if b == nil {
 			return nil
 		}
-		fmt.Fprintf(w, "BUCKET: %s\n", bucketDefault)
+		fmt.Fprintf(w, "BUCKET: %s\n", bucketCellData)
 		dumpBucket(w, b)
 
 		return nil

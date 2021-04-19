@@ -26,19 +26,20 @@ func (o *Operator) Mkdir(ctx context.Context, s Store, x Root, p string) (*Root,
 	if err := o.checkNoEntry(ctx, s, x, p); err != nil {
 		return nil, err
 	}
-	md := Metadata{
-		Mode: 0o755 | os.ModeDir,
+	md := &Metadata{
+		Mode: uint32(0o755 | os.ModeDir),
 	}
 	return o.PutMetadata(ctx, s, x, p, md)
 }
 
 func (o *Operator) EnsureDir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+	p = cleanPath(p)
 	parts := strings.Split(p, string(Sep))
 	for i := range parts {
 		p2 := strings.Join(parts[:i+1], string(Sep))
 		_, err := o.GetDirMetadata(ctx, s, x, p2)
 		if os.IsNotExist(err) {
-			x2, err := o.Mkdir(ctx, s, x, parts[0])
+			x2, err := o.Mkdir(ctx, s, x, p2)
 			if err != nil {
 				return nil, err
 			}
@@ -122,7 +123,7 @@ func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
 	name := string(ent.Key[len(di.p)+1:])
 	dirEnt := DirEnt{
 		Name: name,
-		Mode: md.Mode,
+		Mode: os.FileMode(md.Mode),
 	}
 	return &dirEnt, nil
 }

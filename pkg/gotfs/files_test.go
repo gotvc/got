@@ -3,6 +3,7 @@ package gotfs
 import (
 	"bytes"
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -39,5 +40,5 @@ func TestFileMetadata(t *testing.T) {
 	md, err := op.GetMetadata(ctx, s, *x, "file.txt")
 	require.NoError(t, err)
 	require.NotNil(t, md)
-	require.True(t, md.Mode.IsRegular())
+	require.True(t, os.FileMode(md.Mode).IsRegular())
 }

@@ -13,6 +13,7 @@ import (
 type KeyFunc func(ptextHash cadata.ID) DEK
 
 func SaltedConvergent(salt []byte) KeyFunc {
+	salt = append([]byte{}, salt...)
 	return func(ptextHash cadata.ID) DEK {
 		h := blake3.New(32, salt)
 		h.Write(ptextHash[:])

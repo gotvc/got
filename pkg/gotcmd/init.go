@@ -19,7 +19,7 @@ var initCmd = &cobra.Command{
 			return err
 		}
 		w := cmd.ErrOrStderr()
-		fmt.Fprintf(w, "successfully initialized got repo in current directory")
+		fmt.Fprintln(w, "successfully initialized got repo in current directory")
 		return nil
 	},
 }
