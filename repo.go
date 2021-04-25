@@ -187,7 +187,7 @@ func (r *Repo) Log(ctx context.Context, fn func(ref Ref, s Commit) error) error 
 	if snap == nil {
 		return nil
 	}
-	return gotvc.ForEachAncestor(ctx, vol.Store, *snap, fn)
+	return gotvc.ForEachAncestor(ctx, vol.VCStore, *snap, fn)
 }
 
 func (r *Repo) DebugDB(ctx context.Context, w io.Writer) error {

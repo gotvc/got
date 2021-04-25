@@ -31,7 +31,13 @@ func GetF(ctx context.Context, s Store, x Root, key []byte, fn func([]byte) erro
 	return defaultOperator.GetF(ctx, s, x, key, fn)
 }
 
-func Copy(ctx context.Context, dst, src Store, x Root, entryFn func(Entry) error) error {
+// Sync ensures dst has all the data reachable from x.
+func Sync(ctx context.Context, dst, src Store, x Root, entryFn func(Entry) error) error {
+	if exists, err := dst.Exists(ctx, x.Ref.CID); err != nil {
+		return err
+	} else if exists {
+		return nil
+	}
 	if x.Depth == 0 {
 		ents, err := ptree.ListEntries(ctx, src, ptree.Index{First: x.First, Ref: x.Ref})
 		if err != nil {
@@ -48,7 +54,12 @@ func Copy(ctx context.Context, dst, src Store, x Root, entryFn func(Entry) error
 			return err
 		}
 		for _, idx := range idxs {
-			if err := Copy(ctx, dst, src, Root{Ref: idx.Ref, First: idx.First, Depth: x.Depth - 1}, entryFn); err != nil {
+			root2 := Root{
+				Ref:   idx.Ref,
+				First: idx.First,
+				Depth: x.Depth - 1,
+			}
+			if err := Sync(ctx, dst, src, root2, entryFn); err != nil {
 				return err
 			}
 		}

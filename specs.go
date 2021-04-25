@@ -15,9 +15,7 @@ type StoreSpec struct {
 	Peer      *PeerStoreSpec      `json:"peer,omitempty"`
 }
 
-type LocalStoreSpec struct {
-	ID uint64 `json:"id"`
-}
+type LocalStoreSpec = StoreID
 
 type BlobcacheStoreSpec struct {
 	Addr string `json:"addr"`
@@ -40,15 +38,17 @@ type PeerStoreSpec struct {
 func (r *Repo) MakeStore(spec StoreSpec) (Store, error) {
 	switch {
 	case spec.Local != nil:
-		return r.storeManager.GetStore(spec.Local.ID), nil
+		return r.storeManager.GetStore(*spec.Local), nil
 	default:
 		return nil, errors.Errorf("empty store spec")
 	}
 }
 
 type VolumeSpec struct {
-	Cell  CellSpec  `json:"cell"`
-	Store StoreSpec `json:"store"`
+	Cell     CellSpec  `json:"cell"`
+	VCStore  StoreSpec `json:"vc_store"`
+	FSStore  StoreSpec `json:"fs_store"`
+	RawStore StoreSpec `json:"raw_store"`
 }
 
 func ParseVolumeSpec(data []byte) (*VolumeSpec, error) {
@@ -64,11 +64,24 @@ func (r *Repo) MakeVolume(k string, spec VolumeSpec) (*Volume, error) {
 	if err != nil {
 		return nil, err
 	}
-	store, err := r.MakeStore(spec.Store)
+	vcStore, err := r.MakeStore(spec.VCStore)
 	if err != nil {
 		return nil, err
 	}
-	return &Volume{Cell: cell, Store: store}, nil
+	fsStore, err := r.MakeStore(spec.VCStore)
+	if err != nil {
+		return nil, err
+	}
+	rawStore, err := r.MakeStore(spec.VCStore)
+	if err != nil {
+		return nil, err
+	}
+	return &Volume{
+		Cell:     cell,
+		VCStore:  vcStore,
+		FSStore:  fsStore,
+		RawStore: rawStore,
+	}, nil
 }
 
 type CellSpec struct {

@@ -9,8 +9,11 @@ import (
 	"github.com/brendoncarroll/got/pkg/gotkv"
 )
 
-func Copy(ctx context.Context, dst, src Store, root Root) error {
-	return gotkv.Copy(ctx, dst, src, root, func(ent gotkv.Entry) error {
+// Sync ensures dst has all the data reachable from root
+// dst and src should both be metadata stores.
+// copyData will be called to sync metadata
+func Sync(ctx context.Context, dst, src Store, root Root, copyData func(id cadata.ID) error) error {
+	return gotkv.Sync(ctx, dst, src, root, func(ent gotkv.Entry) error {
 		if isPartKey(ent.Key) {
 			part, err := parsePart(ent.Value)
 			if err != nil {
@@ -20,7 +23,7 @@ func Copy(ctx context.Context, dst, src Store, root Root) error {
 			if err != nil {
 				return err
 			}
-			return cadata.Copy(ctx, dst, src, ref.CID)
+			return copyData(ref.CID)
 		}
 		return nil
 	})

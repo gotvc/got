@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/fs"
 	"github.com/brendoncarroll/got/pkg/volumes"
 )
@@ -49,10 +50,15 @@ func (esd *volSpecDir) List(ctx context.Context, prefix string) ([]string, error
 }
 
 func (csd *volSpecDir) Create(ctx context.Context, name string) error {
-	x := randomUint64()
+	newLocalSpec := func() *LocalStoreSpec {
+		x := randomUint64()
+		return &x
+	}
 	spec := VolumeSpec{
-		Cell:  CellSpec{Local: &LocalCellSpec{}},
-		Store: StoreSpec{Local: &LocalStoreSpec{ID: x}},
+		Cell:     CellSpec{Local: &LocalCellSpec{}},
+		VCStore:  StoreSpec{Local: newLocalSpec()},
+		FSStore:  StoreSpec{Local: newLocalSpec()},
+		RawStore: StoreSpec{Local: newLocalSpec()},
 	}
 	return csd.CreateWithSpec(name, spec)
 }
@@ -93,11 +99,21 @@ func (esd *volSpecDir) makeVol(k string, spec VolumeSpec) (*Volume, error) {
 	if err != nil {
 		return nil, err
 	}
-	store, err := esd.sf(spec.Store)
-	if err != nil {
-		return nil, err
+	ss := [3]cadata.Store{}
+	for i, spec := range []StoreSpec{
+		spec.VCStore, spec.FSStore, spec.RawStore,
+	} {
+		ss[i], err = esd.sf(spec)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return &Volume{Cell: cell, Store: store}, nil
+	return &Volume{
+		Cell:     cell,
+		VCStore:  ss[0],
+		FSStore:  ss[1],
+		RawStore: ss[2],
+	}, nil
 }
 
 func randomUint64() uint64 {

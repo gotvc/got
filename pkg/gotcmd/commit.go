@@ -35,18 +35,22 @@ var logCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		pr, pw := io.Pipe()
 		eg := errgroup.Group{}
-		eg.Go(func() (retErr error) {
-			defer func() { pw.CloseWithError(retErr) }()
-			return repo.Log(ctx, func(ref got.Ref, c got.Commit) error {
+		eg.Go(func() error {
+			err := repo.Log(ctx, func(ref got.Ref, c got.Commit) error {
 				fmt.Fprintf(pw, "#%04d\t%v\n", c.N, ref.CID)
 				fmt.Fprintf(pw, "Created At: %v\n", c.CreatedAt)
 				fmt.Fprintf(pw, "Message: %s\n", c.Message)
 				fmt.Fprintln(pw)
 				return nil
 			})
+			pw.CloseWithError(err)
+			return err
 		})
 		eg.Go(func() error {
-			return pr.CloseWithError(pipeToLess(pr))
+			err := pipeToLess(pr)
+			//_, err := io.Copy(cmd.OutOrStdout(), pr)
+			pr.CloseWithError(err)
+			return err
 		})
 		return eg.Wait()
 	},

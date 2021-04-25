@@ -6,7 +6,9 @@ import (
 
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/cells"
+	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotvc"
+	"github.com/brendoncarroll/got/pkg/volumes"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -15,33 +17,33 @@ import (
 // if the commit in dst is not an ancestor of src then an error is returned.
 // that behavior can be disabled with force=true.
 func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
-	if err := cadata.CopyAll(ctx, dst, src); err != nil {
-		return err
-	}
-	srcSnap, err := getSnapshot(ctx, src.Cell)
-	if err != nil {
-		return err
-	}
-	srcRef, err := gotvc.PostSnapshot(ctx, src.Store, *srcSnap)
-	if err != nil {
-		return err
-	}
-	return applySnapshot(ctx, dst.Cell, func(x *Commit) (*Commit, error) {
-		if x == nil {
-			return nil, err
-		}
-		xRef, err := gotvc.PostSnapshot(ctx, src.Store, *srcSnap)
+	return applySnapshot(ctx, dst.Cell, func(x *gotvc.Snapshot) (*gotvc.Snapshot, error) {
+		goal, err := getSnapshot(ctx, src.Cell)
 		if err != nil {
 			return nil, err
 		}
-		hasAncestor, err := gotvc.HasAncestor(ctx, src.Store, *srcRef, *xRef)
+		if x == nil {
+			return goal, err
+		}
+		goalRef, err := gotvc.PostSnapshot(ctx, cadata.Void{}, *goal)
+		if err != nil {
+			return nil, err
+		}
+		xRef, err := gotvc.PostSnapshot(ctx, cadata.Void{}, *goal)
+		if err != nil {
+			return nil, err
+		}
+		hasAncestor, err := gotvc.HasAncestor(ctx, src.VCStore, *goalRef, *xRef)
 		if err != nil {
 			return nil, err
 		}
 		if !force && !hasAncestor {
 			return nil, errors.Errorf("cannot CAS, dst ref is not parent of src ref")
 		}
-		return srcSnap, nil
+		if err := syncStores(ctx, tripleFromVolume(dst), tripleFromVolume(src), *goal); err != nil {
+			return nil, err
+		}
+		return goal, nil
 	})
 }
 
@@ -117,7 +119,7 @@ func getSnapshot(ctx context.Context, c cells.Cell) (*Commit, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(data) < 0 {
+	if len(data) == 0 {
 		return nil, nil
 	}
 	var x Commit
@@ -144,5 +146,25 @@ func applySnapshot(ctx context.Context, c cells.Cell, fn func(*Commit) (*Commit,
 			return nil, nil
 		}
 		return json.Marshal(*y)
+	})
+}
+
+type triple struct {
+	VC, FS, Raw Store
+}
+
+func tripleFromVolume(vol volumes.Volume) triple {
+	return triple{
+		VC:  vol.VCStore,
+		FS:  vol.FSStore,
+		Raw: vol.RawStore,
+	}
+}
+
+func syncStores(ctx context.Context, dst, src triple, snap gotvc.Snapshot) error {
+	return gotvc.Sync(ctx, dst.VC, src.VC, snap, func(root gotfs.Root) error {
+		return gotfs.Sync(ctx, dst.FS, src.FS, root, func(id cadata.ID) error {
+			return cadata.Copy(ctx, dst.Raw, src.Raw, id)
+		})
 	})
 }

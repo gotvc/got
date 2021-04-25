@@ -14,6 +14,10 @@ type (
 	Poster = blobs.Poster
 )
 
+var (
+	ErrNotFound = blobs.ErrNotFound
+)
+
 type ID = blobs.ID
 
 func Hash(data []byte) blobs.ID {
@@ -34,7 +38,19 @@ func ForEach(ctx context.Context, s blobs.Lister, fn func(id ID) error) error {
 	return blobs.ForEach(ctx, s, fn)
 }
 
+type Pinner interface {
+	Poster
+	// Pin allows store to add the data by ID alone.
+	// It will return ErrNotFound if the caller should call Post instead.
+	Pin(ctx context.Context, id ID) error
+}
+
 func Copy(ctx context.Context, dst blobs.Poster, src blobs.Getter, id ID) error {
+	if pinner, ok := dst.(Pinner); ok {
+		if err := pinner.Pin(ctx, id); err != ErrNotFound {
+			return err
+		}
+	}
 	return src.GetF(ctx, id, func(data []byte) error {
 		_, err := dst.Post(ctx, data)
 		return err
@@ -49,7 +65,6 @@ func CopyAll(ctx context.Context, dst, src Store) error {
 	if caf, ok := dst.(CopyAllFrom); ok {
 		return caf.CopyAllFrom(ctx, src)
 	}
-
 	const numWorkers = 16
 	ch := make(chan blobs.ID)
 	eg, ctx := errgroup.WithContext(ctx)
@@ -74,4 +89,11 @@ func CopyAll(ctx context.Context, dst, src Store) error {
 		})
 	}
 	return eg.Wait()
+}
+
+// DeleteAll deletes all the data in s
+func DeleteAll(ctx context.Context, s Store) error {
+	return ForEach(ctx, s, func(id ID) error {
+		return s.Delete(ctx, id)
+	})
 }

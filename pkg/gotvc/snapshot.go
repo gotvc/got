@@ -164,25 +164,32 @@ func parseCommit(data []byte) (*Snapshot, error) {
 	return &snap, nil
 }
 
-func Copy(ctx context.Context, dst, src cadata.Store, ref gdat.Ref) error {
-	snap, err := GetSnapshot(ctx, src, ref)
-	if err != nil {
-		return err
-	}
+// Sync ensures dst has all of the data reachable from snap.
+func Sync(ctx context.Context, dst, src cadata.Store, snap Snapshot, copyRoot func(gotfs.Root) error) error {
 	if snap.Parent != nil {
-		if err := Copy(ctx, dst, src, *snap.Parent); err != nil {
+		// Skip if the parent is already copied.
+		if exists, err := dst.Exists(ctx, snap.Parent.CID); err != nil {
+			return err
+		} else if exists {
+			return nil
+		}
+		parent, err := GetSnapshot(ctx, src, *snap.Parent)
+		if err != nil {
+			return err
+		}
+		if err := Sync(ctx, dst, src, *parent, copyRoot); err != nil {
+			return err
+		}
+		if err := cadata.Copy(ctx, dst, src, snap.Parent.CID); err != nil {
 			return err
 		}
 	}
-	if err := gotfs.Copy(ctx, dst, src, snap.Root); err != nil {
-		return err
-	}
-	return cadata.Copy(ctx, dst, src, ref.CID)
+	return copyRoot(snap.Root)
 }
 
 // ForEachAncestor call fn once for each ancestor of snap, and snap in reverse order.
 func ForEachAncestor(ctx context.Context, s cadata.Store, snap Snapshot, fn func(Ref, Snapshot) error) error {
-	ref, err := PostSnapshot(ctx, s, snap)
+	ref, err := PostSnapshot(ctx, cadata.Void{}, snap)
 	if err != nil {
 		return err
 	}
@@ -197,7 +204,7 @@ func ForEachAncestor(ctx context.Context, s cadata.Store, snap Snapshot, fn func
 		if err != nil {
 			return err
 		}
-		snap = *next
 		ref = snap.Parent
+		snap = *next
 	}
 }

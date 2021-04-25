@@ -54,9 +54,10 @@ func (w *writer) Flush() error {
 }
 
 // CreateFileRoot creates a new filesystem with the contents read from r at the root
-func (o *Operator) CreateFileRoot(ctx context.Context, s Store, r io.Reader) (*Root, error) {
-	as := cadata.NewAsyncStore(s, runtime.GOMAXPROCS(0))
-	b := o.gotkv.NewBuilder(as)
+func (o *Operator) CreateFileRoot(ctx context.Context, ms, ds Store, r io.Reader) (*Root, error) {
+	ams := cadata.NewAsyncStore(ms, runtime.GOMAXPROCS(0))
+	ads := cadata.NewAsyncStore(ds, runtime.GOMAXPROCS(0))
+	b := o.gotkv.NewBuilder(ams)
 
 	// metadata entry
 	md := Metadata{
@@ -67,7 +68,7 @@ func (o *Operator) CreateFileRoot(ctx context.Context, s Store, r io.Reader) (*R
 	}
 	// content
 	var total uint64
-	w := o.newWriter(ctx, as, func(part *Part) error {
+	w := o.newWriter(ctx, ads, func(part *Part) error {
 		total += uint64(part.Length)
 		key := makePartKey("", total)
 		return b.Put(ctx, key, part.marshal())
@@ -82,7 +83,10 @@ func (o *Operator) CreateFileRoot(ctx context.Context, s Store, r io.Reader) (*R
 	if err != nil {
 		return nil, err
 	}
-	if err := as.Close(); err != nil {
+	if err := ads.Close(); err != nil {
+		return nil, err
+	}
+	if err := ams.Close(); err != nil {
 		return nil, err
 	}
 	return root, nil
@@ -90,27 +94,29 @@ func (o *Operator) CreateFileRoot(ctx context.Context, s Store, r io.Reader) (*R
 
 // CreateFile creates a file at p with data from r
 // If there is an entry at p CreateFile returns an error
-func (o *Operator) CreateFile(ctx context.Context, s Store, x Root, p string, r io.Reader) (*Root, error) {
+// ms is the store used for metadata
+// ds is the store used for data.
+func (o *Operator) CreateFile(ctx context.Context, ms, ds Store, x Root, p string, r io.Reader) (*Root, error) {
 	p = cleanPath(p)
-	if err := o.checkNoEntry(ctx, s, x, p); err != nil {
+	if err := o.checkNoEntry(ctx, ms, x, p); err != nil {
 		return nil, err
 	}
-	fileRoot, err := o.CreateFileRoot(ctx, s, r)
+	fileRoot, err := o.CreateFileRoot(ctx, ms, ds, r)
 	if err != nil {
 		return nil, err
 	}
 	if p == "" {
 		return fileRoot, nil
 	}
-	fileRoot, err = o.gotkv.AddPrefix(ctx, s, *fileRoot, []byte(p))
+	fileRoot, err = o.gotkv.AddPrefix(ctx, ms, *fileRoot, []byte(p))
 	if err != nil {
 		return nil, err
 	}
-	y, err := o.EnsureDir(ctx, s, x, parentPath(p))
+	y, err := o.EnsureDir(ctx, ms, x, parentPath(p))
 	if err != nil {
 		return nil, err
 	}
-	return o.gotkv.Merge(ctx, s, *y, *fileRoot)
+	return o.gotkv.Merge(ctx, ms, *y, *fileRoot)
 }
 
 func (o *Operator) SizeOfFile(ctx context.Context, s Store, x Root, p string) (int, error) {

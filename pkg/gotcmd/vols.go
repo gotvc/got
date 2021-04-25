@@ -97,12 +97,7 @@ var branchCmd = &cobra.Command{
 			fmt.Fprintf(w, "ACTIVE VOLUME: %s\n", name)
 			return nil
 		}
-
-		spec := got.VolumeSpec{
-			Cell:  got.CellSpec{Local: &got.LocalCellSpec{}},
-			Store: got.StoreSpec{Local: &got.LocalStoreSpec{}},
-		}
-		if err := repo.CreateVolumeWithSpec(name, spec); err != nil && err != volumes.ErrExists {
+		if err := repo.CreateVolume(ctx, name); err != nil && err != volumes.ErrExists {
 			return err
 		}
 		return repo.SetActiveVolume(ctx, name)

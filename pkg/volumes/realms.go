@@ -12,10 +12,10 @@ var ErrNotExist = errors.New("volume does not exist")
 var ErrExists = errors.New("a volume already exists by that name")
 var ErrTooMany = errors.Errorf("too many too list")
 
-// Volume is a (Cell, Store) pair
+// Volume is a Cell and a set of stores pair
 type Volume struct {
 	cells.Cell
-	cadata.Store
+	VCStore, FSStore, RawStore cadata.Store
 }
 
 // A Realm is a set of named volumes.

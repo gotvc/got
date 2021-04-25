@@ -86,6 +86,9 @@ func (sm *storeManager) maybePost(ctx context.Context, id cadata.ID, data []byte
 }
 
 func (sm *storeManager) maybeDelete(ctx context.Context, id cadata.ID) error {
+	if id == (cadata.ID{}) {
+		panic("empty id")
+	}
 	sm.mu.Lock()
 	defer sm.mu.Unlock()
 	var count int
@@ -122,6 +125,7 @@ type virtualStore struct {
 	id StoreID
 }
 
+// Post implements cadata.Poster
 func (s virtualStore) Post(ctx context.Context, data []byte) (cadata.ID, error) {
 	id := cadata.Hash(data)
 	if err := s.sm.db.Batch(func(tx *bolt.Tx) error {
@@ -144,11 +148,52 @@ func (s virtualStore) Post(ctx context.Context, data []byte) (cadata.ID, error) 
 	return s.sm.maybePost(ctx, id, data)
 }
 
+// Pin implements cadata.Pinner
+func (s virtualStore) Pin(ctx context.Context, id cadata.ID) error {
+	return s.sm.db.Batch(func(tx *bolt.Tx) error {
+		b, err := tx.CreateBucketIfNotExists([]byte(s.sm.bucketName))
+		if err != nil {
+			return err
+		}
+		// check that something else has referenced it.
+		count, err := getCount(b, id)
+		if err != nil {
+			return err
+		}
+		if count < 1 {
+			return cadata.ErrNotFound
+		}
+		// and that it's in the store
+		if exists, err := s.sm.store.Exists(ctx, id); err != nil {
+			return err
+		} else if !exists {
+			return cadata.ErrNotFound
+		}
+		if exists, err := isInSet(b, s.id, id); err != nil {
+			return err
+		} else if exists {
+			return nil
+		}
+		if err := addToSet(b, s.id, id); err != nil {
+			return err
+		}
+		return incrCount(b, id)
+	})
+}
+
+// GetF implements cadata.Getter
 func (s virtualStore) GetF(ctx context.Context, id cadata.ID, fn func([]byte) error) error {
-	// TODO: filter based on the set
+	exists, err := s.Exists(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return cadata.ErrNotFound
+	}
 	return s.sm.store.GetF(ctx, id, fn)
 }
 
+// Exists implements cadata.Set
 func (s virtualStore) Exists(ctx context.Context, id cadata.ID) (bool, error) {
 	var exists bool
 	if err := s.sm.db.View(func(tx *bolt.Tx) error {
@@ -164,6 +209,7 @@ func (s virtualStore) Exists(ctx context.Context, id cadata.ID) (bool, error) {
 	return exists, nil
 }
 
+// Deleta implements cadata.Store
 func (s virtualStore) Delete(ctx context.Context, id cadata.ID) error {
 	if err := s.sm.db.Batch(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists([]byte(setsBucketName))
@@ -185,13 +231,14 @@ func (s virtualStore) Delete(ctx context.Context, id cadata.ID) error {
 	return s.sm.maybeDelete(ctx, id)
 }
 
+// List implements cadata.Set
 func (s virtualStore) List(ctx context.Context, prefix []byte, ids []cadata.ID) (int, error) {
+	var n int
 	err := s.sm.db.View(func(tx *bolt.Tx) error {
 		b, _ := s.sm.bucket(tx)
 		if b == nil {
 			return nil
 		}
-		var n int
 		return forEachInSet(b, s.id, prefix, func(id cadata.ID) error {
 			if n >= len(ids) {
 				return blobs.ErrTooMany
@@ -204,7 +251,7 @@ func (s virtualStore) List(ctx context.Context, prefix []byte, ids []cadata.ID) 
 	if err != nil {
 		return 0, err
 	}
-	panic("not implemented")
+	return n, nil
 }
 
 func addToSet(b *bolt.Bucket, setID StoreID, id cadata.ID) error {
@@ -258,7 +305,7 @@ func forEachInSet(b *bolt.Bucket, setID StoreID, prefix []byte, fn func(cadata.I
 	if setBucket == nil {
 		return nil
 	}
-	c := b.Cursor()
+	c := setBucket.Cursor()
 	for k, _ := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = c.Next() {
 		id := cadata.IDFromBytes(k)
 		if err := fn(id); err != nil {

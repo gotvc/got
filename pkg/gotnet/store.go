@@ -123,7 +123,7 @@ func (s *blobMainSrv) handleAsk(ctx context.Context, msg *p2p.Message, w io.Writ
 				if err != nil {
 					return nil, err
 				}
-				if _, err := vol.Store.Post(ctx, data); err != nil {
+				if _, err := vol.RawStore.Post(ctx, data); err != nil {
 					return nil, err
 				}
 			}

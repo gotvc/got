@@ -16,9 +16,9 @@ import (
 func TestSnapshotSingleFile(t *testing.T) {
 	ctx := context.Background()
 	cell := cells.NewMem()
-	store := cadata.NewMem()
+	s := cadata.NewMem()
 	op := gotfs.NewOperator()
-	stage := NewStage(cell, store, &op)
+	stage := NewStage(cell, s, s, &op)
 
 	makeContents := func(i int) string {
 		return fmt.Sprintf("contents of file\n%d\n", i)
@@ -31,8 +31,14 @@ func TestSnapshotSingleFile(t *testing.T) {
 		base, err = stage.Snapshot(ctx, base, "", nil)
 		require.NoError(t, err)
 		require.Equal(t, i, int(base.N))
-		requireFileContent(t, store, base.Root, "test.txt", makeContents(i))
+		requireFileContent(t, s, base.Root, "test.txt", makeContents(i))
 	}
+	var count int
+	ForEachAncestor(ctx, s, *base, func(Ref, Snapshot) error {
+		count++
+		return nil
+	})
+	require.Equal(t, N, count)
 }
 
 func requireFileContent(t *testing.T, s cadata.Store, root gotfs.Root, p, content string) {

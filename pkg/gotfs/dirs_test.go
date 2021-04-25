@@ -25,12 +25,12 @@ func TestReadDir(t *testing.T) {
 	ps := []string{"file1.txt", "file2.txt", "file3.txt"}
 	for i := range ps {
 		p := path.Join("dir1", ps[i])
-		x, err = op.CreateFile(ctx, s, *x, p, bytes.NewReader(nil))
+		x, err = op.CreateFile(ctx, s, s, *x, p, bytes.NewReader(nil))
 		require.NoError(t, err)
 	}
 	x, err = op.Mkdir(ctx, s, *x, "dir1/subdir")
 	require.NoError(t, err)
-	x, err = op.CreateFile(ctx, s, *x, "dir1/subdir/file.txt", bytes.NewReader(nil))
+	x, err = op.CreateFile(ctx, s, s, *x, "dir1/subdir/file.txt", bytes.NewReader(nil))
 	require.NoError(t, err)
 	ps = append(ps, "subdir")
 	var i int

@@ -26,12 +26,12 @@ func NewEmptyDelta(ctx context.Context, s Store) (*Delta, error) {
 	}, nil
 }
 
-func NewAddition(ctx context.Context, s Store, fsop *gotfs.Operator, p string, r io.Reader) (*Delta, error) {
-	delta, err := NewEmptyDelta(ctx, s)
+func NewAddition(ctx context.Context, ms, ds Store, fsop *gotfs.Operator, p string, r io.Reader) (*Delta, error) {
+	delta, err := NewEmptyDelta(ctx, ms)
 	if err != nil {
 		return nil, err
 	}
-	x, err := fsop.CreateFile(ctx, s, delta.Additions, p, r)
+	x, err := fsop.CreateFile(ctx, ms, ds, delta.Additions, p, r)
 	if err != nil {
 		return nil, err
 	}

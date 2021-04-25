@@ -11,36 +11,38 @@ import (
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotkv"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // Stage allows batching changes before producing a new snapshot
 type Stage struct {
-	cell  cells.Cell
-	store cadata.Store
-	fsop  *gotfs.Operator
+	cell   cells.Cell
+	ms, ds cadata.Store
+	fsop   *gotfs.Operator
 }
 
-func NewStage(cell cells.Cell, store cadata.Store, fsop *gotfs.Operator) *Stage {
+func NewStage(cell cells.Cell, ms, ds cadata.Store, fsop *gotfs.Operator) *Stage {
 	return &Stage{
-		cell:  cell,
-		store: store,
-		fsop:  fsop,
+		cell: cell,
+		ms:   ms,
+		ds:   ds,
+		fsop: fsop,
 	}
 }
 
 // Add adds a path to the stage.
 func (s *Stage) Add(ctx context.Context, p string, r io.Reader) error {
-	delta, err := NewAddition(ctx, s.store, s.fsop, p, r)
+	delta, err := NewAddition(ctx, s.ms, s.ds, s.fsop, p, r)
 	if err != nil {
 		return err
 	}
 	kvop := gotkv.NewOperator()
 	return s.apply(ctx, func(x Delta) (*Delta, error) {
-		additions, err := kvop.Merge(ctx, s.store, x.Additions, delta.Additions)
+		additions, err := kvop.Merge(ctx, s.ms, x.Additions, delta.Additions)
 		if err != nil {
 			return nil, err
 		}
-		deletions, err := kvop.DeleteSpan(ctx, s.store, x.Deletions, gotkv.PrefixSpan([]byte(p)))
+		deletions, err := kvop.DeleteSpan(ctx, s.ms, x.Deletions, gotkv.PrefixSpan([]byte(p)))
 		if err != nil {
 			return nil, err
 		}
@@ -53,17 +55,17 @@ func (s *Stage) Add(ctx context.Context, p string, r io.Reader) error {
 
 // Remove removes a path from the stage.
 func (s *Stage) Remove(ctx context.Context, p string) error {
-	delta, err := NewDeletion(ctx, s.store, s.fsop, p)
+	delta, err := NewDeletion(ctx, s.ms, s.fsop, p)
 	if err != nil {
 		return err
 	}
 	kvop := gotkv.NewOperator()
 	return s.apply(ctx, func(x Delta) (*Delta, error) {
-		deletions, err := kvop.Merge(ctx, s.store, x.Deletions, delta.Deletions)
+		deletions, err := kvop.Merge(ctx, s.ms, x.Deletions, delta.Deletions)
 		if err != nil {
 			return nil, err
 		}
-		additions, err := s.fsop.RemoveAll(ctx, s.store, x.Additions, p)
+		additions, err := s.fsop.RemoveAll(ctx, s.ms, x.Additions, p)
 		if err != nil {
 			return nil, err
 		}
@@ -77,11 +79,11 @@ func (s *Stage) Remove(ctx context.Context, p string) error {
 func (s *Stage) Unstage(ctx context.Context, p string) error {
 	kvop := gotkv.NewOperator()
 	return s.apply(ctx, func(x Delta) (*Delta, error) {
-		additions, err := s.fsop.RemoveAll(ctx, s.store, x.Additions, p)
+		additions, err := s.fsop.RemoveAll(ctx, s.ms, x.Additions, p)
 		if err != nil {
 			return nil, err
 		}
-		deletions, err := kvop.DeleteSpan(ctx, s.store, x.Deletions, gotkv.PrefixSpan([]byte(p)))
+		deletions, err := kvop.DeleteSpan(ctx, s.ms, x.Deletions, gotkv.PrefixSpan([]byte(p)))
 		if err != nil {
 			return nil, err
 		}
@@ -93,9 +95,19 @@ func (s *Stage) Unstage(ctx context.Context, p string) error {
 }
 
 func (s *Stage) Clear(ctx context.Context) error {
-	return s.apply(ctx, func(Delta) (*Delta, error) {
-		return nil, nil
+	eg := errgroup.Group{}
+	eg.Go(func() error {
+		return s.apply(ctx, func(Delta) (*Delta, error) {
+			return nil, nil
+		})
 	})
+	eg.Go(func() error {
+		return cadata.DeleteAll(ctx, s.ms)
+	})
+	eg.Go(func() error {
+		return cadata.DeleteAll(ctx, s.ds)
+	})
+	return eg.Wait()
 }
 
 func (s *Stage) Delta(ctx context.Context) (*Delta, error) {
@@ -107,7 +119,7 @@ func (s *Stage) Snapshot(ctx context.Context, base *Snapshot, message string, cr
 	if err != nil {
 		return nil, err
 	}
-	snap, err := ApplyDelta(ctx, s.store, base, *delta)
+	snap, err := ApplyDelta(ctx, s.ms, base, *delta)
 	if err != nil {
 		return nil, err
 	}
@@ -130,7 +142,7 @@ func (s *Stage) apply(ctx context.Context, fn func(delta Delta) (*Delta, error))
 				return nil, err
 			}
 		} else {
-			d, err := NewEmptyDelta(ctx, s.store)
+			d, err := NewEmptyDelta(ctx, s.ms)
 			if err != nil {
 				return nil, err
 			}
@@ -158,7 +170,7 @@ func (s *Stage) get(ctx context.Context) (*Delta, error) {
 			return nil, err
 		}
 	} else {
-		return NewEmptyDelta(ctx, s.store)
+		return NewEmptyDelta(ctx, s.ms)
 	}
 	return &delta, nil
 }

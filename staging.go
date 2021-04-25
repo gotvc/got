@@ -9,7 +9,6 @@ import (
 
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/cells"
-	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotvc"
 )
 
@@ -74,12 +73,9 @@ func (r *Repo) Commit(ctx context.Context, message string, createdAt *time.Time)
 		if err != nil {
 			return nil, err
 		}
-		if y.Parent != nil {
-			if err := gotvc.Copy(ctx, vol.Store, r.stagingStore(), *y.Parent); err != nil {
-				return nil, err
-			}
-		}
-		if err := gotfs.Copy(ctx, vol.Store, r.stagingStore(), y.Root); err != nil {
+		dst := tripleFromVolume(*vol)
+		src := triple{VC: r.stagingStore(), FS: r.stagingStore(), Raw: r.stagingStore()}
+		if err := syncStores(ctx, dst, src, *y); err != nil {
 			return nil, err
 		}
 		return y, nil
@@ -91,7 +87,8 @@ func (r *Repo) Commit(ctx context.Context, message string, createdAt *time.Time)
 }
 
 func (r *Repo) stage() *gotvc.Stage {
-	return gotvc.NewStage(r.stagingCell(), r.stagingStore(), r.getFSOp())
+	s := r.stagingStore()
+	return gotvc.NewStage(r.stagingCell(), s, s, r.getFSOp())
 }
 
 func (r *Repo) stagingStore() cadata.Store {

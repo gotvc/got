@@ -30,7 +30,7 @@ var slurpCmd = &cobra.Command{
 
 		store := repo.StagingStore()
 		fsop := gotfs.NewOperator()
-		root, err := fsop.CreateFileRoot(ctx, store, f)
+		root, err := fsop.CreateFileRoot(ctx, store, store, f)
 		if err != nil {
 			return err
 		}
