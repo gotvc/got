@@ -32,13 +32,13 @@ func NewStage(cell cells.Cell, ms, ds cadata.Store, fsop *gotfs.Operator) *Stage
 
 // Add adds a path to the stage.
 func (s *Stage) Add(ctx context.Context, p string, r io.Reader) error {
-	delta, err := NewAddition(ctx, s.ms, s.ds, s.fsop, p, r)
+	kvop := gotkv.NewOperator()
+	fileRoot, err := s.fsop.CreateFileRoot(ctx, s.ms, s.ds, r)
 	if err != nil {
 		return err
 	}
-	kvop := gotkv.NewOperator()
 	return s.apply(ctx, func(x Delta) (*Delta, error) {
-		additions, err := kvop.Merge(ctx, s.ms, x.Additions, delta.Additions)
+		additions, err := s.fsop.Graft(ctx, s.ms, x.Additions, p, *fileRoot)
 		if err != nil {
 			return nil, err
 		}

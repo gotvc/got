@@ -6,6 +6,7 @@ import (
 
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/cells"
+	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotvc"
 	"github.com/brendoncarroll/got/pkg/volumes"
@@ -29,7 +30,7 @@ func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
 		if err != nil {
 			return nil, err
 		}
-		xRef, err := gotvc.PostSnapshot(ctx, cadata.Void{}, *goal)
+		xRef, err := gotvc.PostSnapshot(ctx, cadata.Void{}, *x)
 		if err != nil {
 			return nil, err
 		}
@@ -163,8 +164,8 @@ func tripleFromVolume(vol volumes.Volume) triple {
 
 func syncStores(ctx context.Context, dst, src triple, snap gotvc.Snapshot) error {
 	return gotvc.Sync(ctx, dst.VC, src.VC, snap, func(root gotfs.Root) error {
-		return gotfs.Sync(ctx, dst.FS, src.FS, root, func(id cadata.ID) error {
-			return cadata.Copy(ctx, dst.Raw, src.Raw, id)
+		return gotfs.Sync(ctx, dst.FS, src.FS, root, func(ref gdat.Ref) error {
+			return cadata.Copy(ctx, dst.Raw, src.Raw, ref.CID)
 		})
 	})
 }

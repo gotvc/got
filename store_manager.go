@@ -120,6 +120,11 @@ func (sm *storeManager) bucket(tx *bolt.Tx) (*bolt.Bucket, error) {
 	}
 }
 
+var _ interface {
+	cadata.Store
+	cadata.Pinner
+} = &virtualStore{}
+
 type virtualStore struct {
 	sm *storeManager
 	id StoreID

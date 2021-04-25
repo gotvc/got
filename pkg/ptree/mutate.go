@@ -127,7 +127,7 @@ func copyTree(ctx context.Context, b *Builder, depth int, idx Index) error {
 		panic("copyTree with depth=0 ")
 	}
 	if b.SyncedBelow(depth) {
-		return b.CopyTree(ctx, idx, depth)
+		return b.copyTree(ctx, idx, depth)
 	}
 	if depth == 1 {
 		return copyEntries(ctx, b, idx)

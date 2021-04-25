@@ -165,7 +165,7 @@ func parseCommit(data []byte) (*Snapshot, error) {
 }
 
 // Sync ensures dst has all of the data reachable from snap.
-func Sync(ctx context.Context, dst, src cadata.Store, snap Snapshot, copyRoot func(gotfs.Root) error) error {
+func Sync(ctx context.Context, dst, src cadata.Store, snap Snapshot, syncRoot func(gotfs.Root) error) error {
 	if snap.Parent != nil {
 		// Skip if the parent is already copied.
 		if exists, err := dst.Exists(ctx, snap.Parent.CID); err != nil {
@@ -177,14 +177,29 @@ func Sync(ctx context.Context, dst, src cadata.Store, snap Snapshot, copyRoot fu
 		if err != nil {
 			return err
 		}
-		if err := Sync(ctx, dst, src, *parent, copyRoot); err != nil {
+		if err := Sync(ctx, dst, src, *parent, syncRoot); err != nil {
 			return err
 		}
 		if err := cadata.Copy(ctx, dst, src, snap.Parent.CID); err != nil {
 			return err
 		}
 	}
-	return copyRoot(snap.Root)
+	return syncRoot(snap.Root)
+}
+
+// Check ensures that snapshot is valid.
+func Check(ctx context.Context, s cadata.Store, snap Snapshot, checkRoot func(gotfs.Root) error) error {
+	if err := checkRoot(snap.Root); err != nil {
+		return err
+	}
+	if snap.Parent == nil {
+		return nil
+	}
+	parent, err := GetSnapshot(ctx, s, *snap.Parent)
+	if err != nil {
+		return err
+	}
+	return Check(ctx, s, *parent, checkRoot)
 }
 
 // ForEachAncestor call fn once for each ancestor of snap, and snap in reverse order.

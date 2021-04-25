@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotkv"
 )
@@ -12,7 +11,7 @@ import (
 // Sync ensures dst has all the data reachable from root
 // dst and src should both be metadata stores.
 // copyData will be called to sync metadata
-func Sync(ctx context.Context, dst, src Store, root Root, copyData func(id cadata.ID) error) error {
+func Sync(ctx context.Context, dst, src Store, root Root, syncData func(ref gdat.Ref) error) error {
 	return gotkv.Sync(ctx, dst, src, root, func(ent gotkv.Entry) error {
 		if isPartKey(ent.Key) {
 			part, err := parsePart(ent.Value)
@@ -23,7 +22,7 @@ func Sync(ctx context.Context, dst, src Store, root Root, copyData func(id cadat
 			if err != nil {
 				return err
 			}
-			return copyData(ref.CID)
+			return syncData(*ref)
 		}
 		return nil
 	})

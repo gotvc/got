@@ -28,7 +28,7 @@ func parseMetadata(data []byte) (*Metadata, error) {
 	return md, nil
 }
 
-// PutMetadata assigne metadata to p
+// PutMetadata assigns metadata to p
 func (o *Operator) PutMetadata(ctx context.Context, s Store, x Root, p string, md *Metadata) (*Root, error) {
 	gotkv := gotkv.NewOperator()
 	return gotkv.Put(ctx, s, x, []byte(p), md.marshal())

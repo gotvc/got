@@ -166,7 +166,7 @@ func (b *Builder) SyncedBelow(depth int) bool {
 // So depth = 1 is stored in level 1.
 // In order to write an index everything below the level must be synced.
 // SyncedBelow(depth) MUST be true
-func (b *Builder) CopyTree(ctx context.Context, idx Index, depth int) error {
+func (b *Builder) copyTree(ctx context.Context, idx Index, depth int) error {
 	if b.isDone {
 		panic("builder is closed")
 	}
@@ -277,7 +277,7 @@ func (it *Iterator) Peek(ctx context.Context) (*Entry, error) {
 }
 
 func (it *Iterator) Seek(ctx context.Context, k []byte) error {
-	for i := len(it.levels); i >= 0; i-- {
+	for i := len(it.levels) - 1; i >= 0; i-- {
 		sr, err := it.getReader(ctx, i)
 		if err != nil {
 			return err
@@ -287,6 +287,78 @@ func (it *Iterator) Seek(ctx context.Context, k []byte) error {
 		}
 	}
 	return nil
+}
+
+func (it *Iterator) SyncedBelow(depth int) bool {
+	if depth > len(it.levels) {
+		return false
+	}
+	for i := range it.levels[:depth] {
+		if it.levels[i] != nil {
+			return false
+		}
+	}
+	return true
+}
+
+func (it *Iterator) nextIndex(ctx context.Context, depth int) (*Index, error) {
+	if !it.SyncedBelow(depth) {
+		panic("cannot iterate indexes. not synced")
+	}
+	sr, err := it.getReader(ctx, depth)
+	if err != nil {
+		return nil, err
+	}
+	ent, err := sr.Next(ctx)
+	if err != nil {
+		return nil, err
+	}
+	idx, err := entryToIndex(*ent)
+	if err != nil {
+		return nil, err
+	}
+	return &idx, nil
+}
+
+// CopyAll copies all the entries from it to b.
+func CopyAll(ctx context.Context, b *Builder, it *Iterator) error {
+	for {
+		if err := func() error {
+			for i := len(b.levels); i > 0; i-- {
+				if !b.SyncedBelow(i) || !it.SyncedBelow(i) {
+					break
+				}
+				if err := copyIndex(ctx, b, it, i); err != nil {
+					if err == io.EOF {
+						return nil
+					}
+					return err
+				}
+			}
+			return copyEntry(ctx, b, it)
+		}(); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+	}
+}
+
+func copyIndex(ctx context.Context, b *Builder, it *Iterator, depth int) error {
+	idx, err := it.nextIndex(ctx, depth)
+	if err != nil {
+		return err
+	}
+	return b.copyTree(ctx, *idx, depth)
+}
+
+func copyEntry(ctx context.Context, b *Builder, it *Iterator) error {
+	ent, err := it.Next(ctx)
+	if err != nil {
+		return err
+	}
+	return b.Put(ctx, ent.Key, ent.Value)
 }
 
 // ListChildren returns the immediate children of root if any.

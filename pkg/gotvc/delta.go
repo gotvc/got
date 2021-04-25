@@ -72,7 +72,7 @@ func DiffWithNothing(ctx context.Context, s Store, a Snapshot) (*Delta, error) {
 func (d *Delta) ListAdditionPaths(ctx context.Context, s Store) ([]string, error) {
 	fsop := gotfs.NewOperator()
 	var additions []string
-	if err := fsop.Walk(ctx, s, d.Additions, func(p string, md gotfs.Metadata) error {
+	if err := fsop.Walk(ctx, s, d.Additions, func(p string, md *gotfs.Metadata) error {
 		additions = append(additions, p)
 		return nil
 	}); err != nil {

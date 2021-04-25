@@ -66,3 +66,13 @@ func Sync(ctx context.Context, dst, src Store, x Root, entryFn func(Entry) error
 	}
 	return cadata.Copy(ctx, dst, src, x.Ref.CID)
 }
+
+// CopyAll copies all the entries from iterator to builder.
+func CopyAll(ctx context.Context, b Builder, it Iterator) error {
+	ptb, ok1 := b.(*ptree.Builder)
+	pti, ok2 := it.(*ptree.Iterator)
+	if !ok1 || !ok2 {
+		return errors.Errorf("CopyAll not supported on b=%T it=%T", b, it)
+	}
+	return ptree.CopyAll(ctx, ptb, pti)
+}

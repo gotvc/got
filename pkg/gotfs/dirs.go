@@ -96,7 +96,7 @@ func (o *Operator) newDirIterator(ctx context.Context, s Store, x Root, p string
 	}
 	span := gotkv.PrefixSpan([]byte(p))
 	iter := o.gotkv.NewIterator(s, x, span)
-	if _, err := iter.Next(ctx); err != nil && err != io.EOF {
+	if _, err := iter.Next(ctx); err != nil {
 		return nil, err
 	}
 	return &dirIterator{
@@ -117,10 +117,11 @@ func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
 		return nil, err
 	}
 	// now we have to advance through the file or directory to fully consume it.
-	if err := di.iter.Seek(ctx, gotkv.PrefixEnd(ent.Key)); err != nil {
+	end := gotkv.PrefixEnd(ent.Key)
+	if err := di.iter.Seek(ctx, end); err != nil {
 		return nil, err
 	}
-	name := string(ent.Key[len(di.p)+1:])
+	name := cleanPath(string(ent.Key[len(di.p):]))
 	dirEnt := DirEnt{
 		Name: name,
 		Mode: os.FileMode(md.Mode),

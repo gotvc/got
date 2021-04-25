@@ -9,6 +9,7 @@ import (
 
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/cells"
+	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/stretchr/testify/require"
 )
@@ -31,20 +32,26 @@ func TestSnapshotSingleFile(t *testing.T) {
 		base, err = stage.Snapshot(ctx, base, "", nil)
 		require.NoError(t, err)
 		require.Equal(t, i, int(base.N))
-		requireFileContent(t, s, base.Root, "test.txt", makeContents(i))
+		requireFileContent(t, s, s, base.Root, "test.txt", makeContents(i))
 	}
 	var count int
-	ForEachAncestor(ctx, s, *base, func(Ref, Snapshot) error {
+	err := ForEachAncestor(ctx, s, *base, func(ref Ref, snap Snapshot) error {
 		count++
 		return nil
 	})
+	require.NoError(t, err)
 	require.Equal(t, N, count)
+
+	err = Check(ctx, s, *base, func(root gotfs.Root) error {
+		return op.Check(ctx, s, root, func(gdat.Ref) error { return nil })
+	})
+	require.NoError(t, err)
 }
 
-func requireFileContent(t *testing.T, s cadata.Store, root gotfs.Root, p, content string) {
+func requireFileContent(t *testing.T, ms, ds cadata.Store, root gotfs.Root, p, content string) {
 	ctx := context.Background()
 	op := gotfs.NewOperator()
-	r := gotfs.NewReader(ctx, s, &op, root, p)
+	r := op.NewReader(ctx, ms, ds, root, p)
 	data, err := ioutil.ReadAll(r)
 	require.NoError(t, err)
 	require.Equal(t, content, string(data))

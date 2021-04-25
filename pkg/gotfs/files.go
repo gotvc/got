@@ -16,7 +16,7 @@ import (
 const (
 	minPartSize            = 1 << 12
 	maxPartSize            = 1 << 20
-	partSizeDoublingPeriod = 1
+	partSizeDoublingPeriod = 2
 )
 
 type writer struct {
@@ -105,21 +105,11 @@ func (o *Operator) CreateFile(ctx context.Context, ms, ds Store, x Root, p strin
 	if err != nil {
 		return nil, err
 	}
-	if p == "" {
-		return fileRoot, nil
-	}
-	fileRoot, err = o.gotkv.AddPrefix(ctx, ms, *fileRoot, []byte(p))
-	if err != nil {
-		return nil, err
-	}
-	y, err := o.EnsureDir(ctx, ms, x, parentPath(p))
-	if err != nil {
-		return nil, err
-	}
-	return o.gotkv.Merge(ctx, ms, *y, *fileRoot)
+	return o.Graft(ctx, ms, x, p, *fileRoot)
 }
 
-func (o *Operator) SizeOfFile(ctx context.Context, s Store, x Root, p string) (int, error) {
+// SizeOfFile returns the size of the file at p in bytes.
+func (o *Operator) SizeOfFile(ctx context.Context, s Store, x Root, p string) (uint64, error) {
 	gotkv := gotkv.NewOperator()
 	under := append([]byte(p), 0x01)
 	key, err := gotkv.MaxKey(ctx, s, x, under)
@@ -132,20 +122,21 @@ func (o *Operator) SizeOfFile(ctx context.Context, s Store, x Root, p string) (i
 	}
 	offset := binary.BigEndian.Uint64(key[len(key)-8:])
 	// size of part at that key
-	var size int
+	var size uint64
 	if err := gotkv.GetF(ctx, s, x, []byte(p), func(v []byte) error {
-		size = len(v)
+		size = uint64(len(v))
 		return nil
 	}); err != nil {
 		return 0, err
 	}
-	return int(offset) + size, nil
+	return offset + size, nil
 }
 
-func (o *Operator) ReadFileAt(ctx context.Context, s Store, x Root, p string, start uint64, buf []byte) (int, error) {
+// ReadFileAt fills `buf` with data in the file at `p` starting at offset `start`
+func (o *Operator) ReadFileAt(ctx context.Context, ms, ds Store, x Root, p string, start uint64, buf []byte) (int, error) {
 	kvop := gotkv.NewOperator()
 	dop := gdat.NewOperator()
-	_, err := o.GetFileMetadata(ctx, s, x, p)
+	_, err := o.GetFileMetadata(ctx, ms, x, p)
 	if err != nil {
 		return 0, err
 	}
@@ -154,7 +145,7 @@ func (o *Operator) ReadFileAt(ctx context.Context, s Store, x Root, p string, st
 		Start: key,
 		End:   fileSpanEnd(p),
 	}
-	it := kvop.NewIterator(s, x, span)
+	it := kvop.NewIterator(ms, x, span)
 	var n int
 	for n < len(buf) {
 		ent, err := it.Next(ctx)
@@ -180,7 +171,7 @@ func (o *Operator) ReadFileAt(ctx context.Context, s Store, x Root, p string, st
 			return 0, err
 		}
 		extentStart := extentEnd - uint64(part.Length)
-		if err := dop.GetF(ctx, s, *ref, func(data []byte) error {
+		if err := dop.GetF(ctx, ds, *ref, func(data []byte) error {
 			data = data[part.Offset : part.Offset+part.Length]
 			n += copy(buf, data[start-extentStart:])
 			return nil

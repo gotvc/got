@@ -7,11 +7,11 @@ type readOnly struct {
 }
 
 func Post(ctx context.Context, data []byte) (ID, error) {
-	panic("Post on read only")
+	panic("Post called on read only Store")
 }
 
 func Delete(ctx context.Context, id ID) error {
-	panic("Delete on read only")
+	panic("Delete called on read only Store")
 }
 
 // AssertReadOnly returns a new store backup by x, which will panic if it is modified.

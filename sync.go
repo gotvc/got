@@ -4,6 +4,7 @@ import (
 	"context"
 )
 
+// Sync synces 2 volumes by name.
 func (r *Repo) Sync(ctx context.Context, dst, src string, force bool) error {
 	realm := r.GetRealm()
 	srcV, err := realm.Get(ctx, src)
