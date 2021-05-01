@@ -53,12 +53,13 @@ func TestLargeFiles(t *testing.T) {
 	op := NewOperator()
 
 	const N = 5
+	const size = 1e8
 	fileRoots := make([]Root, N)
 	eg := errgroup.Group{}
 	for i := 0; i < N; i++ {
 		i := i
 		eg.Go(func() error {
-			x, err := op.CreateFileRoot(ctx, s, s, io.LimitReader(rand.Reader, 1e8))
+			x, err := op.CreateFileRoot(ctx, s, s, io.LimitReader(rand.Reader, size))
 			if err != nil {
 				return err
 			}
@@ -74,4 +75,19 @@ func TestLargeFiles(t *testing.T) {
 		root, err = op.Graft(ctx, s, *root, strconv.Itoa(i), fileRoots[i])
 		require.NoError(t, err)
 	}
+
+	eg = errgroup.Group{}
+	for i := range fileRoots {
+		i := i
+		p := strconv.Itoa(i)
+		actualSize, err := op.SizeOfFile(ctx, s, *root, p)
+		require.NoError(t, err)
+		require.Equal(t, uint64(size), actualSize)
+		eg.Go(func() error {
+			r := op.NewReader(ctx, s, s, *root, p)
+			_, err := io.CopyN(io.Discard, r, size)
+			return err
+		})
+	}
+	require.NoError(t, eg.Wait())
 }

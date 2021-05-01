@@ -12,6 +12,7 @@ func init() {
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(lsCmd)
 	rootCmd.AddCommand(catCmd)
+	rootCmd.AddCommand(checkCmd)
 }
 
 var statusCmd = &cobra.Command{
@@ -96,5 +97,14 @@ var catCmd = &cobra.Command{
 		}
 		w := cmd.OutOrStdout()
 		return repo.Cat(ctx, p, w)
+	},
+}
+
+var checkCmd = &cobra.Command{
+	Use:     "check",
+	Short:   "checks contents of the current volume",
+	PreRunE: loadRepo,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return repo.Check(ctx)
 	},
 }

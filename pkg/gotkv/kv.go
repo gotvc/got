@@ -38,8 +38,9 @@ func Sync(ctx context.Context, dst, src Store, x Root, entryFn func(Entry) error
 	} else if exists {
 		return nil
 	}
+	op := gdat.NewOperator()
 	if x.Depth == 0 {
-		ents, err := ptree.ListEntries(ctx, src, ptree.Index{First: x.First, Ref: x.Ref})
+		ents, err := ptree.ListEntries(ctx, src, &op, ptree.Index{First: x.First, Ref: x.Ref})
 		if err != nil {
 			return err
 		}
@@ -49,7 +50,7 @@ func Sync(ctx context.Context, dst, src Store, x Root, entryFn func(Entry) error
 			}
 		}
 	} else {
-		idxs, err := ptree.ListChildren(ctx, src, x)
+		idxs, err := ptree.ListChildren(ctx, src, &op, x)
 		if err != nil {
 			return err
 		}

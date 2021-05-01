@@ -101,12 +101,13 @@ func (s *Stage) Clear(ctx context.Context) error {
 			return nil, nil
 		})
 	})
-	eg.Go(func() error {
-		return cadata.DeleteAll(ctx, s.ms)
-	})
-	eg.Go(func() error {
-		return cadata.DeleteAll(ctx, s.ds)
-	})
+	// TODO: this is slow right now.
+	// eg.Go(func() error {
+	// 	return cadata.DeleteAll(ctx, s.ms)
+	// })
+	// eg.Go(func() error {
+	// 	return cadata.DeleteAll(ctx, s.ds)
+	// })
 	return eg.Wait()
 }
 

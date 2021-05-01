@@ -3,6 +3,7 @@ package got
 import (
 	"context"
 	"encoding/json"
+	"log"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/cells"
@@ -163,6 +164,8 @@ func tripleFromVolume(vol volumes.Volume) triple {
 }
 
 func syncStores(ctx context.Context, dst, src triple, snap gotvc.Snapshot) error {
+	log.Println("begin syncing stores")
+	log.Println("done syncing stores")
 	return gotvc.Sync(ctx, dst.VC, src.VC, snap, func(root gotfs.Root) error {
 		return gotfs.Sync(ctx, dst.FS, src.FS, root, func(ref gdat.Ref) error {
 			return cadata.Copy(ctx, dst.Raw, src.Raw, ref.CID)

@@ -48,6 +48,20 @@ func (s Span) Contains(k []byte) bool {
 	return !s.GreaterThan(k) && !s.LessThan(k)
 }
 
+func (s Span) Clone() Span {
+	var start, end []byte
+	if s.Start != nil {
+		start = append([]byte{}, s.Start...)
+	}
+	if s.End != nil {
+		end = append([]byte{}, s.End...)
+	}
+	return Span{
+		Start: start,
+		End:   end,
+	}
+}
+
 // KeyAfter returns the key immediately after x.
 // There will be no key less than the result and greater than x
 func KeyAfter(x []byte) []byte {

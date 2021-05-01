@@ -2,6 +2,7 @@ package gotfs
 
 import (
 	"context"
+	"log"
 	"strings"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
@@ -40,10 +41,9 @@ func NewOperator(opts ...Option) Operator {
 	return o
 }
 
-var defaultOp = NewOperator()
-
 // Select returns a new root containing everything under p, shifted to the root.
 func (o *Operator) Select(ctx context.Context, s cadata.Store, root Root, p string) (*Root, error) {
+	p = cleanPath(p)
 	_, err := o.GetMetadata(ctx, s, root, p)
 	if err != nil {
 		return nil, err
@@ -77,20 +77,21 @@ func (o *Operator) Walk(ctx context.Context, s cadata.Store, root Root, fn func(
 			if err != nil {
 				return err
 			}
-			return fn(string(ent.Key), md)
+			p := strings.Trim(string(ent.Key), string(Sep))
+			return fn(p, md)
 		}
 		return nil
 	})
 }
 
-// Graft places branch at offset p in root.
+// Graft places branch at p in root.
 // If p == "" then branch is returned unaltered.
 func (o *Operator) Graft(ctx context.Context, s cadata.Store, root Root, p string, branch Root) (*Root, error) {
 	p = cleanPath(p)
 	if p == "" {
 		return &branch, nil
 	}
-	root2, err := o.EnsureDir(ctx, s, root, parentPath(p))
+	root2, err := o.MkdirAll(ctx, s, root, parentPath(p))
 	if err != nil {
 		return nil, err
 	}
@@ -119,17 +120,26 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 			if len(ent.Key) != 0 {
 				return errors.Errorf("filesystem is missing root")
 			}
+			p := ""
+			lastPath = &p
 		case !isPartKey(ent.Key):
 			_, err := parseMetadata(ent.Value)
 			if err != nil {
 				return err
 			}
 			p := string(ent.Key)
+			log.Println("checking", p)
 			if !strings.HasPrefix(*lastPath, parentPath(p)) {
 				return errors.Errorf("path %s did not have parent", p)
 			}
+			lastPath = &p
+			lastOffset = nil
 		default:
 			p, off, err := splitPartKey(ent.Key)
+			if err != nil {
+				return err
+			}
+			part, err := parsePart(ent.Value)
 			if err != nil {
 				return err
 			}
@@ -139,17 +149,15 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 			if lastOffset != nil && off <= *lastOffset {
 				return errors.Errorf("part offsets not monotonic")
 			}
-		}
-		if isPartKey(ent.Key) {
-			p, off, err := splitPartKey(ent.Key)
+			ref, err := gdat.ParseRef(part.Ref)
 			if err != nil {
+				return err
+			}
+			if err := checkData(*ref); err != nil {
 				return err
 			}
 			lastPath = &p
 			lastOffset = &off
-		} else {
-			p := string(ent.Key)
-			lastPath = &p
 		}
 		return nil
 	})

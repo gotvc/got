@@ -182,167 +182,124 @@ func (b *Builder) copyTree(ctx context.Context, idx Index, depth int) error {
 }
 
 type Iterator struct {
-	s      cadata.Store
-	op     *gdat.Operator
-	levels []*StreamReader
-	span   Span
+	s    cadata.Store
+	op   *gdat.Operator
+	root Root
+	span Span
 }
 
 func NewIterator(s cadata.Store, op *gdat.Operator, root Root, span Span) *Iterator {
-	levels := make([]*StreamReader, root.Depth+1)
-	levels[root.Depth] = NewStreamReader(s, op, rootToIndex(root))
-	return &Iterator{
-		s:      s,
-		op:     op,
-		levels: levels,
-		span:   span,
+	it := &Iterator{
+		s:    s,
+		op:   op,
+		root: root,
+		span: span.Clone(),
 	}
-}
-
-func (it *Iterator) getReader(ctx context.Context, depth int) (*StreamReader, error) {
-	if depth == len(it.levels) {
-		return nil, io.EOF
-	}
-	if it.levels[depth] != nil {
-		return it.levels[depth], nil
-	}
-
-	// create a stream reader for depth, by reading an entry from depth+1
-	var ent *Entry
-	for {
-		sr, err := it.getReader(ctx, depth+1)
-		if err != nil {
-			return nil, err
-		}
-		ent, err = sr.Next(ctx)
-		if err != nil {
-			if err == io.EOF {
-				it.markEOF(depth + 1)
-				continue
-			}
-			return nil, err
-		}
-		break
-	}
-	idx, err := entryToIndex(*ent)
-	if err != nil {
-		return nil, err
-	}
-	it.levels[depth] = NewStreamReader(it.s, it.op, idx)
-	return it.levels[depth], nil
-}
-
-func (it *Iterator) markEOF(depth int) {
-	it.levels[depth] = nil
+	return it
 }
 
 func (it *Iterator) Next(ctx context.Context) (*Entry, error) {
-	for {
-		sr, err := it.getReader(ctx, 0)
-		if err != nil {
-			return nil, err // io.EOF here is the true EOF
-		}
-		ent, err := sr.Next(ctx)
-		if err != nil {
-			if err == io.EOF {
-				it.markEOF(0)
-				continue
-			}
-			return nil, err
-		}
-		if it.span.Contains(ent.Key) {
-			return ent, nil
-		}
+	ent, err := it.Peek(ctx)
+	if err != nil {
+		return nil, err
 	}
+	it.setPosAfter(ent.Key)
+	return ent, nil
 }
 
 func (it *Iterator) Peek(ctx context.Context) (*Entry, error) {
-	for {
-		sr, err := it.getReader(ctx, 0)
-		if err != nil {
-			return nil, err
-		}
-		ent, err := sr.Peek(ctx)
-		if err != nil {
-			if err == io.EOF {
-				it.markEOF(0)
-				continue
-			}
-			return nil, err
-		}
-		if it.span.Contains(ent.Key) {
-			return ent, nil
-		}
+	_, ent, err := it.peek(ctx)
+	if err != nil {
+		return nil, err
 	}
+	if it.span.LessThan(ent.Key) {
+		return nil, io.EOF
+	}
+	return ent, nil
+}
+
+func (it *Iterator) peek(ctx context.Context) (int, *Entry, error) {
+	return peekTree(ctx, it.s, it.op, it.root, it.span.Start)
 }
 
 func (it *Iterator) Seek(ctx context.Context, k []byte) error {
-	for i := len(it.levels) - 1; i >= 0; i-- {
-		sr, err := it.getReader(ctx, i)
-		if err != nil {
-			return err
-		}
-		if err := sr.Seek(ctx, k); err != nil {
-			return err
-		}
-	}
+	it.setPos(k)
 	return nil
 }
 
-func (it *Iterator) SyncedBelow(depth int) bool {
-	if depth > len(it.levels) {
-		return false
-	}
-	for i := range it.levels[:depth] {
-		if it.levels[i] != nil {
-			return false
-		}
-	}
-	return true
+func (it *Iterator) setPos(k []byte) {
+	it.span.Start = append(it.span.Start[:0], k...)
+}
+
+func (it *Iterator) setPosAfter(k []byte) {
+	it.setPos(k)
+	it.span.Start = append(it.span.Start, 0x00)
 }
 
 func (it *Iterator) nextIndex(ctx context.Context, depth int) (*Index, error) {
-	if !it.SyncedBelow(depth) {
-		panic("cannot iterate indexes. not synced")
-	}
-	sr, err := it.getReader(ctx, depth)
+	panic("not implemented")
+}
+
+func peekEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Index, gteq []byte) (*Entry, error) {
+	entries, err := ListEntries(ctx, s, op, idx)
 	if err != nil {
 		return nil, err
 	}
-	ent, err := sr.Next(ctx)
-	if err != nil {
-		return nil, err
+	for _, ent := range entries {
+		// ent.Key >= gteq
+		if bytes.Compare(ent.Key, gteq) >= 0 {
+			return &ent, nil
+		}
 	}
-	idx, err := entryToIndex(*ent)
-	if err != nil {
-		return nil, err
+	return nil, io.EOF
+}
+
+func peekTree(ctx context.Context, s cadata.Store, op *gdat.Operator, root Root, gteq []byte) (int, *Entry, error) {
+	if root.Depth == 0 {
+		idx := rootToIndex(root)
+		ent, err := peekEntries(ctx, s, op, idx, gteq)
+		if err != nil {
+			return 0, nil, err
+		}
+		var syncLevel int
+		if bytes.Equal(ent.Key, idx.First) {
+			syncLevel = 1
+		}
+		return syncLevel, ent, nil
+	} else {
+		idxs, err := ListChildren(ctx, s, op, root)
+		if err != nil {
+			return 0, nil, err
+		}
+		for i := 0; i < len(idxs); i++ {
+			// if the first element in the next is also lteq then skip.
+			if i+1 < len(idxs) && bytes.Compare(idxs[i+1].First, gteq) <= 0 {
+				continue
+			}
+			syncLevel, ent, err := peekTree(ctx, s, op, indexToRoot(idxs[i], root.Depth-1), gteq)
+			if err == io.EOF {
+				continue
+			}
+			if i == 0 {
+				syncLevel++
+			}
+			return syncLevel, ent, err
+		}
 	}
-	return &idx, nil
+	return 0, nil, io.EOF
 }
 
 // CopyAll copies all the entries from it to b.
 func CopyAll(ctx context.Context, b *Builder, it *Iterator) error {
 	for {
-		if err := func() error {
-			for i := len(b.levels); i > 0; i-- {
-				if !b.SyncedBelow(i) || !it.SyncedBelow(i) {
-					break
-				}
-				if err := copyIndex(ctx, b, it, i); err != nil {
-					if err == io.EOF {
-						return nil
-					}
-					return err
-				}
-			}
-			return copyEntry(ctx, b, it)
-		}(); err != nil {
+		if err := copyEntry(ctx, b, it); err != nil {
 			if err == io.EOF {
-				return nil
+				break
 			}
 			return err
 		}
 	}
+	return nil
 }
 
 func copyIndex(ctx context.Context, b *Builder, it *Iterator, depth int) error {
@@ -362,12 +319,11 @@ func copyEntry(ctx context.Context, b *Builder, it *Iterator) error {
 }
 
 // ListChildren returns the immediate children of root if any.
-func ListChildren(ctx context.Context, s cadata.Store, root Root) ([]Index, error) {
+func ListChildren(ctx context.Context, s cadata.Store, op *gdat.Operator, root Root) ([]Index, error) {
 	if root.Depth < 1 {
 		return nil, errors.Errorf("cannot list children of root with depth=%d", root.Depth)
 	}
-	op := gdat.NewOperator()
-	sr := NewStreamReader(s, &op, rootToIndex(root))
+	sr := NewStreamReader(s, op, rootToIndex(root))
 	var idxs []Index
 	for {
 		ent, err := sr.Next(ctx)
@@ -387,10 +343,9 @@ func ListChildren(ctx context.Context, s cadata.Store, root Root) ([]Index, erro
 }
 
 // ListEntries
-func ListEntries(ctx context.Context, s cadata.Store, idx Index) ([]Entry, error) {
+func ListEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Index) ([]Entry, error) {
 	var ents []Entry
-	op := gdat.NewOperator()
-	sr := NewStreamReader(s, &op, idx)
+	sr := NewStreamReader(s, op, idx)
 	for {
 		ent, err := sr.Next(ctx)
 		if err != nil {

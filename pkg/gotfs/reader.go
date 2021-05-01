@@ -17,8 +17,10 @@ func (o *Operator) NewReader(ctx context.Context, ms, ds Store, x Root, p string
 		ctx: ctx,
 		ms:  ms,
 		ds:  ds,
-		x:   x,
-		p:   p,
+		op:  o,
+
+		x: x,
+		p: p,
 	}
 }
 

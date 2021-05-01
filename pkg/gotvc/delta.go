@@ -3,6 +3,7 @@ package gotvc
 import (
 	"context"
 	"io"
+	"log"
 
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
@@ -106,6 +107,7 @@ func ApplyDelta(ctx context.Context, s Store, base *Snapshot, delta Delta) (*Sna
 	kvop := gotkv.NewOperator()
 	fsop := gotfs.NewOperator()
 	root := &base.Root
+	log.Println("begin applying deletions")
 	err := kvop.ForEach(ctx, s, delta.Deletions, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
 		var err error
 		root, err = fsop.RemoveAll(ctx, s, *root, string(ent.Key))
@@ -114,10 +116,14 @@ func ApplyDelta(ctx context.Context, s Store, base *Snapshot, delta Delta) (*Sna
 	if err != nil {
 		return nil, err
 	}
+	log.Println("done applying deletions")
+
+	log.Println("begin merging")
 	root, err = kvop.Merge(ctx, s, base.Root, delta.Additions)
 	if err != nil {
 		return nil, err
 	}
+	log.Println("done merging")
 
 	var parentRef *gdat.Ref
 	if base != nil {
