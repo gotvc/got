@@ -3,6 +3,7 @@ package cadata
 import (
 	"bytes"
 	"context"
+	"time"
 
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -24,6 +25,9 @@ type AsyncStore struct {
 }
 
 func NewAsyncStore(target Store, numWorkers int) *AsyncStore {
+	if numWorkers < 1 {
+		numWorkers = 1
+	}
 	eg, ctx := errgroup.WithContext(context.Background())
 	as := &AsyncStore{
 		target: target,
@@ -34,7 +38,12 @@ func NewAsyncStore(target Store, numWorkers int) *AsyncStore {
 	for i := 0; i < numWorkers; i++ {
 		as.eg.Go(func() error {
 			for buf := range as.todo {
-				if _, err := as.target.Post(ctx, buf.Bytes()); err != nil {
+				if err := func() error {
+					ctx, cf := context.WithTimeout(ctx, time.Second*1)
+					defer cf()
+					_, err := as.target.Post(ctx, buf.Bytes())
+					return err
+				}(); err != nil {
 					return err
 				}
 				buf.Reset()

@@ -78,13 +78,6 @@ func (r *Repo) SetActiveVolume(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	yes, err := r.StagingIsEmpty(ctx)
-	if err != nil {
-		return err
-	}
-	if !yes {
-		return errors.Errorf("cannot change active volume with non-empty staging")
-	}
 	return setActiveVolume(r.db, name)
 }
 

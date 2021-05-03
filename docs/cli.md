@@ -10,8 +10,9 @@ This prints information about the active volume and the contents of staging.
 Branch switches to the volume at name, or creates volume with the provided name and initializes it with the content of the current volume.
 
 ### `got commit [-m <message>]`
-Applies the contents of staging to the contents of the active volume, producing a new commit.
-The new commit is written to the current volume, replacing what was there.
+Produces a delta by looking at the tracked paths and applies that delta to the contents of the active volume.
+This produces a new commit.
+The new commit is written to the active volume, replacing what was there.
 
 ### `got ls <path>`
 Lists the children of path in the filesystem contained in the current volume.
@@ -19,23 +20,18 @@ Lists the children of path in the filesystem contained in the current volume.
 ### `got cat <path>`
 Writes the contents of the file at path, from the filesystem contained in the current volume, to stdout.
 
-## Staging
-These commands add and remove files from the staging area.
+## Tracking
+These files manage what content will be committed.
 
-### `got add <path>`
-Marks a file from the working tree to create or replace the corresponding file in staging.
+### `got track <path>`
+Start tracking the path. The path will be considered during the next commit.
+If the path does not exist, then it will be deleted.
 
-### `got rm <path>`
-Marks a file to be removed in staging.
-
-### `got unstage <path>`
-Removes a path from staging.  It will no longer be marked for addition or deletion if it was.
+### `got untrack <path>`
+Stop tracking the path, if it is tracked.
 
 ### `got clear`
-Unstages everything from staging.
-This is equivalent to calling `unstage` on every path in staging
-
-**NOTE UNSTABLE: may be added as a flag to unstage**
+Untracks everything.
 
 ## Volumes
 
@@ -46,15 +42,18 @@ Lists the available volumes
 Creates a new volume with configuration written to stdin.
 You can also create a volume by manually writing the configuration to the `.got/volume_specs` directory.
 
-### `got rm <name>
+### `got rm <name>`
 Deletes the volume with name if it exists
+
+### `got sync <src_vol> <dst_vol>`
+Sync the contents of src_vol to dst_vol.
 
 ## Misc
 
 ### `got slurp <path>`
 Slurp creates a gotfs filesystem from the file at path and writes the root, PEM encoded, to stdout.
 Slurp can reference paths outside of the repo.
-It does not write to any volumes or to staging.
+It does not write to any volumes.
 
 ### `got clobber <path>`
-This overwrites the data in the working tree at path with whatever is in staging + the active volume.
+This overwrites the data in the working tree at path with whatever is in the active volume

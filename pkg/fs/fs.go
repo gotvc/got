@@ -173,11 +173,16 @@ func WriteIfNotExists(fs FS, p string, data []byte) error {
 }
 
 func WalkFiles(ctx context.Context, fs FS, p string, fn func(p string) error) error {
-	return fs.ReadDir(p, func(finfo os.FileInfo) error {
-		p2 := filepath.Join(p, finfo.Name())
-		if finfo.IsDir() {
+	finfo, err := fs.Stat(p)
+	if err != nil {
+		return err
+	}
+	if finfo.IsDir() {
+		return fs.ReadDir(p, func(finfo os.FileInfo) error {
+			p2 := filepath.Join(p, finfo.Name())
 			return WalkFiles(ctx, fs, p2, fn)
-		}
-		return fn(p2)
-	})
+		})
+	} else {
+		return fn(p)
+	}
 }

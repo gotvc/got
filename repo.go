@@ -34,6 +34,7 @@ const (
 const (
 	bucketCellData = "cells"
 	bucketStores   = "stores"
+	bucketTracker  = "tracker"
 )
 
 // fs paths
@@ -58,6 +59,7 @@ type Repo struct {
 	workingDir   FS
 	specDir      *volSpecDir
 	storeManager *storeManager
+	tracker      *tracker
 	swarm        peerswarm.AskSwarm
 }
 
@@ -116,6 +118,7 @@ func OpenRepo(p string) (*Repo, error) {
 		workingDir: fs.NewFilterFS(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
+		tracker: newTracker(db, []string{bucketTracker}),
 	}
 	r.specDir = newVolSpecDir(r.MakeCell, r.MakeStore, fs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
 	if err := volumes.CreateIfNotExists(context.TODO(), r.specDir, nameMaster); err != nil {
