@@ -38,7 +38,7 @@ func NewOperator(opts ...Option) Operator {
 	for _, opt := range opts {
 		opt(&o)
 	}
-	o.gotkv = gotkv.NewOperator(gotkv.WithRefOperator(o.dop))
+	o.gotkv = gotkv.NewOperator(gotkv.WithDataOperator(o.dop))
 	return o
 }
 

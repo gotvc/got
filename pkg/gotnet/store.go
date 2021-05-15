@@ -167,8 +167,6 @@ func askJson(ctx context.Context, s p2p.Asker, dst p2p.PeerID, resp, req interfa
 	return json.Unmarshal(respData, resp)
 }
 
-//var _ cadata.Store = &store{}
-
 type store struct {
 	peer p2p.PeerID
 	name string

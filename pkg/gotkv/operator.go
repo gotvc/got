@@ -21,7 +21,7 @@ type Iterator interface {
 
 type Option func(op *Operator)
 
-func WithRefOperator(ro gdat.Operator) Option {
+func WithDataOperator(ro gdat.Operator) Option {
 	return func(o *Operator) {
 		o.dop = ro
 	}

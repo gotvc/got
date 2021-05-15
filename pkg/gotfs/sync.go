@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotkv"
 )
@@ -30,4 +31,22 @@ func Sync(ctx context.Context, dst, src Store, root Root, syncData func(ref gdat
 
 func isPartKey(x []byte) bool {
 	return len(x) >= 9 && bytes.Index(x, []byte{0x00}) == len(x)-9
+}
+
+// Populate adds the ID for all the metadata blobs to mdSet and all the data blobs to dataSet
+func Populate(ctx context.Context, s Store, root Root, mdSet, dataSet cadata.Set) error {
+	return gotkv.Populate(ctx, s, root, mdSet, func(ent gotkv.Entry) error {
+		if isPartKey(ent.Key) {
+			part, err := parsePart(ent.Value)
+			if err != nil {
+				return err
+			}
+			ref, err := gdat.ParseRef(part.Ref)
+			if err != nil {
+				return err
+			}
+			return dataSet.Add(ctx, ref.CID)
+		}
+		return nil
+	})
 }

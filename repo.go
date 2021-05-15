@@ -106,6 +106,7 @@ func OpenRepo(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
+	db.NoSync = true
 	privateKey, err := LoadPrivateKey(repoFS, privateKeyPath)
 	if err != nil {
 		return nil, err

@@ -101,3 +101,24 @@ func DeleteAll(ctx context.Context, s Store) error {
 		return s.Delete(ctx, id)
 	})
 }
+
+type Set interface {
+	Exists(ctx context.Context, id ID) (bool, error)
+	Add(ctx context.Context, id ID) error
+}
+
+type MemSet map[ID]struct{}
+
+func (ms MemSet) Exists(ctx context.Context, id ID) (bool, error) {
+	_, exists := ms[id]
+	return exists, nil
+}
+
+func (ms MemSet) Add(ctx context.Context, id ID) error {
+	ms[id] = struct{}{}
+	return nil
+}
+
+func (ms MemSet) Count() int {
+	return len(ms)
+}
