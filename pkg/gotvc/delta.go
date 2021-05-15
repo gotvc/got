@@ -5,7 +5,6 @@ import (
 	"io"
 	"log"
 
-	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotkv"
 )
@@ -73,7 +72,7 @@ func DiffWithNothing(ctx context.Context, s Store, a Snapshot) (*Delta, error) {
 func (d *Delta) ListAdditionPaths(ctx context.Context, s Store) ([]string, error) {
 	fsop := gotfs.NewOperator()
 	var additions []string
-	if err := fsop.Walk(ctx, s, d.Additions, func(p string, md *gotfs.Metadata) error {
+	if err := fsop.ForEach(ctx, s, d.Additions, "", func(p string, md *gotfs.Metadata) error {
 		additions = append(additions, p)
 		return nil
 	}); err != nil {
@@ -96,45 +95,29 @@ func (d *Delta) ListDeletionPaths(ctx context.Context, s Store) ([]string, error
 
 // ApplyDelta makes the changes in delta to base and returns the result.
 func ApplyDelta(ctx context.Context, s Store, base *Snapshot, delta Delta) (*Snapshot, error) {
-	if base == nil {
-		return &Snapshot{
-			N:      0,
-			Root:   delta.Additions,
-			Parent: nil,
-		}, nil
-	}
-
 	kvop := gotkv.NewOperator()
 	fsop := gotfs.NewOperator()
-	root := &base.Root
-	log.Println("begin applying deletions")
-	err := kvop.ForEach(ctx, s, delta.Deletions, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
-		var err error
-		root, err = fsop.RemoveAll(ctx, s, *root, string(ent.Key))
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	log.Println("done applying deletions")
-
-	log.Println("begin merging")
-	root, err = kvop.Merge(ctx, s, base.Root, delta.Additions)
-	if err != nil {
-		return nil, err
-	}
-	log.Println("done merging")
-
-	var parentRef *gdat.Ref
-	if base != nil {
-		var err error
-		if parentRef, err = PostSnapshot(ctx, s, *base); err != nil {
+	return Change(ctx, s, base, func(root *Root) (*Root, error) {
+		if root == nil {
+			return &delta.Additions, nil
+		}
+		log.Println("begin applying deletions")
+		err := kvop.ForEach(ctx, s, delta.Deletions, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
+			var err error
+			root, err = fsop.RemoveAll(ctx, s, *root, string(ent.Key))
+			return err
+		})
+		if err != nil {
 			return nil, err
 		}
-	}
-	return &Snapshot{
-		N:      base.N + 1,
-		Root:   *root,
-		Parent: parentRef,
-	}, nil
+		log.Println("done applying deletions")
+
+		log.Println("begin merging")
+		root, err = kvop.Merge(ctx, s, base.Root, delta.Additions)
+		if err != nil {
+			return nil, err
+		}
+		log.Println("done merging")
+		return root, nil
+	})
 }

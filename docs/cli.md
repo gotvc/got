@@ -1,6 +1,5 @@
 # CLI
 
-
 ## General
 
 ### `got status`
@@ -21,7 +20,7 @@ Lists the children of path in the filesystem contained in the current volume.
 Writes the contents of the file at path, from the filesystem contained in the current volume, to stdout.
 
 ## Tracking
-These files manage what content will be committed.
+These commands manage what content will be committed.
 
 ### `got track <path>`
 Start tracking the path. The path will be considered during the next commit.
@@ -57,3 +56,6 @@ It does not write to any volumes.
 
 ### `got clobber <path>`
 This overwrites the data in the working tree at path with whatever is in the active volume
+
+### `got check`
+Runs validation checks on the snapshots in the current history and their filesystems.

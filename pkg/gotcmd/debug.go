@@ -11,6 +11,14 @@ var debugCmd = &cobra.Command{
 	PreRunE: loadRepo,
 	Hidden:  true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return repo.DebugDB(ctx, cmd.OutOrStdout())
+		p := args[0]
+		switch p {
+		case "db":
+			return repo.DebugDB(ctx, cmd.OutOrStdout())
+		case "fs":
+			return repo.DebugFS(ctx, cmd.OutOrStdout())
+		default:
+			return nil
+		}
 	},
 }

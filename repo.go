@@ -17,6 +17,7 @@ import (
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotnet"
 	"github.com/brendoncarroll/got/pkg/gotvc"
+	"github.com/brendoncarroll/got/pkg/ptree"
 	"github.com/brendoncarroll/got/pkg/volumes"
 	"github.com/inet256/inet256/pkg/inet256p2p"
 	"github.com/pkg/errors"
@@ -211,6 +212,19 @@ func (r *Repo) DebugDB(ctx context.Context, w io.Writer) error {
 
 		return nil
 	})
+}
+
+func (r *Repo) DebugFS(ctx context.Context, w io.Writer) error {
+	_, vol, err := r.GetActiveVolume(ctx)
+	if err != nil {
+		return err
+	}
+	x, err := getSnapshot(ctx, vol.Cell)
+	if err != nil {
+		return err
+	}
+	ptree.DebugTree(vol.FSStore, x.Root)
+	return nil
 }
 
 func dumpBucket(w io.Writer, b *bolt.Bucket) {

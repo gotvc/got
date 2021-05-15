@@ -65,6 +65,10 @@ func CopyAll(ctx context.Context, dst, src Store) error {
 	if caf, ok := dst.(CopyAllFrom); ok {
 		return caf.CopyAllFrom(ctx, src)
 	}
+	return CopyAllBasic(ctx, dst, src)
+}
+
+func CopyAllBasic(ctx context.Context, dst, src Store) error {
 	const numWorkers = 16
 	ch := make(chan blobs.ID)
 	eg, ctx := errgroup.WithContext(ctx)

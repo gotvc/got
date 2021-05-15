@@ -3,6 +3,7 @@ package gotfs
 import (
 	"context"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
@@ -70,8 +71,9 @@ func (o *Operator) deleteOutside(ctx context.Context, s cadata.Store, root Root,
 	return x, err
 }
 
-func (o *Operator) Walk(ctx context.Context, s cadata.Store, root Root, fn func(p string, md *Metadata) error) error {
-	return o.gotkv.ForEach(ctx, s, root, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
+func (o *Operator) ForEach(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Metadata) error) error {
+	p = cleanPath(p)
+	fn2 := func(ent gotkv.Entry) error {
 		if !isPartKey(ent.Key) {
 			md, err := parseMetadata(ent.Value)
 			if err != nil {
@@ -81,6 +83,19 @@ func (o *Operator) Walk(ctx context.Context, s cadata.Store, root Root, fn func(
 			return fn(p, md)
 		}
 		return nil
+	}
+	if err := o.gotkv.ForEach(ctx, s, root, gotkv.SingleKeySpan([]byte(p)), fn2); err != nil {
+		return err
+	}
+	return o.gotkv.ForEach(ctx, s, root, gotkv.PrefixSpan([]byte(p+"/")), fn2)
+}
+
+func (o *Operator) ForEachFile(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Metadata) error) error {
+	return o.ForEach(ctx, s, root, p, func(p string, md *Metadata) error {
+		if os.FileMode(md.Mode).IsDir() {
+			return nil
+		}
+		return fn(p, md)
 	})
 }
 
@@ -117,6 +132,7 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 	return o.gotkv.ForEach(ctx, s, root, gotkv.Span{}, func(ent gotkv.Entry) error {
 		switch {
 		case lastPath == nil:
+			log.Printf("checking root")
 			if len(ent.Key) != 0 {
 				return errors.Errorf("filesystem is missing root")
 			}
@@ -128,7 +144,7 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 				return err
 			}
 			p := string(ent.Key)
-			log.Println("checking", p)
+			log.Printf("checking %q", p)
 			if !strings.HasPrefix(*lastPath, parentPath(p)) {
 				return errors.Errorf("path %s did not have parent", p)
 			}

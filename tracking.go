@@ -19,11 +19,11 @@ func (r *Repo) Untrack(ctx context.Context, p string) error {
 
 func (r *Repo) ForEachTracked(ctx context.Context, fn func(p string, isDelete bool) error) error {
 	return r.tracker.ForEach(ctx, func(p string) error {
-		_, err := r.workingDir.Stat(p)
-		if err != nil && !fs.IsNotExist(err) {
+		exists, err := fs.Exists(r.workingDir, p)
+		if err != nil {
 			return err
 		}
-		return fn(p, fs.IsNotExist(err))
+		return fn(p, !exists)
 	})
 }
 

@@ -186,3 +186,15 @@ func WalkFiles(ctx context.Context, fs FS, p string, fn func(p string) error) er
 		return fn(p)
 	}
 }
+
+func Exists(fs FS, p string) (bool, error) {
+	_, err := fs.Stat(p)
+	switch {
+	case IsNotExist(err):
+		return false, nil
+	case err != nil:
+		return false, err
+	default:
+		return true, nil
+	}
+}

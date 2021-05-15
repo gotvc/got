@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
+	"log"
 	"sync"
 
 	"github.com/blobcache/blobcache/pkg/blobs"
@@ -257,6 +258,31 @@ func (s virtualStore) List(ctx context.Context, prefix []byte, ids []cadata.ID) 
 		return 0, err
 	}
 	return n, nil
+}
+
+func (s virtualStore) CopyAllFrom(ctx context.Context, src cadata.Store) error {
+	log.Println("doing optimized copy")
+	vs2, ok := src.(virtualStore)
+	if !ok {
+		return cadata.CopyAllBasic(ctx, s, src)
+	}
+	return s.sm.db.Batch(func(tx *bolt.Tx) error {
+		b, _ := s.sm.bucket(tx)
+		if b == nil {
+			return nil
+		}
+		return forEachInSet(b, vs2.id, nil, func(id cadata.ID) error {
+			if exists, err := isInSet(b, s.id, id); err != nil {
+				return err
+			} else if exists {
+				return nil
+			}
+			if err := addToSet(b, s.id, id); err != nil {
+				return err
+			}
+			return incrCount(b, id)
+		})
+	})
 }
 
 func addToSet(b *bolt.Bucket, setID StoreID, id cadata.ID) error {

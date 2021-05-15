@@ -76,6 +76,7 @@ func (o *Operator) ReadDir(ctx context.Context, s Store, x Root, p string, fn fu
 }
 
 func (o *Operator) RemoveAll(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+	p = cleanPath(p)
 	md, err := o.GetMetadata(ctx, s, x, p)
 	if os.IsNotExist(err) {
 		return &x, nil
@@ -84,16 +85,20 @@ func (o *Operator) RemoveAll(ctx context.Context, s Store, x Root, p string) (*R
 		return nil, err
 	}
 	mode := os.FileMode(md.Mode)
+	y := &x
 	var span gotkv.Span
 	if mode.IsDir() {
-		span = gotkv.PrefixSpan([]byte(p))
+		if y, err = o.gotkv.Delete(ctx, s, *y, []byte(p)); err != nil {
+			return nil, err
+		}
+		span = gotkv.PrefixSpan([]byte(p + "/"))
 	} else {
 		span = gotkv.Span{
 			Start: []byte(p),
 			End:   fileSpanEnd(p),
 		}
 	}
-	return o.gotkv.DeleteSpan(ctx, s, x, span)
+	return o.gotkv.DeleteSpan(ctx, s, *y, span)
 }
 
 func cleanPath(p string) string {

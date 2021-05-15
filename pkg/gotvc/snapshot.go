@@ -46,6 +46,30 @@ func NewSnapshot(ctx context.Context, s cadata.Store, root Root, parentRef *gdat
 	}, nil
 }
 
+func Change(ctx context.Context, s cadata.Store, base *Snapshot, fn func(root *gotfs.Root) (*gotfs.Root, error)) (*Snapshot, error) {
+	var parentRef *Ref
+	var n uint64
+	var root *Root
+	if base != nil {
+		var err error
+		parentRef, err = PostSnapshot(ctx, s, *base)
+		if err != nil {
+			return nil, err
+		}
+		n = base.N + 1
+		root = &base.Root
+	}
+	root, err := fn(root)
+	if err != nil {
+		return nil, err
+	}
+	return &Snapshot{
+		Parent: parentRef,
+		N:      n,
+		Root:   *root,
+	}, nil
+}
+
 // PostSnapshot marshals the snapshot and posts it to the store
 func PostSnapshot(ctx context.Context, s Store, x Snapshot) (*Ref, error) {
 	dop := gdat.NewOperator()

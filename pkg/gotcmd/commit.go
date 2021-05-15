@@ -24,7 +24,10 @@ var commitCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// TODO get message from -m flag
 		now := time.Now()
-		return repo.Commit(ctx, "", &now)
+		return repo.Commit(ctx, got.CommitInfo{
+			Message:   "",
+			CreatedAt: &now,
+		})
 	},
 }
 
