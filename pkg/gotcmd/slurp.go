@@ -14,9 +14,10 @@ func init() {
 }
 
 var slurpCmd = &cobra.Command{
-	Use:     "slurp",
-	Short:   "imports a file or directory and returns a ref",
-	PreRunE: loadRepo,
+	Use:      "slurp",
+	Short:    "imports a file or directory and returns a ref",
+	PreRunE:  loadRepo,
+	PostRunE: closeRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) < 1 {
 			return errors.Errorf("must provide target to ingest")

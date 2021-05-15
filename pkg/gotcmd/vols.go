@@ -23,9 +23,10 @@ func init() {
 }
 
 var newVolCmd = &cobra.Command{
-	Use:     "new-vol",
-	Short:   "creates a volume with the config from stdin",
-	PreRunE: loadRepo,
+	Use:      "new-vol",
+	Short:    "creates a volume with the config from stdin",
+	PreRunE:  loadRepo,
+	PostRunE: closeRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if err := cmd.ParseFlags(args); err != nil {
 			return err
@@ -49,9 +50,10 @@ var setupVolCmd = &cobra.Command{
 }
 
 var listVolCmd = &cobra.Command{
-	Use:     "ls-vol",
-	Short:   "lists the volumes",
-	PreRunE: loadRepo,
+	Use:      "ls-vol",
+	Short:    "lists the volumes",
+	PreRunE:  loadRepo,
+	PostRunE: closeRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		r := repo.GetRealm()
 		w := cmd.OutOrStdout()
@@ -63,9 +65,10 @@ var listVolCmd = &cobra.Command{
 }
 
 var rmVolCmd = &cobra.Command{
-	Use:     "rm-vol",
-	Short:   "deletes a volume",
-	PreRunE: loadRepo,
+	Use:      "rm-vol",
+	Short:    "deletes a volume",
+	PreRunE:  loadRepo,
+	PostRunE: closeRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var cellName string
 		if len(args[0]) > 0 {
@@ -79,9 +82,10 @@ var rmVolCmd = &cobra.Command{
 }
 
 var branchCmd = &cobra.Command{
-	Use:     "branch",
-	Short:   "creates a local volume if it does not exist and switches to it",
-	PreRunE: loadRepo,
+	Use:      "branch",
+	Short:    "creates a local volume if it does not exist and switches to it",
+	PreRunE:  loadRepo,
+	PostRunE: closeRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var name string
 		if len(args) > 0 {

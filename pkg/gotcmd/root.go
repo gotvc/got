@@ -29,3 +29,7 @@ func loadRepo(cmd *cobra.Command, args []string) error {
 	repo = r
 	return nil
 }
+
+func closeRepo(cmd *cobra.Command, args []string) error {
+	return repo.Close()
+}

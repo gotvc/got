@@ -7,8 +7,9 @@ func init() {
 }
 
 var cleanupCmd = &cobra.Command{
-	Use:     "cleanup",
-	PreRunE: loadRepo,
+	Use:      "cleanup",
+	PreRunE:  loadRepo,
+	PostRunE: closeRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return repo.Cleanup(ctx, args)
 	},

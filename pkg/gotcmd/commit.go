@@ -18,9 +18,10 @@ func init() {
 }
 
 var commitCmd = &cobra.Command{
-	Use:     "commit",
-	Short:   "commits the contents of staging applied to the contents of the active volume",
-	PreRunE: loadRepo,
+	Use:      "commit",
+	Short:    "commits the contents of staging applied to the contents of the active volume",
+	PreRunE:  loadRepo,
+	PostRunE: closeRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// TODO get message from -m flag
 		now := time.Now()
