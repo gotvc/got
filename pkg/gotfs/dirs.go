@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/brendoncarroll/got/pkg/gotkv"
@@ -102,6 +103,10 @@ func (o *Operator) RemoveAll(ctx context.Context, s Store, x Root, p string) (*R
 }
 
 func cleanPath(p string) string {
+	p = path.Clean(p)
+	if p == "." {
+		return ""
+	}
 	p = strings.Trim(p, string(Sep))
 	if p != "" {
 		p = "/" + p
