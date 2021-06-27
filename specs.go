@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-p2p/c/httpcell"
+	"github.com/brendoncarroll/go-state/cells/httpcell"
 	"github.com/brendoncarroll/got/pkg/cells"
 	"github.com/pkg/errors"
 )
@@ -155,7 +155,7 @@ func (r *Repo) MakeCell(k string, spec CellSpec) (Cell, error) {
 			}
 			privateKey = privKey
 		}
-		return cells.NewSigned(inner, "got-signed-cell", pubKey, privateKey), nil
+		return cells.NewSigned(inner, pubKey, privateKey), nil
 
 	default:
 		return nil, errors.Errorf("empty cell spec")

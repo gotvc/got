@@ -3,6 +3,8 @@ package got
 import (
 	"encoding/json"
 
+	"github.com/pkg/errors"
+
 	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/cells"
 	"github.com/brendoncarroll/got/pkg/fs"
@@ -10,7 +12,6 @@ import (
 	"github.com/brendoncarroll/got/pkg/gotkv"
 	"github.com/brendoncarroll/got/pkg/gotvc"
 	"github.com/brendoncarroll/got/pkg/volumes"
-	"github.com/pkg/errors"
 )
 
 type (

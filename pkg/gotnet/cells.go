@@ -43,10 +43,14 @@ type cell struct {
 	srv *cellSrv
 }
 
-func (c *cell) CAS(ctx context.Context, prev, next []byte) (bool, []byte, error) {
+func (c *cell) CAS(ctx context.Context, actual, prev, next []byte) (bool, int, error) {
 	panic("not implemented")
 }
 
-func (c *cell) Get(ctx context.Context) ([]byte, error) {
+func (c *cell) Read(ctx context.Context, buf []byte) (int, error) {
 	panic("not implemented")
+}
+
+func (c *cell) MaxSize() int {
+	return 1 << 16
 }

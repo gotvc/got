@@ -5,14 +5,15 @@ import (
 	"encoding/json"
 	"log"
 
+	"github.com/brendoncarroll/go-state/cells"
+	"github.com/pkg/errors"
+	bolt "go.etcd.io/bbolt"
+
 	"github.com/brendoncarroll/got/pkg/cadata"
-	"github.com/brendoncarroll/got/pkg/cells"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotvc"
 	"github.com/brendoncarroll/got/pkg/volumes"
-	"github.com/pkg/errors"
-	bolt "go.etcd.io/bbolt"
 )
 
 // SyncVolumes moves the commit in src and all it's data from to dst
@@ -110,7 +111,7 @@ func setActiveVolume(db *bolt.DB, name string) error {
 }
 
 func getSnapshot(ctx context.Context, c cells.Cell) (*Commit, error) {
-	data, err := c.Get(ctx)
+	data, err := cells.GetBytes(ctx, c)
 	if err != nil {
 		return nil, err
 	}
