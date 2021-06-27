@@ -11,7 +11,11 @@ import (
 	"github.com/brendoncarroll/got/pkg/volumes"
 )
 
-func (r *Repo) Cleanup(ctx context.Context, volNames []string) error {
+func (r *Repo) Cleanup(ctx context.Context) error {
+	return r.porter.Cleanup(ctx)
+}
+
+func (r *Repo) CleanupVolumes(ctx context.Context, volNames []string) error {
 	if len(volNames) == 0 {
 		name, _, err := r.GetActiveVolume(ctx)
 		if err != nil {

@@ -2,7 +2,6 @@ package got
 
 import (
 	"context"
-	"io"
 	"log"
 	"time"
 
@@ -59,12 +58,7 @@ func (r *Repo) Commit(ctx context.Context, commitInfo CommitInfo) error {
 					}
 				}
 				if err := r.forEachToAdd(ctx, target, func(p string) error {
-					rc, err := r.workingDir.Open(p)
-					if err != nil {
-						return err
-					}
-					defer rc.Close()
-					root, err = r.putPath(ctx, src.FS, src.Raw, *root, p, rc)
+					root, err = r.putPath(ctx, src.FS, src.Raw, *root, p)
 					if err != nil {
 						return err
 					}
@@ -130,10 +124,9 @@ func (r *Repo) forEachToAdd(ctx context.Context, target string, fn func(p string
 	return err
 }
 
-func (r *Repo) putPath(ctx context.Context, ms, ds Store, x Root, p string, rdr io.Reader) (*Root, error) {
+func (r *Repo) putPath(ctx context.Context, ms, ds Store, x Root, p string) (*Root, error) {
 	log.Println("processing PUT:", p)
-	fsop := r.getFSOp()
-	fileRoot, err := fsop.CreateFileRoot(ctx, ms, ds, rdr)
+	fileRoot, err := r.porter.Import(ctx, ms, ds, r.repoFS, p)
 	if err != nil {
 		return nil, err
 	}

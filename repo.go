@@ -36,6 +36,7 @@ const (
 	bucketCellData = "cells"
 	bucketStores   = "stores"
 	bucketTracker  = "tracker"
+	bucketPorter   = "porter"
 )
 
 // fs paths
@@ -58,6 +59,7 @@ type Repo struct {
 
 	realms       []Realm
 	workingDir   FS
+	porter       *porter
 	specDir      *volSpecDir
 	storeManager *storeManager
 	tracker      *tracker
@@ -128,6 +130,7 @@ func OpenRepo(p string) (*Repo, error) {
 	}
 	fsStore := cadata.NewFSStore(fs.NewDirFS(filepath.Join(r.rootPath, storePath)))
 	r.storeManager = newStoreManager(fsStore, r.db, bucketStores)
+	r.porter = newPorter(db, []string{bucketPorter}, r.getFSOp())
 	return r, nil
 }
 

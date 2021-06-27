@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotkv"
 	"github.com/pkg/errors"
 )
@@ -92,4 +93,10 @@ func pathFromKey(key []byte) (string, error) {
 		return "", errors.Errorf("gotfs: invalid key %q", key)
 	}
 	return string(key), nil
+}
+
+func Equal(a, b Root) bool {
+	return gdat.Equal(a.Ref, b.Ref) &&
+		bytes.Equal(a.First, b.First) &&
+		a.Depth == b.Depth
 }

@@ -11,6 +11,6 @@ var cleanupCmd = &cobra.Command{
 	PreRunE:  loadRepo,
 	PostRunE: closeRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return repo.Cleanup(ctx, args)
+		return repo.CleanupVolumes(ctx, args)
 	},
 }
