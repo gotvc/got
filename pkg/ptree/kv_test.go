@@ -5,7 +5,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +13,7 @@ import (
 func TestAddPrefix(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	s := cadata.NewMem()
+	s := cadata.NewMem(defaultMaxSize)
 	op := gdat.NewOperator()
 	b := NewBuilder(s, &op)
 

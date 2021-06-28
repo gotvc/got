@@ -9,7 +9,7 @@ import (
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotvc"

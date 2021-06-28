@@ -9,8 +9,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/blobcache/blobcache/pkg/blobs"
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/stretchr/testify/require"
 )
@@ -35,7 +34,7 @@ func TestStreamRW(t *testing.T) {
 	var refs []Ref
 	var idxs []Index
 
-	s := cadata.NewMem()
+	s := cadata.NewMem(defaultMaxSize)
 	sw := NewStreamWriter(s, &op, defaultAvgSize, defaultMaxSize, func(idx Index) error {
 		idxs = append(idxs, idx)
 		refs = append(refs, idx.Ref)
@@ -88,7 +87,7 @@ func BenchmarkStreamWriter(b *testing.B) {
 
 	ctx := context.Background()
 	op := gdat.NewOperator()
-	s := blobs.Void{}
+	s := cadata.Void{}
 	sw := NewStreamWriter(s, &op, defaultAvgSize, defaultMaxSize, func(idx Index) error {
 		return nil
 	})

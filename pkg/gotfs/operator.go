@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotkv"
 	"github.com/pkg/errors"

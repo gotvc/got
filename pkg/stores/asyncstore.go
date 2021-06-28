@@ -1,13 +1,16 @@
-package cadata
+package stores
 
 import (
 	"bytes"
 	"context"
 	"time"
 
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
+
+var _ cadata.Store = &AsyncStore{}
 
 // AsyncStore allows blobs to be Posted in the background by a pool of workers.
 // It is not safe for concurrent use by multiple callers.
@@ -58,7 +61,7 @@ func (s *AsyncStore) Post(ctx context.Context, data []byte) (ID, error) {
 	// TODO: error if closed
 	buf := &bytes.Buffer{}
 	buf.Write(data)
-	id := Hash(data)
+	id := cadata.DefaultHash(data)
 	select {
 	case <-ctx.Done():
 		return ID{}, ctx.Err()
@@ -69,8 +72,8 @@ func (s *AsyncStore) Post(ctx context.Context, data []byte) (ID, error) {
 	return id, nil
 }
 
-func (s *AsyncStore) GetF(ctx context.Context, id ID, fn func([]byte) error) error {
-	return s.target.GetF(ctx, id, fn)
+func (s *AsyncStore) Read(ctx context.Context, id ID, buf []byte) (int, error) {
+	return s.target.Read(ctx, id, buf)
 }
 
 func (s *AsyncStore) Delete(ctx context.Context, id ID) error {
@@ -88,4 +91,12 @@ func (s *AsyncStore) List(ctx context.Context, prefix []byte, ids []ID) (int, er
 func (s *AsyncStore) Close() error {
 	close(s.todo)
 	return s.eg.Wait()
+}
+
+func (s *AsyncStore) Hash(x []byte) ID {
+	return s.target.Hash(x)
+}
+
+func (s *AsyncStore) MaxSize() int {
+	return s.target.MaxSize()
 }

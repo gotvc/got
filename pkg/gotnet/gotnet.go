@@ -5,7 +5,7 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/stringmux"
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/volumes"
 	"golang.org/x/sync/errgroup"
 )

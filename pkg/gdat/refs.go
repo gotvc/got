@@ -5,7 +5,7 @@ import (
 	"crypto/hmac"
 	"encoding/base64"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/pkg/errors"
 )
 

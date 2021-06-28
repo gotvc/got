@@ -8,8 +8,7 @@ import (
 	"log"
 	"sync"
 
-	"github.com/blobcache/blobcache/pkg/blobs"
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -25,7 +24,9 @@ type storeManager struct {
 	store      Store
 	db         *bolt.DB
 	bucketName string
-	mu         sync.RWMutex
+	maxSize    int
+
+	mu sync.RWMutex
 }
 
 func newStoreManager(store Store, db *bolt.DB, bucketName string) *storeManager {
@@ -33,6 +34,7 @@ func newStoreManager(store Store, db *bolt.DB, bucketName string) *storeManager 
 		store:      store,
 		db:         db,
 		bucketName: bucketName,
+		maxSize:    MaxBlobSize,
 	}
 }
 
@@ -123,7 +125,7 @@ func (sm *storeManager) bucket(tx *bolt.Tx) (*bolt.Bucket, error) {
 
 var _ interface {
 	cadata.Store
-	cadata.Pinner
+	cadata.Adder
 } = &virtualStore{}
 
 type virtualStore struct {
@@ -133,7 +135,7 @@ type virtualStore struct {
 
 // Post implements cadata.Poster
 func (s virtualStore) Post(ctx context.Context, data []byte) (cadata.ID, error) {
-	id := cadata.Hash(data)
+	id := cadata.DefaultHash(data)
 	if err := s.sm.db.Batch(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists([]byte(s.sm.bucketName))
 		if err != nil {
@@ -154,8 +156,8 @@ func (s virtualStore) Post(ctx context.Context, data []byte) (cadata.ID, error) 
 	return s.sm.maybePost(ctx, id, data)
 }
 
-// Pin implements cadata.Pinner
-func (s virtualStore) Pin(ctx context.Context, id cadata.ID) error {
+// Add implements cadata.Adder
+func (s virtualStore) Add(ctx context.Context, id cadata.ID) error {
 	return s.sm.db.Batch(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists([]byte(s.sm.bucketName))
 		if err != nil {
@@ -187,16 +189,16 @@ func (s virtualStore) Pin(ctx context.Context, id cadata.ID) error {
 	})
 }
 
-// GetF implements cadata.Getter
-func (s virtualStore) GetF(ctx context.Context, id cadata.ID, fn func([]byte) error) error {
+// Read implements cadata.Reader
+func (s virtualStore) Read(ctx context.Context, id cadata.ID, buf []byte) (int, error) {
 	exists, err := s.Exists(ctx, id)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if !exists {
-		return cadata.ErrNotFound
+		return 0, cadata.ErrNotFound
 	}
-	return s.sm.store.GetF(ctx, id, fn)
+	return s.sm.store.Read(ctx, id, buf)
 }
 
 // Exists implements cadata.Set
@@ -247,7 +249,7 @@ func (s virtualStore) List(ctx context.Context, prefix []byte, ids []cadata.ID) 
 		}
 		return forEachInSet(b, s.id, prefix, func(id cadata.ID) error {
 			if n >= len(ids) {
-				return blobs.ErrTooMany
+				return cadata.ErrTooMany
 			}
 			ids[n] = id
 			n++
@@ -258,6 +260,14 @@ func (s virtualStore) List(ctx context.Context, prefix []byte, ids []cadata.ID) 
 		return 0, err
 	}
 	return n, nil
+}
+
+func (s virtualStore) Hash(x []byte) cadata.ID {
+	return cadata.DefaultHash(x)
+}
+
+func (s virtualStore) MaxSize() int {
+	return s.sm.maxSize
 }
 
 func (s virtualStore) CopyAllFrom(ctx context.Context, src cadata.Store) error {

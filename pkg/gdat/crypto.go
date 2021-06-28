@@ -4,8 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 
-	"github.com/blobcache/blobcache/pkg/blobs"
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"golang.org/x/crypto/chacha20"
 	"lukechampine.com/blake3"
 )
@@ -37,28 +36,26 @@ func RandomKey(cadata.ID) DEK {
 
 type DEK [32]byte
 
-func postEncrypt(ctx context.Context, s cadata.Poster, keyFunc KeyFunc, data []byte) (blobs.ID, *DEK, error) {
-	id := blobs.Hash(data)
+func postEncrypt(ctx context.Context, s cadata.Poster, keyFunc KeyFunc, data []byte) (cadata.ID, *DEK, error) {
+	id := cadata.DefaultHash(data)
 	dek := keyFunc(id)
 	ctext := make([]byte, len(data))
 	cryptoXOR(dek, ctext, data)
 	id, err := s.Post(ctx, ctext)
 	if err != nil {
-		return blobs.ID{}, nil, err
+		return cadata.ID{}, nil, err
 	}
 	return id, &dek, nil
 }
 
-func getDecrypt(ctx context.Context, s cadata.Getter, dek DEK, id blobs.ID, fn func([]byte) error) error {
-	var ptext []byte
-	if err := s.GetF(ctx, id, func(ctext []byte) error {
-		ptext = make([]byte, len(ctext))
-		cryptoXOR(dek, ptext, ctext)
-		return nil
-	}); err != nil {
+func getDecrypt(ctx context.Context, s cadata.Store, dek DEK, id cadata.ID, fn func([]byte) error) error {
+	buf := make([]byte, s.MaxSize())
+	n, err := s.Read(ctx, id, buf)
+	if err != nil {
 		return err
 	}
-	return fn(ptext)
+	cryptoXOR(dek, buf[:n], buf[:n])
+	return fn(buf[:n])
 }
 
 func cryptoXOR(key DEK, dst, src []byte) {

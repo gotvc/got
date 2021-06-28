@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMarshalUnmarshal(t *testing.T) {
 	ctx := context.Background()
-	s := cadata.NewMem()
+	s := cadata.NewMem(cadata.DefaultMaxSize)
 	op := NewOperator()
 	x, err := op.Post(ctx, s, []byte("test data"))
 	require.NoError(t, err)

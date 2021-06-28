@@ -9,7 +9,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/fs"
 	"github.com/brendoncarroll/got/pkg/volumes"
 )

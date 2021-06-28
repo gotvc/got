@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/stretchr/testify/require"
 )
@@ -15,7 +15,7 @@ import (
 func TestBuilder(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	s := cadata.NewMem()
+	s := cadata.NewMem(cadata.DefaultMaxSize)
 	op := gdat.NewOperator()
 	b := NewBuilder(s, &op)
 
@@ -31,7 +31,7 @@ func TestBuilder(t *testing.T) {
 func TestBuildIterate(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	s := cadata.NewMem()
+	s := cadata.NewMem(cadata.DefaultMaxSize)
 	op := gdat.NewOperator()
 	b := NewBuilder(s, &op)
 
@@ -57,7 +57,7 @@ func TestBuildIterate(t *testing.T) {
 func TestMutate(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	s := cadata.NewMem()
+	s := cadata.NewMem(cadata.DefaultMaxSize)
 	op := gdat.NewOperator()
 	b := NewBuilder(s, &op)
 

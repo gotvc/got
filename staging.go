@@ -5,7 +5,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/fs"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"

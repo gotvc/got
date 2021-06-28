@@ -1,28 +1,33 @@
-package cadata
+package stores
 
 import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/blobcache/blobcache/pkg/blobs"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/fs"
 	"github.com/pkg/errors"
 )
 
 type fsStore struct {
-	fs fs.FS
+	fs      fs.FS
+	maxSize int
 }
 
-func NewFSStore(x fs.FS) Store {
-	return fsStore{fs: x}
+func NewFSStore(x fs.FS, maxSize int) Store {
+	return fsStore{fs: x, maxSize: maxSize}
 }
 
 func (s fsStore) Post(ctx context.Context, data []byte) (ID, error) {
-	id := Hash(data)
+	if len(data) > s.maxSize {
+		return ID{}, cadata.ErrTooLarge
+	}
+	id := cadata.DefaultHash(data)
 	p := s.pathFromID(id)
 	if err := s.fs.WriteFile(p, bytes.NewReader(data)); err != nil {
 		return ID{}, err
@@ -30,13 +35,14 @@ func (s fsStore) Post(ctx context.Context, data []byte) (ID, error) {
 	return id, nil
 }
 
-func (s fsStore) GetF(ctx context.Context, id ID, fn func([]byte) error) error {
+func (s fsStore) Read(ctx context.Context, id ID, buf []byte) (int, error) {
 	p := s.pathFromID(id)
-	data, err := fs.ReadFile(s.fs, p)
+	f, err := s.fs.Open(p)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	return fn(data)
+	defer f.Close()
+	return copyToBuffer(buf, f)
 }
 
 func (s fsStore) Exists(ctx context.Context, id ID) (bool, error) {
@@ -68,7 +74,7 @@ func (s fsStore) List(ctx context.Context, prefix []byte, ids []ID) (int, error)
 			return nil
 		}
 		if n >= len(ids) {
-			return blobs.ErrTooMany
+			return cadata.ErrTooMany
 		}
 		ids[n] = id
 		n++
@@ -78,6 +84,14 @@ func (s fsStore) List(ctx context.Context, prefix []byte, ids []ID) (int, error)
 		return n, err
 	}
 	return n, nil
+}
+
+func (s fsStore) Hash(x []byte) ID {
+	return cadata.DefaultHash(x)
+}
+
+func (s fsStore) MaxSize() int {
+	return s.maxSize
 }
 
 func (s fsStore) pathFromID(id ID) string {
@@ -102,4 +116,19 @@ func (s fsStore) idFromPath(p string) (ID, error) {
 
 func (s fsStore) encoding() *base64.Encoding {
 	return base64.RawURLEncoding
+}
+
+func copyToBuffer(dst []byte, r io.Reader) (int, error) {
+	var n int
+	for {
+		n2, err := r.Read(dst[n:])
+		if err != nil && err != io.EOF {
+			return 0, err
+		}
+		n += n2
+		if err == io.EOF {
+			break
+		}
+	}
+	return n, nil
 }

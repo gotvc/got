@@ -1,4 +1,4 @@
-package cadata
+package stores
 
 import "context"
 
@@ -6,11 +6,11 @@ type readOnly struct {
 	Store
 }
 
-func Post(ctx context.Context, data []byte) (ID, error) {
+func (ro readOnly) Post(ctx context.Context, data []byte) (ID, error) {
 	panic("Post called on read only Store")
 }
 
-func Delete(ctx context.Context, id ID) error {
+func (ro readOnly) Delete(ctx context.Context, id ID) error {
 	panic("Delete called on read only Store")
 }
 

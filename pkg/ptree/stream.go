@@ -7,8 +7,7 @@ import (
 	"io"
 	"log"
 
-	"github.com/blobcache/blobcache/pkg/blobs"
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/chunking"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/pkg/errors"
@@ -16,7 +15,7 @@ import (
 
 const (
 	defaultAvgSize = 1 << 13
-	defaultMaxSize = blobs.MaxSize
+	defaultMaxSize = 1 << 16
 )
 
 type Ref = gdat.Ref

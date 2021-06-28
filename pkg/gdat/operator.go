@@ -5,7 +5,7 @@ import (
 	"hash/crc64"
 	"io"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	lru "github.com/hashicorp/golang-lru"
 )
 

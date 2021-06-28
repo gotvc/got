@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotkv"
+	"github.com/brendoncarroll/got/pkg/stores"
 )
 
 // Sync ensures dst has all the data reachable from root
@@ -34,7 +34,7 @@ func isPartKey(x []byte) bool {
 }
 
 // Populate adds the ID for all the metadata blobs to mdSet and all the data blobs to dataSet
-func Populate(ctx context.Context, s Store, root Root, mdSet, dataSet cadata.Set) error {
+func Populate(ctx context.Context, s Store, root Root, mdSet, dataSet stores.Set) error {
 	return gotkv.Populate(ctx, s, root, mdSet, func(ent gotkv.Entry) error {
 		if isPartKey(ent.Key) {
 			part, err := parsePart(ent.Value)

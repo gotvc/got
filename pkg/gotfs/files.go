@@ -6,10 +6,11 @@ import (
 	"io"
 	"runtime"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/chunking"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotkv"
+	"github.com/brendoncarroll/got/pkg/stores"
 	"github.com/pkg/errors"
 )
 
@@ -55,8 +56,8 @@ func (w *writer) Flush() error {
 
 // CreateFileRoot creates a new filesystem with the contents read from r at the root
 func (o *Operator) CreateFileRoot(ctx context.Context, ms, ds Store, r io.Reader) (*Root, error) {
-	ams := cadata.NewAsyncStore(ms, runtime.GOMAXPROCS(0))
-	ads := cadata.NewAsyncStore(ds, runtime.GOMAXPROCS(0))
+	ams := stores.NewAsyncStore(ms, runtime.GOMAXPROCS(0))
+	ads := stores.NewAsyncStore(ds, runtime.GOMAXPROCS(0))
 	b := o.gotkv.NewBuilder(ams)
 
 	// metadata entry

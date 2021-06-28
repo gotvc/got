@@ -3,7 +3,7 @@ package gotkv
 import (
 	"context"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/ptree"
 	"golang.org/x/sync/errgroup"
 )

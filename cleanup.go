@@ -4,10 +4,11 @@ import (
 	"context"
 	"log"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotvc"
+	"github.com/brendoncarroll/got/pkg/stores"
 	"github.com/brendoncarroll/got/pkg/volumes"
 )
 
@@ -42,22 +43,22 @@ func (r *Repo) cleanupVolume(ctx context.Context, vol *volumes.Volume) error {
 	if err != nil {
 		return err
 	}
-	stores := [3]cadata.Store{
+	ss := [3]cadata.Store{
 		vol.VCStore,
 		vol.FSStore,
 		vol.RawStore,
 	}
-	keep := [3]cadata.MemSet{{}, {}, {}}
+	keep := [3]stores.MemSet{{}, {}, {}}
 	if start != nil {
-		if err := r.reachableVC(ctx, stores[0], *start, keep[0], func(root Root) error {
-			return gotfs.Populate(ctx, stores[1], root, keep[1], keep[2])
+		if err := r.reachableVC(ctx, ss[0], *start, keep[0], func(root Root) error {
+			return gotfs.Populate(ctx, ss[1], root, keep[1], keep[2])
 		}); err != nil {
 			return err
 		}
 	}
 	for i := range keep {
 		log.Printf("keeping %d blobs", keep[i].Count())
-		if count, err := filterStore(ctx, stores[i], keep[i]); err != nil {
+		if count, err := filterStore(ctx, ss[i], ss[i]); err != nil {
 			return err
 		} else {
 			log.Printf("deleted %d blobs", count)
@@ -82,7 +83,7 @@ func filterStore(ctx context.Context, s Store, set cadata.Set) (int, error) {
 	return count, err
 }
 
-func (r *Repo) reachableVC(ctx context.Context, s Store, start gotvc.Snapshot, set cadata.Set, fn func(root Root) error) error {
+func (r *Repo) reachableVC(ctx context.Context, s Store, start gotvc.Snapshot, set stores.Set, fn func(root Root) error) error {
 	return gotvc.ForEachAncestor(ctx, s, start, func(ref gdat.Ref, snap gotvc.Snapshot) error {
 		if err := fn(snap.Root); err != nil {
 			return err

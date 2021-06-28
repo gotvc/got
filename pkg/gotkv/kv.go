@@ -3,9 +3,10 @@ package gotkv
 import (
 	"context"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/ptree"
+	"github.com/brendoncarroll/got/pkg/stores"
 	"github.com/pkg/errors"
 )
 
@@ -80,7 +81,7 @@ func CopyAll(ctx context.Context, b Builder, it Iterator) error {
 
 // Populate adds all blobs reachable from x to set.
 // If an item is in set all of the blobs reachable from it are also assumed to also be in set.
-func Populate(ctx context.Context, s Store, x Root, set cadata.Set, entryFn func(ent Entry) error) error {
+func Populate(ctx context.Context, s Store, x Root, set stores.Set, entryFn func(ent Entry) error) error {
 	op := gdat.NewOperator()
 	if exists, err := set.Exists(ctx, x.Ref.CID); err != nil {
 		return err

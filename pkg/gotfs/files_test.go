@@ -10,14 +10,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestCreateFileFrom(t *testing.T) {
 	ctx := context.Background()
-	s := cadata.NewMem()
+	s := cadata.NewMem(cadata.DefaultMaxSize)
 	op := NewOperator()
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
@@ -34,7 +34,7 @@ func TestCreateFileFrom(t *testing.T) {
 
 func TestFileMetadata(t *testing.T) {
 	ctx := context.Background()
-	s := cadata.NewMem()
+	s := cadata.NewMem(cadata.DefaultMaxSize)
 	op := NewOperator()
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
@@ -49,7 +49,7 @@ func TestFileMetadata(t *testing.T) {
 
 func TestLargeFiles(t *testing.T) {
 	ctx := context.Background()
-	s := cadata.NewMem()
+	s := cadata.NewMem(cadata.DefaultMaxSize)
 	op := NewOperator()
 
 	const N = 5

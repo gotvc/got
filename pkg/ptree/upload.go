@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/chunking"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"golang.org/x/sync/errgroup"

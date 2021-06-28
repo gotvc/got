@@ -6,9 +6,8 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/blobcache/blobcache/pkg/blobs"
 	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -40,9 +39,9 @@ func (s *blobPullSrv) PullFrom(ctx context.Context, dst p2p.PeerID, id cadata.ID
 		return nil, err
 	}
 	if bytes.Equal(respData, id[:]) {
-		return nil, blobs.ErrTooMany
+		return nil, cadata.ErrTooMany
 	}
-	if cadata.Hash(respData) != id {
+	if cadata.DefaultHash(respData) != id {
 		return nil, errors.Errorf("got bad blob from %v", dst)
 	}
 	return respData, nil
@@ -52,15 +51,20 @@ func (s *blobPullSrv) handleAsk(ctx context.Context, msg *p2p.Message, w io.Writ
 	if !s.acl.CanReadAny(msg.Src.(p2p.PeerID)) {
 		return
 	}
-	id := cadata.IDFromBytes(msg.Payload)
-	err := s.store.GetF(ctx, id, func(data []byte) error {
-		w.Write(data)
-		return nil
-	})
-	if err == blobs.ErrNotFound {
-		w.Write(id[:])
-	} else if err != nil {
-		logrus.Error(err)
+	if err := func() error {
+		id := cadata.IDFromBytes(msg.Payload)
+		buf := make([]byte, s.store.MaxSize())
+		n, err := s.store.Read(ctx, id, buf)
+		if cadata.IsNotFound(err) {
+			_, err := w.Write(id[:])
+			return err
+		} else if err != nil {
+			return err
+		}
+		_, err = w.Write(buf[:n])
+		return err
+	}(); err != nil {
+		logrus.Warn(err)
 	}
 }
 

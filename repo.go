@@ -11,13 +11,13 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/s/peerswarm"
-	"github.com/brendoncarroll/got/pkg/cadata"
 	"github.com/brendoncarroll/got/pkg/fs"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotnet"
 	"github.com/brendoncarroll/got/pkg/gotvc"
 	"github.com/brendoncarroll/got/pkg/ptree"
+	"github.com/brendoncarroll/got/pkg/stores"
 	"github.com/brendoncarroll/got/pkg/volumes"
 	"github.com/inet256/inet256/pkg/inet256p2p"
 	"github.com/pkg/errors"
@@ -30,6 +30,7 @@ const (
 	keyStaging    = "STAGING"
 	keyActive     = "ACTIVE"
 	nameMaster    = "master"
+	MaxBlobSize   = 1 << 20
 )
 
 const (
@@ -128,7 +129,7 @@ func OpenRepo(p string) (*Repo, error) {
 	if err := volumes.CreateIfNotExists(context.TODO(), r.specDir, nameMaster); err != nil {
 		return nil, err
 	}
-	fsStore := cadata.NewFSStore(fs.NewDirFS(filepath.Join(r.rootPath, storePath)))
+	fsStore := stores.NewFSStore(fs.NewDirFS(filepath.Join(r.rootPath, storePath)), MaxBlobSize)
 	r.storeManager = newStoreManager(fsStore, r.db, bucketStores)
 	r.porter = newPorter(db, []string{bucketPorter}, r.getFSOp())
 	return r, nil

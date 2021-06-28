@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/brendoncarroll/got/pkg/cadata"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewEmpty(t *testing.T) {
 	ctx := context.Background()
-	s := cadata.NewMem()
+	s := cadata.NewMem(cadata.DefaultMaxSize)
 	op := NewOperator()
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
@@ -58,7 +58,7 @@ func TestPutGetMany(t *testing.T) {
 func testSetup(t *testing.T) (context.Context, cadata.Store, *Root) {
 	ctx := context.Background()
 	op := NewOperator()
-	s := cadata.NewMem()
+	s := cadata.NewMem(cadata.DefaultMaxSize)
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	return ctx, s, x
