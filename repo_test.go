@@ -22,10 +22,10 @@ func TestRepoInit(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, repo)
 
-	name, vol, err := repo.GetActiveVolume(ctx)
+	name, branch, err := repo.GetActiveBranch(ctx)
 	require.NoError(t, err)
 	require.Equal(t, nameMaster, name)
-	require.NotNil(t, vol)
+	require.NotNil(t, branch)
 }
 
 func TestCommit(t *testing.T) {

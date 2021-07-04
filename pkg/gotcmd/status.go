@@ -19,7 +19,7 @@ var statusCmd = &cobra.Command{
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		w := cmd.OutOrStdout()
-		name, _, err := repo.GetActiveVolume(ctx)
+		name, _, err := repo.GetActiveBranch(ctx)
 		if err != nil {
 			return err
 		}

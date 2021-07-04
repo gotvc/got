@@ -5,17 +5,17 @@ import (
 	"io"
 
 	"github.com/brendoncarroll/go-p2p"
+	"github.com/brendoncarroll/got/pkg/branches"
 	"github.com/brendoncarroll/got/pkg/cells"
-	"github.com/brendoncarroll/got/pkg/volumes"
 )
 
 type cellSrv struct {
-	realm *volumes.Realm
+	realm *branches.Realm
 	acl   ACL
 	swarm p2p.AskSwarm
 }
 
-func newCellSrv(realm *volumes.Realm, acl ACL, swarm p2p.AskSwarm) *cellSrv {
+func newCellSrv(realm *branches.Realm, acl ACL, swarm p2p.AskSwarm) *cellSrv {
 	cs := &cellSrv{
 		realm: realm,
 		acl:   acl,

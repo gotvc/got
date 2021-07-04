@@ -5,32 +5,32 @@ import (
 	"log"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/got/pkg/branches"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotvc"
 	"github.com/brendoncarroll/got/pkg/stores"
-	"github.com/brendoncarroll/got/pkg/volumes"
 )
 
 func (r *Repo) Cleanup(ctx context.Context) error {
 	return r.porter.Cleanup(ctx)
 }
 
-func (r *Repo) CleanupVolumes(ctx context.Context, volNames []string) error {
-	if len(volNames) == 0 {
-		name, _, err := r.GetActiveVolume(ctx)
+func (r *Repo) CleanupBranches(ctx context.Context, branchNames []string) error {
+	if len(branchNames) == 0 {
+		name, _, err := r.GetActiveBranch(ctx)
 		if err != nil {
 			return err
 		}
-		volNames = []string{name}
+		branchNames = []string{name}
 	}
-	for _, name := range volNames {
-		vol, err := r.GetRealm().Get(ctx, name)
+	for _, name := range branchNames {
+		branch, err := r.GetRealm().Get(ctx, name)
 		if err != nil {
 			return err
 		}
 		log.Println("begin cleanup on", name)
-		if err := r.cleanupVolume(ctx, vol); err != nil {
+		if err := r.cleanupVolume(ctx, branch.Volume); err != nil {
 			return err
 		}
 		log.Println("done cleanup on", name)
@@ -38,7 +38,7 @@ func (r *Repo) CleanupVolumes(ctx context.Context, volNames []string) error {
 	return nil
 }
 
-func (r *Repo) cleanupVolume(ctx context.Context, vol *volumes.Volume) error {
+func (r *Repo) cleanupVolume(ctx context.Context, vol *branches.Volume) error {
 	start, err := getSnapshot(ctx, vol.Cell)
 	if err != nil {
 		return err

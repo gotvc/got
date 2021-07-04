@@ -11,14 +11,13 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/s/peerswarm"
+	"github.com/brendoncarroll/got/pkg/branches"
 	"github.com/brendoncarroll/got/pkg/fs"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotnet"
-	"github.com/brendoncarroll/got/pkg/gotvc"
 	"github.com/brendoncarroll/got/pkg/ptree"
 	"github.com/brendoncarroll/got/pkg/stores"
-	"github.com/brendoncarroll/got/pkg/volumes"
 	"github.com/inet256/inet256/pkg/inet256p2p"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
@@ -45,7 +44,7 @@ const (
 	gotPrefix      = ".got"
 	configPath     = ".got/config"
 	privateKeyPath = ".got/private.pem"
-	specDirPath    = ".got/volume_specs"
+	specDirPath    = ".got/branches"
 	policyPath     = ".got/policy"
 	storePath      = ".got/blobs"
 )
@@ -58,12 +57,14 @@ type Repo struct {
 	policy     *Policy
 	privateKey p2p.PrivateKey
 
-	realms       []Realm
-	workingDir   FS
-	porter       *porter
-	specDir      *volSpecDir
+	workingDir FS
+	porter     *porter
+	tracker    *tracker
+
+	specDir *branchSpecDir
+	realm   Realm
+
 	storeManager *storeManager
-	tracker      *tracker
 	swarm        peerswarm.AskSwarm
 }
 
@@ -100,6 +101,7 @@ func InitRepo(p string) error {
 }
 
 func OpenRepo(p string) (*Repo, error) {
+	ctx := context.TODO()
 	repoFS := fs.NewDirFS(p)
 	config, err := LoadConfig(repoFS, configPath)
 	if err != nil {
@@ -125,8 +127,14 @@ func OpenRepo(p string) (*Repo, error) {
 		}),
 		tracker: newTracker(db, []string{bucketTracker}),
 	}
-	r.specDir = newVolSpecDir(r.MakeCell, r.MakeStore, fs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
-	if err := volumes.CreateIfNotExists(context.TODO(), r.specDir, nameMaster); err != nil {
+	r.specDir = newBranchSpecDir(r.MakeCell, r.MakeStore, fs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
+	if err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster); err != nil {
+		return nil, err
+	}
+	r.realm, err = branches.NewMultiRealm([]branches.Layer{
+		{Prefix: "", Target: r.specDir},
+	})
+	if err != nil {
 		return nil, err
 	}
 	fsStore := stores.NewFSStore(fs.NewDirFS(filepath.Join(r.rootPath, storePath)), MaxBlobSize)
@@ -155,7 +163,7 @@ func (r *Repo) GetACL() gotnet.ACL {
 }
 
 func (r *Repo) GetRealm() Realm {
-	return volumes.NewLayered(append(r.realms, r.specDir)...)
+	return r.realm
 }
 
 func (r *Repo) getSwarm() (peerswarm.AskSwarm, error) {
@@ -184,21 +192,6 @@ func dbPath(x string) string {
 	return filepath.Join(x, gotPrefix, "local.db")
 }
 
-func (r *Repo) Log(ctx context.Context, fn func(ref Ref, s Commit) error) error {
-	_, vol, err := r.GetActiveVolume(ctx)
-	if err != nil {
-		return err
-	}
-	snap, err := getSnapshot(ctx, vol.Cell)
-	if err != nil {
-		return err
-	}
-	if snap == nil {
-		return nil
-	}
-	return gotvc.ForEachAncestor(ctx, vol.VCStore, *snap, fn)
-}
-
 func (r *Repo) DebugDB(ctx context.Context, w io.Writer) error {
 	return r.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(bucketDefault))
@@ -220,10 +213,11 @@ func (r *Repo) DebugDB(ctx context.Context, w io.Writer) error {
 }
 
 func (r *Repo) DebugFS(ctx context.Context, w io.Writer) error {
-	_, vol, err := r.GetActiveVolume(ctx)
+	_, branch, err := r.GetActiveBranch(ctx)
 	if err != nil {
 		return err
 	}
+	vol := branch.Volume
 	x, err := getSnapshot(ctx, vol.Cell)
 	if err != nil {
 		return err

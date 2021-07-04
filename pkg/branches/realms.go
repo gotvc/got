@@ -1,4 +1,4 @@
-package volumes
+package branches
 
 import (
 	"context"
@@ -8,9 +8,18 @@ import (
 	"github.com/pkg/errors"
 )
 
-var ErrNotExist = errors.New("volume does not exist")
-var ErrExists = errors.New("a volume already exists by that name")
-var ErrTooMany = errors.Errorf("too many too list")
+var (
+	ErrNotExist = errors.New("volume does not exist")
+	ErrExists   = errors.New("a volume already exists by that name")
+)
+
+func IsNotExist(err error) bool {
+	return err == ErrNotExist
+}
+
+func IsExists(err error) bool {
+	return err == ErrExists
+}
 
 // Volume is a Cell and a set of stores pair
 type Volume struct {
@@ -18,33 +27,25 @@ type Volume struct {
 	VCStore, FSStore, RawStore cadata.Store
 }
 
+type Branch struct {
+	Volume      *Volume
+	Annotations map[string]string
+}
+
 // A Realm is a set of named volumes.
 type Realm interface {
-	Get(ctx context.Context, name string) (*Volume, error)
+	Get(ctx context.Context, name string) (*Branch, error)
 	Create(ctx context.Context, name string) error
 	Delete(ctx context.Context, name string) error
-	List(ctx context.Context, prefix string) ([]string, error)
+	ForEach(ctx context.Context, fn func(string) error) error
 }
 
 func CreateIfNotExists(ctx context.Context, r Realm, k string) error {
 	if _, err := r.Get(ctx, k); err != nil {
-		if err == ErrNotExist {
+		if IsNotExist(err) {
 			return r.Create(ctx, k)
 		}
 		return err
-	}
-	return nil
-}
-
-func ForEach(ctx context.Context, r Realm, fn func(string) error) error {
-	keys, err := r.List(ctx, "")
-	if err != nil && err != ErrTooMany {
-		return err
-	}
-	for _, key := range keys {
-		if err := fn(key); err != nil {
-			return err
-		}
 	}
 	return nil
 }

@@ -44,6 +44,10 @@ func (r *Repo) MakeStore(spec StoreSpec) (Store, error) {
 	}
 }
 
+type BranchSpec struct {
+	Volume VolumeSpec `json:"volume"`
+}
+
 type VolumeSpec struct {
 	Cell     CellSpec  `json:"cell"`
 	VCStore  StoreSpec `json:"vc_store"`

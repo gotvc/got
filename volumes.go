@@ -7,19 +7,18 @@ import (
 
 	"github.com/brendoncarroll/go-state/cells"
 	"github.com/pkg/errors"
-	bolt "go.etcd.io/bbolt"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/got/pkg/branches"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
 	"github.com/brendoncarroll/got/pkg/gotvc"
-	"github.com/brendoncarroll/got/pkg/volumes"
 )
 
 // SyncVolumes moves the commit in src and all it's data from to dst
 // if the commit in dst is not an ancestor of src then an error is returned.
 // that behavior can be disabled with force=true.
-func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
+func syncVolumes(ctx context.Context, dst, src Volume, force bool) error {
 	return applySnapshot(ctx, dst.Cell, func(x *gotvc.Snapshot) (*gotvc.Snapshot, error) {
 		goal, err := getSnapshot(ctx, src.Cell)
 		if err != nil {
@@ -47,66 +46,6 @@ func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
 			return nil, err
 		}
 		return goal, nil
-	})
-}
-
-func (r *Repo) CreateVolume(ctx context.Context, name string) error {
-	return r.specDir.Create(ctx, name)
-}
-
-func (r *Repo) CreateVolumeWithSpec(name string, spec VolumeSpec) error {
-	return r.specDir.CreateWithSpec(name, spec)
-}
-
-func (r *Repo) DeleteVolume(ctx context.Context, name string) error {
-	return r.specDir.Delete(ctx, name)
-}
-
-func (r *Repo) GetActiveVolume(ctx context.Context) (string, *Volume, error) {
-	name, err := getActiveVolume(r.db)
-	if err != nil {
-		return "", nil, err
-	}
-	vol, err := r.GetRealm().Get(ctx, name)
-	if err != nil {
-		return "", nil, err
-	}
-	return name, vol, nil
-}
-
-func (r *Repo) SetActiveVolume(ctx context.Context, name string) error {
-	_, err := r.GetRealm().Get(ctx, name)
-	if err != nil {
-		return err
-	}
-	return setActiveVolume(r.db, name)
-}
-
-func getActiveVolume(db *bolt.DB) (string, error) {
-	name := nameMaster
-	if err := db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(bucketDefault))
-		if b == nil {
-			return nil
-		}
-		v := b.Get([]byte(keyActive))
-		if len(v) > 0 {
-			name = string(v)
-		}
-		return nil
-	}); err != nil {
-		return "", err
-	}
-	return name, nil
-}
-
-func setActiveVolume(db *bolt.DB, name string) error {
-	return db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists([]byte(bucketDefault))
-		if err != nil {
-			return err
-		}
-		return b.Put([]byte(keyActive), []byte(name))
 	})
 }
 
@@ -149,7 +88,7 @@ type triple struct {
 	VC, FS, Raw Store
 }
 
-func tripleFromVolume(vol volumes.Volume) triple {
+func tripleFromVolume(vol branches.Volume) triple {
 	return triple{
 		VC:  vol.VCStore,
 		FS:  vol.FSStore,

@@ -25,10 +25,11 @@ func (r *Repo) Commit(ctx context.Context, commitInfo CommitInfo) error {
 		log.Println("WARN: nothing to commit")
 		return nil
 	}
-	_, vol, err := r.GetActiveVolume(ctx)
+	_, branch, err := r.GetActiveBranch(ctx)
 	if err != nil {
 		return err
 	}
+	vol := branch.Volume
 	err = applySnapshot(ctx, vol.Cell, func(x *Commit) (*Commit, error) {
 		dst := tripleFromVolume(*vol)
 		src := r.stagingTriple()

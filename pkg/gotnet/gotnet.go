@@ -6,7 +6,7 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/stringmux"
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/volumes"
+	"github.com/brendoncarroll/got/pkg/branches"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -14,11 +14,6 @@ const (
 	channelBlobPull = "got/blob-pull@v0"
 	channelBlobMain = "got/blob-main@v0"
 )
-
-type Repo interface {
-	GetRealm() volumes.Realm
-	GetACL() ACL
-}
 
 type ACL interface {
 	CanWriteAny(p2p.PeerID) bool
@@ -31,6 +26,7 @@ type Params struct {
 	Store cadata.Store
 	Mux   stringmux.AskMux
 	ACL   ACL
+	Realm branches.Realm
 }
 
 type Service struct {
@@ -60,7 +56,7 @@ func (s *Service) Serve() error {
 	return eg.Wait()
 }
 
-func (s *Service) GetRealm(peer p2p.PeerID) volumes.Realm {
+func (s *Service) GetRealm(peer p2p.PeerID) branches.Realm {
 	return &realm{
 		s:    s,
 		peer: peer,
@@ -71,7 +67,7 @@ func (s *Service) Close() error {
 	return nil
 }
 
-var _ volumes.Realm = &realm{}
+var _ branches.Realm = &realm{}
 
 type realm struct {
 	s    *Service
@@ -82,7 +78,7 @@ func (r *realm) Create(ctx context.Context, name string) error {
 	return nil
 }
 
-func (r *realm) Get(ctx context.Context, name string) (*volumes.Volume, error) {
+func (r *realm) Get(ctx context.Context, name string) (*branches.Branch, error) {
 	return nil, nil
 }
 
@@ -90,6 +86,6 @@ func (r *realm) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
-func (r *realm) List(ctx context.Context, prefix string) ([]string, error) {
-	return nil, nil
+func (r *realm) ForEach(ctx context.Context, fn func(string) error) error {
+	return nil
 }

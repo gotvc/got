@@ -10,25 +10,26 @@ import (
 )
 
 func (r *Repo) Ls(ctx context.Context, p string, fn func(gotfs.DirEnt) error) error {
-	_, vol, err := r.GetActiveVolume(ctx)
+	_, branch, err := r.GetActiveBranch(ctx)
 	if err != nil {
 		return err
 	}
-	snap, err := getSnapshot(ctx, vol.Cell)
+	snap, err := getSnapshot(ctx, branch.Volume.Cell)
 	if err != nil {
 		return err
 	}
 	if snap == nil {
 		return nil
 	}
-	return r.getFSOp().ReadDir(ctx, vol.FSStore, snap.Root, p, fn)
+	return r.getFSOp().ReadDir(ctx, branch.Volume.FSStore, snap.Root, p, fn)
 }
 
 func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
-	_, vol, err := r.GetActiveVolume(ctx)
+	_, branch, err := r.GetActiveBranch(ctx)
 	if err != nil {
 		return err
 	}
+	vol := branch.Volume
 	snap, err := getSnapshot(ctx, vol.Cell)
 	if err != nil {
 		return err
@@ -44,10 +45,11 @@ func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
 }
 
 func (r *Repo) Check(ctx context.Context) error {
-	_, vol, err := r.GetActiveVolume(ctx)
+	_, branch, err := r.GetActiveBranch(ctx)
 	if err != nil {
 		return err
 	}
+	vol := branch.Volume
 	snap, err := getSnapshot(ctx, vol.Cell)
 	if err != nil {
 		return err

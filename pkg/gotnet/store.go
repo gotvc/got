@@ -118,10 +118,11 @@ func (s *blobMainSrv) handleAsk(ctx context.Context, msg *p2p.Message, w io.Writ
 			if !s.acl.CanWrite(peer, req.Name) {
 				return nil, errors.Errorf("ACL error")
 			}
-			vol, err := s.realm.Get(ctx, req.Name)
+			branch, err := s.realm.Get(ctx, req.Name)
 			if err != nil {
 				return nil, err
 			}
+			vol := branch.Volume
 			for _, id := range req.IDs {
 				data, err := s.blobPullSrv.PullFrom(ctx, peer, id)
 				if err != nil {

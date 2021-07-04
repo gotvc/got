@@ -34,13 +34,13 @@ var commitCmd = &cobra.Command{
 
 var logCmd = &cobra.Command{
 	Use:     "log",
-	Short:   "prints the log",
+	Short:   "prints the commit log",
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		pr, pw := io.Pipe()
 		eg := errgroup.Group{}
 		eg.Go(func() error {
-			err := repo.Log(ctx, func(ref got.Ref, c got.Commit) error {
+			err := repo.History(ctx, "", func(ref got.Ref, c got.Commit) error {
 				fmt.Fprintf(pw, "#%04d\t%v\n", c.N, ref.CID)
 				fmt.Fprintf(pw, "Created At: %v\n", c.CreatedAt)
 				fmt.Fprintf(pw, "Message: %s\n", c.Message)
