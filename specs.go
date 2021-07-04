@@ -63,8 +63,8 @@ func ParseVolumeSpec(data []byte) (*VolumeSpec, error) {
 	return &spec, nil
 }
 
-func (r *Repo) MakeVolume(k string, spec VolumeSpec) (*Volume, error) {
-	cell, err := r.MakeCell(k, spec.Cell)
+func (r *Repo) MakeVolume(spec VolumeSpec) (*Volume, error) {
+	cell, err := r.MakeCell(spec.Cell)
 	if err != nil {
 		return nil, err
 	}
@@ -89,14 +89,14 @@ func (r *Repo) MakeVolume(k string, spec VolumeSpec) (*Volume, error) {
 }
 
 type CellSpec struct {
-	Local     *LocalCellSpec     `json:"local"`
-	HTTP      *HTTPCellSpec      `json:"http"`
-	SecretBox *SecretBoxCellSpec `json:"secretbox"`
-	Peer      *PeerCellSpec      `json:"peer"`
-	Signed    *SignedCellSpec    `json:"signed"`
+	Local     *LocalCellSpec     `json:"local,omitempty"`
+	HTTP      *HTTPCellSpec      `json:"http,omitempty"`
+	SecretBox *SecretBoxCellSpec `json:"secretbox,omitempty"`
+	Peer      *PeerCellSpec      `json:"peer,omitempty"`
+	Signed    *SignedCellSpec    `json:"signed,omitempty"`
 }
 
-type LocalCellSpec struct{}
+type LocalCellSpec = CellID
 
 type HTTPCellSpec = httpcell.Spec
 
@@ -124,16 +124,16 @@ func ParseCellSpec(data []byte) (*CellSpec, error) {
 	return &cellSpec, nil
 }
 
-func (r *Repo) MakeCell(k string, spec CellSpec) (Cell, error) {
+func (r *Repo) MakeCell(spec CellSpec) (Cell, error) {
 	switch {
 	case spec.Local != nil:
-		return cells.NewBoltCell(r.db, []string{bucketCellData, k}), nil
+		return r.cellManager.Get(*spec.Local)
 
 	case spec.HTTP != nil:
 		return httpcell.New(*spec.HTTP), nil
 
 	case spec.SecretBox != nil:
-		inner, err := r.MakeCell(k, spec.SecretBox.Inner)
+		inner, err := r.MakeCell(spec.SecretBox.Inner)
 		if err != nil {
 			return nil, err
 		}
@@ -143,7 +143,7 @@ func (r *Repo) MakeCell(k string, spec CellSpec) (Cell, error) {
 		panic("not implemented")
 
 	case spec.Signed != nil:
-		inner, err := r.MakeCell(k, spec.Signed.Inner)
+		inner, err := r.MakeCell(spec.Signed.Inner)
 		if err != nil {
 			return nil, err
 		}

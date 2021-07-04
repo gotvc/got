@@ -10,6 +10,7 @@ var debugCmd = &cobra.Command{
 	Use:     "debug",
 	PreRunE: loadRepo,
 	Hidden:  true,
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		p := args[0]
 		switch p {

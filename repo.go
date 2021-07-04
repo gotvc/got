@@ -64,6 +64,7 @@ type Repo struct {
 	specDir *branchSpecDir
 	realm   Realm
 
+	cellManager  *cellManager
 	storeManager *storeManager
 	swarm        peerswarm.AskSwarm
 }
@@ -127,7 +128,12 @@ func OpenRepo(p string) (*Repo, error) {
 		}),
 		tracker: newTracker(db, []string{bucketTracker}),
 	}
-	r.specDir = newBranchSpecDir(r.MakeCell, r.MakeStore, fs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
+	r.porter = newPorter(db, []string{bucketPorter}, r.getFSOp())
+	fsStore := stores.NewFSStore(fs.NewDirFS(filepath.Join(r.rootPath, storePath)), MaxBlobSize)
+	r.storeManager = newStoreManager(fsStore, r.db, bucketStores)
+	r.cellManager = newCellManager(db, []string{bucketCellData})
+
+	r.specDir = newBranchSpecDir(r.makeDefaultVolume, r.MakeCell, r.MakeStore, fs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
 	if err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster); err != nil {
 		return nil, err
 	}
@@ -137,9 +143,7 @@ func OpenRepo(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	fsStore := stores.NewFSStore(fs.NewDirFS(filepath.Join(r.rootPath, storePath)), MaxBlobSize)
-	r.storeManager = newStoreManager(fsStore, r.db, bucketStores)
-	r.porter = newPorter(db, []string{bucketPorter}, r.getFSOp())
+
 	return r, nil
 }
 
@@ -221,6 +225,9 @@ func (r *Repo) DebugFS(ctx context.Context, w io.Writer) error {
 	x, err := getSnapshot(ctx, vol.Cell)
 	if err != nil {
 		return err
+	}
+	if x == nil {
+		return errors.Errorf("no snapshot, no root")
 	}
 	ptree.DebugTree(vol.FSStore, x.Root)
 	return nil

@@ -14,20 +14,22 @@ import (
 
 var _ Realm = &branchSpecDir{}
 
-type cellFactory = func(name string, spec CellSpec) (Cell, error)
+type cellFactory = func(spec CellSpec) (Cell, error)
 type storeFactory = func(spec StoreSpec) (Store, error)
 
 type branchSpecDir struct {
-	cf cellFactory
-	sf storeFactory
-	fs fs.FS
+	makeDefault func() VolumeSpec
+	cf          cellFactory
+	sf          storeFactory
+	fs          fs.FS
 }
 
-func newBranchSpecDir(cf cellFactory, sf storeFactory, fs fs.FS) *branchSpecDir {
+func newBranchSpecDir(makeDefault func() VolumeSpec, cf cellFactory, sf storeFactory, fs fs.FS) *branchSpecDir {
 	return &branchSpecDir{
-		cf: cf,
-		sf: sf,
-		fs: fs,
+		makeDefault: makeDefault,
+		cf:          cf,
+		sf:          sf,
+		fs:          fs,
 	}
 }
 
@@ -38,21 +40,13 @@ func (r *branchSpecDir) ForEach(ctx context.Context, fn func(string) error) erro
 }
 
 func (r *branchSpecDir) Create(ctx context.Context, name string) error {
-	newLocalSpec := func() *LocalStoreSpec {
-		x := randomUint64()
-		return &x
-	}
-	spec := VolumeSpec{
-		Cell:     CellSpec{Local: &LocalCellSpec{}},
-		VCStore:  StoreSpec{Local: newLocalSpec()},
-		FSStore:  StoreSpec{Local: newLocalSpec()},
-		RawStore: StoreSpec{Local: newLocalSpec()},
-	}
-	return r.CreateWithSpec(name, BranchSpec{Volume: spec})
+	return r.CreateWithSpec(name, BranchSpec{
+		Volume: r.makeDefault(),
+	})
 }
 
 func (csd *branchSpecDir) CreateWithSpec(name string, spec BranchSpec) error {
-	_, err := csd.cf(name, spec.Volume.Cell)
+	_, err := csd.cf(spec.Volume.Cell)
 	if err != nil {
 		return err
 	}
@@ -91,7 +85,7 @@ func (esd *branchSpecDir) makeBranch(k string, spec BranchSpec) (*Branch, error)
 }
 
 func (esd *branchSpecDir) makeVol(k string, spec VolumeSpec) (*Volume, error) {
-	cell, err := esd.cf(k, spec.Cell)
+	cell, err := esd.cf(spec.Cell)
 	if err != nil {
 		return nil, err
 	}

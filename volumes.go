@@ -2,6 +2,7 @@ package got
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"log"
 
@@ -47,6 +48,28 @@ func syncVolumes(ctx context.Context, dst, src Volume, force bool) error {
 		}
 		return goal, nil
 	})
+}
+
+func (r *Repo) makeDefaultVolume() VolumeSpec {
+	newRandom := func() *uint64 {
+		x := randomUint64()
+		return &x
+	}
+	cellSpec := CellSpec{
+		Local: (*LocalCellSpec)(newRandom()),
+	}
+	cellSpec = CellSpec{
+		SecretBox: &SecretBoxCellSpec{
+			Inner:  cellSpec,
+			Secret: generateSecret(32),
+		},
+	}
+	return VolumeSpec{
+		Cell:     cellSpec,
+		VCStore:  StoreSpec{Local: (*LocalStoreSpec)(newRandom())},
+		FSStore:  StoreSpec{Local: (*LocalStoreSpec)(newRandom())},
+		RawStore: StoreSpec{Local: (*LocalStoreSpec)(newRandom())},
+	}
 }
 
 func getSnapshot(ctx context.Context, c cells.Cell) (*Commit, error) {
@@ -104,4 +127,12 @@ func syncStores(ctx context.Context, dst, src triple, snap gotvc.Snapshot) error
 			return cadata.Copy(ctx, dst.Raw, src.Raw, ref.CID)
 		})
 	})
+}
+
+func generateSecret(n int) []byte {
+	x := make([]byte, n)
+	if _, err := rand.Read(x); err != nil {
+		panic(err)
+	}
+	return x
 }

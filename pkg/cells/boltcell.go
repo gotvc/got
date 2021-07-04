@@ -9,22 +9,27 @@ import (
 )
 
 type boltCell struct {
-	db   *bolt.DB
-	path []string
+	db         *bolt.DB
+	bucketPath []string
+	key        []byte
 }
 
-func NewBoltCell(db *bolt.DB, path []string) Cell {
-	if len(path) < 2 {
-		panic("len(path) must be > 2")
+func NewBoltCell(db *bolt.DB, bucketPath []string, key []byte) Cell {
+	if len(bucketPath) < 1 {
+		panic("len(path) must be >= 1")
 	}
-	return &boltCell{db: db, path: path}
+	return &boltCell{
+		db:         db,
+		bucketPath: bucketPath,
+		key:        key,
+	}
 }
 
 func (c *boltCell) CAS(ctx context.Context, actual, prev, next []byte) (bool, int, error) {
 	if len(next) > c.MaxSize() {
 		return false, 0, cells.ErrTooLarge{}
 	}
-	path := c.path
+	path := c.bucketPath
 	var swapped bool
 	var n int
 	// have to be careful to always assign to swapped and actual every time this function is called, unless it errors
@@ -34,14 +39,14 @@ func (c *boltCell) CAS(ctx context.Context, actual, prev, next []byte) (bool, in
 			return err
 		}
 		path = path[1:]
-		for len(path) > 1 {
+		for len(path) > 0 {
 			b, err = tx.CreateBucketIfNotExists([]byte(path[0]))
 			if err != nil {
 				return err
 			}
 			path = path[1:]
 		}
-		key := []byte(path[0])
+		key := c.key
 		v := b.Get([]byte(key))
 		if !bytes.Equal(v, prev) {
 			swapped = false
@@ -64,20 +69,20 @@ func (c *boltCell) CAS(ctx context.Context, actual, prev, next []byte) (bool, in
 func (c *boltCell) Read(ctx context.Context, buf []byte) (int, error) {
 	var n int
 	if err := c.db.View(func(tx *bolt.Tx) error {
-		path := c.path
+		path := c.bucketPath
 		b := tx.Bucket([]byte(path[0]))
 		if b == nil {
 			return nil
 		}
 		path = path[1:]
-		for len(path) > 1 {
+		for len(path) > 0 {
 			b = b.Bucket([]byte(path[0]))
 			if b == nil {
 				return nil
 			}
 			path = path[1:]
 		}
-		key := []byte(path[0])
+		key := c.key
 		v := b.Get(key)
 		n = copy(buf, v)
 		return nil

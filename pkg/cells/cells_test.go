@@ -18,6 +18,6 @@ func TestBoltCell(t *testing.T) {
 		t.Cleanup(func() {
 			require.NoError(t, db.Close())
 		})
-		return NewBoltCell(db, []string{"test-cells", "key1"})
+		return NewBoltCell(db, []string{"test-cells"}, []byte("key1"))
 	})
 }
