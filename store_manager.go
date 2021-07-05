@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/binary"
-	"log"
 	"sync"
 
 	"github.com/brendoncarroll/go-state/cadata"
@@ -24,7 +23,6 @@ type storeManager struct {
 	store      Store
 	db         *bolt.DB
 	bucketName string
-	maxSize    int
 
 	mu sync.RWMutex
 }
@@ -34,7 +32,6 @@ func newStoreManager(store Store, db *bolt.DB, bucketName string) *storeManager 
 		store:      store,
 		db:         db,
 		bucketName: bucketName,
-		maxSize:    MaxBlobSize,
 	}
 }
 
@@ -267,11 +264,10 @@ func (s virtualStore) Hash(x []byte) cadata.ID {
 }
 
 func (s virtualStore) MaxSize() int {
-	return s.sm.maxSize
+	return s.sm.store.MaxSize()
 }
 
 func (s virtualStore) CopyAllFrom(ctx context.Context, src cadata.Store) error {
-	log.Println("doing optimized copy")
 	vs2, ok := src.(virtualStore)
 	if !ok {
 		return cadata.CopyAllBasic(ctx, s, src)

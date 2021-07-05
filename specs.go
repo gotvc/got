@@ -91,7 +91,7 @@ func (r *Repo) MakeVolume(spec VolumeSpec) (*Volume, error) {
 type CellSpec struct {
 	Local     *LocalCellSpec     `json:"local,omitempty"`
 	HTTP      *HTTPCellSpec      `json:"http,omitempty"`
-	SecretBox *SecretBoxCellSpec `json:"secretbox,omitempty"`
+	Encrypted *EncryptedCellSpec `json:"encrypted,omitempty"`
 	Peer      *PeerCellSpec      `json:"peer,omitempty"`
 	Signed    *SignedCellSpec    `json:"signed,omitempty"`
 }
@@ -100,7 +100,7 @@ type LocalCellSpec = CellID
 
 type HTTPCellSpec = httpcell.Spec
 
-type SecretBoxCellSpec struct {
+type EncryptedCellSpec struct {
 	Inner  CellSpec `json:"inner"`
 	Secret []byte   `json:"secret"`
 }
@@ -132,12 +132,12 @@ func (r *Repo) MakeCell(spec CellSpec) (Cell, error) {
 	case spec.HTTP != nil:
 		return httpcell.New(*spec.HTTP), nil
 
-	case spec.SecretBox != nil:
-		inner, err := r.MakeCell(spec.SecretBox.Inner)
+	case spec.Encrypted != nil:
+		inner, err := r.MakeCell(spec.Encrypted.Inner)
 		if err != nil {
 			return nil, err
 		}
-		return cells.NewSecretBox(inner, spec.SecretBox.Secret), nil
+		return cells.NewEncrypted(inner, spec.Encrypted.Secret), nil
 
 	case spec.Peer != nil:
 		panic("not implemented")

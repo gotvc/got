@@ -3,8 +3,6 @@ package got
 import (
 	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/binary"
 	"encoding/json"
 
 	"github.com/brendoncarroll/go-state/cadata"
@@ -45,8 +43,8 @@ func (r *branchSpecDir) Create(ctx context.Context, name string) error {
 	})
 }
 
-func (csd *branchSpecDir) CreateWithSpec(name string, spec BranchSpec) error {
-	_, err := csd.cf(spec.Volume.Cell)
+func (r *branchSpecDir) CreateWithSpec(name string, spec BranchSpec) error {
+	_, err := r.cf(spec.Volume.Cell)
 	if err != nil {
 		return err
 	}
@@ -54,15 +52,15 @@ func (csd *branchSpecDir) CreateWithSpec(name string, spec BranchSpec) error {
 	if err != nil {
 		return err
 	}
-	return csd.fs.WriteFile(name, bytes.NewReader(data))
+	return r.fs.WriteFile(name, bytes.NewReader(data))
 }
 
-func (csd *branchSpecDir) Delete(ctx context.Context, k string) error {
-	return csd.fs.Remove(k)
+func (r *branchSpecDir) Delete(ctx context.Context, k string) error {
+	return r.fs.Remove(k)
 }
 
-func (esd *branchSpecDir) Get(ctx context.Context, k string) (*Branch, error) {
-	data, err := fs.ReadFile(esd.fs, k)
+func (r *branchSpecDir) Get(ctx context.Context, k string) (*Branch, error) {
+	data, err := fs.ReadFile(r.fs, k)
 	if err != nil {
 		if fs.IsNotExist(err) {
 			return nil, branches.ErrNotExist
@@ -73,19 +71,19 @@ func (esd *branchSpecDir) Get(ctx context.Context, k string) (*Branch, error) {
 	if err := json.Unmarshal(data, &spec); err != nil {
 		return nil, err
 	}
-	return esd.makeBranch(k, spec)
+	return r.makeBranch(k, spec)
 }
 
-func (esd *branchSpecDir) makeBranch(k string, spec BranchSpec) (*Branch, error) {
-	vol, err := esd.makeVol(k, spec.Volume)
+func (r *branchSpecDir) makeBranch(k string, spec BranchSpec) (*Branch, error) {
+	vol, err := r.makeVol(k, spec.Volume)
 	if err != nil {
 		return nil, err
 	}
 	return &Branch{Volume: vol}, nil
 }
 
-func (esd *branchSpecDir) makeVol(k string, spec VolumeSpec) (*Volume, error) {
-	cell, err := esd.cf(spec.Cell)
+func (r *branchSpecDir) makeVol(k string, spec VolumeSpec) (*Volume, error) {
+	cell, err := r.cf(spec.Cell)
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +91,7 @@ func (esd *branchSpecDir) makeVol(k string, spec VolumeSpec) (*Volume, error) {
 	for i, spec := range []StoreSpec{
 		spec.VCStore, spec.FSStore, spec.RawStore,
 	} {
-		ss[i], err = esd.sf(spec)
+		ss[i], err = r.sf(spec)
 		if err != nil {
 			return nil, err
 		}
@@ -104,12 +102,4 @@ func (esd *branchSpecDir) makeVol(k string, spec VolumeSpec) (*Volume, error) {
 		FSStore:  ss[1],
 		RawStore: ss[2],
 	}, nil
-}
-
-func randomUint64() uint64 {
-	buf := [8]byte{}
-	if _, err := rand.Read(buf[:]); err != nil {
-		panic(err)
-	}
-	return binary.BigEndian.Uint64(buf[:])
 }

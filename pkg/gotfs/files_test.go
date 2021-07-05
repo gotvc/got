@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -85,8 +86,14 @@ func TestLargeFiles(t *testing.T) {
 		require.Equal(t, uint64(size), actualSize)
 		eg.Go(func() error {
 			r := op.NewReader(ctx, s, s, *root, p)
-			_, err := io.CopyN(io.Discard, r, size)
-			return err
+			n, err := io.Copy(io.Discard, r)
+			if err != nil {
+				return err
+			}
+			if n != size {
+				return errors.Errorf("reader returned wrong number of bytes HAVE: %d WANT: %d", n, uint64(size))
+			}
+			return nil
 		})
 	}
 	require.NoError(t, eg.Wait())

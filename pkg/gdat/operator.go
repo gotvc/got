@@ -2,8 +2,6 @@ package gdat
 
 import (
 	"context"
-	"hash/crc64"
-	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	lru "github.com/hashicorp/golang-lru"
@@ -62,22 +60,18 @@ func (o *Operator) GetF(ctx context.Context, s Store, ref Ref, fn func(data []by
 	if data := o.checkCache(ref); data != nil {
 		return fn(data)
 	}
-	return getDecrypt(ctx, s, ref.DEK, ref.CID, func(data []byte) error {
-		o.loadCache(ref, data)
-		return fn(data)
-	})
+	buf := make([]byte, s.MaxSize())
+	n, err := o.Read(ctx, s, ref, buf)
+	if err != nil {
+		return err
+	}
+	data := buf[:n]
+	o.loadCache(ref, data)
+	return fn(data)
 }
 
 func (o *Operator) Read(ctx context.Context, s Store, ref Ref, buf []byte) (int, error) {
-	var n int
-	err := o.GetF(ctx, s, ref, func(data []byte) error {
-		n = copy(buf, data)
-		if n < len(data) {
-			return io.ErrShortBuffer
-		}
-		return nil
-	})
-	return n, err
+	return getDecrypt(ctx, s, ref.DEK, ref.CID, buf)
 }
 
 func (o *Operator) checkCache(ref Ref) []byte {
@@ -90,18 +84,4 @@ func (o *Operator) checkCache(ref Ref) []byte {
 
 func (o *Operator) loadCache(ref Ref, data []byte) {
 	o.cache.Add(ref, append([]byte{}, data...))
-}
-
-func assertNotModified(data []byte, fn func(data []byte) error) error {
-	before := crc64Sum(data)
-	err := fn(data)
-	after := crc64Sum(data)
-	if before != after {
-		panic("buffer modified")
-	}
-	return err
-}
-
-func crc64Sum(data []byte) uint64 {
-	return crc64.Checksum(data, crc64.MakeTable(crc64.ISO))
 }

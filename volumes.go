@@ -3,6 +3,7 @@ package got
 import (
 	"context"
 	"crypto/rand"
+	"encoding/binary"
 	"encoding/json"
 	"log"
 
@@ -59,7 +60,7 @@ func (r *Repo) makeDefaultVolume() VolumeSpec {
 		Local: (*LocalCellSpec)(newRandom()),
 	}
 	cellSpec = CellSpec{
-		SecretBox: &SecretBoxCellSpec{
+		Encrypted: &EncryptedCellSpec{
 			Inner:  cellSpec,
 			Secret: generateSecret(32),
 		},
@@ -135,4 +136,12 @@ func generateSecret(n int) []byte {
 		panic(err)
 	}
 	return x
+}
+
+func randomUint64() uint64 {
+	buf := [8]byte{}
+	if _, err := rand.Read(buf[:]); err != nil {
+		panic(err)
+	}
+	return binary.BigEndian.Uint64(buf[:])
 }

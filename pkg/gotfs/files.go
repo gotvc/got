@@ -3,6 +3,7 @@ package gotfs
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"runtime"
 
@@ -16,7 +17,6 @@ import (
 
 const (
 	minPartSize            = 1 << 12
-	maxPartSize            = 1 << 20
 	partSizeDoublingPeriod = 2
 )
 
@@ -27,11 +27,14 @@ type writer struct {
 }
 
 func (o *Operator) newWriter(ctx context.Context, s cadata.Store, onPart func(*Part) error) *writer {
+	if s.MaxSize() < minPartSize {
+		panic(fmt.Sprint("store size too small", s.MaxSize()))
+	}
 	w := &writer{
 		onPart: onPart,
 		ctx:    ctx,
 	}
-	w.chunker = chunking.NewExponential(minPartSize, maxPartSize, partSizeDoublingPeriod, func(data []byte) error {
+	w.chunker = chunking.NewExponential(minPartSize, s.MaxSize(), partSizeDoublingPeriod, func(data []byte) error {
 		ref, err := o.dop.Post(ctx, s, data)
 		if err != nil {
 			return err

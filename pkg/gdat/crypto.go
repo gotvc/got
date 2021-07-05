@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/pkg/errors"
 	"golang.org/x/crypto/chacha20"
 	"lukechampine.com/blake3"
 )
@@ -48,14 +49,18 @@ func postEncrypt(ctx context.Context, s cadata.Poster, keyFunc KeyFunc, data []b
 	return id, &dek, nil
 }
 
-func getDecrypt(ctx context.Context, s cadata.Store, dek DEK, id cadata.ID, fn func([]byte) error) error {
-	buf := make([]byte, s.MaxSize())
+func getDecrypt(ctx context.Context, s cadata.Store, dek DEK, id cadata.ID, buf []byte) (int, error) {
 	n, err := s.Read(ctx, id, buf)
 	if err != nil {
-		return err
+		return 0, err
 	}
-	cryptoXOR(dek, buf[:n], buf[:n])
-	return fn(buf[:n])
+	data := buf[:n]
+	id2 := s.Hash(data)
+	if id != id2 {
+		return 0, errors.Errorf("bad data from store")
+	}
+	cryptoXOR(dek, data, data)
+	return n, nil
 }
 
 func cryptoXOR(key DEK, dst, src []byte) {

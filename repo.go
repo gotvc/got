@@ -67,6 +67,8 @@ type Repo struct {
 	cellManager  *cellManager
 	storeManager *storeManager
 	swarm        peerswarm.AskSwarm
+	dop          gdat.Operator
+	fsop         gotfs.Operator
 }
 
 func InitRepo(p string) error {
@@ -127,6 +129,8 @@ func OpenRepo(p string) (*Repo, error) {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
 		tracker: newTracker(db, []string{bucketTracker}),
+		dop:     gdat.NewOperator(),
+		fsop:    gotfs.NewOperator(),
 	}
 	r.porter = newPorter(db, []string{bucketPorter}, r.getFSOp())
 	fsStore := stores.NewFSStore(fs.NewDirFS(filepath.Join(r.rootPath, storePath)), MaxBlobSize)
@@ -183,13 +187,11 @@ func (r *Repo) getSwarm() (peerswarm.AskSwarm, error) {
 }
 
 func (r *Repo) getFSOp() *gotfs.Operator {
-	o := gotfs.NewOperator()
-	return &o
+	return &r.fsop
 }
 
 func (r *Repo) getDataOp() *gdat.Operator {
-	o := gdat.NewOperator()
-	return &o
+	return &r.dop
 }
 
 func dbPath(x string) string {
@@ -199,19 +201,15 @@ func dbPath(x string) string {
 func (r *Repo) DebugDB(ctx context.Context, w io.Writer) error {
 	return r.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(bucketDefault))
-		if b == nil {
-			return nil
+		if b != nil {
+			fmt.Fprintf(w, "BUCKET: %s\n", bucketDefault)
+			dumpBucket(w, b)
 		}
-		fmt.Fprintf(w, "BUCKET: %s\n", bucketDefault)
-		dumpBucket(w, b)
-
 		b = tx.Bucket([]byte(bucketCellData))
-		if b == nil {
-			return nil
+		if b != nil {
+			fmt.Fprintf(w, "BUCKET: %s\n", bucketCellData)
+			dumpBucket(w, b)
 		}
-		fmt.Fprintf(w, "BUCKET: %s\n", bucketCellData)
-		dumpBucket(w, b)
-
 		return nil
 	})
 }

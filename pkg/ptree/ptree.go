@@ -236,10 +236,6 @@ func (it *Iterator) setPosAfter(k []byte) {
 	it.span.Start = append(it.span.Start, 0x00)
 }
 
-func (it *Iterator) nextIndex(ctx context.Context, depth int) (*Index, error) {
-	panic("not implemented")
-}
-
 func peekEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Index, gteq []byte) (*Entry, error) {
 	entries, err := ListEntries(ctx, s, op, idx)
 	if err != nil {
@@ -300,14 +296,6 @@ func CopyAll(ctx context.Context, b *Builder, it *Iterator) error {
 		}
 	}
 	return nil
-}
-
-func copyIndex(ctx context.Context, b *Builder, it *Iterator, depth int) error {
-	idx, err := it.nextIndex(ctx, depth)
-	if err != nil {
-		return err
-	}
-	return b.copyTree(ctx, *idx, depth)
 }
 
 func copyEntry(ctx context.Context, b *Builder, it *Iterator) error {

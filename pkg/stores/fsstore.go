@@ -119,16 +119,25 @@ func (s fsStore) encoding() *base64.Encoding {
 }
 
 func copyToBuffer(dst []byte, r io.Reader) (int, error) {
-	var n int
-	for {
-		n2, err := r.Read(dst[n:])
-		if err != nil && err != io.EOF {
-			return 0, err
-		}
-		n += n2
-		if err == io.EOF {
-			break
-		}
+	bw := newByteWriter(dst)
+	n, err := io.Copy(bw, r)
+	return int(n), err
+}
+
+type byteWriter struct {
+	n   int
+	buf []byte
+}
+
+func newByteWriter(buf []byte) *byteWriter {
+	return &byteWriter{buf: buf}
+}
+
+func (bw *byteWriter) Write(p []byte) (int, error) {
+	n := copy(bw.buf[bw.n:], p)
+	if n < len(p) {
+		return n, io.ErrShortBuffer
 	}
+	bw.n += n
 	return n, nil
 }
