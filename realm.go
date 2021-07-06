@@ -79,7 +79,7 @@ func (r *branchSpecDir) makeBranch(k string, spec BranchSpec) (*Branch, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Branch{Volume: vol}, nil
+	return &Branch{Volume: *vol}, nil
 }
 
 func (r *branchSpecDir) makeVol(k string, spec VolumeSpec) (*Volume, error) {

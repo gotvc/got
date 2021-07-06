@@ -38,7 +38,7 @@ func (r *Repo) CleanupBranches(ctx context.Context, branchNames []string) error 
 	return nil
 }
 
-func (r *Repo) cleanupVolume(ctx context.Context, vol *branches.Volume) error {
+func (r *Repo) cleanupVolume(ctx context.Context, vol branches.Volume) error {
 	start, err := getSnapshot(ctx, vol.Cell)
 	if err != nil {
 		return err

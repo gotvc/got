@@ -15,7 +15,7 @@ func (r *Repo) Sync(ctx context.Context, dst, src string, force bool) error {
 	if err != nil {
 		return err
 	}
-	return syncVolumes(ctx, *dstBranch.Volume, *srcBranch.Volume, force)
+	return syncVolumes(ctx, dstBranch.Volume, srcBranch.Volume, force)
 }
 
 type syncTask struct {

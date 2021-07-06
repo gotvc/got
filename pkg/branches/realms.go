@@ -2,6 +2,7 @@ package branches
 
 import (
 	"context"
+	"sync"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cells"
@@ -21,18 +22,7 @@ func IsExists(err error) bool {
 	return err == ErrExists
 }
 
-// Volume is a Cell and a set of stores pair
-type Volume struct {
-	cells.Cell
-	VCStore, FSStore, RawStore cadata.Store
-}
-
-type Branch struct {
-	Volume      *Volume
-	Annotations map[string]string
-}
-
-// A Realm is a set of named volumes.
+// A Realm is a set of named branches.
 type Realm interface {
 	Get(ctx context.Context, name string) (*Branch, error)
 	Create(ctx context.Context, name string) error
@@ -48,4 +38,74 @@ func CreateIfNotExists(ctx context.Context, r Realm, k string) error {
 		return err
 	}
 	return nil
+}
+
+type MemRealm struct {
+	newStore func() cadata.Store
+	newCell  func() cells.Cell
+
+	mu       sync.RWMutex
+	branches map[string]Branch
+}
+
+func NewMem(newStore func() cadata.Store, newCell func() cells.Cell) Realm {
+	return &MemRealm{
+		newStore: newStore,
+		newCell:  newCell,
+		branches: map[string]Branch{},
+	}
+}
+
+func (r *MemRealm) Get(ctx context.Context, name string) (*Branch, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	branch, exists := r.branches[name]
+	branch.Annotations = copyAnotations(branch.Annotations)
+	if !exists {
+		return nil, ErrNotExist
+	}
+	return &branch, nil
+}
+
+func (r *MemRealm) Create(ctx context.Context, name string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.branches[name]; exists {
+		return ErrExists
+	}
+	r.branches[name] = Branch{
+		Volume: Volume{
+			Cell:     r.newCell(),
+			VCStore:  r.newStore(),
+			FSStore:  r.newStore(),
+			RawStore: r.newStore(),
+		},
+	}
+	return nil
+}
+
+func (r *MemRealm) Delete(ctx context.Context, name string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.branches, name)
+	return nil
+}
+
+func (r *MemRealm) ForEach(ctx context.Context, fn func(string) error) error {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	for name := range r.branches {
+		if err := fn(name); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func copyAnotations(x map[string]string) map[string]string {
+	y := make(map[string]string, len(x))
+	for k, v := range x {
+		y[k] = v
+	}
+	return y
 }

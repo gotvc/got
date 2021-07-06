@@ -31,7 +31,7 @@ func (r *Repo) Commit(ctx context.Context, commitInfo CommitInfo) error {
 	}
 	vol := branch.Volume
 	err = applySnapshot(ctx, vol.Cell, func(x *Commit) (*Commit, error) {
-		dst := tripleFromVolume(*vol)
+		dst := tripleFromVolume(vol)
 		src := r.stagingTriple()
 
 		y, err := gotvc.Change(ctx, src.VC, x, func(root *Root) (*Root, error) {
