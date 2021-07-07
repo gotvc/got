@@ -1,4 +1,4 @@
-package got
+package gotrepo
 
 import (
 	"bytes"

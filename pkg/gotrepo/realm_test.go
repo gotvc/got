@@ -1,4 +1,4 @@
-package got
+package gotrepo
 
 import (
 	"testing"
@@ -11,9 +11,9 @@ func TestRealm(t *testing.T) {
 	t.Parallel()
 	branches.TestRealm(t, func(t testing.TB) branches.Realm {
 		dir := t.TempDir()
-		err := InitRepo(dir)
+		err := Init(dir)
 		require.NoError(t, err)
-		r, err := OpenRepo(dir)
+		r, err := Open(dir)
 		require.NoError(t, err)
 		return r.specDir
 	})

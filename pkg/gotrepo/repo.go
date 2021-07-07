@@ -1,4 +1,4 @@
-package got
+package gotrepo
 
 import (
 	"context"
@@ -68,7 +68,7 @@ type Repo struct {
 	fsop         gotfs.Operator
 }
 
-func InitRepo(p string) error {
+func Init(p string) error {
 	repoDirFS := fs.NewDirFS(p)
 	if err := repoDirFS.Mkdir(gotPrefix, 0o755); err != nil {
 		return err
@@ -93,14 +93,14 @@ func InitRepo(p string) error {
 	if err := fs.WriteIfNotExists(repoDirFS, policyPath, nil); err != nil {
 		return err
 	}
-	r, err := OpenRepo(p)
+	r, err := Open(p)
 	if err != nil {
 		return err
 	}
 	return r.Close()
 }
 
-func OpenRepo(p string) (*Repo, error) {
+func Open(p string) (*Repo, error) {
 	ctx := context.TODO()
 	repoFS := fs.NewDirFS(p)
 	config, err := LoadConfig(repoFS, configPath)

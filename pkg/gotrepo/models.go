@@ -1,10 +1,6 @@
-package got
+package gotrepo
 
 import (
-	"encoding/json"
-
-	"github.com/pkg/errors"
-
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/branches"
 	"github.com/brendoncarroll/got/pkg/cells"
@@ -28,26 +24,3 @@ type (
 
 	Commit = gotvc.Snapshot
 )
-
-func MarshalPEM(x interface{}) ([]byte, error) {
-	ty, err := getPEMType(x)
-	if err != nil {
-		return nil, err
-	}
-	data, err := json.Marshal(x)
-	if err != nil {
-		return nil, err
-	}
-	return marshalPEM(ty, data), nil
-}
-
-func getPEMType(x interface{}) (string, error) {
-	switch x := x.(type) {
-	case Root, *Root:
-		return "GOTFS ROOT", nil
-	case Commit, *Commit:
-		return "GOT COMMIT", nil
-	default:
-		return "", errors.Errorf("unknown type %T", x)
-	}
-}

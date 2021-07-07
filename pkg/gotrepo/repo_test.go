@@ -1,4 +1,4 @@
-package got
+package gotrepo
 
 import (
 	"bytes"
@@ -17,8 +17,8 @@ func TestRepoInit(t *testing.T) {
 	ctx := context.Background()
 	dirpath := t.TempDir()
 	t.Log("testing in", dirpath)
-	require.NoError(t, InitRepo(dirpath))
-	repo, err := OpenRepo(dirpath)
+	require.NoError(t, Init(dirpath))
+	repo, err := Open(dirpath)
 	require.NoError(t, err)
 	require.NotNil(t, repo)
 
@@ -33,8 +33,8 @@ func TestCommit(t *testing.T) {
 	ctx := context.Background()
 	dirpath := t.TempDir()
 	t.Log("testing in", dirpath)
-	require.NoError(t, InitRepo(dirpath))
-	repo, err := OpenRepo(dirpath)
+	require.NoError(t, Init(dirpath))
+	repo, err := Open(dirpath)
 	require.NoError(t, err)
 	require.NotNil(t, repo)
 
@@ -64,6 +64,14 @@ func TestCommit(t *testing.T) {
 	checkFileContent(t, repo, p2, fileContents)
 
 	require.NoError(t, repo.Check(ctx))
+}
+
+func newTestRepo(t testing.TB) *Repo {
+	dirpath := t.TempDir()
+	require.NoError(t, Init(dirpath))
+	repo, err := Open(dirpath)
+	require.NoError(t, err)
+	return repo
 }
 
 func checkFileContent(t testing.TB, repo *Repo, p, content string) {
