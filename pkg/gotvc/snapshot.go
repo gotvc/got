@@ -16,6 +16,7 @@ type (
 	Store = cadata.Store
 	Ref   = gdat.Ref
 	Root  = gotfs.Root
+	Snap  = Snapshot
 )
 
 type Snapshot struct {

@@ -14,7 +14,7 @@ import (
 
 func init() {
 	rootCmd.AddCommand(commitCmd)
-	rootCmd.AddCommand(logCmd)
+	rootCmd.AddCommand(historyCmd)
 }
 
 var commitCmd = &cobra.Command{
@@ -25,22 +25,23 @@ var commitCmd = &cobra.Command{
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// TODO get message from -m flag
 		now := time.Now()
-		return repo.Commit(ctx, got.CommitInfo{
+		return repo.Commit(ctx, got.SnapInfo{
 			Message:   "",
 			CreatedAt: &now,
 		})
 	},
 }
 
-var logCmd = &cobra.Command{
-	Use:     "log",
-	Short:   "prints the commit log",
+var historyCmd = &cobra.Command{
+	Use:     "history",
+	Short:   "prints the snapshot log",
 	PreRunE: loadRepo,
+	Aliases: []string{"log"},
 	RunE: func(cmd *cobra.Command, args []string) error {
 		pr, pw := io.Pipe()
 		eg := errgroup.Group{}
 		eg.Go(func() error {
-			err := repo.History(ctx, "", func(ref got.Ref, c got.Commit) error {
+			err := repo.History(ctx, "", func(ref got.Ref, c got.Snap) error {
 				fmt.Fprintf(pw, "#%04d\t%v\n", c.N, ref.CID)
 				fmt.Fprintf(pw, "Created At: %v\n", c.CreatedAt)
 				fmt.Fprintf(pw, "Message: %s\n", c.Message)

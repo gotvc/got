@@ -22,5 +22,5 @@ type (
 	Ref  = gotkv.Ref
 	Root = gotfs.Root
 
-	Commit = gotvc.Snapshot
+	Snap = gotvc.Snap
 )

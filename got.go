@@ -11,11 +11,11 @@ import (
 )
 
 type (
-	Repo       = gotrepo.Repo
-	Root       = gotfs.Root
-	Ref        = gdat.Ref
-	CommitInfo = gotrepo.CommitInfo
-	Commit     = gotrepo.Commit
+	Repo     = gotrepo.Repo
+	Root     = gotfs.Root
+	Ref      = gdat.Ref
+	SnapInfo = gotrepo.SnapInfo
+	Snap     = gotrepo.Snap
 )
 
 func InitRepo(p string) error {
@@ -42,8 +42,8 @@ func getPEMType(x interface{}) (string, error) {
 	switch x := x.(type) {
 	case Root, *Root:
 		return "GOTFS ROOT", nil
-	case Commit, *Commit:
-		return "GOT COMMIT", nil
+	case Snap, *Snap:
+		return "GOT SNAPSHOT", nil
 	default:
 		return "", errors.Errorf("unknown type %T", x)
 	}

@@ -73,7 +73,7 @@ func (r *Repo) makeDefaultVolume() VolumeSpec {
 	}
 }
 
-func getSnapshot(ctx context.Context, c cells.Cell) (*Commit, error) {
+func getSnapshot(ctx context.Context, c cells.Cell) (*Snap, error) {
 	data, err := cells.GetBytes(ctx, c)
 	if err != nil {
 		return nil, err
@@ -81,18 +81,18 @@ func getSnapshot(ctx context.Context, c cells.Cell) (*Commit, error) {
 	if len(data) == 0 {
 		return nil, nil
 	}
-	var x Commit
+	var x Snap
 	if err := json.Unmarshal(data, &x); err != nil {
 		return nil, err
 	}
 	return &x, nil
 }
 
-func applySnapshot(ctx context.Context, c cells.Cell, fn func(*Commit) (*Commit, error)) error {
+func applySnapshot(ctx context.Context, c cells.Cell, fn func(*Snap) (*Snap, error)) error {
 	return cells.Apply(ctx, c, func(data []byte) ([]byte, error) {
-		var x *Commit
+		var x *Snap
 		if len(data) > 0 {
-			x = &Commit{}
+			x = &Snap{}
 			if err := json.Unmarshal(data, &x); err != nil {
 				return nil, err
 			}

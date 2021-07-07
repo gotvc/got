@@ -12,13 +12,13 @@ import (
 	"github.com/brendoncarroll/got/pkg/gotvc"
 )
 
-// CommitInfo is additional information that can be attached to a commit
-type CommitInfo struct {
+// SnapInfo is additional information that can be attached to a snapshot
+type SnapInfo struct {
 	Message   string
 	CreatedAt *time.Time
 }
 
-func (r *Repo) Commit(ctx context.Context, commitInfo CommitInfo) error {
+func (r *Repo) Commit(ctx context.Context, snapInfo SnapInfo) error {
 	if yes, err := r.tracker.IsEmpty(ctx); err != nil {
 		return err
 	} else if yes {
@@ -30,7 +30,7 @@ func (r *Repo) Commit(ctx context.Context, commitInfo CommitInfo) error {
 		return err
 	}
 	vol := branch.Volume
-	err = applySnapshot(ctx, vol.Cell, func(x *Commit) (*Commit, error) {
+	err = applySnapshot(ctx, vol.Cell, func(x *Snap) (*Snap, error) {
 		dst := tripleFromVolume(vol)
 		src := r.stagingTriple()
 
@@ -77,8 +77,8 @@ func (r *Repo) Commit(ctx context.Context, commitInfo CommitInfo) error {
 		if err != nil {
 			return nil, err
 		}
-		y.CreatedAt = commitInfo.CreatedAt
-		y.Message = commitInfo.Message
+		y.CreatedAt = snapInfo.CreatedAt
+		y.Message = snapInfo.Message
 		if err := syncStores(ctx, dst, src, *y); err != nil {
 			return nil, err
 		}

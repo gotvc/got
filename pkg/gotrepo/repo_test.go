@@ -46,7 +46,7 @@ func TestCommit(t *testing.T) {
 	err = repo.Track(ctx, p)
 	require.NoError(t, err)
 
-	err = repo.Commit(ctx, CommitInfo{})
+	err = repo.Commit(ctx, SnapInfo{})
 	require.NoError(t, err)
 
 	checkFileContent(t, repo, p, fileContents)
@@ -57,7 +57,7 @@ func TestCommit(t *testing.T) {
 	// track both
 	require.NoError(t, repo.Track(ctx, p))
 	require.NoError(t, repo.Track(ctx, p2))
-	err = repo.Commit(ctx, CommitInfo{})
+	err = repo.Commit(ctx, SnapInfo{})
 	require.NoError(t, err)
 
 	checkNotExists(t, repo, p)

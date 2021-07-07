@@ -61,7 +61,7 @@ func (r *Repo) GetActiveBranch(ctx context.Context) (string, *Branch, error) {
 	return name, branch, nil
 }
 
-func (r *Repo) History(ctx context.Context, name string, fn func(ref Ref, s Commit) error) error {
+func (r *Repo) History(ctx context.Context, name string, fn func(ref Ref, s Snap) error) error {
 	var err error
 	var branch *Branch
 	if name == "" {
