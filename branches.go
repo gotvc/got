@@ -36,6 +36,7 @@ func (r *Repo) ForEachBranch(ctx context.Context, fn func(string) error) error {
 	return r.realm.ForEach(ctx, fn)
 }
 
+// SetActiveBranch sets the active branch to name
 func (r *Repo) SetActiveBranch(ctx context.Context, name string) error {
 	_, err := r.GetRealm().Get(ctx, name)
 	if err != nil {
@@ -44,6 +45,7 @@ func (r *Repo) SetActiveBranch(ctx context.Context, name string) error {
 	return setActiveBranch(r.db, name)
 }
 
+// GetActiveBranch returns the name of the active branch, and the branch
 func (r *Repo) GetActiveBranch(ctx context.Context) (string, *Branch, error) {
 	name, err := getActiveBranch(r.db)
 	if err != nil {

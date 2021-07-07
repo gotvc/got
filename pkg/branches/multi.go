@@ -16,12 +16,9 @@ type Layer struct {
 
 func NewMultiRealm(layers []Layer) (Realm, error) {
 	for i := 0; i < len(layers); i++ {
-		for j := 0; j < len(layers); j++ {
-			if i == j {
-				continue
-			}
-			if strings.HasPrefix(layers[i].Prefix, layers[j].Prefix) {
-				return nil, errors.Errorf("MultiRealm: prefix conflict: %q and %q", layers[i], layers[j])
+		for j := i + 1; j < len(layers); j++ {
+			if strings.HasPrefix(layers[j].Prefix, layers[i].Prefix) {
+				return nil, errors.Errorf("layer %d prefix=%s has %d prefix=%s", j, layers[j].Prefix, i, layers[i].Prefix)
 			}
 		}
 	}

@@ -10,15 +10,13 @@ import (
 	"time"
 
 	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-p2p/s/peerswarm"
+	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/branches"
 	"github.com/brendoncarroll/got/pkg/fs"
 	"github.com/brendoncarroll/got/pkg/gdat"
 	"github.com/brendoncarroll/got/pkg/gotfs"
-	"github.com/brendoncarroll/got/pkg/gotnet"
 	"github.com/brendoncarroll/got/pkg/ptree"
 	"github.com/brendoncarroll/got/pkg/stores"
-	"github.com/inet256/inet256/pkg/inet256p2p"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -51,13 +49,13 @@ const (
 
 type Repo struct {
 	rootPath   string
-	repoFS     FS
+	repoFS     FS // repoFS is the directory that the repo is in
 	db         *bolt.DB
 	config     Config
 	policy     *Policy
 	privateKey p2p.PrivateKey
 
-	workingDir FS
+	workingDir FS // workingDir is repoFS with reserved paths filtered.
 	porter     *porter
 	tracker    *tracker
 
@@ -66,7 +64,6 @@ type Repo struct {
 
 	cellManager  *cellManager
 	storeManager *storeManager
-	swarm        peerswarm.AskSwarm
 	dop          gdat.Operator
 	fsop         gotfs.Operator
 }
@@ -166,24 +163,8 @@ func (r *Repo) WorkingDir() FS {
 	return r.workingDir
 }
 
-func (r *Repo) GetACL() gotnet.ACL {
-	return r.policy
-}
-
 func (r *Repo) GetRealm() Realm {
 	return r.realm
-}
-
-func (r *Repo) getSwarm() (peerswarm.AskSwarm, error) {
-	if r.swarm != nil {
-		return r.swarm, nil
-	}
-	swarm, err := inet256p2p.NewSwarm("127.0.0.1:25600", r.privateKey)
-	if err != nil {
-		return nil, err
-	}
-	r.swarm = swarm
-	return swarm, nil
 }
 
 func (r *Repo) getFSOp() *gotfs.Operator {
@@ -192,6 +173,10 @@ func (r *Repo) getFSOp() *gotfs.Operator {
 
 func (r *Repo) getDataOp() *gdat.Operator {
 	return &r.dop
+}
+
+func (r *Repo) UnionStore() cadata.Store {
+	return stores.AssertReadOnly(r.storeManager.store)
 }
 
 func dbPath(x string) string {

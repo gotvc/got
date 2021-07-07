@@ -5,6 +5,7 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/cells"
+	"github.com/stretchr/testify/require"
 )
 
 func TestMemRealm(t *testing.T) {
@@ -27,4 +28,19 @@ func TestCryptoRealm(t *testing.T) {
 		secret := make([]byte, 32)
 		return NewCryptoRealm(mem, secret)
 	})
+}
+
+func TestIsValidName(t *testing.T) {
+	tcs := map[string]bool{
+		"":              false,
+		"test":          true,
+		"test\ttest":    false,
+		"test123":       true,
+		"something.com": true,
+		"test\n":        false,
+	}
+	for x, expected := range tcs {
+		actual := IsValidName(x)
+		require.Equal(t, expected, actual, "%s -> %v", x, actual)
+	}
 }

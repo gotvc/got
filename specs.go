@@ -12,7 +12,6 @@ import (
 type StoreSpec struct {
 	Local     *LocalStoreSpec     `json:"local,omitempty"`
 	Blobcache *BlobcacheStoreSpec `json:"blobcache,omitempty"`
-	Peer      *PeerStoreSpec      `json:"peer,omitempty"`
 }
 
 type LocalStoreSpec = StoreID
@@ -29,10 +28,6 @@ func DefaultBlobcacheSpec() StoreSpec {
 			Addr: "127.0.0.1:6025",
 		},
 	}
-}
-
-type PeerStoreSpec struct {
-	ID p2p.PeerID `json:"id"`
 }
 
 func (r *Repo) MakeStore(spec StoreSpec) (Store, error) {
@@ -92,7 +87,6 @@ type CellSpec struct {
 	Local     *LocalCellSpec     `json:"local,omitempty"`
 	HTTP      *HTTPCellSpec      `json:"http,omitempty"`
 	Encrypted *EncryptedCellSpec `json:"encrypted,omitempty"`
-	Peer      *PeerCellSpec      `json:"peer,omitempty"`
 	Signed    *SignedCellSpec    `json:"signed,omitempty"`
 }
 
@@ -139,9 +133,6 @@ func (r *Repo) MakeCell(spec CellSpec) (Cell, error) {
 		}
 		return cells.NewEncrypted(inner, spec.Encrypted.Secret), nil
 
-	case spec.Peer != nil:
-		panic("not implemented")
-
 	case spec.Signed != nil:
 		inner, err := r.MakeCell(spec.Signed.Inner)
 		if err != nil {
@@ -166,5 +157,13 @@ func (r *Repo) MakeCell(spec CellSpec) (Cell, error) {
 	}
 }
 
+type MultiRealmSpec []LayerRealmSpec
+
+type LayerRealmSpec struct {
+	Prefix string    `json:"prefix"`
+	Target RealmSpec `json:"target"`
+}
+
 type RealmSpec struct {
+	Peer *p2p.PeerID `json:"peer,omitempty"`
 }

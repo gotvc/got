@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/got/pkg/gotnet"
 	"github.com/pkg/errors"
 )
 
@@ -14,8 +13,6 @@ const (
 	methodWrite = "WRITE"
 	methodRead  = "READ"
 )
-
-var _ gotnet.ACL = Policy{}
 
 type Policy struct {
 	rules []Rule

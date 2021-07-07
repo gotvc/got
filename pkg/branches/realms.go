@@ -68,6 +68,9 @@ func (r *MemRealm) Get(ctx context.Context, name string) (*Branch, error) {
 }
 
 func (r *MemRealm) Create(ctx context.Context, name string) error {
+	if err := CheckName(name); err != nil {
+		return err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.branches[name]; exists {

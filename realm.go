@@ -44,6 +44,9 @@ func (r *branchSpecDir) Create(ctx context.Context, name string) error {
 }
 
 func (r *branchSpecDir) CreateWithSpec(name string, spec BranchSpec) error {
+	if err := branches.CheckName(name); err != nil {
+		return err
+	}
 	_, err := r.cf(spec.Volume.Cell)
 	if err != nil {
 		return err
