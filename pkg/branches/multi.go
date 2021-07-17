@@ -27,7 +27,7 @@ func NewMultiRealm(layers []Layer) (Realm, error) {
 
 func (r layered) Create(ctx context.Context, k string) error {
 	for _, layer := range r {
-		if strings.HasPrefix(layer.Prefix, k) {
+		if strings.HasPrefix(k, layer.Prefix) {
 			l := len(layer.Prefix)
 			return layer.Target.Create(ctx, k[l:])
 		}
@@ -37,7 +37,7 @@ func (r layered) Create(ctx context.Context, k string) error {
 
 func (r layered) Delete(ctx context.Context, k string) error {
 	for _, layer := range r {
-		if strings.HasPrefix(layer.Prefix, k) {
+		if strings.HasPrefix(k, layer.Prefix) {
 			l := len(layer.Prefix)
 			return layer.Target.Delete(ctx, k[l:])
 		}
