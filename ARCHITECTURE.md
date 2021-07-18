@@ -53,7 +53,7 @@ There are a few layers that make up Got's data formats.
 
 ### Refs
 All data is encrypted, and the key for encryption (regardless of how it was derived) is stored with the hash reference to the data.
-So Got's Refs are a ciphertext hash, and a secret key, for a total of about 512B per ref.
+So Got's Refs are a ciphertext hash, and a secret key, for a total of about 64 bytes per ref.
 Anytime you see "Ref", "reference", or "pointer" mentioned below, it is referring to one of these Refs.
 
 ### GotKV
@@ -67,11 +67,11 @@ It is just a GotKV instance with a special schema.
 
 More information in `docs/gotfs.md`
 
-### Commits
-A Commit is a snapshot of a GotFS filesystem.
+### Snapshots
+A Snapshot or Snap is a GotFS instance, as well as a history of snapshots that came before it.
 It contains a Ref to a GotFS root.
 It may contain a pointer to a parent, so that a delta can be computed.
 If there is no parent, then it is the first version of the filesystem.
 
-A Ref to a Commit is what Got stores in a Volume's cell.
+A serialized Snapshot is what Got stores in a Volume's cell.
 And the set of blobs reachable from the Commit via the GotFS datastructure is what is stored in the Volume's store.

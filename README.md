@@ -7,7 +7,7 @@ Got is version control, with a model similar to Git's, extending ideas from [Web
 - Snapshot based version control.
 - Good support for large files
 - Data is end to end encrypted.
-- Multi-Backend, using [Cells](./pkg/cells) and [Stores](./pkg/cadata)
+- Multi-Backend, using [Cells](./pkg/cells) and [Stores](./pkg/stores)
 
 ## Getting Started
 Installs to `$GOPATH/bin` with make.
