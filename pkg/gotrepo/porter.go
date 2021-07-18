@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/gotvc/got/pkg/fs"
+	"github.com/brendoncarroll/go-state/fs"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
@@ -43,12 +43,12 @@ func (p *porter) Import(ctx context.Context, ms, ds Store, fsx fs.FS, pth string
 	if !stat.Mode().IsRegular() {
 		return nil, errors.Errorf("porter cannot import non-regular file at path %q", pth)
 	}
-	f, err := fsx.Open(pth)
+	f, err := fsx.OpenFile(pth, fs.O_RDONLY, 0)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
-	root, err := p.fsop.CreateFileRoot(ctx, ms, ds, f)
+	root, err := p.fsop.CreateFileRoot(ctx, ms, ds, f.(fs.RegularFile))
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func (p *porter) Export(ctx context.Context, ms, ds Store, root gotfs.Root, fsx 
 		return nil
 	}
 	r := p.fsop.NewReader(ctx, ms, ds, root, pth)
-	if err := fsx.WriteFile(pth, r); err != nil {
+	if err := fs.PutFile(ctx, fsx, pth, 0o644, r); err != nil {
 		return err
 	}
 	finfo, err := fsx.Stat(pth)

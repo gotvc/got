@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/fs"
+	"github.com/brendoncarroll/go-state/fs"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
@@ -61,6 +61,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo SnapInfo) error {
 				if err := r.forEachToAdd(ctx, target, func(p string) error {
 					root, err = r.putPath(ctx, src.FS, src.Raw, *root, p)
 					if err != nil {
+						panic(err)
 						return err
 					}
 					return nil
@@ -104,7 +105,7 @@ func (r *Repo) StagingStore() cadata.Store {
 
 func (r *Repo) forEachToDelete(ctx context.Context, ms Store, root Root, target string, fn func(p string) error) error {
 	return r.getFSOp().ForEach(ctx, ms, root, target, func(p string, md *gotfs.Metadata) error {
-		exists, err := fs.Exists(r.workingDir, p)
+		exists, err := exists(r.workingDir, p)
 		if err != nil {
 			return err
 		}
@@ -116,10 +117,10 @@ func (r *Repo) forEachToDelete(ctx context.Context, ms Store, root Root, target 
 }
 
 func (r *Repo) forEachToAdd(ctx context.Context, target string, fn func(p string) error) error {
-	err := fs.WalkFiles(ctx, r.workingDir, target, func(p string) error {
+	err := fs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ fs.DirEnt) error {
 		return fn(p)
 	})
-	if fs.IsNotExist(err) {
+	if fs.IsErrNotExist(err) {
 		err = nil
 	}
 	return err
@@ -139,7 +140,7 @@ func (r *Repo) deletePath(ctx context.Context, ms Store, x Root, fsx fs.FS, p st
 	fsop := r.getFSOp()
 	y := &x
 	err := fsop.ForEach(ctx, ms, x, p, func(p string, md *gotfs.Metadata) error {
-		exists, err := fs.Exists(fsx, p)
+		exists, err := exists(fsx, p)
 		if err != nil {
 			return err
 		}

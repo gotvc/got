@@ -4,7 +4,7 @@ go 1.15
 
 require (
 	github.com/brendoncarroll/go-p2p v0.0.0-20210705020028-29a4cc3b2ad1
-	github.com/brendoncarroll/go-state v0.0.0-20210705045958-10fec17ec7be
+	github.com/brendoncarroll/go-state v0.0.0-20210718182221-9c0569ebd47e
 	github.com/chmduquesne/rollinghash v0.0.0-20180912150627-a60f8e7142b5
 	github.com/golang/protobuf v1.4.3
 	github.com/hashicorp/golang-lru v0.5.1

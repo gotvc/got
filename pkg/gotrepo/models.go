@@ -2,9 +2,9 @@ package gotrepo
 
 import (
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/fs"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
-	"github.com/gotvc/got/pkg/fs"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotvc"

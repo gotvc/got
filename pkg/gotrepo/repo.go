@@ -1,18 +1,18 @@
 package gotrepo
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/fs"
 	"github.com/gotvc/got/pkg/branches"
-	"github.com/gotvc/got/pkg/fs"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/ptree"
@@ -70,17 +70,20 @@ type Repo struct {
 
 func Init(p string) error {
 	repoDirFS := fs.NewDirFS(p)
+	if _, err := repoDirFS.Stat(configPath); fs.IsErrNotExist(err) {
+	} else if err != nil {
+		return err
+	} else {
+		return errors.Errorf("repo already exists")
+	}
 	if err := repoDirFS.Mkdir(gotPrefix, 0o755); err != nil {
 		return err
 	}
 	if err := repoDirFS.Mkdir(specDirPath, 0o755); err != nil {
 		return err
 	}
-	if _, err := repoDirFS.Stat(configPath); os.IsNotExist(err) {
-	} else if err != nil {
+	if err := repoDirFS.Mkdir(storePath, 0o755); err != nil {
 		return err
-	} else {
-		return errors.Errorf("repo already exists")
 	}
 	config := DefaultConfig()
 	if err := SaveConfig(repoDirFS, configPath, config); err != nil {
@@ -90,7 +93,7 @@ func Init(p string) error {
 	if err := SavePrivateKey(repoDirFS, privateKeyPath, privKey); err != nil {
 		return err
 	}
-	if err := fs.WriteIfNotExists(repoDirFS, policyPath, nil); err != nil {
+	if err := writeIfNotExists(repoDirFS, policyPath, 0o644, bytes.NewReader(nil)); err != nil {
 		return err
 	}
 	r, err := Open(p)
@@ -122,7 +125,7 @@ func Open(p string) (*Repo, error) {
 		config:     *config,
 		privateKey: privateKey,
 		db:         db,
-		workingDir: fs.NewFilterFS(repoFS, func(x string) bool {
+		workingDir: fs.NewFiltered(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
 		tracker: newTracker(db, []string{bucketTracker}),
@@ -130,7 +133,7 @@ func Open(p string) (*Repo, error) {
 		fsop:    gotfs.NewOperator(),
 	}
 	r.porter = newPorter(db, []string{bucketPorter}, r.getFSOp())
-	fsStore := stores.NewFSStore(fs.NewDirFS(filepath.Join(r.rootPath, storePath)), MaxBlobSize)
+	fsStore := stores.NewFSStore(r.getSubFS(storePath), MaxBlobSize)
 	r.storeManager = newStoreManager(fsStore, r.db, bucketStores)
 	r.cellManager = newCellManager(db, []string{bucketCellData})
 
@@ -144,7 +147,6 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return r, nil
 }
 
@@ -165,6 +167,10 @@ func (r *Repo) WorkingDir() FS {
 
 func (r *Repo) GetRealm() Realm {
 	return r.realm
+}
+
+func (r *Repo) getSubFS(prefix string) fs.FS {
+	return fs.NewPrefixed(r.repoFS, prefix)
 }
 
 func (r *Repo) getFSOp() *gotfs.Operator {

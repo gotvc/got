@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gotvc/got/pkg/fs"
+	"github.com/brendoncarroll/go-state/fs"
 	"github.com/gotvc/got/pkg/gotfs"
 	bolt "go.etcd.io/bbolt"
 )
@@ -19,7 +19,7 @@ func (r *Repo) Untrack(ctx context.Context, p string) error {
 
 func (r *Repo) ForEachTracked(ctx context.Context, fn func(p string, isDelete bool) error) error {
 	return r.tracker.ForEach(ctx, func(p string) error {
-		exists, err := fs.Exists(r.workingDir, p)
+		exists, err := exists(r.workingDir, p)
 		if err != nil {
 			return err
 		}
@@ -156,4 +156,15 @@ func bucketFromTx(tx *bolt.Tx, path []string) (*bolt.Bucket, error) {
 		path = path[1:]
 	}
 	return b, nil
+}
+
+func exists(x fs.FS, p string) (bool, error) {
+	_, err := x.Stat(p)
+	if fs.IsErrNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }

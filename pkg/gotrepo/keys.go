@@ -1,13 +1,16 @@
 package gotrepo
 
 import (
+	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
+	"io"
 
 	"github.com/brendoncarroll/go-p2p"
-	"github.com/gotvc/got/pkg/fs"
+	"github.com/brendoncarroll/go-state/fs"
 	"github.com/pkg/errors"
 )
 
@@ -24,7 +27,7 @@ func (r *Repo) GetPrivateKey() p2p.PrivateKey {
 }
 
 func LoadPrivateKey(fsx fs.FS, p string) (p2p.PrivateKey, error) {
-	data, err := fs.ReadFile(fsx, p)
+	data, err := fs.ReadFile(context.TODO(), fsx, p)
 	if err != nil {
 		return nil, err
 	}
@@ -32,7 +35,20 @@ func LoadPrivateKey(fsx fs.FS, p string) (p2p.PrivateKey, error) {
 }
 
 func SavePrivateKey(fsx fs.FS, p string, privateKey p2p.PrivateKey) error {
-	return fs.WriteIfNotExists(fsx, p, marshalPrivateKey(privateKey))
+	data := marshalPrivateKey(privateKey)
+	return writeIfNotExists(fsx, p, 0o600, bytes.NewReader(data))
+}
+
+func writeIfNotExists(fsx fs.FS, p string, mode fs.FileMode, r io.Reader) error {
+	f, err := fsx.OpenFile(p, fs.O_EXCL|fs.O_CREATE|fs.O_WRONLY, mode)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := io.Copy(f.(fs.RegularFile), r); err != nil {
+		return err
+	}
+	return f.Close()
 }
 
 func marshalPEM(ty string, data []byte) []byte {

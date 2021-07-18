@@ -1,7 +1,6 @@
 package gotrepo
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/binary"
@@ -20,11 +19,11 @@ const (
 type StoreID = uint64
 
 type storeManager struct {
-	store      Store
+	store Store
+	locks [256]sync.RWMutex
+
 	db         *bolt.DB
 	bucketName string
-
-	mu sync.RWMutex
 }
 
 func newStoreManager(store Store, db *bolt.DB, bucketName string) *storeManager {
@@ -72,9 +71,6 @@ func (sm *storeManager) GetStore(id StoreID) Store {
 }
 
 func (sm *storeManager) maybePost(ctx context.Context, id cadata.ID, data []byte) (cadata.ID, error) {
-	sm.mu.RLock()
-	defer sm.mu.RUnlock()
-	// TODO: check db again here
 	exists, err := sm.store.Exists(ctx, id)
 	if err != nil {
 		return cadata.ID{}, err
@@ -89,8 +85,6 @@ func (sm *storeManager) maybeDelete(ctx context.Context, id cadata.ID) error {
 	if id == (cadata.ID{}) {
 		panic("empty id")
 	}
-	sm.mu.Lock()
-	defer sm.mu.Unlock()
 	var count int
 	if err := sm.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(sm.bucketName))
@@ -120,6 +114,24 @@ func (sm *storeManager) bucket(tx *bolt.Tx) (*bolt.Bucket, error) {
 	}
 }
 
+func (sm *storeManager) lock(id cadata.ID, deleteMode bool) {
+	l := &sm.locks[id[0]]
+	if deleteMode {
+		l.Lock()
+	} else {
+		l.RLock()
+	}
+}
+
+func (sm *storeManager) unlock(id cadata.ID, deleteMode bool) {
+	l := &sm.locks[id[0]]
+	if deleteMode {
+		l.Unlock()
+	} else {
+		l.RUnlock()
+	}
+}
+
 var _ interface {
 	cadata.Store
 	cadata.Adder
@@ -133,6 +145,8 @@ type virtualStore struct {
 // Post implements cadata.Poster
 func (s virtualStore) Post(ctx context.Context, data []byte) (cadata.ID, error) {
 	id := cadata.DefaultHash(data)
+	s.sm.lock(id, false)
+	defer s.sm.unlock(id, false)
 	if err := s.sm.db.Batch(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists([]byte(s.sm.bucketName))
 		if err != nil {
@@ -155,6 +169,8 @@ func (s virtualStore) Post(ctx context.Context, data []byte) (cadata.ID, error) 
 
 // Add implements cadata.Adder
 func (s virtualStore) Add(ctx context.Context, id cadata.ID) error {
+	s.sm.lock(id, false)
+	defer s.sm.unlock(id, false)
 	return s.sm.db.Batch(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists([]byte(s.sm.bucketName))
 		if err != nil {
@@ -216,6 +232,8 @@ func (s virtualStore) Exists(ctx context.Context, id cadata.ID) (bool, error) {
 
 // Deleta implements cadata.Store
 func (s virtualStore) Delete(ctx context.Context, id cadata.ID) error {
+	s.sm.lock(id, true)
+	defer s.sm.unlock(id, true)
 	if err := s.sm.db.Batch(func(tx *bolt.Tx) error {
 		b, err := tx.CreateBucketIfNotExists([]byte(setsBucketName))
 		if err != nil {
@@ -237,26 +255,30 @@ func (s virtualStore) Delete(ctx context.Context, id cadata.ID) error {
 }
 
 // List implements cadata.Set
-func (s virtualStore) List(ctx context.Context, prefix []byte, ids []cadata.ID) (int, error) {
+func (s virtualStore) List(ctx context.Context, first []byte, ids []cadata.ID) (int, error) {
 	var n int
+	stopIter := errors.New("stop")
 	err := s.sm.db.View(func(tx *bolt.Tx) error {
 		b, _ := s.sm.bucket(tx)
 		if b == nil {
 			return nil
 		}
-		return forEachInSet(b, s.id, prefix, func(id cadata.ID) error {
-			if n >= len(ids) {
-				return cadata.ErrTooMany
-			}
+		return forEachInSet(b, s.id, first, func(id cadata.ID) error {
 			ids[n] = id
 			n++
+			if n == len(ids) {
+				return stopIter
+			}
 			return nil
 		})
 	})
-	if err != nil {
+	if err != nil && err != stopIter {
 		return 0, err
 	}
-	return n, nil
+	if err == stopIter {
+		return 0, nil
+	}
+	return n, cadata.ErrEndOfList
 }
 
 func (s virtualStore) Hash(x []byte) cadata.ID {
@@ -334,7 +356,7 @@ func isInSet(b *bolt.Bucket, setID StoreID, id cadata.ID) (bool, error) {
 	return v != nil, nil
 }
 
-func forEachInSet(b *bolt.Bucket, setID StoreID, prefix []byte, fn func(cadata.ID) error) error {
+func forEachInSet(b *bolt.Bucket, setID StoreID, first []byte, fn func(cadata.ID) error) error {
 	b = b.Bucket([]byte(setsBucketName))
 	var setIDBuf [8]byte
 	binary.BigEndian.PutUint64(setIDBuf[:], setID)
@@ -343,7 +365,7 @@ func forEachInSet(b *bolt.Bucket, setID StoreID, prefix []byte, fn func(cadata.I
 		return nil
 	}
 	c := setBucket.Cursor()
-	for k, _ := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = c.Next() {
+	for k, _ := c.Seek(first); k != nil; k, _ = c.Next() {
 		id := cadata.IDFromBytes(k)
 		if err := fn(id); err != nil {
 			return err

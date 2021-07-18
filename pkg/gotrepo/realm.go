@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/fs"
 	"github.com/gotvc/got/pkg/branches"
-	"github.com/gotvc/got/pkg/fs"
 )
 
 var _ Realm = &branchSpecDir{}
@@ -32,7 +32,7 @@ func newBranchSpecDir(makeDefault func() VolumeSpec, cf cellFactory, sf storeFac
 }
 
 func (r *branchSpecDir) ForEach(ctx context.Context, fn func(string) error) error {
-	return fs.WalkFiles(ctx, r.fs, "", func(p string) error {
+	return fs.WalkLeaves(ctx, r.fs, "", func(p string, _ fs.DirEnt) error {
 		return fn(p)
 	})
 }
@@ -55,7 +55,7 @@ func (r *branchSpecDir) CreateWithSpec(name string, spec BranchSpec) error {
 	if err != nil {
 		return err
 	}
-	return r.fs.WriteFile(name, bytes.NewReader(data))
+	return writeIfNotExists(r.fs, name, 0o644, bytes.NewReader(data))
 }
 
 func (r *branchSpecDir) Delete(ctx context.Context, k string) error {
@@ -63,9 +63,9 @@ func (r *branchSpecDir) Delete(ctx context.Context, k string) error {
 }
 
 func (r *branchSpecDir) Get(ctx context.Context, k string) (*Branch, error) {
-	data, err := fs.ReadFile(r.fs, k)
+	data, err := fs.ReadFile(ctx, r.fs, k)
 	if err != nil {
-		if fs.IsNotExist(err) {
+		if fs.IsErrNotExist(err) {
 			return nil, branches.ErrNotExist
 		}
 		return nil, err

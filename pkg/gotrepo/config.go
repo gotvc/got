@@ -1,9 +1,11 @@
 package gotrepo
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 
-	"github.com/gotvc/got/pkg/fs"
+	"github.com/brendoncarroll/go-state/fs"
 )
 
 type Config struct {
@@ -17,7 +19,7 @@ func DefaultConfig() Config {
 }
 
 func LoadConfig(fsx fs.FS, p string) (*Config, error) {
-	data, err := fs.ReadFile(fsx, p)
+	data, err := fs.ReadFile(context.TODO(), fsx, p)
 	if err != nil {
 		return nil, err
 	}
@@ -33,5 +35,5 @@ func SaveConfig(fsx fs.FS, p string, c Config) error {
 	if err != nil {
 		return err
 	}
-	return fs.WriteFile(fsx, p, data)
+	return fs.PutFile(context.TODO(), fsx, p, 0o644, bytes.NewReader(data))
 }

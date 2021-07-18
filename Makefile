@@ -12,3 +12,8 @@ install: protobuf
 protobuf:
 	cd ./pkg/gotfs && ./build_protobuf.sh
 
+add-replace:
+	go mod edit -replace=github.com/brendoncarroll/go-state=../../brendoncarroll/go-state
+
+drop-replace:
+	go mod edit -dropreplace=github.com/brendoncarroll/go-state

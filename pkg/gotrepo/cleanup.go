@@ -58,7 +58,7 @@ func (r *Repo) cleanupVolume(ctx context.Context, vol branches.Volume) error {
 	}
 	for i := range keep {
 		log.Printf("keeping %d blobs", keep[i].Count())
-		if count, err := filterStore(ctx, ss[i], ss[i]); err != nil {
+		if count, err := filterStore(ctx, ss[i], keep[i]); err != nil {
 			return err
 		} else {
 			log.Printf("deleted %d blobs", count)
