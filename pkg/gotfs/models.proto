@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option go_package = "github.com/brendoncarroll/got/pkg/gotfs";
+option go_package = "github.com/gotvc/got/pkg/gotfs";
 
 message Metadata {
    uint32 mode = 1;

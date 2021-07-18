@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/ptree"
+	"github.com/gotvc/got/pkg/ptree"
 	"golang.org/x/sync/errgroup"
 )
 

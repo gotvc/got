@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/fs"
-	"github.com/brendoncarroll/got/pkg/gdat"
-	"github.com/brendoncarroll/got/pkg/gotfs"
-	"github.com/brendoncarroll/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/fs"
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/gotvc"
 )
 
 // SnapInfo is additional information that can be attached to a snapshot

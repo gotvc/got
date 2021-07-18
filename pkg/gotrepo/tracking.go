@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/brendoncarroll/got/pkg/fs"
-	"github.com/brendoncarroll/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/fs"
+	"github.com/gotvc/got/pkg/gotfs"
 	bolt "go.etcd.io/bbolt"
 )
 

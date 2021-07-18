@@ -8,10 +8,10 @@ import (
 	"runtime"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/chunking"
-	"github.com/brendoncarroll/got/pkg/gdat"
-	"github.com/brendoncarroll/got/pkg/gotkv"
-	"github.com/brendoncarroll/got/pkg/stores"
+	"github.com/gotvc/got/pkg/chunking"
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
 )
 

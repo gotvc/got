@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/brendoncarroll/got/pkg/fs"
-	"github.com/brendoncarroll/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/fs"
+	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )

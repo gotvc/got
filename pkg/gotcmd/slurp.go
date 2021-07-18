@@ -3,8 +3,8 @@ package gotcmd
 import (
 	"os"
 
-	"github.com/brendoncarroll/got"
-	"github.com/brendoncarroll/got/pkg/gotfs"
+	"github.com/gotvc/got"
+	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )

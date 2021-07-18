@@ -1,4 +1,4 @@
-module github.com/brendoncarroll/got
+module github.com/gotvc/got
 
 go 1.15
 

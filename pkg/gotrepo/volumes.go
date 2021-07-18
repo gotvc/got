@@ -11,10 +11,10 @@ import (
 	"github.com/pkg/errors"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/branches"
-	"github.com/brendoncarroll/got/pkg/gdat"
-	"github.com/brendoncarroll/got/pkg/gotfs"
-	"github.com/brendoncarroll/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/gotvc"
 )
 
 // SyncVolumes moves the commit in src and all it's data from to dst

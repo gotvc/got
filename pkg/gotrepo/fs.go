@@ -4,9 +4,9 @@ import (
 	"context"
 	"io"
 
-	"github.com/brendoncarroll/got/pkg/gdat"
-	"github.com/brendoncarroll/got/pkg/gotfs"
-	"github.com/brendoncarroll/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/gotvc"
 )
 
 func (r *Repo) Ls(ctx context.Context, p string, fn func(gotfs.DirEnt) error) error {

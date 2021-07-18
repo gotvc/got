@@ -5,8 +5,8 @@ import (
 	"context"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/gdat"
-	"github.com/brendoncarroll/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/pkg/errors"
 )
 

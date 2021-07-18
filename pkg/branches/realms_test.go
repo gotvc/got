@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/cells"
+	"github.com/gotvc/got/pkg/cells"
 	"github.com/stretchr/testify/require"
 )
 

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gdat"
 	"github.com/stretchr/testify/require"
 )
 

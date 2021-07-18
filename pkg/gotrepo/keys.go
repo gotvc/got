@@ -7,7 +7,7 @@ import (
 	"encoding/pem"
 
 	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/got/pkg/fs"
+	"github.com/gotvc/got/pkg/fs"
 	"github.com/pkg/errors"
 )
 

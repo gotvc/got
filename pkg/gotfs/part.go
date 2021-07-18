@@ -3,7 +3,7 @@ package gotfs
 import (
 	"encoding/binary"
 
-	"github.com/brendoncarroll/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
 )

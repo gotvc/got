@@ -8,8 +8,8 @@ import (
 	"log"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/chunking"
-	"github.com/brendoncarroll/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/chunking"
+	"github.com/gotvc/got/pkg/gdat"
 	"github.com/pkg/errors"
 )
 

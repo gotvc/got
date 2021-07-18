@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"encoding/pem"
 
-	"github.com/brendoncarroll/got/pkg/gdat"
-	"github.com/brendoncarroll/got/pkg/gotfs"
-	"github.com/brendoncarroll/got/pkg/gotrepo"
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/gotrepo"
 	"github.com/pkg/errors"
 )
 

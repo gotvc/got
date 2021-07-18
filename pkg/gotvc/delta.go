@@ -5,8 +5,8 @@ import (
 	"io"
 	"log"
 
-	"github.com/brendoncarroll/got/pkg/gotfs"
-	"github.com/brendoncarroll/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/gotkv"
 )
 
 type Delta struct {

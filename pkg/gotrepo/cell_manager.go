@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 
-	"github.com/brendoncarroll/got/pkg/cells"
+	"github.com/gotvc/got/pkg/cells"
 	bolt "go.etcd.io/bbolt"
 )
 

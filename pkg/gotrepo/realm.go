@@ -6,8 +6,8 @@ import (
 	"encoding/json"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/branches"
-	"github.com/brendoncarroll/got/pkg/fs"
+	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/fs"
 )
 
 var _ Realm = &branchSpecDir{}

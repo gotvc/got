@@ -5,7 +5,7 @@ import (
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gdat"
 )
 
 // Mutate applies the mutation mut, to the tree root.

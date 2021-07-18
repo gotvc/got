@@ -7,7 +7,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/brendoncarroll/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/pkg/errors"
 )
 

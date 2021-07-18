@@ -3,7 +3,7 @@ package gotrepo
 import (
 	"encoding/json"
 
-	"github.com/brendoncarroll/got/pkg/fs"
+	"github.com/gotvc/got/pkg/fs"
 )
 
 type Config struct {

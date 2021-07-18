@@ -3,7 +3,7 @@ package gotcmd
 import (
 	"fmt"
 
-	"github.com/brendoncarroll/got/pkg/branches"
+	"github.com/gotvc/got/pkg/branches"
 	"github.com/spf13/cobra"
 )
 

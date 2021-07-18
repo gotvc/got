@@ -3,7 +3,7 @@ package gotrepo
 import (
 	"testing"
 
-	"github.com/brendoncarroll/got/pkg/branches"
+	"github.com/gotvc/got/pkg/branches"
 	"github.com/stretchr/testify/require"
 )
 

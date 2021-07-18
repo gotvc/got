@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/fs"
+	"github.com/gotvc/got/pkg/fs"
 	"github.com/pkg/errors"
 )
 

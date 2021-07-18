@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/brendoncarroll/got/pkg/gdat"
-	"github.com/brendoncarroll/got/pkg/gotkv"
-	"github.com/brendoncarroll/got/pkg/stores"
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/stores"
 )
 
 // Sync ensures dst has all the data reachable from root

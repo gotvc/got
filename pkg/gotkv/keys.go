@@ -1,7 +1,7 @@
 package gotkv
 
 import (
-	"github.com/brendoncarroll/got/pkg/ptree"
+	"github.com/gotvc/got/pkg/ptree"
 )
 
 // PrefixSpan returns a Span that includes all keys with prefix p

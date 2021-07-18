@@ -5,11 +5,11 @@ import (
 	"log"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/branches"
-	"github.com/brendoncarroll/got/pkg/gdat"
-	"github.com/brendoncarroll/got/pkg/gotfs"
-	"github.com/brendoncarroll/got/pkg/gotvc"
-	"github.com/brendoncarroll/got/pkg/stores"
+	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/stores"
 )
 
 func (r *Repo) Cleanup(ctx context.Context) error {

@@ -3,7 +3,7 @@ package gotrepo
 import (
 	"context"
 
-	"github.com/brendoncarroll/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/gotvc"
 	bolt "go.etcd.io/bbolt"
 )
 

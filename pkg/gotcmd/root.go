@@ -1,7 +1,7 @@
 package gotcmd
 
 import (
-	"github.com/brendoncarroll/got"
+	"github.com/gotvc/got"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 )

@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/brendoncarroll/got/pkg/gotcmd"
+	"github.com/gotvc/got/pkg/gotcmd"
 )
 
 func main() {

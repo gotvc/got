@@ -11,12 +11,12 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/branches"
-	"github.com/brendoncarroll/got/pkg/fs"
-	"github.com/brendoncarroll/got/pkg/gdat"
-	"github.com/brendoncarroll/got/pkg/gotfs"
-	"github.com/brendoncarroll/got/pkg/ptree"
-	"github.com/brendoncarroll/got/pkg/stores"
+	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/fs"
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/ptree"
+	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
