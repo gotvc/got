@@ -3,7 +3,7 @@ package gotnet
 import (
 	"context"
 	"encoding/json"
-	"io"
+	"time"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
@@ -35,8 +35,8 @@ func newRealmSrv(realm branches.Realm, acl ACL, swarm p2p.AskSwarm) *realmSrv {
 	}
 }
 
-func (s *realmSrv) Serve() error {
-	return p2p.ServeBoth(s.swarm, p2p.NoOpTellHandler, s.handleAsk)
+func (srv *realmSrv) Serve(ctx context.Context) error {
+	return serveAsks(ctx, srv.swarm, srv.handleAsk)
 }
 
 func (s *realmSrv) Create(ctx context.Context, bid BranchID) error {
@@ -106,10 +106,12 @@ func (s *realmSrv) ForEach(ctx context.Context, peer p2p.PeerID, fn func(string)
 	return nil
 }
 
-func (s *realmSrv) handleAsk(ctx context.Context, msg *p2p.Message, w io.Writer) {
+func (s *realmSrv) handleAsk(resp []byte, msg p2p.Message) int {
+	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
+	defer cf()
 	peer := msg.Src.(p2p.PeerID)
 	if !s.acl.CanReadAny(peer) && !s.acl.CanWriteAny(peer) {
-		return
+		return 0
 	}
 	res, err := func() (*RealmRes, error) {
 		var req RealmReq
@@ -138,9 +140,7 @@ func (s *realmSrv) handleAsk(ctx context.Context, msg *p2p.Message, w io.Writer)
 		}
 	}
 	data, _ := json.Marshal(res)
-	if _, err := w.Write(data); err != nil {
-		logrus.Error(err)
-	}
+	return copy(resp, data)
 }
 
 func (s *realmSrv) handleCreate(ctx context.Context, peer p2p.PeerID, name string) (*RealmRes, error) {

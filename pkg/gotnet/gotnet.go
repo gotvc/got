@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-p2p/p/stringmux"
+	"github.com/brendoncarroll/go-p2p/p/p2pmux"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/got/pkg/branches"
 	"github.com/brendoncarroll/got/pkg/cells"
@@ -46,14 +46,14 @@ type ACL interface {
 }
 
 type Params struct {
-	Mux    stringmux.SecureAskMux
+	Mux    p2pmux.StringSecureAskMux
 	ACL    ACL
 	Realm  branches.Realm
 	Logger *logrus.Logger
 }
 
 type Service struct {
-	mux stringmux.SecureAskMux
+	mux p2pmux.StringSecureAskMux
 
 	blobPullSrv *blobPullSrv
 	blobMainSrv *blobMainSrv
@@ -73,12 +73,19 @@ func New(params Params) *Service {
 }
 
 func (s *Service) Serve() error {
-	eg := errgroup.Group{}
+	ctx := context.Background()
+	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
-		return s.blobMainSrv.Serve()
+		return s.blobPullSrv.Serve(ctx)
 	})
 	eg.Go(func() error {
-		return s.blobPullSrv.Serve()
+		return s.blobMainSrv.Serve(ctx)
+	})
+	eg.Go(func() error {
+		return s.cellSrv.Serve(ctx)
+	})
+	eg.Go(func() error {
+		return s.realmSrv.Serve(ctx)
 	})
 	return eg.Wait()
 }
@@ -99,9 +106,25 @@ func askJson(ctx context.Context, s p2p.Asker, dst p2p.PeerID, resp, req interfa
 	if err != nil {
 		return err
 	}
-	respData, err := s.Ask(ctx, dst, p2p.IOVec{reqData})
+	respData := make([]byte, 1<<16)
+	n, err := s.Ask(ctx, respData, dst, p2p.IOVec{reqData})
 	if err != nil {
 		return err
 	}
-	return json.Unmarshal(respData, resp)
+	return json.Unmarshal(respData[:n], resp)
+}
+
+func serveAsks(ctx context.Context, x p2p.AskSwarm, fn p2p.AskHandler) error {
+	eg := errgroup.Group{}
+	eg.Go(func() error {
+		return p2p.DiscardTells(ctx, x)
+	})
+	eg.Go(func() error {
+		for {
+			if err := x.ServeAsk(ctx, fn); err != nil {
+				return err
+			}
+		}
+	})
+	return eg.Wait()
 }

@@ -86,6 +86,7 @@ type Repo struct {
 	storeManager *storeManager
 	dop          gdat.Operator
 	fsop         gotfs.Operator
+	gotNet       *gotnet.Service
 }
 
 func Init(p string) error {
@@ -134,7 +135,6 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	db.NoSync = true
 	privateKey, err := LoadPrivateKey(repoFS, privateKeyPath)
 	if err != nil {
 		return nil, err
@@ -187,6 +187,10 @@ func (r *Repo) WorkingDir() FS {
 
 func (r *Repo) GetSpace() Space {
 	return r.realm
+}
+
+func (r *Repo) GetACL() *Policy {
+	return r.policy
 }
 
 func (r *Repo) getSubFS(prefix string) fs.FS {

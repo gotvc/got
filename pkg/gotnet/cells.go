@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
+	"time"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/got/pkg/branches"
@@ -32,11 +32,14 @@ func newCellSrv(realm branches.Realm, acl ACL, swarm p2p.AskSwarm) *cellSrv {
 		acl:   acl,
 		swarm: swarm,
 	}
-	go p2p.ServeBoth(cs.swarm, p2p.NoOpTellHandler, cs.handleAsk)
 	return cs
 }
 
-func (cs *cellSrv) CAS(ctx context.Context, cid CellID, prev, next []byte) ([]byte, error) {
+func (cs *cellSrv) Serve(ctx context.Context) error {
+	return serveAsks(ctx, cs.swarm, cs.handleAsk)
+}
+
+func (cs *cellSrv) CAS(ctx context.Context, cid CellID, actual, prev, next []byte) (int, error) {
 	req := CellReq{
 		CAS: &CASReq{
 			Name: cid.Name,
@@ -48,7 +51,7 @@ func (cs *cellSrv) CAS(ctx context.Context, cid CellID, prev, next []byte) ([]by
 	if err != nil {
 		panic(err)
 	}
-	return cs.swarm.Ask(ctx, cid.Peer, p2p.IOVec{reqData})
+	return cs.swarm.Ask(ctx, actual, cid.Peer, p2p.IOVec{reqData})
 }
 
 func (cs *cellSrv) Read(ctx context.Context, cid CellID, buf []byte) (int, error) {
@@ -61,52 +64,41 @@ func (cs *cellSrv) Read(ctx context.Context, cid CellID, buf []byte) (int, error
 	if err != nil {
 		panic(err)
 	}
-	data, err := cs.swarm.Ask(ctx, cid.Peer, p2p.IOVec{reqData})
-	if err != nil {
-		return 0, err
-	}
-	if len(buf) < len(data) {
-		return 0, io.ErrShortBuffer
-	}
-	return copy(buf, data), nil
+	return cs.swarm.Ask(ctx, buf, cid.Peer, p2p.IOVec{reqData})
 }
 
-func (cs *cellSrv) handleAsk(ctx context.Context, msg *p2p.Message, w io.Writer) {
+func (cs *cellSrv) handleAsk(resp []byte, msg p2p.Message) int {
+	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
+	defer cf()
 	var req CellReq
+	var n int
 	if err := func() error {
 		if err := json.Unmarshal(msg.Payload, &req); err != nil {
 			return err
 		}
+		var err error
 		switch {
 		case req.Read != nil:
-			buf := make([]byte, cellSize)
-			n, err := cs.handleRead(ctx, msg.Src.(p2p.PeerID), req.Read.Name, buf)
+			n, err = cs.handleRead(ctx, msg.Src.(p2p.PeerID), req.Read.Name, resp)
 			if err != nil {
-				return err
-			}
-			data := buf[:n]
-			if _, err := w.Write(data); err != nil {
 				return err
 			}
 
 		case req.CAS != nil:
-			buf := make([]byte, cellSize)
-			n, err := cs.handleCAS(ctx, msg.Src.(p2p.PeerID), req.CAS.Name, buf, req.CAS.Prev[:], req.CAS.Next)
+			n, err = cs.handleCAS(ctx, msg.Src.(p2p.PeerID), req.CAS.Name, resp, req.CAS.Prev[:], req.CAS.Next)
 			if err != nil {
 				return err
 			}
-			data := buf[:n]
-			if _, err := w.Write(data); err != nil {
-				return err
-			}
+
 		default:
 			return errors.Errorf("no request content")
 		}
 		return nil
 	}(); err != nil {
 		logrus.Error(err)
-		return
+		return 0
 	}
+	return n
 }
 
 func (cs *cellSrv) handleCAS(ctx context.Context, peer p2p.PeerID, name string, actual, prev, next []byte) (int, error) {
@@ -176,12 +168,11 @@ func newCell(srv *cellSrv, cid CellID) *cell {
 }
 
 func (c *cell) CAS(ctx context.Context, actual, prev, next []byte) (bool, int, error) {
-	actual2, err := c.srv.CAS(ctx, c.cid, prev, next)
+	n, err := c.srv.CAS(ctx, c.cid, actual, prev, next)
 	if err != nil {
 		return false, 0, err
 	}
-	n := copy(actual, actual2)
-	success := bytes.Equal(next, actual2)
+	success := bytes.Equal(next, actual)
 	return success, n, nil
 }
 

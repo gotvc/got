@@ -1,9 +1,9 @@
-package got
+package gotrepo
 
 import (
 	"context"
 
-	"github.com/brendoncarroll/go-p2p/p/stringmux"
+	"github.com/brendoncarroll/go-p2p/p/p2pmux"
 	"github.com/brendoncarroll/got/pkg/gotnet"
 	"github.com/inet256/inet256/pkg/inet256p2p"
 	"github.com/sirupsen/logrus"
@@ -18,6 +18,10 @@ func (r *Repo) Serve(ctx context.Context) error {
 	return srv.Serve()
 }
 
+func (r *Repo) GotNetClient() (*gotnet.Service, error) {
+	return r.getGotNet()
+}
+
 func (r *Repo) getGotNet() (*gotnet.Service, error) {
 	if r.gotNet != nil {
 		return r.gotNet, nil
@@ -26,7 +30,7 @@ func (r *Repo) getGotNet() (*gotnet.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	mux := stringmux.WrapSecureAskSwarm(swarm)
+	mux := p2pmux.NewStringSecureAskMux(swarm)
 	srv := gotnet.New(gotnet.Params{
 		Logger: logrus.New(),
 		ACL:    r.GetACL(),
@@ -34,5 +38,6 @@ func (r *Repo) getGotNet() (*gotnet.Service, error) {
 		Realm:  r.GetRealm(),
 	})
 	r.gotNet = srv
+	go r.gotNet.Serve()
 	return srv, nil
 }

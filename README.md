@@ -3,6 +3,8 @@ Like Git, but with an 'o'
 
 Got is version control, with a model similar to Git's, extending ideas from [WebFS](https://github.com/brendoncarroll/webfs).
 
+Got uses [INET256](https://github.com/inet256/inet256) to easily and securely connect repositories.
+
 ## Features
 - Snapshot based version control.
 - Good support for large files
@@ -23,6 +25,15 @@ Make sure you `cd` to where you want the repository.
 $ got init
 ```
 
+## Contributing
+To run the tests:
+```shell
+$ make test
+```
+The tests for `pkg/gotnet` require an INET256 daemon to be running.
+
+
+## More
 Read more about the CLI commands in [docs/cli.md](./docs/cli.md).
 
 Read more about the configuration objects in [docs/config.md](./docs/config.md).
