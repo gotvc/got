@@ -8,8 +8,9 @@ import (
 	"github.com/brendoncarroll/go-p2p/p/p2pmux"
 	"github.com/brendoncarroll/go-p2p/s/peerswarm"
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/branches"
-	"github.com/brendoncarroll/got/pkg/cells"
+	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/cells"
+	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/inet256/inet256/pkg/inet256p2p"
 	"github.com/stretchr/testify/require"
 )
@@ -27,10 +28,11 @@ func TestRealm(t *testing.T) {
 type side struct {
 	realm branches.Realm
 	srv   *Service
-	swarm peerswarm.AskSwarm
+	swarm p2p.SecureAskSwarm
 }
 
 func newTestPair(t testing.TB) (s1, s2 *side) {
+	srv := inet256client.NewTestService(t)
 	_, key1, _ := ed25519.GenerateKey(nil)
 	_, key2, _ := ed25519.GenerateKey(nil)
 	s1 = newTestSide(t, key1)
@@ -38,7 +40,7 @@ func newTestPair(t testing.TB) (s1, s2 *side) {
 	return s1, s2
 }
 
-func newTestSide(t testing.TB, privKey p2p.PrivateKey) *side {
+func newTestSide(t testing.TB, srv inet256.Service, privKey p2p.PrivateKey) *side {
 	swarm, err := inet256p2p.NewSwarm("127.0.0.1:25600", privKey)
 	require.NoError(t, err)
 	t.Cleanup(func() {

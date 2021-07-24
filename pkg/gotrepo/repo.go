@@ -20,6 +20,7 @@ import (
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
+	"github.com/gotvc/got/pkg/gotnet"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"

@@ -8,8 +8,8 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/p2pmux"
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/branches"
-	"github.com/brendoncarroll/got/pkg/cells"
+	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/cells"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )

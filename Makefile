@@ -14,6 +14,8 @@ protobuf:
 
 add-replace:
 	go mod edit -replace=github.com/brendoncarroll/go-state=../../brendoncarroll/go-state
+	go mod edit -replace=github.com/inet256/inet256=../../inet256/inet256
 
 drop-replace:
 	go mod edit -dropreplace=github.com/brendoncarroll/go-state
+	go mod edit -dropreplace=github.com/inet256/inet256

@@ -10,8 +10,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
-	"github.com/brendoncarroll/got/pkg/branches"
-	"github.com/brendoncarroll/got/pkg/cells"
+	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/cells"
 )
 
 type BranchID struct {

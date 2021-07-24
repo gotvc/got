@@ -10,7 +10,7 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/got/pkg/branches"
+	"github.com/gotvc/got/pkg/branches"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -60,10 +60,10 @@ func (s *blobPullSrv) PullFrom(ctx context.Context, dst p2p.PeerID, id cadata.ID
 	}
 	respData = respData[:n]
 	if bytes.Equal(respData, id[:]) {
-		return nil, cadata.ErrTooMany
+		return nil, cadata.ErrNotFound
 	}
-	if cadata.DefaultHash(respData) != id {
-		return nil, errors.Errorf("got bad blob from %v", dst)
+	if err := cadata.Check(cadata.DefaultHash, id, respData); err != nil {
+		return nil, errors.Wrapf(err, "from peer %v", dst)
 	}
 	return respData, nil
 }

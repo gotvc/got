@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/brendoncarroll/go-p2p/p/p2pmux"
-	"github.com/brendoncarroll/got/pkg/gotnet"
+	"github.com/gotvc/got/pkg/gotnet"
 	"github.com/inet256/inet256/pkg/inet256p2p"
 	"github.com/sirupsen/logrus"
 )

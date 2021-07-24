@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/got/pkg/branches"
-	"github.com/brendoncarroll/got/pkg/cells"
+	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/cells"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
