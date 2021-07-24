@@ -72,8 +72,8 @@ func (s *AsyncStore) Post(ctx context.Context, data []byte) (ID, error) {
 	return id, nil
 }
 
-func (s *AsyncStore) Read(ctx context.Context, id ID, buf []byte) (int, error) {
-	return s.target.Read(ctx, id, buf)
+func (s *AsyncStore) Get(ctx context.Context, id ID, buf []byte) (int, error) {
+	return s.target.Get(ctx, id, buf)
 }
 
 func (s *AsyncStore) Delete(ctx context.Context, id ID) error {

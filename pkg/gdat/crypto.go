@@ -50,7 +50,7 @@ func postEncrypt(ctx context.Context, s cadata.Poster, keyFunc KeyFunc, data []b
 }
 
 func getDecrypt(ctx context.Context, s cadata.Store, dek DEK, id cadata.ID, buf []byte) (int, error) {
-	n, err := s.Read(ctx, id, buf)
+	n, err := s.Get(ctx, id, buf)
 	if err != nil {
 		return 0, err
 	}

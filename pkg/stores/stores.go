@@ -15,6 +15,8 @@ type (
 	Set   = cadata.Set
 )
 
+var _ cadata.Set = MemSet{}
+
 type MemSet map[ID]struct{}
 
 func (ms MemSet) Exists(ctx context.Context, id ID) (bool, error) {
