@@ -3,6 +3,7 @@
 
 test: protobuf
 	go test ./...
+
 testv: protobuf
 	go test -v -count=1 ./...
 
