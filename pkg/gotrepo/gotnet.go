@@ -5,7 +5,7 @@ import (
 
 	"github.com/brendoncarroll/go-p2p/p/p2pmux"
 	"github.com/gotvc/got/pkg/gotnet"
-	"github.com/inet256/inet256/pkg/inet256p2p"
+	"github.com/inet256/inet256/client/go_client/inet256client"
 	"github.com/sirupsen/logrus"
 )
 
@@ -23,13 +23,19 @@ func (r *Repo) GotNetClient() (*gotnet.Service, error) {
 }
 
 func (r *Repo) getGotNet() (*gotnet.Service, error) {
+	ctx := context.Background()
 	if r.gotNet != nil {
 		return r.gotNet, nil
 	}
-	swarm, err := inet256p2p.NewSwarm("127.0.0.1:25600", r.privateKey)
+	client, err := inet256client.NewEnvClient()
 	if err != nil {
 		return nil, err
 	}
+	node, err := client.CreateNode(ctx, r.privateKey)
+	if err != nil {
+		return nil, err
+	}
+	swarm := inet256client.NewSwarm(node, r.privateKey.Public())
 	mux := p2pmux.NewStringSecureAskMux(swarm)
 	srv := gotnet.New(gotnet.Params{
 		Logger: logrus.New(),

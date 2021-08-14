@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/brendoncarroll/go-p2p"
+	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/pkg/errors"
 )
 
@@ -14,11 +14,13 @@ const (
 	methodRead  = "READ"
 )
 
+type PeerID = inet256.Addr
+
 type Policy struct {
 	rules []Rule
 }
 
-func (p Policy) CanWriteAny(peerID p2p.PeerID) (ret bool) {
+func (p Policy) CanWriteAny(peerID PeerID) (ret bool) {
 	// can cas any cell
 	for _, r := range p.rules {
 		ret = ret || (r.Subject == peerID && r.Method == methodWrite)
@@ -26,7 +28,7 @@ func (p Policy) CanWriteAny(peerID p2p.PeerID) (ret bool) {
 	return ret
 }
 
-func (p Policy) CanReadAny(peerID p2p.PeerID) (ret bool) {
+func (p Policy) CanReadAny(peerID PeerID) (ret bool) {
 	// can get any cell
 	for _, r := range p.rules {
 		ret = ret || (r.Subject == peerID && r.Method == methodRead)
@@ -34,15 +36,15 @@ func (p Policy) CanReadAny(peerID p2p.PeerID) (ret bool) {
 	return ret
 }
 
-func (p Policy) CanWrite(peerID p2p.PeerID, name string) (ret bool) {
+func (p Policy) CanWrite(peerID PeerID, name string) (ret bool) {
 	return p.canDo(peerID, methodWrite, name)
 }
 
-func (p Policy) CanRead(peerID p2p.PeerID, name string) (ret bool) {
+func (p Policy) CanRead(peerID PeerID, name string) (ret bool) {
 	return p.canDo(peerID, methodRead, name)
 }
 
-func (p Policy) canDo(peerID p2p.PeerID, method, object string) (ret bool) {
+func (p Policy) canDo(peerID PeerID, method, object string) (ret bool) {
 	ret = false
 	for _, r := range p.rules {
 		if r.Allows(peerID, method, object) {
@@ -84,7 +86,7 @@ func (p Policy) Marshal() []byte {
 
 type Rule struct {
 	Allow   bool
-	Subject p2p.PeerID
+	Subject PeerID
 	Method  string
 	Object  *regexp.Regexp
 }
@@ -105,7 +107,7 @@ func ParseRule(data []byte) (*Rule, error) {
 		return nil, errors.Errorf("rule must start with ALLOW or DENY")
 	}
 	// Subject
-	id := p2p.PeerID{}
+	id := PeerID{}
 	if err := id.UnmarshalText(parts[1]); err != nil {
 		return nil, err
 	}
@@ -126,17 +128,17 @@ func ParseRule(data []byte) (*Rule, error) {
 	return &r, nil
 }
 
-func (r Rule) Matches(sub p2p.PeerID, method, obj string) bool {
+func (r Rule) Matches(sub PeerID, method, obj string) bool {
 	return sub == r.Subject &&
 		method == r.Method &&
 		r.Object.MatchString(obj)
 }
 
-func (r Rule) Allows(sub p2p.PeerID, method, obj string) bool {
+func (r Rule) Allows(sub PeerID, method, obj string) bool {
 	return r.Matches(sub, method, obj) && r.Allow
 }
 
-func (r Rule) Denies(sub p2p.PeerID, method, obj string) bool {
+func (r Rule) Denies(sub PeerID, method, obj string) bool {
 	return r.Matches(sub, method, obj) && !r.Allow
 }
 

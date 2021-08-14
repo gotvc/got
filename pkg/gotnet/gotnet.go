@@ -10,6 +10,7 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
+	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 )
@@ -29,8 +30,14 @@ const (
 	opDelete = "DELETE"
 )
 
+const (
+	MaxMessageSize = 1 << 22
+)
+
+type PeerID = inet256.Addr
+
 type ErrNotAllowed struct {
-	Subject      p2p.PeerID
+	Subject      PeerID
 	Verb, Object string
 }
 
@@ -39,10 +46,10 @@ func (e ErrNotAllowed) Error() string {
 }
 
 type ACL interface {
-	CanWriteAny(p2p.PeerID) bool
-	CanReadAny(p2p.PeerID) bool
-	CanWrite(id p2p.PeerID, name string) bool
-	CanRead(id p2p.PeerID, name string) bool
+	CanWriteAny(PeerID) bool
+	CanReadAny(PeerID) bool
+	CanWrite(id PeerID, name string) bool
+	CanRead(id PeerID, name string) bool
 }
 
 type Params struct {
@@ -90,7 +97,7 @@ func (s *Service) Serve() error {
 	return eg.Wait()
 }
 
-func (s *Service) GetRealm(peer p2p.PeerID) branches.Realm {
+func (s *Service) GetRealm(peer PeerID) branches.Realm {
 	newCell := func(cid CellID) cells.Cell {
 		return newCell(s.cellSrv, cid)
 	}
@@ -98,10 +105,9 @@ func (s *Service) GetRealm(peer p2p.PeerID) branches.Realm {
 		return newStore(s.blobMainSrv, s.blobPullSrv, sid)
 	}
 	return newRealm(s.realmSrv, peer, newCell, newStore)
-
 }
 
-func askJson(ctx context.Context, s p2p.Asker, dst p2p.PeerID, resp, req interface{}) error {
+func askJson(ctx context.Context, s p2p.Asker, dst PeerID, resp, req interface{}) error {
 	reqData, err := json.Marshal(req)
 	if err != nil {
 		return err

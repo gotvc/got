@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"io"
 	"sync"
-	"time"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
@@ -18,7 +17,7 @@ import (
 const maxBlobSize = 1 << 20
 
 type StoreID struct {
-	Peer   p2p.PeerID
+	Peer   PeerID
 	Branch string
 	Type   StoreType
 }
@@ -52,7 +51,7 @@ func (srv *blobPullSrv) Serve(ctx context.Context) error {
 // if the node does not have the data they will send back the hash as a sentinel value.
 // if the data sent back has an incorrect hash an error is returned; this is potentially malicious.
 // otherwise the data is returned
-func (s *blobPullSrv) PullFrom(ctx context.Context, dst p2p.PeerID, id cadata.ID) ([]byte, error) {
+func (s *blobPullSrv) PullFrom(ctx context.Context, dst PeerID, id cadata.ID) ([]byte, error) {
 	respData := make([]byte, maxBlobSize)
 	n, err := s.swarm.Ask(ctx, respData, dst, p2p.IOVec{id[:]})
 	if err != nil {
@@ -68,17 +67,16 @@ func (s *blobPullSrv) PullFrom(ctx context.Context, dst p2p.PeerID, id cadata.ID
 	return respData, nil
 }
 
-func (s *blobPullSrv) handleAsk(resp []byte, msg p2p.Message) int {
-	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
-	defer cf()
-	if !s.acl.CanReadAny(msg.Src.(p2p.PeerID)) {
-		return 0
+func (s *blobPullSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) (int, error) {
+	peer := msg.Src.(PeerID)
+	if !s.acl.CanReadAny(peer) {
+		return 0, ErrNotAllowed{Subject: peer}
 	}
 	var n int
 	if err := func() error {
 		id := cadata.IDFromBytes(msg.Payload)
 		var err error
-		n, err = s.store.Read(ctx, id, resp)
+		n, err = s.store.Get(ctx, id, resp)
 		if cadata.IsNotFound(err) {
 			n = copy(resp, id[:])
 			return nil
@@ -88,9 +86,9 @@ func (s *blobPullSrv) handleAsk(resp []byte, msg p2p.Message) int {
 		return nil
 	}(); err != nil {
 		logrus.Warn(err)
-		return 0
+		return 0, err
 	}
-	return n
+	return n, nil
 }
 
 type blobMainSrv struct {
@@ -173,14 +171,12 @@ func (s *blobMainSrv) doToIDs(ctx context.Context, sid StoreID, op string, ids [
 	return &resp, nil
 }
 
-func (s *blobMainSrv) handleAsk(respBuf []byte, msg p2p.Message) int {
-	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
-	defer cf()
+func (s *blobMainSrv) handleAsk(ctx context.Context, respBuf []byte, msg p2p.Message) (int, error) {
 	var req BlobReq
 	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return 0
+		return 0, err
 	}
-	peer := msg.Src.(p2p.PeerID)
+	peer := msg.Src.(PeerID)
 	resp, err := func() (*BlobResp, error) {
 		switch req.Op {
 		case opPush:
@@ -191,16 +187,16 @@ func (s *blobMainSrv) handleAsk(respBuf []byte, msg p2p.Message) int {
 	}()
 	if err != nil {
 		logrus.Error(err)
-		return 0
+		return 0, err
 	}
 	data, err := json.Marshal(resp)
 	if err != nil {
 		panic(err)
 	}
-	return copy(respBuf, data)
+	return copy(respBuf, data), nil
 }
 
-func (s *blobMainSrv) handlePush(ctx context.Context, peer p2p.PeerID, req BlobReq) (*BlobResp, error) {
+func (s *blobMainSrv) handlePush(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
 	if !s.acl.CanWrite(peer, req.Branch) {
 		return nil, ErrNotAllowed{
 			Subject: peer,
@@ -277,8 +273,8 @@ func newTempStore() *tempStore {
 	}
 }
 
-func (ts *tempStore) Read(ctx context.Context, id cadata.ID, data []byte) (int, error) {
-	return ts.store.Read(ctx, id, data)
+func (ts *tempStore) Get(ctx context.Context, id cadata.ID, data []byte) (int, error) {
+	return ts.store.Get(ctx, id, data)
 }
 
 func (ts *tempStore) MaxSize() int {
@@ -333,7 +329,7 @@ func newStore(blobMainSrv *blobMainSrv, blobPullSrv *blobPullSrv, sid StoreID) *
 	}
 }
 
-func (s *store) Read(ctx context.Context, id cadata.ID, buf []byte) (int, error) {
+func (s *store) Get(ctx context.Context, id cadata.ID, buf []byte) (int, error) {
 	data, err := s.blobPullSrv.PullFrom(ctx, s.sid.Peer, id)
 	if err != nil {
 		return 0, err

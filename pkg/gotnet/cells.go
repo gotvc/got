@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/gotvc/got/pkg/branches"
@@ -16,7 +15,7 @@ import (
 const cellSize = 1 << 16
 
 type CellID struct {
-	Peer p2p.PeerID
+	Peer PeerID
 	Name string
 }
 
@@ -67,9 +66,7 @@ func (cs *cellSrv) Read(ctx context.Context, cid CellID, buf []byte) (int, error
 	return cs.swarm.Ask(ctx, buf, cid.Peer, p2p.IOVec{reqData})
 }
 
-func (cs *cellSrv) handleAsk(resp []byte, msg p2p.Message) int {
-	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
-	defer cf()
+func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) (int, error) {
 	var req CellReq
 	var n int
 	if err := func() error {
@@ -79,13 +76,13 @@ func (cs *cellSrv) handleAsk(resp []byte, msg p2p.Message) int {
 		var err error
 		switch {
 		case req.Read != nil:
-			n, err = cs.handleRead(ctx, msg.Src.(p2p.PeerID), req.Read.Name, resp)
+			n, err = cs.handleRead(ctx, msg.Src.(PeerID), req.Read.Name, resp)
 			if err != nil {
 				return err
 			}
 
 		case req.CAS != nil:
-			n, err = cs.handleCAS(ctx, msg.Src.(p2p.PeerID), req.CAS.Name, resp, req.CAS.Prev[:], req.CAS.Next)
+			n, err = cs.handleCAS(ctx, msg.Src.(PeerID), req.CAS.Name, resp, req.CAS.Prev[:], req.CAS.Next)
 			if err != nil {
 				return err
 			}
@@ -96,12 +93,12 @@ func (cs *cellSrv) handleAsk(resp []byte, msg p2p.Message) int {
 		return nil
 	}(); err != nil {
 		logrus.Error(err)
-		return 0
+		return 0, err
 	}
-	return n
+	return n, nil
 }
 
-func (cs *cellSrv) handleCAS(ctx context.Context, peer p2p.PeerID, name string, actual, prev, next []byte) (int, error) {
+func (cs *cellSrv) handleCAS(ctx context.Context, peer PeerID, name string, actual, prev, next []byte) (int, error) {
 	if !cs.acl.CanRead(peer, name) {
 		return 0, ErrNotAllowed{
 			Subject: peer,
@@ -118,7 +115,7 @@ func (cs *cellSrv) handleCAS(ctx context.Context, peer p2p.PeerID, name string, 
 	return n, err
 }
 
-func (cs *cellSrv) handleRead(ctx context.Context, peer p2p.PeerID, name string, buf []byte) (int, error) {
+func (cs *cellSrv) handleRead(ctx context.Context, peer PeerID, name string, buf []byte) (int, error) {
 	if !cs.acl.CanRead(peer, name) {
 		return 0, ErrNotAllowed{
 			Subject: peer,

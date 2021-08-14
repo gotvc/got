@@ -7,6 +7,7 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
@@ -15,7 +16,7 @@ import (
 )
 
 type BranchID struct {
-	Peer p2p.PeerID
+	Peer PeerID
 	Name string
 }
 
@@ -87,7 +88,7 @@ func (s *realmSrv) Exists(ctx context.Context, bid BranchID) (bool, error) {
 	return *resp.Exists, nil
 }
 
-func (s *realmSrv) ForEach(ctx context.Context, peer p2p.PeerID, fn func(string) error) error {
+func (s *realmSrv) ForEach(ctx context.Context, peer PeerID, fn func(string) error) error {
 	req := RealmReq{
 		Op: opList,
 	}
@@ -106,12 +107,12 @@ func (s *realmSrv) ForEach(ctx context.Context, peer p2p.PeerID, fn func(string)
 	return nil
 }
 
-func (s *realmSrv) handleAsk(resp []byte, msg p2p.Message) int {
+func (s *realmSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) (int, error) {
 	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
 	defer cf()
-	peer := msg.Src.(p2p.PeerID)
+	peer := msg.Src.(inet256.Addr)
 	if !s.acl.CanReadAny(peer) && !s.acl.CanWriteAny(peer) {
-		return 0
+		return 0, ErrNotAllowed{Subject: peer}
 	}
 	res, err := func() (*RealmRes, error) {
 		var req RealmReq
@@ -140,10 +141,10 @@ func (s *realmSrv) handleAsk(resp []byte, msg p2p.Message) int {
 		}
 	}
 	data, _ := json.Marshal(res)
-	return copy(resp, data)
+	return copy(resp, data), nil
 }
 
-func (s *realmSrv) handleCreate(ctx context.Context, peer p2p.PeerID, name string) (*RealmRes, error) {
+func (s *realmSrv) handleCreate(ctx context.Context, peer PeerID, name string) (*RealmRes, error) {
 	if err := checkACL(s.acl, peer, name, true); err != nil {
 		return nil, err
 	}
@@ -153,7 +154,7 @@ func (s *realmSrv) handleCreate(ctx context.Context, peer p2p.PeerID, name strin
 	return &RealmRes{}, nil
 }
 
-func (s *realmSrv) handleDelete(ctx context.Context, peer p2p.PeerID, name string) (*RealmRes, error) {
+func (s *realmSrv) handleDelete(ctx context.Context, peer PeerID, name string) (*RealmRes, error) {
 	if err := checkACL(s.acl, peer, name, true); err != nil {
 		return nil, err
 	}
@@ -166,7 +167,7 @@ func (s *realmSrv) handleDelete(ctx context.Context, peer p2p.PeerID, name strin
 	return &RealmRes{}, nil
 }
 
-func (s *realmSrv) handleExists(ctx context.Context, peer p2p.PeerID, name string) (*RealmRes, error) {
+func (s *realmSrv) handleExists(ctx context.Context, peer PeerID, name string) (*RealmRes, error) {
 	if err := checkACL(s.acl, peer, name, false); err != nil {
 		return nil, err
 	}
@@ -180,7 +181,7 @@ func (s *realmSrv) handleExists(ctx context.Context, peer p2p.PeerID, name strin
 	}, nil
 }
 
-func (s *realmSrv) handleList(ctx context.Context, peer p2p.PeerID) (*RealmRes, error) {
+func (s *realmSrv) handleList(ctx context.Context, peer PeerID) (*RealmRes, error) {
 	if !s.acl.CanReadAny(peer) {
 		return nil, ErrNotAllowed{Subject: peer, Verb: "LIST"}
 	}
@@ -194,7 +195,7 @@ func (s *realmSrv) handleList(ctx context.Context, peer p2p.PeerID) (*RealmRes, 
 	return &RealmRes{List: names}, nil
 }
 
-func checkACL(acl ACL, peer p2p.PeerID, name string, write bool) error {
+func checkACL(acl ACL, peer PeerID, name string, write bool) error {
 	var err error
 	if write {
 		verb := "WRITE"
@@ -233,12 +234,12 @@ var _ branches.Realm = &realm{}
 
 type realm struct {
 	srv      *realmSrv
-	peer     p2p.PeerID
+	peer     PeerID
 	newCell  func(CellID) cells.Cell
 	newStore func(StoreID) cadata.Store
 }
 
-func newRealm(srv *realmSrv, peer p2p.PeerID, newCell func(CellID) cells.Cell, newStore func(StoreID) cadata.Store) *realm {
+func newRealm(srv *realmSrv, peer PeerID, newCell func(CellID) cells.Cell, newStore func(StoreID) cadata.Store) *realm {
 	return &realm{
 		srv:      srv,
 		peer:     peer,

@@ -43,6 +43,8 @@ github.com/bkaradzic/go-lz4 v0.0.0-20160924222819-7224d8d8f27e/go.mod h1:0Ydlkow
 github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBTaaSFSlLx/70C2HPIMNZpVV8+vt/A+FMnYP11g=
 github.com/brendoncarroll/go-p2p v0.0.0-20210711165108-8e3676947493 h1:LF0KP9cjOGacNx31eNnUlD7gMSnIdLovkm1G40fDFdc=
 github.com/brendoncarroll/go-p2p v0.0.0-20210711165108-8e3676947493/go.mod h1:0vMrP9usF5q1T4o0o37QvcEOFyB2gSKXf+7mldLHxMw=
+github.com/brendoncarroll/go-p2p v0.0.0-20210814171431-566793c5a6a6 h1:Ez/GQdfXa1j/VFNyBLn3QvxEWtwZZ4VFum1Z0E4ARVE=
+github.com/brendoncarroll/go-p2p v0.0.0-20210814171431-566793c5a6a6/go.mod h1:tXEfapNF/whaBeE9HD6wY/QofRZ0Sr01aAtQNB1Le9s=
 github.com/brendoncarroll/go-state v0.0.0-20210627233638-99c825eb7040/go.mod h1:EQKdXJyc93dh3yN1wRYdKjAZk+MutF5DFwoW+Vqe5U0=
 github.com/brendoncarroll/go-state v0.0.0-20210724154322-8779b9922848 h1:WqRA4Lo7fpt0GF6AJGhMhT1E9HBHDfwWIsDjxWb4gw8=
 github.com/brendoncarroll/go-state v0.0.0-20210724154322-8779b9922848/go.mod h1:M86VCqKTis4CJcSvWCoB1OZHuRu3d1c05iS7+6HbBQI=
@@ -207,6 +209,8 @@ github.com/inconshreveable/mousetrap v1.0.0 h1:Z8tu5sraLXCXIcARxBp/8cbvlwVa7Z1NH
 github.com/inconshreveable/mousetrap v1.0.0/go.mod h1:PxqpIevigyE2G7u3NXJIT2ANytuPF1OarO4DADm73n8=
 github.com/inet256/inet256 v0.0.0-20210711205022-acb62157b926 h1:gLUP9MYiUWc/zJEtYx2VLQHmaV38vGHro4sZIehoaAY=
 github.com/inet256/inet256 v0.0.0-20210711205022-acb62157b926/go.mod h1:AREUE+WeBX7XmwOxGthpksIJqocR5ybd0GDcq+7eUjE=
+github.com/inet256/inet256 v0.0.0-20210814184651-afe565607de0 h1:IyiGMWkSquT3qGUmu5BvAbn+OWszCIRvaHJJjNDVzIg=
+github.com/inet256/inet256 v0.0.0-20210814184651-afe565607de0/go.mod h1:dexUw/P1GEkpctpsY3qhQiBi/s+UuRLReWtZkxbKox8=
 github.com/influxdata/influxdb1-client v0.0.0-20191209144304-8bf82d3c094d/go.mod h1:qj24IKcXYK6Iy9ceXlo3Tc+vtHo9lIhSX5JddghvEPo=
 github.com/jackpal/gateway v1.0.6/go.mod h1:lTpwd4ACLXmpyiCTRtfiNyVnUmqT9RivzCDQetPfnjA=
 github.com/jackpal/go-nat-pmp v1.0.2/go.mod h1:QPH045xvCAeXUZOxsnwmrtiCoxIr9eob+4orBN1SBKc=
