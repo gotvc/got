@@ -22,15 +22,15 @@ func IsExists(err error) bool {
 	return err == ErrExists
 }
 
-// A Realm is a set of named branches.
-type Realm interface {
+// A Space holds named branches.
+type Space interface {
 	Get(ctx context.Context, name string) (*Branch, error)
 	Create(ctx context.Context, name string) error
 	Delete(ctx context.Context, name string) error
 	ForEach(ctx context.Context, fn func(string) error) error
 }
 
-func CreateIfNotExists(ctx context.Context, r Realm, k string) error {
+func CreateIfNotExists(ctx context.Context, r Space, k string) error {
 	if _, err := r.Get(ctx, k); err != nil {
 		if IsNotExist(err) {
 			return r.Create(ctx, k)
@@ -40,7 +40,7 @@ func CreateIfNotExists(ctx context.Context, r Realm, k string) error {
 	return nil
 }
 
-type MemRealm struct {
+type MemSpace struct {
 	newStore func() cadata.Store
 	newCell  func() cells.Cell
 
@@ -48,15 +48,15 @@ type MemRealm struct {
 	branches map[string]Branch
 }
 
-func NewMem(newStore func() cadata.Store, newCell func() cells.Cell) Realm {
-	return &MemRealm{
+func NewMem(newStore func() cadata.Store, newCell func() cells.Cell) Space {
+	return &MemSpace{
 		newStore: newStore,
 		newCell:  newCell,
 		branches: map[string]Branch{},
 	}
 }
 
-func (r *MemRealm) Get(ctx context.Context, name string) (*Branch, error) {
+func (r *MemSpace) Get(ctx context.Context, name string) (*Branch, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	branch, exists := r.branches[name]
@@ -67,7 +67,7 @@ func (r *MemRealm) Get(ctx context.Context, name string) (*Branch, error) {
 	return &branch, nil
 }
 
-func (r *MemRealm) Create(ctx context.Context, name string) error {
+func (r *MemSpace) Create(ctx context.Context, name string) error {
 	if err := CheckName(name); err != nil {
 		return err
 	}
@@ -87,14 +87,14 @@ func (r *MemRealm) Create(ctx context.Context, name string) error {
 	return nil
 }
 
-func (r *MemRealm) Delete(ctx context.Context, name string) error {
+func (r *MemSpace) Delete(ctx context.Context, name string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	delete(r.branches, name)
 	return nil
 }
 
-func (r *MemRealm) ForEach(ctx context.Context, fn func(string) error) error {
+func (r *MemSpace) ForEach(ctx context.Context, fn func(string) error) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for name := range r.branches {

@@ -11,10 +11,10 @@ type layered []Layer
 
 type Layer struct {
 	Prefix string
-	Target Realm
+	Target Space
 }
 
-func NewMultiRealm(layers []Layer) (Realm, error) {
+func NewMultiSpace(layers []Layer) (Space, error) {
 	for i := 0; i < len(layers); i++ {
 		for j := i + 1; j < len(layers); j++ {
 			if strings.HasPrefix(layers[j].Prefix, layers[i].Prefix) {
@@ -32,7 +32,7 @@ func (r layered) Create(ctx context.Context, k string) error {
 			return layer.Target.Create(ctx, k[l:])
 		}
 	}
-	return errors.Errorf("key not contained in MultiRealm %q", k)
+	return errors.Errorf("key not contained in MultiSpace %q", k)
 }
 
 func (r layered) Delete(ctx context.Context, k string) error {
@@ -42,7 +42,7 @@ func (r layered) Delete(ctx context.Context, k string) error {
 			return layer.Target.Delete(ctx, k[l:])
 		}
 	}
-	return errors.Errorf("key not contained in MultiRealm %q", k)
+	return errors.Errorf("key not contained in MultiSpace %q", k)
 }
 
 func (r layered) Get(ctx context.Context, k string) (*Branch, error) {

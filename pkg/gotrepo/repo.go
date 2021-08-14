@@ -60,7 +60,7 @@ type Repo struct {
 	tracker    *tracker
 
 	specDir *branchSpecDir
-	realm   Realm
+	realm   Space
 
 	cellManager  *cellManager
 	storeManager *storeManager
@@ -141,7 +141,7 @@ func Open(p string) (*Repo, error) {
 	if err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster); err != nil {
 		return nil, err
 	}
-	r.realm, err = branches.NewMultiRealm([]branches.Layer{
+	r.realm, err = branches.NewMultiSpace([]branches.Layer{
 		{Prefix: "", Target: r.specDir},
 	})
 	if err != nil {
@@ -165,7 +165,7 @@ func (r *Repo) WorkingDir() FS {
 	return r.workingDir
 }
 
-func (r *Repo) GetRealm() Realm {
+func (r *Repo) GetSpace() Space {
 	return r.realm
 }
 

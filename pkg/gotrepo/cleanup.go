@@ -25,7 +25,7 @@ func (r *Repo) CleanupBranches(ctx context.Context, branchNames []string) error 
 		branchNames = []string{name}
 	}
 	for _, name := range branchNames {
-		branch, err := r.GetRealm().Get(ctx, name)
+		branch, err := r.GetSpace().Get(ctx, name)
 		if err != nil {
 			return err
 		}
