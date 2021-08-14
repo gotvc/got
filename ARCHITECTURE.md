@@ -18,7 +18,7 @@ The set of hashes in the store can be listed.
 
 ### Volume
 A volume is a (Cell, Store) pair.
-The exact definition can be found in `pkg/volumes`
+The exact definition can be found in `pkg/branches`
 The cell stores the root of some data structure.
 The store stores the content-addressed blobs that make up the data structure.
 
@@ -41,12 +41,15 @@ Sync and Cleanup can be run concurrently with themselves, but not each other.
 This essentially puts the volume in one of 2 modes: Expand mode and Contract mode.
 How this is implemented is not really important either; you can use locks, you can use MVCC, whatever.
 
-### Realms
-A Realm is a namespace for addressing a set of volumes with the same implementation.
-The interface is defined in `pkg/volumes`.
+## Branches
+Branches are name volumes, and associated metadata like creation time.  Since they contain volumes, they function as a holder of a Got data structure.
 
-One of Got's core functionalities is to be a composite Realm.
-You stitch together realms to create a composite namespace of volumes, then you perform operations involving the volumes by name.
+### Spaces
+A Space is a namespace for addressing a set of branches with the same implementation.
+The interface is defined in `pkg/branches`.
+
+One of Got's core functionalities is to be a composite Space.
+You stitch together spaces to create a composite namespace of branches, then you perform operations involving the volumes by name.
 
 ## Data Formats
 There are a few layers that make up Got's data formats.

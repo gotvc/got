@@ -157,13 +157,13 @@ func (r *Repo) MakeCell(spec CellSpec) (Cell, error) {
 	}
 }
 
-type MultiRealmSpec []LayerRealmSpec
+type MultiSpaceSpec []LayerSpaceSpec
 
-type LayerRealmSpec struct {
+type LayerSpaceSpec struct {
 	Prefix string    `json:"prefix"`
-	Target RealmSpec `json:"target"`
+	Target SpaceSpec `json:"target"`
 }
 
-type RealmSpec struct {
+type SpaceSpec struct {
 	Peer *p2p.PeerID `json:"peer,omitempty"`
 }

@@ -14,7 +14,7 @@ type (
 	FS = fs.FS
 
 	Cell   = cells.Cell
-	Realm  = branches.Realm
+	Space  = branches.Space
 	Volume = branches.Volume
 	Branch = branches.Branch
 	Store  = cadata.Store

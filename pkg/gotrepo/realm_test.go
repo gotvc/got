@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRealm(t *testing.T) {
+func TestSpace(t *testing.T) {
 	t.Parallel()
-	branches.TestRealm(t, func(t testing.TB) branches.Realm {
+	branches.TestSpace(t, func(t testing.TB) branches.Space {
 		dir := t.TempDir()
 		err := Init(dir)
 		require.NoError(t, err)

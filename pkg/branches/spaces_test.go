@@ -8,11 +8,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMemRealm(t *testing.T) {
-	TestRealm(t, newTestRealm)
+func TestMemSpace(t *testing.T) {
+	TestSpace(t, newTestSpace)
 }
 
-func newTestRealm(t testing.TB) Realm {
+func newTestSpace(t testing.TB) Space {
 	newStore := func() cadata.Store {
 		return cadata.NewMem(1 << 20)
 	}
@@ -22,11 +22,11 @@ func newTestRealm(t testing.TB) Realm {
 	return NewMem(newStore, newCell)
 }
 
-func TestCryptoRealm(t *testing.T) {
-	TestRealm(t, func(t testing.TB) Realm {
-		mem := newTestRealm(t)
+func TestCryptoSpace(t *testing.T) {
+	TestSpace(t, func(t testing.TB) Space {
+		mem := newTestSpace(t)
 		secret := make([]byte, 32)
-		return NewCryptoRealm(mem, secret)
+		return NewCryptoSpace(mem, secret)
 	})
 }
 

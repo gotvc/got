@@ -10,7 +10,7 @@ import (
 	"github.com/gotvc/got/pkg/branches"
 )
 
-var _ Realm = &branchSpecDir{}
+var _ Space = &branchSpecDir{}
 
 type cellFactory = func(spec CellSpec) (Cell, error)
 type storeFactory = func(spec StoreSpec) (Store, error)

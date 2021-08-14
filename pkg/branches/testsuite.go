@@ -7,11 +7,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRealm(t *testing.T, newRealm func(t testing.TB) Realm) {
+func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 	ctx := context.Background()
 	t.Run("CreateGet", func(t *testing.T) {
 		t.Parallel()
-		x := newRealm(t)
+		x := newSpace(t)
 		b, err := x.Get(ctx, "test")
 		require.Equal(t, ErrNotExist, err)
 		require.Nil(t, b)

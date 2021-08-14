@@ -9,12 +9,12 @@ import (
 )
 
 type Config struct {
-	Realms []RealmSpec `json:"realms"`
+	Spaces []SpaceSpec `json:"realms"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		Realms: []RealmSpec{},
+		Spaces: []SpaceSpec{},
 	}
 }
 
