@@ -10,8 +10,8 @@ import (
 )
 
 var (
-	ErrNotExist = errors.New("volume does not exist")
-	ErrExists   = errors.New("a volume already exists by that name")
+	ErrNotExist = errors.New("branch does not exist")
+	ErrExists   = errors.New("a branch already exists by that name")
 )
 
 func IsNotExist(err error) bool {

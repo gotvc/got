@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log"
 
 	"github.com/brendoncarroll/go-p2p"
+	"github.com/brendoncarroll/go-state/cells"
 	"github.com/gotvc/got/pkg/branches"
-	"github.com/gotvc/got/pkg/cells"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -20,14 +21,14 @@ type CellID struct {
 }
 
 type cellSrv struct {
-	realm branches.Realm
+	space branches.Space
 	acl   ACL
 	swarm p2p.AskSwarm
 }
 
-func newCellSrv(realm branches.Realm, acl ACL, swarm p2p.AskSwarm) *cellSrv {
+func newCellSrv(space branches.Space, acl ACL, swarm p2p.AskSwarm) *cellSrv {
 	cs := &cellSrv{
-		realm: realm,
+		space: space,
 		acl:   acl,
 		swarm: swarm,
 	}
@@ -39,6 +40,9 @@ func (cs *cellSrv) Serve(ctx context.Context) error {
 }
 
 func (cs *cellSrv) CAS(ctx context.Context, cid CellID, actual, prev, next []byte) (int, error) {
+	if len(next) > cellSize {
+		return 0, cells.ErrTooLarge{}
+	}
 	req := CellReq{
 		CAS: &CASReq{
 			Name: cid.Name,
@@ -70,6 +74,7 @@ func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 	var req CellReq
 	var n int
 	if err := func() error {
+		log.Println("got message")
 		if err := json.Unmarshal(msg.Payload, &req); err != nil {
 			return err
 		}
@@ -92,7 +97,7 @@ func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 		}
 		return nil
 	}(); err != nil {
-		logrus.Error(err)
+		logrus.Errorf("while handling cell request: %v", err)
 		return 0, err
 	}
 	return n, nil
@@ -106,7 +111,7 @@ func (cs *cellSrv) handleCAS(ctx context.Context, peer PeerID, name string, actu
 			Object:  name,
 		}
 	}
-	branch, err := cs.realm.Get(ctx, name)
+	branch, err := cs.space.Get(ctx, name)
 	if err != nil {
 		return 0, err
 	}
@@ -123,7 +128,7 @@ func (cs *cellSrv) handleRead(ctx context.Context, peer PeerID, name string, buf
 			Object:  name,
 		}
 	}
-	branch, err := cs.realm.Get(ctx, name)
+	branch, err := cs.space.Get(ctx, name)
 	if err != nil {
 		return 0, err
 	}
@@ -169,7 +174,7 @@ func (c *cell) CAS(ctx context.Context, actual, prev, next []byte) (bool, int, e
 	if err != nil {
 		return false, 0, err
 	}
-	success := bytes.Equal(next, actual)
+	success := bytes.Equal(next, actual[:n])
 	return success, n, nil
 }
 

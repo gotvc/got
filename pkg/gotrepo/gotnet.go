@@ -41,7 +41,7 @@ func (r *Repo) getGotNet() (*gotnet.Service, error) {
 		Logger: logrus.New(),
 		ACL:    r.GetACL(),
 		Mux:    mux,
-		Realm:  r.GetRealm(),
+		Space:  r.GetSpace(),
 	})
 	r.gotNet = srv
 	go r.gotNet.Serve()

@@ -20,32 +20,32 @@ type BranchID struct {
 	Name string
 }
 
-type realmSrv struct {
-	realm branches.Realm
+type spaceSrv struct {
+	space branches.Space
 	acl   ACL
 	swarm p2p.AskSwarm
 	log   *logrus.Logger
 }
 
-func newRealmSrv(realm branches.Realm, acl ACL, swarm p2p.AskSwarm) *realmSrv {
-	return &realmSrv{
-		realm: realm,
+func newSpaceSrv(space branches.Space, acl ACL, swarm p2p.AskSwarm) *spaceSrv {
+	return &spaceSrv{
+		space: space,
 		acl:   acl,
 		swarm: swarm,
 		log:   logrus.StandardLogger(),
 	}
 }
 
-func (srv *realmSrv) Serve(ctx context.Context) error {
+func (srv *spaceSrv) Serve(ctx context.Context) error {
 	return serveAsks(ctx, srv.swarm, srv.handleAsk)
 }
 
-func (s *realmSrv) Create(ctx context.Context, bid BranchID) error {
-	req := RealmReq{
+func (s *spaceSrv) Create(ctx context.Context, bid BranchID) error {
+	req := SpaceReq{
 		Op:   opCreate,
 		Name: bid.Name,
 	}
-	var resp RealmRes
+	var resp SpaceRes
 	if err := askJson(ctx, s.swarm, bid.Peer, &resp, &req); err != nil {
 		return err
 	}
@@ -55,12 +55,12 @@ func (s *realmSrv) Create(ctx context.Context, bid BranchID) error {
 	return nil
 }
 
-func (s *realmSrv) Delete(ctx context.Context, bid BranchID) error {
-	req := RealmReq{
+func (s *spaceSrv) Delete(ctx context.Context, bid BranchID) error {
+	req := SpaceReq{
 		Op:   opDelete,
 		Name: bid.Name,
 	}
-	var resp RealmRes
+	var resp SpaceRes
 	if err := askJson(ctx, s.swarm, bid.Peer, &resp, &req); err != nil {
 		return err
 	}
@@ -70,12 +70,12 @@ func (s *realmSrv) Delete(ctx context.Context, bid BranchID) error {
 	return nil
 }
 
-func (s *realmSrv) Exists(ctx context.Context, bid BranchID) (bool, error) {
-	req := RealmReq{
+func (s *spaceSrv) Exists(ctx context.Context, bid BranchID) (bool, error) {
+	req := SpaceReq{
 		Op:   opExists,
 		Name: bid.Name,
 	}
-	var resp RealmRes
+	var resp SpaceRes
 	if err := askJson(ctx, s.swarm, bid.Peer, &resp, &req); err != nil {
 		return false, err
 	}
@@ -88,11 +88,11 @@ func (s *realmSrv) Exists(ctx context.Context, bid BranchID) (bool, error) {
 	return *resp.Exists, nil
 }
 
-func (s *realmSrv) ForEach(ctx context.Context, peer PeerID, fn func(string) error) error {
-	req := RealmReq{
+func (s *spaceSrv) ForEach(ctx context.Context, peer PeerID, fn func(string) error) error {
+	req := SpaceReq{
 		Op: opList,
 	}
-	var resp RealmRes
+	var resp SpaceRes
 	if err := askJson(ctx, s.swarm, peer, &resp, &req); err != nil {
 		return err
 	}
@@ -107,15 +107,15 @@ func (s *realmSrv) ForEach(ctx context.Context, peer PeerID, fn func(string) err
 	return nil
 }
 
-func (s *realmSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) (int, error) {
+func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) (int, error) {
 	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
 	defer cf()
 	peer := msg.Src.(inet256.Addr)
 	if !s.acl.CanReadAny(peer) && !s.acl.CanWriteAny(peer) {
 		return 0, ErrNotAllowed{Subject: peer}
 	}
-	res, err := func() (*RealmRes, error) {
-		var req RealmReq
+	res, err := func() (*SpaceRes, error) {
+		var req SpaceReq
 		if err := json.Unmarshal(msg.Payload, &req); err != nil {
 			return nil, err
 		}
@@ -136,7 +136,7 @@ func (s *realmSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 	if err != nil {
 		logrus.Error(err)
 		errMsg := err.Error()
-		res = &RealmRes{
+		res = &SpaceRes{
 			Error: &errMsg,
 		}
 	}
@@ -144,55 +144,55 @@ func (s *realmSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 	return copy(resp, data), nil
 }
 
-func (s *realmSrv) handleCreate(ctx context.Context, peer PeerID, name string) (*RealmRes, error) {
+func (s *spaceSrv) handleCreate(ctx context.Context, peer PeerID, name string) (*SpaceRes, error) {
 	if err := checkACL(s.acl, peer, name, true); err != nil {
 		return nil, err
 	}
-	if err := s.realm.Create(ctx, name); err != nil {
+	if err := s.space.Create(ctx, name); err != nil {
 		return nil, err
 	}
-	return &RealmRes{}, nil
+	return &SpaceRes{}, nil
 }
 
-func (s *realmSrv) handleDelete(ctx context.Context, peer PeerID, name string) (*RealmRes, error) {
+func (s *spaceSrv) handleDelete(ctx context.Context, peer PeerID, name string) (*SpaceRes, error) {
 	if err := checkACL(s.acl, peer, name, true); err != nil {
 		return nil, err
 	}
 	if err := checkACL(s.acl, peer, name, true); err != nil {
 		return nil, err
 	}
-	if err := s.realm.Delete(ctx, name); err != nil {
+	if err := s.space.Delete(ctx, name); err != nil {
 		return nil, err
 	}
-	return &RealmRes{}, nil
+	return &SpaceRes{}, nil
 }
 
-func (s *realmSrv) handleExists(ctx context.Context, peer PeerID, name string) (*RealmRes, error) {
+func (s *spaceSrv) handleExists(ctx context.Context, peer PeerID, name string) (*SpaceRes, error) {
 	if err := checkACL(s.acl, peer, name, false); err != nil {
 		return nil, err
 	}
-	_, err := s.realm.Get(ctx, name)
+	_, err := s.space.Get(ctx, name)
 	if err != nil && err != branches.ErrNotExist {
 		return nil, err
 	}
 	exists := err == nil
-	return &RealmRes{
+	return &SpaceRes{
 		Exists: &exists,
 	}, nil
 }
 
-func (s *realmSrv) handleList(ctx context.Context, peer PeerID) (*RealmRes, error) {
+func (s *spaceSrv) handleList(ctx context.Context, peer PeerID) (*SpaceRes, error) {
 	if !s.acl.CanReadAny(peer) {
 		return nil, ErrNotAllowed{Subject: peer, Verb: "LIST"}
 	}
 	var names []string
-	if err := s.realm.ForEach(ctx, func(x string) error {
+	if err := s.space.ForEach(ctx, func(x string) error {
 		names = append(names, x)
 		return nil
 	}); err != nil {
 		return nil, err
 	}
-	return &RealmRes{List: names}, nil
+	return &SpaceRes{List: names}, nil
 }
 
 func checkACL(acl ACL, peer PeerID, name string, write bool) error {
@@ -219,28 +219,28 @@ func checkACL(acl ACL, peer PeerID, name string, write bool) error {
 	return err
 }
 
-type RealmReq struct {
+type SpaceReq struct {
 	Op   string `json:"op"`
 	Name string `json:"name"`
 }
 
-type RealmRes struct {
+type SpaceRes struct {
 	Error  *string  `json:"error,omitempty"`
 	Exists *bool    `json:"exists,omitempty"`
 	List   []string `json:"list,omitempty"`
 }
 
-var _ branches.Realm = &realm{}
+var _ branches.Space = &space{}
 
-type realm struct {
-	srv      *realmSrv
+type space struct {
+	srv      *spaceSrv
 	peer     PeerID
 	newCell  func(CellID) cells.Cell
 	newStore func(StoreID) cadata.Store
 }
 
-func newRealm(srv *realmSrv, peer PeerID, newCell func(CellID) cells.Cell, newStore func(StoreID) cadata.Store) *realm {
-	return &realm{
+func newSpace(srv *spaceSrv, peer PeerID, newCell func(CellID) cells.Cell, newStore func(StoreID) cadata.Store) *space {
+	return &space{
 		srv:      srv,
 		peer:     peer,
 		newCell:  newCell,
@@ -248,11 +248,11 @@ func newRealm(srv *realmSrv, peer PeerID, newCell func(CellID) cells.Cell, newSt
 	}
 }
 
-func (r *realm) Create(ctx context.Context, name string) error {
+func (r *space) Create(ctx context.Context, name string) error {
 	return r.srv.Create(ctx, BranchID{Peer: r.peer, Name: name})
 }
 
-func (r *realm) Get(ctx context.Context, name string) (*branches.Branch, error) {
+func (r *space) Get(ctx context.Context, name string) (*branches.Branch, error) {
 	if yes, err := r.srv.Exists(ctx, BranchID{Peer: r.peer, Name: name}); err != nil {
 		return nil, err
 	} else if !yes {
@@ -269,10 +269,10 @@ func (r *realm) Get(ctx context.Context, name string) (*branches.Branch, error) 
 	return &b, nil
 }
 
-func (r *realm) Delete(ctx context.Context, name string) error {
+func (r *space) Delete(ctx context.Context, name string) error {
 	return r.srv.Delete(ctx, BranchID{Peer: r.peer, Name: name})
 }
 
-func (r *realm) ForEach(ctx context.Context, fn func(string) error) error {
+func (r *space) ForEach(ctx context.Context, fn func(string) error) error {
 	panic("not implemented")
 }

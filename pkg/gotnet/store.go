@@ -36,9 +36,11 @@ type blobPullSrv struct {
 	acl   ACL
 }
 
-func newBlobPullSrv(store *tempStore, acl ACL, x p2p.AskSwarm) *blobPullSrv {
+func newBlobPullSrv(ts *tempStore, acl ACL, x p2p.AskSwarm) *blobPullSrv {
 	srv := &blobPullSrv{
+		store: ts,
 		swarm: x,
+		acl:   acl,
 	}
 	return srv
 }
@@ -94,15 +96,16 @@ func (s *blobPullSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Messag
 type blobMainSrv struct {
 	swarm       p2p.AskSwarm
 	blobPullSrv *blobPullSrv
-	realm       *realm
+	space       branches.Space
 	acl         ACL
 }
 
-func newBlobMainSrv(blobGet *blobPullSrv, acl ACL, swarm p2p.AskSwarm) *blobMainSrv {
+func newBlobMainSrv(space branches.Space, blobGet *blobPullSrv, acl ACL, swarm p2p.AskSwarm) *blobMainSrv {
 	srv := &blobMainSrv{
 		blobPullSrv: blobGet,
 		swarm:       swarm,
 		acl:         acl,
+		space:       space,
 	}
 	return srv
 }
@@ -121,7 +124,7 @@ func (s *blobMainSrv) PushTo(ctx context.Context, sid StoreID, ids []cadata.ID) 
 	if resp.Affected != nil && len(resp.Affected) == len(ids) {
 		return nil
 	}
-	return errors.Errorf("problem pushing")
+	return errors.Errorf("problem pushing, affected count does not match requested id count")
 }
 
 func (s *blobMainSrv) Delete(ctx context.Context, sid StoreID, ids []cadata.ID) error {
@@ -129,7 +132,7 @@ func (s *blobMainSrv) Delete(ctx context.Context, sid StoreID, ids []cadata.ID) 
 	if err != nil {
 		return err
 	}
-	return err
+	return nil
 }
 
 func (s *blobMainSrv) Exists(ctx context.Context, sid StoreID, ids []cadata.ID) (bool, error) {
@@ -179,6 +182,12 @@ func (s *blobMainSrv) handleAsk(ctx context.Context, respBuf []byte, msg p2p.Mes
 	peer := msg.Src.(PeerID)
 	resp, err := func() (*BlobResp, error) {
 		switch req.Op {
+		case opExists:
+			return s.handleExists(ctx, peer, req)
+		case opDelete:
+			return s.handleDelete(ctx, peer, req)
+		case opList:
+			return s.handleList(ctx, peer, req)
 		case opPush:
 			return s.handlePush(ctx, peer, req)
 		default:
@@ -204,7 +213,7 @@ func (s *blobMainSrv) handlePush(ctx context.Context, peer PeerID, req BlobReq) 
 			Object:  req.Branch,
 		}
 	}
-	branch, err := s.realm.Get(ctx, req.Branch)
+	branch, err := s.space.Get(ctx, req.Branch)
 	if err != nil {
 		return nil, err
 	}
@@ -223,6 +232,77 @@ func (s *blobMainSrv) handlePush(ctx context.Context, peer PeerID, req BlobReq) 
 		}
 	}
 	return &BlobResp{}, nil
+}
+
+func (s *blobMainSrv) handleExists(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
+	if !s.acl.CanRead(peer, req.Branch) {
+		return nil, ErrNotAllowed{Subject: peer, Verb: opExists, Object: req.Branch}
+	}
+	branch, err := s.space.Get(ctx, req.Branch)
+	if err != nil {
+		return nil, err
+	}
+	store, err := getStoreFromVolume(branch.Volume, req.StoreType)
+	if err != nil {
+		return nil, err
+	}
+	affected := make([]bool, len(req.IDs))
+	for i := range req.IDs {
+		exists, err := store.Exists(ctx, req.IDs[i])
+		if err != nil {
+			return nil, err
+		}
+		affected[i] = exists
+	}
+	return &BlobResp{
+		Affected: affected,
+	}, nil
+}
+
+func (s *blobMainSrv) handleDelete(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
+	if !s.acl.CanWrite(peer, req.Branch) {
+		return nil, ErrNotAllowed{Subject: peer, Verb: opDelete, Object: req.Branch}
+	}
+	branch, err := s.space.Get(ctx, req.Branch)
+	if err != nil {
+		return nil, err
+	}
+	store, err := getStoreFromVolume(branch.Volume, req.StoreType)
+	if err != nil {
+		return nil, err
+	}
+	affected := make([]bool, len(req.IDs))
+	for i, id := range req.IDs {
+		if err := store.Delete(ctx, id); err != nil {
+			return nil, err
+		}
+		affected[i] = true
+	}
+	return &BlobResp{
+		Affected: affected,
+	}, nil
+}
+
+func (s *blobMainSrv) handleList(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
+	if !s.acl.CanRead(peer, req.Branch) {
+		return nil, ErrNotAllowed{Subject: peer, Verb: opList, Object: req.Branch}
+	}
+	branch, err := s.space.Get(ctx, req.Branch)
+	if err != nil {
+		return nil, err
+	}
+	store, err := getStoreFromVolume(branch.Volume, req.StoreType)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]cadata.ID, req.Limit)
+	n, err := store.List(ctx, req.First, ids)
+	if err != nil {
+		return nil, err
+	}
+	return &BlobResp{
+		IDs: ids[:n],
+	}, nil
 }
 
 func getStoreFromVolume(vol branches.Volume, st StoreType) (cadata.Store, error) {
@@ -246,8 +326,9 @@ type BlobReq struct {
 	Branch    string    `json:"branch"`
 	StoreType StoreType `json:"store_type"`
 
-	IDs    []cadata.ID `json:"ids,omitempty"`
-	Prefix []byte      `json:"prefix,omitempty"`
+	IDs   []cadata.ID `json:"ids,omitempty"`
+	First []byte      `json:"prefix,omitempty"`
+	Limit int         `json:"limit,omitempty"`
 }
 
 type BlobResp struct {

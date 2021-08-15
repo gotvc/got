@@ -19,7 +19,7 @@ const (
 	channelBlobPull = "got/blob-pull@v0"
 	channelBlobMain = "got/blob-main@v0"
 	channelCell     = "got/cell@v0"
-	channelRealm    = "got/realm@v0"
+	channelSpace    = "got/space@v0"
 )
 
 const (
@@ -55,7 +55,7 @@ type ACL interface {
 type Params struct {
 	Mux    p2pmux.StringSecureAskMux
 	ACL    ACL
-	Realm  branches.Realm
+	Space  branches.Space
 	Logger *logrus.Logger
 }
 
@@ -65,7 +65,7 @@ type Service struct {
 	blobPullSrv *blobPullSrv
 	blobMainSrv *blobMainSrv
 	cellSrv     *cellSrv
-	realmSrv    *realmSrv
+	spaceSrv    *spaceSrv
 }
 
 func New(params Params) *Service {
@@ -73,9 +73,9 @@ func New(params Params) *Service {
 		mux: params.Mux,
 	}
 	srv.blobPullSrv = newBlobPullSrv(newTempStore(), params.ACL, params.Mux.Open(channelBlobPull))
-	srv.blobMainSrv = newBlobMainSrv(srv.blobPullSrv, params.ACL, params.Mux.Open(channelBlobMain))
-	srv.cellSrv = newCellSrv(params.Realm, params.ACL, params.Mux.Open(channelCell))
-	srv.realmSrv = newRealmSrv(params.Realm, params.ACL, params.Mux.Open(channelRealm))
+	srv.blobMainSrv = newBlobMainSrv(params.Space, srv.blobPullSrv, params.ACL, params.Mux.Open(channelBlobMain))
+	srv.cellSrv = newCellSrv(params.Space, params.ACL, params.Mux.Open(channelCell))
+	srv.spaceSrv = newSpaceSrv(params.Space, params.ACL, params.Mux.Open(channelSpace))
 	return srv
 }
 
@@ -92,19 +92,19 @@ func (s *Service) Serve() error {
 		return s.cellSrv.Serve(ctx)
 	})
 	eg.Go(func() error {
-		return s.realmSrv.Serve(ctx)
+		return s.spaceSrv.Serve(ctx)
 	})
 	return eg.Wait()
 }
 
-func (s *Service) GetRealm(peer PeerID) branches.Realm {
+func (s *Service) GetSpace(peer PeerID) branches.Space {
 	newCell := func(cid CellID) cells.Cell {
 		return newCell(s.cellSrv, cid)
 	}
 	newStore := func(sid StoreID) cadata.Store {
 		return newStore(s.blobMainSrv, s.blobPullSrv, sid)
 	}
-	return newRealm(s.realmSrv, peer, newCell, newStore)
+	return newSpace(s.spaceSrv, peer, newCell, newStore)
 }
 
 func askJson(ctx context.Context, s p2p.Asker, dst PeerID, resp, req interface{}) error {

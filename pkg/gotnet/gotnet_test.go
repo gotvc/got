@@ -9,6 +9,7 @@ import (
 	"github.com/brendoncarroll/go-p2p/p/mbapp"
 	"github.com/brendoncarroll/go-p2p/p/p2pmux"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/cells/celltest"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/inet256/inet256/client/go_client/inet256client"
@@ -16,18 +17,58 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestRealm(t *testing.T) {
-	branches.TestRealm(t, func(t testing.TB) branches.Realm {
+func TestSpace(t *testing.T) {
+	branches.TestSpace(t, func(t testing.TB) branches.Space {
 		s1, s2 := newTestPair(t)
 		go s1.srv.Serve()
 		go s2.srv.Serve()
 		peer2 := s2.swarm.LocalAddrs()[0].(PeerID)
-		return s1.srv.GetRealm(peer2)
+		return s1.srv.GetSpace(peer2)
 	})
 }
 
+// func TestStore(t *testing.T) {
+// 	storetest.TestStore(t, func(t testing.TB) cadata.Store {
+// 		s1, s2 := newTestPair(t)
+// 		go s1.srv.Serve()
+// 		go s2.srv.Serve()
+// 		peer2 := s2.swarm.LocalAddrs()[0].(PeerID)
+// 		space := s1.srv.GetSpace(peer2)
+// 		return createStore(t, space)
+// 	})
+// }
+
+func TestCell(t *testing.T) {
+	celltest.CellTestSuite(t, func(t testing.TB) cells.Cell {
+		s1, s2 := newTestPair(t)
+		go s1.srv.Serve()
+		go s2.srv.Serve()
+		peer2 := s2.swarm.LocalAddrs()[0].(PeerID)
+		space := s1.srv.GetSpace(peer2)
+		return createCell(t, space)
+	})
+}
+
+func createCell(t testing.TB, space branches.Space) cells.Cell {
+	name := "test"
+	ctx := context.Background()
+	require.NoError(t, space.Create(ctx, name))
+	branch, err := space.Get(ctx, name)
+	require.NoError(t, err)
+	return branch.Volume.Cell
+}
+
+func createStore(t testing.TB, space branches.Space) cadata.Store {
+	name := "test"
+	ctx := context.Background()
+	require.NoError(t, space.Create(ctx, name))
+	branch, err := space.Get(ctx, name)
+	require.NoError(t, err)
+	return branch.Volume.RawStore
+}
+
 type side struct {
-	realm branches.Realm
+	space branches.Space
 	srv   *Service
 	swarm p2p.SecureAskSwarm
 }
@@ -49,14 +90,14 @@ func newTestSide(t testing.TB, inetSrv inet256.Service, privKey p2p.PrivateKey) 
 	})
 	swarm := mbapp.New(inet256client.NewSwarm(node, privKey.Public()), MaxMessageSize)
 	newStore := func() cadata.Store { return cadata.NewMem(1 << 20) }
-	realm := branches.NewMem(newStore, cells.NewMem)
+	space := branches.NewMem(newStore, cells.NewMem)
 	srv := New(Params{
-		Realm: realm,
+		Space: space,
 		ACL:   newAllACL(),
 		Mux:   p2pmux.NewStringSecureAskMux(swarm),
 	})
 	return &side{
-		realm: realm,
+		space: space,
 		srv:   srv,
 		swarm: swarm,
 	}
