@@ -107,14 +107,14 @@ func (s *spaceSrv) ForEach(ctx context.Context, peer PeerID, fn func(string) err
 	return nil
 }
 
-func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) (int, error) {
+func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) int {
 	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
 	defer cf()
-	peer := msg.Src.(inet256.Addr)
-	if !s.acl.CanReadAny(peer) && !s.acl.CanWriteAny(peer) {
-		return 0, ErrNotAllowed{Subject: peer}
-	}
 	res, err := func() (*SpaceRes, error) {
+		peer := msg.Src.(inet256.Addr)
+		if !s.acl.CanReadAny(peer) && !s.acl.CanWriteAny(peer) {
+			return nil, ErrNotAllowed{Subject: peer}
+		}
 		var req SpaceReq
 		if err := json.Unmarshal(msg.Payload, &req); err != nil {
 			return nil, err
@@ -141,11 +141,11 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 		}
 	}
 	data, _ := json.Marshal(res)
-	return copy(resp, data), nil
+	return copy(resp, data)
 }
 
 func (s *spaceSrv) handleCreate(ctx context.Context, peer PeerID, name string) (*SpaceRes, error) {
-	if err := checkACL(s.acl, peer, name, true); err != nil {
+	if err := checkACL(s.acl, peer, name, true, opCreate); err != nil {
 		return nil, err
 	}
 	if err := s.space.Create(ctx, name); err != nil {
@@ -155,10 +155,7 @@ func (s *spaceSrv) handleCreate(ctx context.Context, peer PeerID, name string) (
 }
 
 func (s *spaceSrv) handleDelete(ctx context.Context, peer PeerID, name string) (*SpaceRes, error) {
-	if err := checkACL(s.acl, peer, name, true); err != nil {
-		return nil, err
-	}
-	if err := checkACL(s.acl, peer, name, true); err != nil {
+	if err := checkACL(s.acl, peer, name, true, opDelete); err != nil {
 		return nil, err
 	}
 	if err := s.space.Delete(ctx, name); err != nil {
@@ -168,7 +165,7 @@ func (s *spaceSrv) handleDelete(ctx context.Context, peer PeerID, name string) (
 }
 
 func (s *spaceSrv) handleExists(ctx context.Context, peer PeerID, name string) (*SpaceRes, error) {
-	if err := checkACL(s.acl, peer, name, false); err != nil {
+	if err := checkACL(s.acl, peer, name, false, opExists); err != nil {
 		return nil, err
 	}
 	_, err := s.space.Get(ctx, name)
@@ -182,8 +179,8 @@ func (s *spaceSrv) handleExists(ctx context.Context, peer PeerID, name string) (
 }
 
 func (s *spaceSrv) handleList(ctx context.Context, peer PeerID) (*SpaceRes, error) {
-	if !s.acl.CanReadAny(peer) {
-		return nil, ErrNotAllowed{Subject: peer, Verb: "LIST"}
+	if err := checkACL(s.acl, peer, "", false, opList); err != nil {
+		return nil, err
 	}
 	var names []string
 	if err := s.space.ForEach(ctx, func(x string) error {
@@ -195,10 +192,9 @@ func (s *spaceSrv) handleList(ctx context.Context, peer PeerID) (*SpaceRes, erro
 	return &SpaceRes{List: names}, nil
 }
 
-func checkACL(acl ACL, peer PeerID, name string, write bool) error {
+func checkACL(acl ACL, peer PeerID, name string, write bool, verb string) error {
 	var err error
 	if write {
-		verb := "WRITE"
 		if !acl.CanWrite(peer, name) {
 			err = ErrNotAllowed{
 				Subject: peer,
@@ -207,7 +203,6 @@ func checkACL(acl ACL, peer PeerID, name string, write bool) error {
 			}
 		}
 	} else {
-		verb := "READ"
 		if !acl.CanRead(peer, name) {
 			err = ErrNotAllowed{
 				Subject: peer,

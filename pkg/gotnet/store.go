@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"io"
 	"sync"
 
 	"github.com/brendoncarroll/go-p2p"
@@ -53,29 +52,24 @@ func (srv *blobPullSrv) Serve(ctx context.Context) error {
 // if the node does not have the data they will send back the hash as a sentinel value.
 // if the data sent back has an incorrect hash an error is returned; this is potentially malicious.
 // otherwise the data is returned
-func (s *blobPullSrv) PullFrom(ctx context.Context, dst PeerID, id cadata.ID) ([]byte, error) {
-	respData := make([]byte, maxBlobSize)
-	n, err := s.swarm.Ask(ctx, respData, dst, p2p.IOVec{id[:]})
+func (s *blobPullSrv) PullFrom(ctx context.Context, dst PeerID, id cadata.ID, buf []byte) (int, error) {
+	n, err := s.swarm.Ask(ctx, buf, dst, p2p.IOVec{id[:]})
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	respData = respData[:n]
-	if bytes.Equal(respData, id[:]) {
-		return nil, cadata.ErrNotFound
+	if err := checkPullReply(id, dst, buf[:n]); err != nil {
+		return 0, err
 	}
-	if err := cadata.Check(cadata.DefaultHash, id, respData); err != nil {
-		return nil, errors.Wrapf(err, "from peer %v", dst)
-	}
-	return respData, nil
+	return n, nil
 }
 
-func (s *blobPullSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) (int, error) {
+func (s *blobPullSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) int {
 	peer := msg.Src.(PeerID)
-	if !s.acl.CanReadAny(peer) {
-		return 0, ErrNotAllowed{Subject: peer}
-	}
 	var n int
 	if err := func() error {
+		if err := checkACL(s.acl, peer, "blobs", false, "GET"); err != nil {
+			return err
+		}
 		id := cadata.IDFromBytes(msg.Payload)
 		var err error
 		n, err = s.store.Get(ctx, id, resp)
@@ -88,9 +82,19 @@ func (s *blobPullSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Messag
 		return nil
 	}(); err != nil {
 		logrus.Warn(err)
-		return 0, err
+		return -1
 	}
-	return n, nil
+	return n
+}
+
+func checkPullReply(id cadata.ID, peer PeerID, reply []byte) error {
+	if bytes.Equal(reply, id[:]) {
+		return cadata.ErrNotFound
+	}
+	if err := cadata.Check(cadata.DefaultHash, id, reply); err != nil {
+		return errors.Wrapf(err, "from peer %v", peer)
+	}
+	return nil
 }
 
 type blobMainSrv struct {
@@ -117,7 +121,7 @@ func (srv *blobMainSrv) Serve(ctx context.Context) error {
 // PushTo sends a set of IDs to the peer dst.
 // The remote peer should pull them all, and then respond to the ask with success or failure for each
 func (s *blobMainSrv) PushTo(ctx context.Context, sid StoreID, ids []cadata.ID) error {
-	resp, err := s.doToIDs(ctx, sid, opPush, ids)
+	resp, err := s.doToIDs(ctx, sid, opPost, ids)
 	if err != nil {
 		return err
 	}
@@ -125,6 +129,26 @@ func (s *blobMainSrv) PushTo(ctx context.Context, sid StoreID, ids []cadata.ID) 
 		return nil
 	}
 	return errors.Errorf("problem pushing, affected count does not match requested id count")
+}
+
+func (s *blobMainSrv) Get(ctx context.Context, sid StoreID, id cadata.ID, buf []byte) (int, error) {
+	reqData, err := json.Marshal(BlobReq{
+		Op:        opGet,
+		Branch:    sid.Branch,
+		StoreType: sid.Type,
+		IDs:       []cadata.ID{id},
+	})
+	if err != nil {
+		panic(err)
+	}
+	n, err := s.swarm.Ask(ctx, buf, sid.Peer, p2p.IOVec{reqData})
+	if err != nil {
+		return 0, err
+	}
+	if err := checkPullReply(id, sid.Peer, buf[:n]); err != nil {
+		return 0, err
+	}
+	return n, nil
 }
 
 func (s *blobMainSrv) Delete(ctx context.Context, sid StoreID, ids []cadata.ID) error {
@@ -147,17 +171,23 @@ func (s *blobMainSrv) Exists(ctx context.Context, sid StoreID, ids []cadata.ID) 
 	return exists, nil
 }
 
-func (s *blobMainSrv) List(ctx context.Context, sid StoreID, prefix []byte, ids []cadata.ID) (int, error) {
+func (s *blobMainSrv) List(ctx context.Context, sid StoreID, first []byte, ids []cadata.ID) (int, error) {
 	var resp BlobResp
 	req := BlobReq{
 		Op:        opList,
 		Branch:    sid.Branch,
 		StoreType: sid.Type,
+		First:     first,
+		Limit:     len(ids),
 	}
 	if err := askJson(ctx, s.swarm, sid.Peer, &resp, req); err != nil {
 		return 0, err
 	}
-	return copy(ids, resp.IDs), nil
+	var err error
+	if resp.EOL {
+		err = cadata.ErrEndOfList
+	}
+	return copy(ids, resp.IDs), err
 }
 
 func (s *blobMainSrv) doToIDs(ctx context.Context, sid StoreID, op string, ids []cadata.ID) (*BlobResp, error) {
@@ -174,42 +204,73 @@ func (s *blobMainSrv) doToIDs(ctx context.Context, sid StoreID, op string, ids [
 	return &resp, nil
 }
 
-func (s *blobMainSrv) handleAsk(ctx context.Context, respBuf []byte, msg p2p.Message) (int, error) {
-	var req BlobReq
-	if err := json.Unmarshal(msg.Payload, &req); err != nil {
-		return 0, err
-	}
-	peer := msg.Src.(PeerID)
-	resp, err := func() (*BlobResp, error) {
-		switch req.Op {
-		case opExists:
-			return s.handleExists(ctx, peer, req)
-		case opDelete:
-			return s.handleDelete(ctx, peer, req)
-		case opList:
-			return s.handleList(ctx, peer, req)
-		case opPush:
-			return s.handlePush(ctx, peer, req)
-		default:
-			return nil, errors.Errorf("invalid op: %q", req.Op)
+func (s *blobMainSrv) handleAsk(ctx context.Context, respBuf []byte, msg p2p.Message) int {
+	var n int
+	if err := func() error {
+		var req BlobReq
+		if err := json.Unmarshal(msg.Payload, &req); err != nil {
+			return err
 		}
-	}()
-	if err != nil {
+		peer := msg.Src.(PeerID)
+		if req.Op == opGet {
+			var err error
+			n, err = s.handleGet(ctx, peer, req, respBuf)
+			return err
+		}
+		resp, err := func() (*BlobResp, error) {
+			switch req.Op {
+			case opExists:
+				return s.handleExists(ctx, peer, req)
+			case opDelete:
+				return s.handleDelete(ctx, peer, req)
+			case opList:
+				return s.handleList(ctx, peer, req)
+			case opPost:
+				return s.handlePost(ctx, peer, req)
+			default:
+				return nil, errors.Errorf("invalid op: %q", req.Op)
+			}
+		}()
+		if err != nil {
+			return err
+		}
+		data, err := json.Marshal(resp)
+		if err != nil {
+			panic(err)
+		}
+		n = copy(respBuf, data)
+		return nil
+	}(); err != nil {
 		logrus.Error(err)
-		return 0, err
+		return -1
 	}
-	data, err := json.Marshal(resp)
-	if err != nil {
-		panic(err)
-	}
-	return copy(respBuf, data), nil
+	return n
 }
 
-func (s *blobMainSrv) handlePush(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
+func (s *blobMainSrv) handleGet(ctx context.Context, peer PeerID, req BlobReq, buf []byte) (int, error) {
+	if err := checkACL(s.acl, peer, req.Branch, false, opGet); err != nil {
+		return 0, err
+	}
+	if len(req.IDs) != 1 {
+		return 0, errors.Errorf("must request exactly one blob at a time")
+	}
+	id := req.IDs[0]
+	b, err := s.space.Get(ctx, req.Branch)
+	if err != nil {
+		return 0, err
+	}
+	store, err := getStoreFromVolume(b.Volume, req.StoreType)
+	if err != nil {
+		return 0, err
+	}
+	return store.Get(ctx, id, buf)
+}
+
+func (s *blobMainSrv) handlePost(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
 	if !s.acl.CanWrite(peer, req.Branch) {
 		return nil, ErrNotAllowed{
 			Subject: peer,
-			Verb:    "WRITE",
+			Verb:    opPost,
 			Object:  req.Branch,
 		}
 	}
@@ -222,16 +283,27 @@ func (s *blobMainSrv) handlePush(ctx context.Context, peer PeerID, req BlobReq) 
 	if err != nil {
 		return nil, err
 	}
-	for _, id := range req.IDs {
-		data, err := s.blobPullSrv.PullFrom(ctx, peer, id)
+	affected := make([]bool, len(req.IDs))
+	buf := make([]byte, maxBlobSize)
+	for i, id := range req.IDs {
+		if exists, err := store.Exists(ctx, id); err != nil {
+			return nil, err
+		} else if exists {
+			affected[i] = false
+			continue
+		}
+		n, err := s.blobPullSrv.PullFrom(ctx, peer, id, buf)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := store.Post(ctx, data); err != nil {
+		if _, err := store.Post(ctx, buf[:n]); err != nil {
 			return nil, err
 		}
+		affected[i] = true
 	}
-	return &BlobResp{}, nil
+	return &BlobResp{
+		Affected: affected,
+	}, nil
 }
 
 func (s *blobMainSrv) handleExists(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
@@ -298,6 +370,9 @@ func (s *blobMainSrv) handleList(ctx context.Context, peer PeerID, req BlobReq) 
 	ids := make([]cadata.ID, req.Limit)
 	n, err := store.List(ctx, req.First, ids)
 	if err != nil {
+		if cadata.IsEndOfList(err) {
+			return &BlobResp{EOL: true}, nil
+		}
 		return nil, err
 	}
 	return &BlobResp{
@@ -334,6 +409,7 @@ type BlobReq struct {
 type BlobResp struct {
 	Affected []bool      `json:"affected,omitempty"`
 	IDs      []cadata.ID `json:"ids,omitempty"`
+	EOL      bool        `json:"eol,omitempty"`
 }
 
 // tempStore provides a holding area for blobs that are about to be pulled
@@ -411,15 +487,7 @@ func newStore(blobMainSrv *blobMainSrv, blobPullSrv *blobPullSrv, sid StoreID) *
 }
 
 func (s *store) Get(ctx context.Context, id cadata.ID, buf []byte) (int, error) {
-	data, err := s.blobPullSrv.PullFrom(ctx, s.sid.Peer, id)
-	if err != nil {
-		return 0, err
-	}
-	if len(buf) < len(data) {
-		return 0, io.ErrShortBuffer
-	}
-	n := copy(buf, data)
-	return n, nil
+	return s.blobMainSrv.Get(ctx, s.sid, id, buf)
 }
 
 func (s *store) Post(ctx context.Context, data []byte) (cadata.ID, error) {

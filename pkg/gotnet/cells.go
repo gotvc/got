@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"log"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cells"
@@ -70,11 +69,10 @@ func (cs *cellSrv) Read(ctx context.Context, cid CellID, buf []byte) (int, error
 	return cs.swarm.Ask(ctx, buf, cid.Peer, p2p.IOVec{reqData})
 }
 
-func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) (int, error) {
+func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) int {
 	var req CellReq
 	var n int
 	if err := func() error {
-		log.Println("got message")
 		if err := json.Unmarshal(msg.Payload, &req); err != nil {
 			return err
 		}
@@ -98,18 +96,14 @@ func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 		return nil
 	}(); err != nil {
 		logrus.Errorf("while handling cell request: %v", err)
-		return 0, err
+		return -1
 	}
-	return n, nil
+	return n
 }
 
 func (cs *cellSrv) handleCAS(ctx context.Context, peer PeerID, name string, actual, prev, next []byte) (int, error) {
-	if !cs.acl.CanRead(peer, name) {
-		return 0, ErrNotAllowed{
-			Subject: peer,
-			Verb:    "WRITE",
-			Object:  name,
-		}
+	if err := checkACL(cs.acl, peer, name, true, "CAS"); err != nil {
+		return 0, err
 	}
 	branch, err := cs.space.Get(ctx, name)
 	if err != nil {
@@ -121,12 +115,8 @@ func (cs *cellSrv) handleCAS(ctx context.Context, peer PeerID, name string, actu
 }
 
 func (cs *cellSrv) handleRead(ctx context.Context, peer PeerID, name string, buf []byte) (int, error) {
-	if !cs.acl.CanRead(peer, name) {
-		return 0, ErrNotAllowed{
-			Subject: peer,
-			Verb:    "READ",
-			Object:  name,
-		}
+	if err := checkACL(cs.acl, peer, name, false, "GET"); err != nil {
+		return 0, err
 	}
 	branch, err := cs.space.Get(ctx, name)
 	if err != nil {

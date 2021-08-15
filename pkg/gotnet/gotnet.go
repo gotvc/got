@@ -24,14 +24,15 @@ const (
 
 const (
 	opCreate = "CREATE"
-	opPush   = "PUSH"
+	opGet    = "GET"
+	opPost   = "POST"
 	opList   = "LIST"
 	opExists = "EXISTS"
 	opDelete = "DELETE"
 )
 
 const (
-	MaxMessageSize = 1 << 22
+	MaxMessageSize = maxBlobSize
 )
 
 type PeerID = inet256.Addr

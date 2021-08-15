@@ -3,7 +3,7 @@ module github.com/gotvc/got
 go 1.15
 
 require (
-	github.com/brendoncarroll/go-p2p v0.0.0-20210814171431-566793c5a6a6
+	github.com/brendoncarroll/go-p2p v0.0.0-20210815172347-9f3e10fe9d4e
 	github.com/brendoncarroll/go-state v0.0.0-20210724154322-8779b9922848
 	github.com/chmduquesne/rollinghash v0.0.0-20180912150627-a60f8e7142b5
 	github.com/golang/protobuf v1.4.3

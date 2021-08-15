@@ -9,6 +9,7 @@ import (
 	"github.com/brendoncarroll/go-p2p/p/mbapp"
 	"github.com/brendoncarroll/go-p2p/p/p2pmux"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/cadata/storetest"
 	"github.com/brendoncarroll/go-state/cells/celltest"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
@@ -27,16 +28,16 @@ func TestSpace(t *testing.T) {
 	})
 }
 
-// func TestStore(t *testing.T) {
-// 	storetest.TestStore(t, func(t testing.TB) cadata.Store {
-// 		s1, s2 := newTestPair(t)
-// 		go s1.srv.Serve()
-// 		go s2.srv.Serve()
-// 		peer2 := s2.swarm.LocalAddrs()[0].(PeerID)
-// 		space := s1.srv.GetSpace(peer2)
-// 		return createStore(t, space)
-// 	})
-// }
+func TestStore(t *testing.T) {
+	storetest.TestStore(t, func(t testing.TB) cadata.Store {
+		s1, s2 := newTestPair(t)
+		go s1.srv.Serve()
+		go s2.srv.Serve()
+		peer2 := s2.swarm.LocalAddrs()[0].(PeerID)
+		space := s1.srv.GetSpace(peer2)
+		return createStore(t, space)
+	})
+}
 
 func TestCell(t *testing.T) {
 	celltest.CellTestSuite(t, func(t testing.TB) cells.Cell {
