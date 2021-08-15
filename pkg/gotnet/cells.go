@@ -3,7 +3,6 @@ package gotnet
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cells"
@@ -49,10 +48,7 @@ func (cs *cellSrv) CAS(ctx context.Context, cid CellID, actual, prev, next []byt
 			Next: next,
 		},
 	}
-	reqData, err := json.Marshal(req)
-	if err != nil {
-		panic(err)
-	}
+	reqData := marshal(req)
 	return cs.swarm.Ask(ctx, actual, cid.Peer, p2p.IOVec{reqData})
 }
 
@@ -62,10 +58,7 @@ func (cs *cellSrv) Read(ctx context.Context, cid CellID, buf []byte) (int, error
 			Name: cid.Name,
 		},
 	}
-	reqData, err := json.Marshal(req)
-	if err != nil {
-		panic(err)
-	}
+	reqData := marshal(req)
 	return cs.swarm.Ask(ctx, buf, cid.Peer, p2p.IOVec{reqData})
 }
 
@@ -73,7 +66,7 @@ func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 	var req CellReq
 	var n int
 	if err := func() error {
-		if err := json.Unmarshal(msg.Payload, &req); err != nil {
+		if err := unmarshal(msg.Payload, &req); err != nil {
 			return err
 		}
 		var err error
@@ -115,7 +108,7 @@ func (cs *cellSrv) handleCAS(ctx context.Context, peer PeerID, name string, actu
 }
 
 func (cs *cellSrv) handleRead(ctx context.Context, peer PeerID, name string, buf []byte) (int, error) {
-	if err := checkACL(cs.acl, peer, name, false, "GET"); err != nil {
+	if err := checkACL(cs.acl, peer, name, false, opGet); err != nil {
 		return 0, err
 	}
 	branch, err := cs.space.Get(ctx, name)

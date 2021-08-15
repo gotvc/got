@@ -38,7 +38,7 @@ func (r *Repo) getGotNet() (*gotnet.Service, error) {
 	swarm := inet256client.NewSwarm(node, r.privateKey.Public())
 	mux := p2pmux.NewStringSecureAskMux(swarm)
 	srv := gotnet.New(gotnet.Params{
-		Logger: logrus.New(),
+		Logger: logrus.StandardLogger(),
 		ACL:    r.GetACL(),
 		Mux:    mux,
 		Space:  r.GetSpace(),

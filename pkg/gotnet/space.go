@@ -88,23 +88,20 @@ func (s *spaceSrv) Exists(ctx context.Context, bid BranchID) (bool, error) {
 	return *resp.Exists, nil
 }
 
-func (s *spaceSrv) ForEach(ctx context.Context, peer PeerID, fn func(string) error) error {
+func (s *spaceSrv) List(ctx context.Context, peer PeerID, first string, limit int) ([]string, error) {
 	req := SpaceReq{
-		Op: opList,
+		Op:    opList,
+		Name:  first,
+		Limit: limit,
 	}
 	var resp SpaceRes
 	if err := askJson(ctx, s.swarm, peer, &resp, &req); err != nil {
-		return err
+		return nil, err
 	}
 	if resp.Error != nil {
-		return errors.New(*resp.Error)
+		return nil, errors.New(*resp.Error)
 	}
-	for _, name := range resp.List {
-		if err := fn(name); err != nil {
-			return err
-		}
-	}
-	return nil
+	return resp.Names, nil
 }
 
 func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) int {
@@ -128,7 +125,7 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 		case opExists:
 			return s.handleExists(ctx, peer, req.Name)
 		case opList:
-			return s.handleList(ctx, peer)
+			return s.handleList(ctx, peer, req.Name, req.Limit)
 		default:
 			return nil, errors.Errorf("unrecognized operation %s", req.Op)
 		}
@@ -178,18 +175,21 @@ func (s *spaceSrv) handleExists(ctx context.Context, peer PeerID, name string) (
 	}, nil
 }
 
-func (s *spaceSrv) handleList(ctx context.Context, peer PeerID) (*SpaceRes, error) {
+func (s *spaceSrv) handleList(ctx context.Context, peer PeerID, first string, limit int) (*SpaceRes, error) {
 	if err := checkACL(s.acl, peer, "", false, opList); err != nil {
 		return nil, err
 	}
 	var names []string
 	if err := s.space.ForEach(ctx, func(x string) error {
+		if len(names) >= limit {
+			return nil
+		}
 		names = append(names, x)
 		return nil
 	}); err != nil {
 		return nil, err
 	}
-	return &SpaceRes{List: names}, nil
+	return &SpaceRes{Names: names}, nil
 }
 
 func checkACL(acl ACL, peer PeerID, name string, write bool, verb string) error {
@@ -215,14 +215,15 @@ func checkACL(acl ACL, peer PeerID, name string, write bool, verb string) error 
 }
 
 type SpaceReq struct {
-	Op   string `json:"op"`
-	Name string `json:"name"`
+	Op    string `json:"op"`
+	Name  string `json:"name"`
+	Limit int    `json:"limit,omitempty"`
 }
 
 type SpaceRes struct {
 	Error  *string  `json:"error,omitempty"`
 	Exists *bool    `json:"exists,omitempty"`
-	List   []string `json:"list,omitempty"`
+	Names  []string `json:"list,omitempty"`
 }
 
 var _ branches.Space = &space{}
@@ -269,5 +270,24 @@ func (r *space) Delete(ctx context.Context, name string) error {
 }
 
 func (r *space) ForEach(ctx context.Context, fn func(string) error) error {
-	panic("not implemented")
+	var first string
+	for {
+		names, err := r.srv.List(ctx, r.peer, first, 100)
+		if err != nil {
+			return err
+		}
+		for _, name := range names {
+			if name == first {
+				continue
+			}
+			if err := fn(name); err != nil {
+				return err
+			}
+		}
+		if len(names) == 0 {
+			break
+		}
+		first = names[len(names)-1]
+	}
+	return nil
 }

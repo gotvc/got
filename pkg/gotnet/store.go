@@ -3,7 +3,6 @@ package gotnet
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"sync"
 
 	"github.com/brendoncarroll/go-p2p"
@@ -132,15 +131,12 @@ func (s *blobMainSrv) PushTo(ctx context.Context, sid StoreID, ids []cadata.ID) 
 }
 
 func (s *blobMainSrv) Get(ctx context.Context, sid StoreID, id cadata.ID, buf []byte) (int, error) {
-	reqData, err := json.Marshal(BlobReq{
+	reqData := marshal(BlobReq{
 		Op:        opGet,
 		Branch:    sid.Branch,
 		StoreType: sid.Type,
 		IDs:       []cadata.ID{id},
 	})
-	if err != nil {
-		panic(err)
-	}
 	n, err := s.swarm.Ask(ctx, buf, sid.Peer, p2p.IOVec{reqData})
 	if err != nil {
 		return 0, err
@@ -208,7 +204,7 @@ func (s *blobMainSrv) handleAsk(ctx context.Context, respBuf []byte, msg p2p.Mes
 	var n int
 	if err := func() error {
 		var req BlobReq
-		if err := json.Unmarshal(msg.Payload, &req); err != nil {
+		if err := unmarshal(msg.Payload, &req); err != nil {
 			return err
 		}
 		peer := msg.Src.(PeerID)
@@ -234,10 +230,7 @@ func (s *blobMainSrv) handleAsk(ctx context.Context, respBuf []byte, msg p2p.Mes
 		if err != nil {
 			return err
 		}
-		data, err := json.Marshal(resp)
-		if err != nil {
-			panic(err)
-		}
+		data := marshal(resp)
 		n = copy(respBuf, data)
 		return nil
 	}(); err != nil {

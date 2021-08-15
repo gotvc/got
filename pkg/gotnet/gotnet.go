@@ -109,11 +109,8 @@ func (s *Service) GetSpace(peer PeerID) branches.Space {
 }
 
 func askJson(ctx context.Context, s p2p.Asker, dst PeerID, resp, req interface{}) error {
-	reqData, err := json.Marshal(req)
-	if err != nil {
-		return err
-	}
-	respData := make([]byte, 1<<16)
+	reqData := marshal(req)
+	respData := make([]byte, MaxMessageSize)
 	n, err := s.Ask(ctx, respData, dst, p2p.IOVec{reqData})
 	if err != nil {
 		return err
@@ -134,4 +131,16 @@ func serveAsks(ctx context.Context, x p2p.AskSwarm, fn p2p.AskHandler) error {
 		}
 	})
 	return eg.Wait()
+}
+
+func marshal(x interface{}) []byte {
+	data, err := json.Marshal(x)
+	if err != nil {
+		panic(err)
+	}
+	return data
+}
+
+func unmarshal(buf []byte, x interface{}) error {
+	return json.Unmarshal(buf, x)
 }
