@@ -25,7 +25,7 @@ func NewCryptoSpace(inner Space, secret []byte) Space {
 	}
 }
 
-func (r *CryptoSpace) Create(ctx context.Context, name string) error {
+func (r *CryptoSpace) Create(ctx context.Context, name string) (*Branch, error) {
 	nameCtext := r.encryptName(name)
 	return r.inner.Create(ctx, nameCtext)
 }

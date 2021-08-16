@@ -25,19 +25,20 @@ func IsExists(err error) bool {
 // A Space holds named branches.
 type Space interface {
 	Get(ctx context.Context, name string) (*Branch, error)
-	Create(ctx context.Context, name string) error
+	Create(ctx context.Context, name string) (*Branch, error)
 	Delete(ctx context.Context, name string) error
 	ForEach(ctx context.Context, fn func(string) error) error
 }
 
-func CreateIfNotExists(ctx context.Context, r Space, k string) error {
-	if _, err := r.Get(ctx, k); err != nil {
+func CreateIfNotExists(ctx context.Context, r Space, k string) (*Branch, error) {
+	branch, err := r.Get(ctx, k)
+	if err != nil {
 		if IsNotExist(err) {
 			return r.Create(ctx, k)
 		}
-		return err
+		return nil, err
 	}
-	return nil
+	return branch, nil
 }
 
 type MemSpace struct {
@@ -67,14 +68,14 @@ func (r *MemSpace) Get(ctx context.Context, name string) (*Branch, error) {
 	return &branch, nil
 }
 
-func (r *MemSpace) Create(ctx context.Context, name string) error {
+func (r *MemSpace) Create(ctx context.Context, name string) (*Branch, error) {
 	if err := CheckName(name); err != nil {
-		return err
+		return nil, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.branches[name]; exists {
-		return ErrExists
+		return nil, ErrExists
 	}
 	r.branches[name] = Branch{
 		Volume: Volume{
@@ -84,7 +85,8 @@ func (r *MemSpace) Create(ctx context.Context, name string) error {
 			RawStore: r.newStore(),
 		},
 	}
-	return nil
+	branch := r.branches[name]
+	return &branch, nil
 }
 
 func (r *MemSpace) Delete(ctx context.Context, name string) error {

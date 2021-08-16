@@ -138,7 +138,7 @@ func Open(p string) (*Repo, error) {
 	r.cellManager = newCellManager(db, []string{bucketCellData})
 
 	r.specDir = newBranchSpecDir(r.makeDefaultVolume, r.MakeCell, r.MakeStore, fs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
-	if err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster); err != nil {
+	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster); err != nil {
 		return nil, err
 	}
 	r.realm, err = branches.NewMultiSpace([]branches.Layer{

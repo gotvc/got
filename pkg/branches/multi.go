@@ -25,14 +25,14 @@ func NewMultiSpace(layers []Layer) (Space, error) {
 	return layered(layers), nil
 }
 
-func (r layered) Create(ctx context.Context, k string) error {
+func (r layered) Create(ctx context.Context, k string) (*Branch, error) {
 	for _, layer := range r {
 		if strings.HasPrefix(k, layer.Prefix) {
 			l := len(layer.Prefix)
 			return layer.Target.Create(ctx, k[l:])
 		}
 	}
-	return errors.Errorf("key not contained in MultiSpace %q", k)
+	return nil, errors.Errorf("key not contained in MultiSpace %q", k)
 }
 
 func (r layered) Delete(ctx context.Context, k string) error {

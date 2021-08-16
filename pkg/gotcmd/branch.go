@@ -32,7 +32,8 @@ var createBranchCmd = &cobra.Command{
 	Args:     cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		branchName := args[0]
-		return repo.CreateBranch(ctx, branchName)
+		_, err := repo.CreateBranch(ctx, branchName)
+		return err
 	},
 }
 
@@ -76,7 +77,7 @@ var switchCmd = &cobra.Command{
 	Args:     cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		var name string
-		if err := repo.CreateBranch(ctx, name); err != nil && err != branches.ErrExists {
+		if _, err := repo.CreateBranch(ctx, name); err != nil && err != branches.ErrExists {
 			return err
 		}
 		return repo.SetActiveBranch(ctx, name)

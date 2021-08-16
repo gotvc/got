@@ -8,12 +8,12 @@ import (
 )
 
 // CreateBranch creates a branch using the default spec.
-func (r *Repo) CreateBranch(ctx context.Context, name string) error {
+func (r *Repo) CreateBranch(ctx context.Context, name string) (*Branch, error) {
 	return r.realm.Create(ctx, name)
 }
 
 // CreateBranchWithSpec creates a branch using spec
-func (r *Repo) CreateBranchWithSpec(name string, spec BranchSpec) error {
+func (r *Repo) CreateBranchWithSpec(name string, spec BranchSpec) (*Branch, error) {
 	return r.specDir.CreateWithSpec(name, spec)
 }
 
@@ -59,6 +59,45 @@ func (r *Repo) GetActiveBranch(ctx context.Context) (string, *Branch, error) {
 		return "", nil, err
 	}
 	return name, branch, nil
+}
+
+func (r *Repo) SetBranchHead(ctx context.Context, name string, snap Snap) error {
+	branch, err := r.GetBranch(ctx, name)
+	if err != nil {
+		return err
+	}
+	return applySnapshot(ctx, branch.Volume.Cell, func(x *Snap) (*Snap, error) {
+		if err := syncStores(ctx, tripleFromVolume(branch.Volume), r.stagingTriple(), snap); err != nil {
+			return nil, err
+		}
+		return &snap, nil
+	})
+}
+
+func (r *Repo) GetBranchHead(ctx context.Context, name string) (*Snap, error) {
+	branch, err := r.GetBranch(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return getSnapshot(ctx, branch.Volume.Cell)
+}
+
+// Fork creates a new branch called next and sets its head to match base's
+func (r *Repo) Fork(ctx context.Context, base, next string) error {
+	baseBranch, err := r.GetBranch(ctx, base)
+	if err != nil {
+		return err
+	}
+
+	nextBranch, err := r.CreateBranch(ctx, next)
+	if err != nil {
+		return err
+	}
+	if err := syncVolumes(ctx, nextBranch.Volume, baseBranch.Volume, false); err != nil {
+		return err
+	}
+
+	return r.SetActiveBranch(ctx, next)
 }
 
 func (r *Repo) History(ctx context.Context, name string, fn func(ref Ref, s Snap) error) error {

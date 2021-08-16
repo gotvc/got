@@ -37,25 +37,28 @@ func (r *branchSpecDir) ForEach(ctx context.Context, fn func(string) error) erro
 	})
 }
 
-func (r *branchSpecDir) Create(ctx context.Context, name string) error {
+func (r *branchSpecDir) Create(ctx context.Context, name string) (*Branch, error) {
 	return r.CreateWithSpec(name, BranchSpec{
 		Volume: r.makeDefault(),
 	})
 }
 
-func (r *branchSpecDir) CreateWithSpec(name string, spec BranchSpec) error {
+func (r *branchSpecDir) CreateWithSpec(name string, spec BranchSpec) (*Branch, error) {
 	if err := branches.CheckName(name); err != nil {
-		return err
+		return nil, err
 	}
 	_, err := r.cf(spec.Volume.Cell)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	data, err := json.MarshalIndent(spec, "", " ")
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return writeIfNotExists(r.fs, name, 0o644, bytes.NewReader(data))
+	if err := writeIfNotExists(r.fs, name, 0o644, bytes.NewReader(data)); err != nil {
+		return nil, err
+	}
+	return r.Get(context.TODO(), name)
 }
 
 func (r *branchSpecDir) Delete(ctx context.Context, k string) error {
