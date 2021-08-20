@@ -1,9 +1,10 @@
 package gotcmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 
-	"github.com/gotvc/got/pkg/branches"
 	"github.com/spf13/cobra"
 )
 
@@ -14,10 +15,13 @@ var (
 
 func init() {
 	rootCmd.AddCommand(branchCmd)
+	rootCmd.AddCommand(activeCmd)
+	rootCmd.AddCommand(forkCmd)
 
 	branchCmd.AddCommand(createBranchCmd)
 	branchCmd.AddCommand(listBranchCmd)
 	branchCmd.AddCommand(deleteBranchCmd)
+	branchCmd.AddCommand(getBranchHeadCmd)
 }
 
 var branchCmd = &cobra.Command{
@@ -32,13 +36,9 @@ var createBranchCmd = &cobra.Command{
 	Args:     cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		branchName := args[0]
-		return repo.CreateBranch(ctx, branchName)
+		_, err := repo.CreateBranch(ctx, branchName)
+		return err
 	},
-}
-
-var setupVolCmd = &cobra.Command{
-	Use:   "setup-vol",
-	Short: "generates a volume spec of the specified type",
 }
 
 var listBranchCmd = &cobra.Command{
@@ -68,17 +68,61 @@ var deleteBranchCmd = &cobra.Command{
 	},
 }
 
-var switchCmd = &cobra.Command{
-	Use:      "switch",
-	Short:    "creates a local branch if it does not exist and switches to it",
+var activeCmd = &cobra.Command{
+	Use:      "active",
+	Short:    "print the active branch or sets it",
+	PreRunE:  loadRepo,
+	PostRunE: closeRepo,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		if len(args) < 1 {
+			name, _, err := repo.GetActiveBranch(ctx)
+			if err != nil {
+				return err
+			}
+			fmt.Fprintln(cmd.OutOrStdout(), name)
+			return nil
+		}
+		name := args[0]
+		return repo.SetActiveBranch(ctx, name)
+	},
+}
+
+var forkCmd = &cobra.Command{
+	Use:      "fork",
+	Short:    "creates a new branch based off the provided branch",
 	PreRunE:  loadRepo,
 	PostRunE: closeRepo,
 	Args:     cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
+		newName := args[0]
+		return repo.Fork(ctx, "", newName)
+	},
+}
+
+var getBranchHeadCmd = &cobra.Command{
+	Use:      "get-head",
+	Short:    "prints the snapshot at the head of the provided branch",
+	PreRunE:  loadRepo,
+	PostRunE: closeRepo,
+	RunE: func(cmd *cobra.Command, args []string) error {
 		var name string
-		if err := repo.CreateBranch(ctx, name); err != nil && err != branches.ErrExists {
+		if len(args) > 0 {
+			name = args[0]
+
+		}
+		branchHead, err := repo.GetBranchHead(ctx, name)
+		if err != nil {
 			return err
 		}
-		return repo.SetActiveBranch(ctx, name)
+		return prettyPrintJSON(cmd.OutOrStdout(), branchHead)
 	},
+}
+
+func prettyPrintJSON(w io.Writer, x interface{}) error {
+	data, err := json.MarshalIndent(x, "", "  ")
+	if err != nil {
+		return err
+	}
+	_, err = w.Write(data)
+	return err
 }
