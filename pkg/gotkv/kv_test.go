@@ -12,7 +12,7 @@ import (
 func TestNewEmpty(t *testing.T) {
 	ctx := context.Background()
 	s := cadata.NewMem(cadata.DefaultMaxSize)
-	op := NewOperator()
+	op := newTestOperator(t)
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	require.NotNil(t, x)
@@ -20,7 +20,7 @@ func TestNewEmpty(t *testing.T) {
 
 func TestPutGet(t *testing.T) {
 	ctx, s, x := testSetup(t)
-	op := NewOperator()
+	op := newTestOperator(t)
 	key := []byte("key1")
 	value := []byte("value")
 	x, err := op.Put(ctx, s, *x, key, value)
@@ -32,7 +32,7 @@ func TestPutGet(t *testing.T) {
 
 func TestPutGetMany(t *testing.T) {
 	ctx, s, x := testSetup(t)
-	op := NewOperator()
+	op := newTestOperator(t)
 	const N = 200
 	makeKey := func(i int) []byte {
 		return []byte(fmt.Sprintf("%d-key", i))
@@ -57,9 +57,13 @@ func TestPutGetMany(t *testing.T) {
 
 func testSetup(t *testing.T) (context.Context, cadata.Store, *Root) {
 	ctx := context.Background()
-	op := NewOperator()
+	op := newTestOperator(t)
 	s := cadata.NewMem(cadata.DefaultMaxSize)
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	return ctx, s, x
+}
+
+func newTestOperator(t *testing.T) Operator {
+	return NewOperator(WithAverageSize(1<<13), WithMaxSize(1<<16))
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/ptree"
+	"github.com/gotvc/got/pkg/gotkv/ptree"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -71,5 +71,5 @@ func TakeLeft(k, l, r []byte) ([]byte, error) {
 }
 
 func (op *Operator) Merge(ctx context.Context, s cadata.Store, roots ...Root) (*Root, error) {
-	return ptree.Merge(ctx, s, &op.dop, roots)
+	return ptree.Merge(ctx, op.makeBuilder(s), roots)
 }

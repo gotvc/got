@@ -1,6 +1,7 @@
 package gotfs
 
 import (
+	"bytes"
 	"context"
 	"log"
 	"os"
@@ -18,6 +19,12 @@ type (
 	Root  = gotkv.Root
 )
 
+const (
+	DefaultMaxBlobSize             = 1 << 21
+	DefaultAverageBlobSizeData     = 1 << 20
+	DefaultAverageBlobSizeMetadata = 1 << 13
+)
+
 type Option func(o *Operator)
 
 func WithDataOperator(dop gdat.Operator) Option {
@@ -29,16 +36,26 @@ func WithDataOperator(dop gdat.Operator) Option {
 type Operator struct {
 	dop   gdat.Operator
 	gotkv gotkv.Operator
+
+	maxBlobSize                          int
+	averageSizeData, averageSizeMetadata int
 }
 
 func NewOperator(opts ...Option) Operator {
 	o := Operator{
-		dop: gdat.NewOperator(),
+		dop:                 gdat.NewOperator(),
+		maxBlobSize:         DefaultMaxBlobSize,
+		averageSizeData:     DefaultAverageBlobSizeData,
+		averageSizeMetadata: DefaultAverageBlobSizeMetadata,
 	}
 	for _, opt := range opts {
 		opt(&o)
 	}
-	o.gotkv = gotkv.NewOperator(gotkv.WithDataOperator(o.dop))
+	o.gotkv = gotkv.NewOperator(
+		gotkv.WithDataOperator(o.dop),
+		gotkv.WithAverageSize(o.averageSizeMetadata),
+		gotkv.WithMaxSize(o.maxBlobSize),
+	)
 	return o
 }
 
@@ -50,10 +67,15 @@ func (o *Operator) Select(ctx context.Context, s cadata.Store, root Root, p stri
 		return nil, err
 	}
 	x := &root
-	if x, err = o.deleteOutside(ctx, s, *x, gotkv.PrefixSpan([]byte(p))); err != nil {
+	k := makeMetadataKey(p)
+	if x, err = o.deleteOutside(ctx, s, *x, gotkv.PrefixSpan(k)); err != nil {
 		return nil, err
 	}
-	if x, err = o.gotkv.RemovePrefix(ctx, s, *x, []byte(p)); err != nil {
+	var prefix []byte
+	if len(k) > 1 {
+		prefix = k[:len(k)-1]
+	}
+	if x, err = o.gotkv.RemovePrefix(ctx, s, *x, prefix); err != nil {
 		return nil, err
 	}
 	return x, err
@@ -74,20 +96,21 @@ func (o *Operator) deleteOutside(ctx context.Context, s cadata.Store, root Root,
 func (o *Operator) ForEach(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Metadata) error) error {
 	p = cleanPath(p)
 	fn2 := func(ent gotkv.Entry) error {
-		if !isPartKey(ent.Key) {
+		if !isExtentKey(ent.Key) {
 			md, err := parseMetadata(ent.Value)
 			if err != nil {
 				return err
 			}
-			p := strings.Trim(string(ent.Key), string(Sep))
+			p, err := parseMetadataKey(ent.Key)
+			if err != nil {
+				return err
+			}
 			return fn(p, md)
 		}
 		return nil
 	}
-	if err := o.gotkv.ForEach(ctx, s, root, gotkv.SingleKeySpan([]byte(p)), fn2); err != nil {
-		return err
-	}
-	return o.gotkv.ForEach(ctx, s, root, gotkv.PrefixSpan([]byte(p+"/")), fn2)
+	k := makeMetadataKey(p)
+	return o.gotkv.ForEach(ctx, s, root, gotkv.PrefixSpan(k), fn2)
 }
 
 func (o *Operator) ForEachFile(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Metadata) error) error {
@@ -111,13 +134,14 @@ func (o *Operator) Graft(ctx context.Context, s cadata.Store, root Root, p strin
 		return nil, err
 	}
 	b := o.gotkv.NewBuilder(s)
-	beforeIt := o.gotkv.NewIterator(s, *root2, gotkv.Span{Start: nil, End: []byte(p)})
-	branch2, err := o.gotkv.AddPrefix(ctx, s, branch, []byte(p))
+	k := makeMetadataKey(p)
+	beforeIt := o.gotkv.NewIterator(s, *root2, gotkv.Span{Start: nil, End: k})
+	branch2, err := o.gotkv.AddPrefix(ctx, s, branch, k[:len(k)-1])
 	if err != nil {
 		return nil, err
 	}
 	branchIt := o.gotkv.NewIterator(s, *branch2, gotkv.Span{})
-	afterIt := o.gotkv.NewIterator(s, root, gotkv.Span{Start: gotkv.PrefixEnd([]byte(p)), End: nil})
+	afterIt := o.gotkv.NewIterator(s, root, gotkv.Span{Start: gotkv.PrefixEnd(k), End: nil})
 	for _, it := range []gotkv.Iterator{beforeIt, branchIt, afterIt} {
 		if err := gotkv.CopyAll(ctx, b, it); err != nil {
 			return nil, err
@@ -133,17 +157,21 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 		switch {
 		case lastPath == nil:
 			log.Printf("checking root")
-			if len(ent.Key) != 0 {
+			if !bytes.Equal(ent.Key, []byte{Sep}) {
+				log.Printf("first key: %q", ent.Key)
 				return errors.Errorf("filesystem is missing root")
 			}
 			p := ""
 			lastPath = &p
-		case !isPartKey(ent.Key):
-			_, err := parseMetadata(ent.Value)
+		case !isExtentKey(ent.Key):
+			p, err := parseMetadataKey(ent.Key)
 			if err != nil {
 				return err
 			}
-			p := string(ent.Key)
+			_, err = parseMetadata(ent.Value)
+			if err != nil {
+				return err
+			}
 			log.Printf("checking %q", p)
 			if !strings.HasPrefix(*lastPath, parentPath(p)) {
 				return errors.Errorf("path %s did not have parent", p)
@@ -151,11 +179,11 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 			lastPath = &p
 			lastOffset = nil
 		default:
-			p, off, err := splitPartKey(ent.Key)
+			p, off, err := splitExtentKey(ent.Key)
 			if err != nil {
 				return err
 			}
-			part, err := parsePart(ent.Value)
+			part, err := parseExtent(ent.Value)
 			if err != nil {
 				return err
 			}

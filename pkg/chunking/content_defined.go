@@ -15,22 +15,28 @@ const (
 type ContentDefined struct {
 	log2AvgSize, maxSize int
 	onChunk              func(data []byte) error
+	hashes               *[256]uint64
 	rh                   *buzhash64.Buzhash64
 	buf                  bytes.Buffer
 }
 
-func NewContentDefined(avgSize, maxSize int, onChunk func(data []byte) error) *ContentDefined {
+func NewContentDefined(avgSize, maxSize int, hashes *[256]uint64, onChunk func(data []byte) error) *ContentDefined {
 	if bits.OnesCount(uint(avgSize)) != 1 {
 		panic("avgSize must be power of 2")
 	}
+	if hashes == nil {
+		hs := buzhash64.GenerateHashes(1)
+		hashes = &hs
+	}
 	log2AvgSize := bits.TrailingZeros64(uint64(avgSize))
-	rh := buzhash64.New()
+	rh := buzhash64.NewFromUint64Array(*hashes)
 	rh.Write(make([]byte, 64))
 	return &ContentDefined{
 		log2AvgSize: log2AvgSize,
 		maxSize:     maxSize,
 		onChunk:     onChunk,
 		rh:          rh,
+		hashes:      hashes,
 	}
 }
 
@@ -52,9 +58,8 @@ func (c *ContentDefined) Write(data []byte) (int, error) {
 
 func (c *ContentDefined) emit() error {
 	defer func() {
-		c.buf.Reset()
-		c.rh.Reset()
-		c.rh.Write(make([]byte, 64))
+		c.Reset()
+
 	}()
 	if c.buf.Len() > 0 {
 		return c.onChunk(c.buf.Bytes())
@@ -64,6 +69,12 @@ func (c *ContentDefined) emit() error {
 
 func (c *ContentDefined) Buffered() int {
 	return c.buf.Len()
+}
+
+func (c *ContentDefined) Reset() {
+	c.buf.Reset()
+	c.rh.Reset()
+	c.rh.Write(make([]byte, 64))
 }
 
 func (c *ContentDefined) WriteNoSplit(data []byte) error {
@@ -93,7 +104,7 @@ func (c *ContentDefined) WouldOverflow(data []byte) bool {
 
 // WouldSplit returns whether the data would be split by the chunking algorithm, given the buffered data.
 func (c *ContentDefined) WouldSplit(data []byte) bool {
-	rh := buzhash64.New()
+	rh := buzhash64.NewFromUint64Array(*c.hashes)
 	rh.Write(make([]byte, 64))
 	for _, b := range c.buf.Bytes() {
 		rh.Roll(b)

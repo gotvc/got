@@ -15,7 +15,7 @@ func TestAddPrefix(t *testing.T) {
 	ctx := context.Background()
 	s := cadata.NewMem(defaultMaxSize)
 	op := gdat.NewOperator()
-	b := NewBuilder(s, &op)
+	b := NewBuilder(s, &op, defaultAvgSize, defaultMaxSize)
 
 	const N = 1e4
 	generateEntries(N, func(ent Entry) {

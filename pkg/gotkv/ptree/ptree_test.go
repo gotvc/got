@@ -17,7 +17,7 @@ func TestBuilder(t *testing.T) {
 	ctx := context.Background()
 	s := cadata.NewMem(cadata.DefaultMaxSize)
 	op := gdat.NewOperator()
-	b := NewBuilder(s, &op)
+	b := NewBuilder(s, &op, defaultAvgSize, defaultMaxSize)
 
 	generateEntries(1e4, func(ent Entry) {
 		err := b.Put(ctx, ent.Key, ent.Value)
@@ -33,7 +33,7 @@ func TestBuildIterate(t *testing.T) {
 	ctx := context.Background()
 	s := cadata.NewMem(cadata.DefaultMaxSize)
 	op := gdat.NewOperator()
-	b := NewBuilder(s, &op)
+	b := NewBuilder(s, &op, defaultAvgSize, defaultMaxSize)
 
 	const N = 1e4
 	generateEntries(N, func(ent Entry) {
@@ -59,7 +59,7 @@ func TestMutate(t *testing.T) {
 	ctx := context.Background()
 	s := cadata.NewMem(cadata.DefaultMaxSize)
 	op := gdat.NewOperator()
-	b := NewBuilder(s, &op)
+	b := NewBuilder(s, &op, defaultAvgSize, defaultMaxSize)
 
 	const N = 1e4
 	generateEntries(N, func(ent Entry) {
@@ -72,7 +72,7 @@ func TestMutate(t *testing.T) {
 
 	k := keyFromInt(int(N) / 3)
 	v := []byte("new changed value")
-	root, err = Mutate(ctx, s, &op, *root, Mutation{
+	root, err = Mutate(ctx, NewBuilder(s, &op, defaultAvgSize, defaultMaxSize), *root, Mutation{
 		Span: SingleItemSpan(k),
 		Fn:   func(*Entry) []Entry { return []Entry{{Key: k, Value: v}} },
 	})

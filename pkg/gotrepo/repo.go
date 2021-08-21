@@ -15,7 +15,7 @@ import (
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/gotvc/got/pkg/ptree"
+	"github.com/gotvc/got/pkg/gotkv/ptree"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"

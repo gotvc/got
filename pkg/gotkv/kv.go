@@ -5,7 +5,7 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/ptree"
+	"github.com/gotvc/got/pkg/gotkv/ptree"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
 )
@@ -22,14 +22,14 @@ type (
 
 var ErrKeyNotFound = errors.Errorf("key not found")
 
-var defaultOperator = NewOperator()
+var defaultReadOnlyOperator = &Operator{dop: gdat.NewOperator()}
 
 func Get(ctx context.Context, s Store, x Root, key []byte) ([]byte, error) {
-	return defaultOperator.Get(ctx, s, x, key)
+	return defaultReadOnlyOperator.Get(ctx, s, x, key)
 }
 
 func GetF(ctx context.Context, s Store, x Root, key []byte, fn func([]byte) error) error {
-	return defaultOperator.GetF(ctx, s, x, key, fn)
+	return defaultReadOnlyOperator.GetF(ctx, s, x, key, fn)
 }
 
 // Sync ensures dst has all the data reachable from x.

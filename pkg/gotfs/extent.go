@@ -1,6 +1,7 @@
 package gotfs
 
 import (
+	"bytes"
 	"encoding/binary"
 
 	"github.com/gotvc/got/pkg/gotkv"
@@ -8,7 +9,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-func (p *Part) marshal() []byte {
+func (p *Extent) marshal() []byte {
 	data, err := proto.Marshal(p)
 	if err != nil {
 		panic(err)
@@ -16,35 +17,43 @@ func (p *Part) marshal() []byte {
 	return data
 }
 
-func parsePart(data []byte) (*Part, error) {
-	p := &Part{}
+func parseExtent(data []byte) (*Extent, error) {
+	p := &Extent{}
 	if err := proto.Unmarshal(data, p); err != nil {
 		return nil, err
 	}
 	return p, nil
 }
 
-func splitPartKey(k []byte) (p string, offset uint64, err error) {
+func splitExtentKey(k []byte) (p string, offset uint64, err error) {
 	if len(k) < 9 {
-		return "", 0, errors.Errorf("key too short")
+		return "", 0, errors.Errorf("not extent key, too short: %q", k)
 	}
 	if k[len(k)-9] != 0x00 {
-		return "", 0, errors.Errorf("not part key, no NULL")
+		return "", 0, errors.Errorf("not extent key, no NULL")
 	}
-	p = string(k[:len(k)-9])
 	offset = binary.BigEndian.Uint64(k[len(k)-8:])
+	p, err = parseMetadataKey(k[:len(k)-9])
+	if err != nil {
+		return "", 0, err
+	}
 	return p, offset, nil
 }
 
-func makePartKey(p string, offset uint64) []byte {
-	x := []byte(p)
+func makeExtentKey(p string, offset uint64) []byte {
+	x := makeMetadataKey(p)
 	x = append(x, 0x00)
 	x = appendUint64(x, offset)
 	return x
 }
 
+func isExtentKey(x []byte) bool {
+	return len(x) >= 9 && bytes.Index(x, []byte{0x00}) == len(x)-9
+}
+
 func fileSpanEnd(p string) []byte {
-	return gotkv.PrefixEnd(append([]byte(p), 0x00))
+	mk := makeMetadataKey(p)
+	return gotkv.PrefixEnd(mk)
 }
 
 func appendUint64(buf []byte, n uint64) []byte {

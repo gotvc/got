@@ -4,13 +4,11 @@ import (
 	"context"
 	"io"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 )
 
 // Mutate applies the mutation mut, to the tree root.
-func Mutate(ctx context.Context, s cadata.Store, op *gdat.Operator, root Root, mut Mutation) (*Root, error) {
-	b := NewBuilder(s, op)
+func Mutate(ctx context.Context, b *Builder, root Root, mut Mutation) (*Root, error) {
 	fnCalled := false
 	mut2 := Mutation{
 		Span: mut.Span,
@@ -179,23 +177,23 @@ type Mutation struct {
 	Fn   func(*Entry) []Entry
 }
 
-func putMutation(k, v []byte) Mutation {
-	return Mutation{
-		Span: SingleItemSpan(k),
-		Fn: func(x *Entry) []Entry {
-			return []Entry{{Key: k, Value: v}}
-		},
-	}
-}
+// func putMutation(k, v []byte) Mutation {
+// 	return Mutation{
+// 		Span: SingleItemSpan(k),
+// 		Fn: func(x *Entry) []Entry {
+// 			return []Entry{{Key: k, Value: v}}
+// 		},
+// 	}
+// }
 
-func deleteMutation(k []byte) Mutation {
-	return Mutation{
-		Span: SingleItemSpan(k),
-		Fn: func(x *Entry) []Entry {
-			return nil
-		},
-	}
-}
+// func deleteMutation(k []byte) Mutation {
+// 	return Mutation{
+// 		Span: SingleItemSpan(k),
+// 		Fn: func(x *Entry) []Entry {
+// 			return nil
+// 		},
+// 	}
+// }
 
 func indexToEntry(idx Index) Entry {
 	return Entry{
