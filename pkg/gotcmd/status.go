@@ -11,7 +11,7 @@ func init() {
 	rootCmd.AddCommand(statusCmd)
 	rootCmd.AddCommand(lsCmd)
 	rootCmd.AddCommand(catCmd)
-	rootCmd.AddCommand(checkCmd)
+	rootCmd.AddCommand(scrubCmd)
 }
 
 var statusCmd = &cobra.Command{
@@ -67,9 +67,9 @@ var catCmd = &cobra.Command{
 	},
 }
 
-var checkCmd = &cobra.Command{
-	Use:     "check",
-	Short:   "checks contents of the current volume",
+var scrubCmd = &cobra.Command{
+	Use:     "scrub",
+	Short:   "runs integrity checks on the current branch",
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return repo.Check(ctx)
