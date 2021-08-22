@@ -3,6 +3,8 @@ package gotrepo
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -13,9 +15,12 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/fs"
 	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
+	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
@@ -45,6 +50,21 @@ const (
 	specDirPath    = ".got/branches"
 	policyPath     = ".got/policy"
 	storePath      = ".got/blobs"
+)
+
+type (
+	FS = fs.FS
+
+	Cell   = cells.Cell
+	Space  = branches.Space
+	Volume = branches.Volume
+	Branch = branches.Branch
+	Store  = cadata.Store
+
+	Ref  = gotkv.Ref
+	Root = gotfs.Root
+
+	Snap = gotvc.Snap
 )
 
 type Repo struct {
@@ -211,7 +231,7 @@ func (r *Repo) DebugFS(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	vol := branch.Volume
-	x, err := getSnapshot(ctx, vol.Cell)
+	x, err := branches.GetHead(ctx, *branch)
 	if err != nil {
 		return err
 	}
@@ -228,4 +248,42 @@ func dumpBucket(w io.Writer, b *bolt.Bucket) {
 		fmt.Fprintf(w, "%q -> %q\n", k, v)
 	}
 	fmt.Fprintln(w)
+}
+
+func (r *Repo) makeDefaultVolume() VolumeSpec {
+	newRandom := func() *uint64 {
+		x := randomUint64()
+		return &x
+	}
+	cellSpec := CellSpec{
+		Local: (*LocalCellSpec)(newRandom()),
+	}
+	cellSpec = CellSpec{
+		Encrypted: &EncryptedCellSpec{
+			Inner:  cellSpec,
+			Secret: generateSecret(32),
+		},
+	}
+	return VolumeSpec{
+		Cell:     cellSpec,
+		VCStore:  StoreSpec{Local: (*LocalStoreSpec)(newRandom())},
+		FSStore:  StoreSpec{Local: (*LocalStoreSpec)(newRandom())},
+		RawStore: StoreSpec{Local: (*LocalStoreSpec)(newRandom())},
+	}
+}
+
+func generateSecret(n int) []byte {
+	x := make([]byte, n)
+	if _, err := rand.Read(x); err != nil {
+		panic(err)
+	}
+	return x
+}
+
+func randomUint64() uint64 {
+	buf := [8]byte{}
+	if _, err := rand.Read(buf[:]); err != nil {
+		panic(err)
+	}
+	return binary.BigEndian.Uint64(buf[:])
 }

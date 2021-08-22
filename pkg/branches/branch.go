@@ -1,19 +1,14 @@
 package branches
 
 import (
+	"context"
 	"regexp"
 	"time"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/cells"
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/pkg/errors"
 )
-
-// Volume is a Cell and a set of stores
-type Volume struct {
-	cells.Cell
-	VCStore, FSStore, RawStore cadata.Store
-}
 
 type Annotations = map[string]string
 
@@ -35,4 +30,46 @@ func CheckName(name string) error {
 		return nil
 	}
 	return errors.Errorf("%q is not a valid branch name", name)
+}
+
+// SetHead forcibly sets the head of the branch.
+func SetHead(ctx context.Context, b Branch, src Triple, snap Snap) error {
+	return applySnapshot(ctx, b.Volume.Cell, func(s *Snap) (*Snap, error) {
+		if err := syncStores(ctx, b.Volume.StoreTriple(), src, snap); err != nil {
+			return nil, err
+		}
+		return &snap, nil
+	})
+}
+
+// GetHead returns the branch head
+func GetHead(ctx context.Context, b Branch) (*Snap, error) {
+	return getSnapshot(ctx, b.Volume.Cell)
+}
+
+// Apply applies fn to branch, any missing data will be pulled from srcStores
+func Apply(ctx context.Context, b Branch, srcStores Triple, fn func(*Snap) (*Snap, error)) error {
+	return applySnapshot(ctx, b.Volume.Cell, func(x *Snap) (*Snap, error) {
+		y, err := fn(x)
+		if err != nil {
+			return nil, err
+		}
+		if y != nil {
+			if err := syncStores(ctx, b.Volume.StoreTriple(), srcStores, *y); err != nil {
+				return nil, err
+			}
+		}
+		return y, nil
+	})
+}
+
+func History(ctx context.Context, b Branch, fn func(ref gdat.Ref, snap Snap) error) error {
+	snap, err := GetHead(ctx, b)
+	if err != nil {
+		return err
+	}
+	if snap == nil {
+		return nil
+	}
+	return gotvc.ForEachAncestor(ctx, b.Volume.VCStore, *snap, fn)
 }

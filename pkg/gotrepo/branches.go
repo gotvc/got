@@ -3,7 +3,7 @@ package gotrepo
 import (
 	"context"
 
-	"github.com/gotvc/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/branches"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -61,17 +61,13 @@ func (r *Repo) GetActiveBranch(ctx context.Context) (string, *Branch, error) {
 	return name, branch, nil
 }
 
+// SetBranchHead
 func (r *Repo) SetBranchHead(ctx context.Context, name string, snap Snap) error {
 	branch, err := r.GetBranch(ctx, name)
 	if err != nil {
 		return err
 	}
-	return applySnapshot(ctx, branch.Volume.Cell, func(x *Snap) (*Snap, error) {
-		if err := syncStores(ctx, tripleFromVolume(branch.Volume), r.stagingTriple(), snap); err != nil {
-			return nil, err
-		}
-		return &snap, nil
-	})
+	return branches.SetHead(ctx, *branch, r.stagingTriple(), snap)
 }
 
 func (r *Repo) GetBranchHead(ctx context.Context, name string) (*Snap, error) {
@@ -79,7 +75,7 @@ func (r *Repo) GetBranchHead(ctx context.Context, name string) (*Snap, error) {
 	if err != nil {
 		return nil, err
 	}
-	return getSnapshot(ctx, branch.Volume.Cell)
+	return branches.GetHead(ctx, *branch)
 }
 
 // Fork creates a new branch called next and sets its head to match base's
@@ -88,41 +84,22 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	if err != nil {
 		return err
 	}
-
 	nextBranch, err := r.CreateBranch(ctx, next)
 	if err != nil {
 		return err
 	}
-	if err := syncVolumes(ctx, nextBranch.Volume, baseBranch.Volume, false); err != nil {
+	if err := branches.SyncVolumes(ctx, nextBranch.Volume, baseBranch.Volume, false); err != nil {
 		return err
 	}
-
 	return r.SetActiveBranch(ctx, next)
 }
 
 func (r *Repo) History(ctx context.Context, name string, fn func(ref Ref, s Snap) error) error {
-	var err error
-	var branch *Branch
-	if name == "" {
-		_, branch, err = r.GetActiveBranch(ctx)
-		if err != nil {
-			return err
-		}
-	} else {
-		branch, err = r.GetBranch(ctx, name)
-		if err != nil {
-			return err
-		}
-	}
-	vol := branch.Volume
-	snap, err := getSnapshot(ctx, vol.Cell)
+	branch, err := r.GetBranch(ctx, name)
 	if err != nil {
 		return err
 	}
-	if snap == nil {
-		return nil
-	}
-	return gotvc.ForEachAncestor(ctx, vol.VCStore, *snap, fn)
+	return branches.History(ctx, *branch, fn)
 }
 
 func getActiveBranch(db *bolt.DB) (string, error) {

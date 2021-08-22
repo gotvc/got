@@ -7,9 +7,10 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/fs"
-	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/stores"
 )
 
 // SnapInfo is additional information that can be attached to a snapshot
@@ -29,21 +30,20 @@ func (r *Repo) Commit(ctx context.Context, snapInfo SnapInfo) error {
 	if err != nil {
 		return err
 	}
-	vol := branch.Volume
-	err = applySnapshot(ctx, vol.Cell, func(x *Snap) (*Snap, error) {
-		dst := tripleFromVolume(vol)
-		src := r.stagingTriple()
-
+	src := r.stagingTriple()
+	dst := branch.Volume.StoreTriple()
+	// writes go to src, but reads from src should fallback to dst
+	src = branches.Triple{
+		Raw: stores.AddWriteLayer(dst.Raw, src.Raw),
+		FS:  stores.AddWriteLayer(dst.FS, src.FS),
+		VC:  stores.AddWriteLayer(dst.VC, src.VC),
+	}
+	err = branches.Apply(ctx, *branch, src, func(x *Snap) (*Snap, error) {
 		y, err := gotvc.Change(ctx, src.VC, x, func(root *Root) (*Root, error) {
 			wasEmpty := false
 			if root == nil {
 				wasEmpty = true
 				if root, err = r.getFSOp().NewEmpty(ctx, src.FS); err != nil {
-					return nil, err
-				}
-			} else {
-				// reverse src, and dst here
-				if err := gotfs.Sync(ctx, src.FS, dst.FS, *root, func(gdat.Ref) error { return nil }); err != nil {
 					return nil, err
 				}
 			}
@@ -80,9 +80,6 @@ func (r *Repo) Commit(ctx context.Context, snapInfo SnapInfo) error {
 		}
 		y.CreatedAt = snapInfo.CreatedAt
 		y.Message = snapInfo.Message
-		if err := syncStores(ctx, dst, src, *y); err != nil {
-			return nil, err
-		}
 		return y, nil
 	})
 	if err != nil {
@@ -95,8 +92,12 @@ func (r *Repo) stagingStore() cadata.Store {
 	return r.storeManager.GetStore(0)
 }
 
-func (r *Repo) stagingTriple() triple {
-	return triple{VC: r.stagingStore(), FS: r.stagingStore(), Raw: r.stagingStore()}
+func (r *Repo) stagingTriple() branches.Triple {
+	return branches.Triple{
+		VC:  r.stagingStore(),
+		FS:  r.stagingStore(),
+		Raw: r.stagingStore(),
+	}
 }
 
 func (r *Repo) StagingStore() cadata.Store {

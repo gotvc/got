@@ -18,5 +18,4 @@ require (
 	golang.org/x/net v0.0.0-20210226172049-e18ecbb05110
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/protobuf v1.25.0
-	lukechampine.com/blake3 v1.1.5
 )

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
@@ -14,7 +15,7 @@ func (r *Repo) Ls(ctx context.Context, p string, fn func(gotfs.DirEnt) error) er
 	if err != nil {
 		return err
 	}
-	snap, err := getSnapshot(ctx, branch.Volume.Cell)
+	snap, err := branches.GetHead(ctx, *branch)
 	if err != nil {
 		return err
 	}
@@ -30,7 +31,7 @@ func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
 		return err
 	}
 	vol := branch.Volume
-	snap, err := getSnapshot(ctx, vol.Cell)
+	snap, err := branches.GetHead(ctx, *branch)
 	if err != nil {
 		return err
 	}
@@ -50,7 +51,7 @@ func (r *Repo) Check(ctx context.Context) error {
 		return err
 	}
 	vol := branch.Volume
-	snap, err := getSnapshot(ctx, vol.Cell)
+	snap, err := branches.GetHead(ctx, *branch)
 	if err != nil {
 		return err
 	}

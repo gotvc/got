@@ -12,6 +12,15 @@ var cleanupCmd = &cobra.Command{
 	PreRunE:  loadRepo,
 	PostRunE: closeRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return repo.CleanupBranches(ctx, args)
+		var names []string
+		if len(args) < 1 {
+			names = []string{""}
+		}
+		for _, name := range names {
+			if err := repo.CleanupBranch(ctx, name); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
