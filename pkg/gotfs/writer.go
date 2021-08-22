@@ -9,13 +9,9 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 )
 
-const (
-	maxPartSize = 1 << 20
-	avgPartSize = maxPartSize / 2
-)
-
 type extentHandler = func(p string, offset uint64, part *Extent) error
 
+// writer produces extents
 type writer struct {
 	o        *Operator
 	ctx      context.Context
@@ -28,7 +24,7 @@ type writer struct {
 }
 
 func (o *Operator) newWriter(ctx context.Context, s cadata.Store, onExtent extentHandler) *writer {
-	if s.MaxSize() < maxPartSize {
+	if s.MaxSize() < o.maxBlobSize {
 		panic(fmt.Sprint("store size too small", s.MaxSize()))
 	}
 	w := &writer{
@@ -38,7 +34,7 @@ func (o *Operator) newWriter(ctx context.Context, s cadata.Store, onExtent exten
 		onExtent: onExtent,
 	}
 	// TODO: derive hashes from same salt used for convergent encryption.
-	w.chunker = chunking.NewContentDefined(avgPartSize, maxPartSize, nil, w.onChunk)
+	w.chunker = chunking.NewContentDefined(o.averageSizeData, o.maxBlobSize, nil, w.onChunk)
 	return w
 }
 

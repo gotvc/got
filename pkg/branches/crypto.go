@@ -8,9 +8,9 @@ import (
 	"fmt"
 
 	"github.com/brendoncarroll/go-state/cells/cryptocell"
+	"github.com/gotvc/got/pkg/gdat"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/chacha20poly1305"
-	"lukechampine.com/blake3"
 )
 
 type CryptoSpace struct {
@@ -112,7 +112,7 @@ func (r *CryptoSpace) wrapVolume(name string, x Volume) Volume {
 }
 
 func deriveKey(out []byte, secret []byte, purpose string) {
-	blake3.DeriveKey(out, purpose, secret)
+	gdat.DeriveKey(out, secret, []byte(purpose))
 }
 
 var enc = base64.URLEncoding

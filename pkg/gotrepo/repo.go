@@ -27,7 +27,7 @@ const (
 	keyStaging    = "STAGING"
 	keyActive     = "ACTIVE"
 	nameMaster    = "master"
-	MaxBlobSize   = 1 << 20
+	MaxBlobSize   = gotfs.DefaultMaxBlobSize
 )
 
 const (

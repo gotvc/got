@@ -28,7 +28,7 @@ func WithDataOperator(ro gdat.Operator) Option {
 	}
 }
 
-// WithMaxSize
+// WithMaxSize sets the max size of blobs made by the operator
 func WithMaxSize(x int) Option {
 	if x < 1 {
 		panic(fmt.Sprint("invalid size:", x))
@@ -38,7 +38,7 @@ func WithMaxSize(x int) Option {
 	}
 }
 
-// WithAverageSize
+// WithAverageSize sets the average size of blobs made by the operator
 func WithAverageSize(x int) Option {
 	if x < 1 {
 		panic(fmt.Sprint("invalid size:", x))

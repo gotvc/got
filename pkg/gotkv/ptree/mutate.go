@@ -177,24 +177,6 @@ type Mutation struct {
 	Fn   func(*Entry) []Entry
 }
 
-// func putMutation(k, v []byte) Mutation {
-// 	return Mutation{
-// 		Span: SingleItemSpan(k),
-// 		Fn: func(x *Entry) []Entry {
-// 			return []Entry{{Key: k, Value: v}}
-// 		},
-// 	}
-// }
-
-// func deleteMutation(k []byte) Mutation {
-// 	return Mutation{
-// 		Span: SingleItemSpan(k),
-// 		Fn: func(x *Entry) []Entry {
-// 			return nil
-// 		},
-// 	}
-// }
-
 func indexToEntry(idx Index) Entry {
 	return Entry{
 		Key:   idx.First,
