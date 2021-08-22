@@ -18,7 +18,7 @@ import (
 
 func TestCreateFileFrom(t *testing.T) {
 	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultMaxSize)
+	s := cadata.NewMem(DefaultMaxBlobSize)
 	op := NewOperator()
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
@@ -35,7 +35,7 @@ func TestCreateFileFrom(t *testing.T) {
 
 func TestFileMetadata(t *testing.T) {
 	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultMaxSize)
+	s := cadata.NewMem(DefaultMaxBlobSize)
 	op := NewOperator()
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
@@ -50,7 +50,7 @@ func TestFileMetadata(t *testing.T) {
 
 func TestLargeFiles(t *testing.T) {
 	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultMaxSize)
+	s := cadata.NewMem(DefaultMaxBlobSize)
 	op := NewOperator()
 
 	const N = 5

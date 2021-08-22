@@ -8,10 +8,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	DefaultAverageSize = 1 << 13
-)
-
 type ContentDefined struct {
 	log2AvgSize, maxSize int
 	onChunk              func(data []byte) error

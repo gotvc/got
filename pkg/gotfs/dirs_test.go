@@ -12,7 +12,7 @@ import (
 
 func TestReadDir(t *testing.T) {
 	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultMaxSize)
+	s := cadata.NewMem(DefaultMaxBlobSize)
 	op := NewOperator()
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
