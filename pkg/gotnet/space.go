@@ -145,7 +145,7 @@ func (s *spaceSrv) handleCreate(ctx context.Context, peer PeerID, name string) (
 	if err := checkACL(s.acl, peer, name, true, opCreate); err != nil {
 		return nil, err
 	}
-	if err := s.space.Create(ctx, name); err != nil {
+	if _, err := s.space.Create(ctx, name); err != nil {
 		return nil, err
 	}
 	return &SpaceRes{}, nil
@@ -244,8 +244,12 @@ func newSpace(srv *spaceSrv, peer PeerID, newCell func(CellID) cells.Cell, newSt
 	}
 }
 
-func (r *space) Create(ctx context.Context, name string) error {
-	return r.srv.Create(ctx, BranchID{Peer: r.peer, Name: name})
+func (r *space) Create(ctx context.Context, name string) (*branches.Branch, error) {
+	if err := r.srv.Create(ctx, BranchID{Peer: r.peer, Name: name}); err != nil {
+		return nil, err
+	}
+	b := r.makeBranch(name)
+	return &b, nil
 }
 
 func (r *space) Get(ctx context.Context, name string) (*branches.Branch, error) {
@@ -254,7 +258,12 @@ func (r *space) Get(ctx context.Context, name string) (*branches.Branch, error) 
 	} else if !yes {
 		return nil, branches.ErrNotExist
 	}
-	b := branches.Branch{
+	b := r.makeBranch(name)
+	return &b, nil
+}
+
+func (r *space) makeBranch(name string) branches.Branch {
+	return branches.Branch{
 		Volume: branches.Volume{
 			Cell:     r.newCell(CellID{Peer: r.peer, Name: name}),
 			VCStore:  r.newStore(StoreID{Peer: r.peer, Branch: name, Type: Type_VC}),
@@ -262,7 +271,6 @@ func (r *space) Get(ctx context.Context, name string) (*branches.Branch, error) 
 			RawStore: r.newStore(StoreID{Peer: r.peer, Branch: name, Type: Type_RAW}),
 		},
 	}
-	return &b, nil
 }
 
 func (r *space) Delete(ctx context.Context, name string) error {

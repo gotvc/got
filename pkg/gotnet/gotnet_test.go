@@ -53,7 +53,8 @@ func TestCell(t *testing.T) {
 func createCell(t testing.TB, space branches.Space) cells.Cell {
 	name := "test"
 	ctx := context.Background()
-	require.NoError(t, space.Create(ctx, name))
+	_, err := space.Create(ctx, name)
+	require.NoError(t, err)
 	branch, err := space.Get(ctx, name)
 	require.NoError(t, err)
 	return branch.Volume.Cell
@@ -62,7 +63,8 @@ func createCell(t testing.TB, space branches.Space) cells.Cell {
 func createStore(t testing.TB, space branches.Space) cadata.Store {
 	name := "test"
 	ctx := context.Background()
-	require.NoError(t, space.Create(ctx, name))
+	_, err := space.Create(ctx, name)
+	require.NoError(t, err)
 	branch, err := space.Get(ctx, name)
 	require.NoError(t, err)
 	return branch.Volume.RawStore
