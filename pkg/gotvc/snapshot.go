@@ -83,7 +83,7 @@ func GetSnapshot(ctx context.Context, s Store, ref Ref) (*Snapshot, error) {
 	var x *Snapshot
 	if err := dop.GetF(ctx, s, ref, func(data []byte) error {
 		var err error
-		x, err = parseCommit(data)
+		x, err = parseSnapshot(data)
 		return err
 	}); err != nil {
 		return nil, err
@@ -182,7 +182,7 @@ func marshalSnapshot(x Snapshot) []byte {
 	return data
 }
 
-func parseCommit(data []byte) (*Snapshot, error) {
+func parseSnapshot(data []byte) (*Snapshot, error) {
 	var snap Snapshot
 	if err := json.Unmarshal(data, &snap); err != nil {
 		return nil, err

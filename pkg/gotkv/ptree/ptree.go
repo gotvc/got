@@ -74,12 +74,12 @@ type Builder struct {
 	ctx context.Context
 }
 
-func NewBuilder(s cadata.Store, op *gdat.Operator) *Builder {
+func NewBuilder(s cadata.Store, op *gdat.Operator, avgSize, maxSize int) *Builder {
 	b := &Builder{
 		s:       s,
 		op:      op,
-		avgSize: defaultAvgSize,
-		maxSize: defaultMaxSize,
+		avgSize: avgSize,
+		maxSize: maxSize,
 	}
 	b.levels = []*StreamWriter{
 		b.makeWriter(0),

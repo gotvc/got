@@ -2,11 +2,12 @@ package gotkv
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/ptree"
+	"github.com/gotvc/got/pkg/gotkv/ptree"
 )
 
 type Builder interface {
@@ -27,11 +28,32 @@ func WithDataOperator(ro gdat.Operator) Option {
 	}
 }
 
+// WithMaxSize sets the max size of blobs made by the operator
+func WithMaxSize(x int) Option {
+	if x < 1 {
+		panic(fmt.Sprint("invalid size:", x))
+	}
+	return func(o *Operator) {
+		o.maxSize = x
+	}
+}
+
+// WithAverageSize sets the average size of blobs made by the operator
+func WithAverageSize(x int) Option {
+	if x < 1 {
+		panic(fmt.Sprint("invalid size:", x))
+	}
+	return func(o *Operator) {
+		o.averageSize = x
+	}
+}
+
 // Operator holds common configuration for operations on gotkv instances.
 // It has nothing to do with the state of a particular gotkv instance. It is NOT analagous to a collection object.
 // It is safe for use by multiple goroutines.
 type Operator struct {
-	dop gdat.Operator
+	dop                  gdat.Operator
+	maxSize, averageSize int
 }
 
 func NewOperator(opts ...Option) Operator {
@@ -41,11 +63,14 @@ func NewOperator(opts ...Option) Operator {
 	for _, opt := range opts {
 		opt(&op)
 	}
+	if op.maxSize == 0 || op.averageSize == 0 {
+		panic("gotkv: must set max and average size")
+	}
 	return op
 }
 
 func (o *Operator) Put(ctx context.Context, s cadata.Store, x Root, key, value []byte) (*Root, error) {
-	return ptree.Mutate(ctx, s, &o.dop, x, ptree.Mutation{
+	return ptree.Mutate(ctx, o.makeBuilder(s), x, ptree.Mutation{
 		Span: ptree.SingleItemSpan(key),
 		Fn:   func(*Entry) []Entry { return []Entry{{Key: key, Value: value}} },
 	})
@@ -80,14 +105,14 @@ func (o *Operator) Delete(ctx context.Context, s cadata.Store, x Root, key []byt
 }
 
 func (o *Operator) DeleteSpan(ctx context.Context, s cadata.Store, x Root, span Span) (*Root, error) {
-	return ptree.Mutate(ctx, s, &o.dop, x, ptree.Mutation{
+	return ptree.Mutate(ctx, o.makeBuilder(s), x, ptree.Mutation{
 		Span: span,
 		Fn:   func(*Entry) []Entry { return nil },
 	})
 }
 
 func (o *Operator) Filter(ctx context.Context, s cadata.Store, root Root, span Span, fn func(Entry) bool) (*Root, error) {
-	return ptree.Mutate(ctx, s, &o.dop, root, ptree.Mutation{
+	return ptree.Mutate(ctx, o.makeBuilder(s), root, ptree.Mutation{
 		Span: span,
 		Fn: func(e *Entry) []Entry {
 			if e == nil {
@@ -119,11 +144,15 @@ func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Store, x Root, pre
 }
 
 func (o *Operator) NewBuilder(s Store) Builder {
-	return ptree.NewBuilder(s, &o.dop)
+	return o.makeBuilder(s)
 }
 
 func (o *Operator) NewIterator(s Store, root Root, span Span) Iterator {
 	return ptree.NewIterator(s, &o.dop, root, span)
+}
+
+func (o *Operator) makeBuilder(s cadata.Store) *ptree.Builder {
+	return ptree.NewBuilder(s, &o.dop, o.averageSize, o.maxSize)
 }
 
 func (o *Operator) ForEach(ctx context.Context, s Store, root Root, span Span, fn func(Entry) error) error {

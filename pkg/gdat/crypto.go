@@ -2,40 +2,61 @@ package gdat
 
 import (
 	"context"
-	"crypto/rand"
+	"io"
+	"math"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/pkg/errors"
+	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/chacha20"
-	"lukechampine.com/blake3"
 )
 
+// DeriveKey uses the blake2b XOF to fill out.
+// The input to the XOF is additional and secret is used to key the XOF.
+func DeriveKey(out, secret, additional []byte) {
+	if len(out) == 0 {
+		return
+	}
+	outputLength := uint32(blake2b.OutputLengthUnknown)
+	if len(out) < math.MaxUint32 {
+		outputLength = uint32(len(out))
+	}
+	xof, err := blake2b.NewXOF(outputLength, secret)
+	if err != nil {
+		panic(err)
+	}
+	if _, err := xof.Write(additional); err != nil {
+		panic(err)
+	}
+	if _, err := io.ReadFull(xof, out[:]); err != nil {
+		panic(err)
+	}
+}
+
+// KeyFunc produces a key for a given blob
 type KeyFunc func(ptextHash cadata.ID) DEK
 
+// SaltedConvergent uses salt to generate convergent keys for each blob.
 func SaltedConvergent(salt []byte) KeyFunc {
 	salt = append([]byte{}, salt...)
 	return func(ptextHash cadata.ID) DEK {
-		h := blake3.New(32, salt)
-		h.Write(ptextHash[:])
 		dek := DEK{}
-		h.Sum(dek[:0])
+		DeriveKey(dek[:], salt, ptextHash[:])
 		return dek
 	}
 }
 
+// Convergent generates a DEK depending only on ptextHash
 func Convergent(ptextHash cadata.ID) DEK {
-	return DEK(blake3.Sum256(ptextHash[:]))
-}
-
-func RandomKey(cadata.ID) DEK {
 	dek := DEK{}
-	if _, err := rand.Read(dek[:]); err != nil {
-		panic(err)
-	}
+	DeriveKey(dek[:], nil, ptextHash[:])
 	return dek
 }
 
 type DEK [32]byte
+
+func (*DEK) String() string {
+	return "{ 32 byte DEK }"
+}
 
 func postEncrypt(ctx context.Context, s cadata.Poster, keyFunc KeyFunc, data []byte) (cadata.ID, *DEK, error) {
 	id := cadata.DefaultHash(data)
@@ -55,9 +76,8 @@ func getDecrypt(ctx context.Context, s cadata.Store, dek DEK, id cadata.ID, buf 
 		return 0, err
 	}
 	data := buf[:n]
-	id2 := s.Hash(data)
-	if id != id2 {
-		return 0, errors.Errorf("bad data from store")
+	if err := cadata.Check(s.Hash, id, data); err != nil {
+		return 0, err
 	}
 	cryptoXOR(dek, data, data)
 	return n, nil

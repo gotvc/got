@@ -12,7 +12,7 @@ A GotFS filesystem is just a GotKV store with a specific key structure used to r
 A reference to data in the content-addressed store.
 This type is provided by GotKV.
 
-### Part
+### Extent
 A part of a file.  It includes a Ref, an offset, and a length.  It is basically an instruction to:
 
 1. Get the referenced data from content-addressed storage
@@ -32,34 +32,36 @@ File data is stored in a content-addressed store, and references to the data are
 
 For example: The file "test.txt" with 10B of data in it would produce the following key value pairs.
 ```
-                                -> Metadata (dir)
-test.txt                        -> Metadata (file)
-test.txt<NULL>< 64 bit: 10 >   -> Part
+/                                -> Metadata (dir)
+/test.txt/                       -> Metadata (file)
+/test.txt/<NULL>< 64 bit: 10 >   -> Extent
 ```
 
 A directory is stored as a metadata object.
 ```
-                                        -> Metadata (dir)
-mydir/                                  -> Metadata (dir)
-mydir/myfile.txt                        -> Metadata (file)
-mydir/myfile.txt<NULL><64 bit offset>   -> Part
+/                                        -> Metadata (dir)
+/mydir/                                  -> Metadata (dir)
+/mydir/myfile.txt                        -> Metadata (file)
+/mydir/myfile.txt<NULL><64 bit offset>   -> Part
 ```
 
 It is possible for a file to be at the root
 ```
-                            -> Metadata (file)
-<NULL><64 bits      >       -> Part
-<NULL>< next offset >       -> Part
+/                            -> Metadata (file)
+/<NULL><64 bits      >       -> Extent
+/<NULL>< next offset >       -> Extent
 ```
 
+All metadata keys end in a trailing `/`, including regular files.
 Keys for metadata objects contain no NULL characters.
-Keys for parts contain exactly 1 NULL character 9 bytes from the end of key, separating the path from the offset.
+Keys for extents contain exactly 1 NULL character 9 bytes from the end of key, separating the path from the offset.
+Extent keys are always prefixed by the metadata key for the file they are part of.
 
 ## Reading A File
 To read from a file in GotFS you first lookup the metadata entry for the path of the file.
 If there is not an entry at the path or the entry is not for a regular file, then return an error.
 
 Then convert the offset to read from to a key.
-Seek to the first part after that key.
-The extent referenced by that part will end at the offset in the key, and will contain data overlapping the target range.
+Seek to the first extent after that key.
+The extent referenced by that extent will end at the offset in the key, and will contain data overlapping the target range.
 

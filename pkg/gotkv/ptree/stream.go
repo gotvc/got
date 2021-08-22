@@ -13,11 +13,6 @@ import (
 	"github.com/pkg/errors"
 )
 
-const (
-	defaultAvgSize = 1 << 13
-	defaultMaxSize = 1 << 16
-)
-
 type Ref = gdat.Ref
 
 type Index struct {
@@ -201,7 +196,7 @@ func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, on
 		s:  s,
 		op: op,
 	}
-	w.chunker = chunking.NewContentDefined(avgSize, maxSize, func(data []byte) error {
+	w.chunker = chunking.NewContentDefined(avgSize, maxSize, nil, func(data []byte) error {
 		if w.firstKey == nil {
 			panic("firstKey should be set")
 		}

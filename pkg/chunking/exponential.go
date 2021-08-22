@@ -57,6 +57,11 @@ func (e *Exponential) Flush() error {
 	return e.emit()
 }
 
+func (e *Exponential) Reset() {
+	e.buf.Reset()
+	e.count = 0
+}
+
 func (e *Exponential) targetSize() int {
 	size := uint64(e.minSize)
 	shift := uint64(e.count / e.period)

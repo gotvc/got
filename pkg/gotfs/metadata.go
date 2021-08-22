@@ -28,18 +28,47 @@ func parseMetadata(data []byte) (*Metadata, error) {
 	return md, nil
 }
 
+func makeMetadataKey(p string) []byte {
+	p = cleanPath(p)
+	if p == "" {
+		return []byte("/")
+	}
+	return []byte("/" + p + "/")
+}
+
+func parseMetadataKey(k []byte) (string, error) {
+	switch len(k) {
+	case 0:
+		return "", errors.Errorf("not a valid metadata key: %q", k)
+	case 1:
+		p := string(k)
+		if p[0] == Sep {
+			return p, nil
+		}
+		return "", errors.Errorf("not a valid metadata key: %q", k)
+	default:
+		if k[0] != Sep || k[len(k)-1] != Sep {
+			return "", errors.Errorf("not a valid metadata key: %q", k)
+		}
+		return string(k[1 : len(k)-1]), nil
+	}
+}
+
 // PutMetadata assigns metadata to p
 func (o *Operator) PutMetadata(ctx context.Context, s Store, x Root, p string, md *Metadata) (*Root, error) {
-	gotkv := gotkv.NewOperator()
-	return gotkv.Put(ctx, s, x, []byte(p), md.marshal())
+	p = cleanPath(p)
+	if err := checkPath(p); err != nil {
+		return nil, err
+	}
+	k := makeMetadataKey(p)
+	return o.gotkv.Put(ctx, s, x, k, md.marshal())
 }
 
 // GetMetadata retrieves the metadata at p if it exists and errors otherwise
 func (o *Operator) GetMetadata(ctx context.Context, s Store, x Root, p string) (*Metadata, error) {
 	p = cleanPath(p)
 	var md *Metadata
-	op := gotkv.NewOperator()
-	err := op.GetF(ctx, s, x, []byte(p), func(data []byte) error {
+	err := o.gotkv.GetF(ctx, s, x, makeMetadataKey(p), func(data []byte) error {
 		var err error
 		md, err = parseMetadata(data)
 		return err

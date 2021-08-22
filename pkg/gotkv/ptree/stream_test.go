@@ -14,6 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+const (
+	defaultMaxSize = 1 << 14
+	defaultAvgSize = 1 << 13
+)
+
 func TestEntry(t *testing.T) {
 	t.Parallel()
 	buf := &bytes.Buffer{}
