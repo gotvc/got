@@ -8,6 +8,7 @@ import (
 	"github.com/gotvc/got/pkg/gotkv/ptree"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -45,10 +46,15 @@ func Sync(ctx context.Context, dst, src Store, x Root, entryFn func(Entry) error
 		if err != nil {
 			return err
 		}
+		eg := errgroup.Group{}
 		for _, ent := range ents {
-			if err := entryFn(ent); err != nil {
-				return err
-			}
+			ent := ent
+			eg.Go(func() error {
+				return entryFn(ent)
+			})
+		}
+		if err := eg.Wait(); err != nil {
+			return err
 		}
 	} else {
 		idxs, err := ptree.ListChildren(ctx, src, &op, x)

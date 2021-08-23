@@ -20,6 +20,7 @@ import (
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
+	"github.com/gotvc/got/pkg/gotnet"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
@@ -86,6 +87,7 @@ type Repo struct {
 	storeManager *storeManager
 	dop          gdat.Operator
 	fsop         gotfs.Operator
+	gotNet       *gotnet.Service
 }
 
 func Init(p string) error {
@@ -134,7 +136,6 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	db.NoSync = true
 	privateKey, err := LoadPrivateKey(repoFS, privateKeyPath)
 	if err != nil {
 		return nil, err
@@ -187,6 +188,10 @@ func (r *Repo) WorkingDir() FS {
 
 func (r *Repo) GetSpace() Space {
 	return r.realm
+}
+
+func (r *Repo) GetACL() *Policy {
+	return r.policy
 }
 
 func (r *Repo) getSubFS(prefix string) fs.FS {
