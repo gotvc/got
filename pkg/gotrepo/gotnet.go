@@ -15,6 +15,7 @@ func (r *Repo) Serve(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	logrus.Println("serving...")
 	return srv.Serve()
 }
 
@@ -35,6 +36,7 @@ func (r *Repo) getGotNet() (*gotnet.Service, error) {
 	if err != nil {
 		return nil, err
 	}
+	logrus.Println("setup INET256 node", node.LocalAddr())
 	swarm := inet256client.NewSwarm(node, r.privateKey.Public())
 	mux := p2pmux.NewStringSecureAskMux(swarm)
 	srv := gotnet.New(gotnet.Params{
