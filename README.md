@@ -30,8 +30,6 @@ To run the tests:
 ```shell
 $ make test
 ```
-The tests for `pkg/gotnet` require an INET256 daemon to be running.
-
 
 ## More
 Read more about the CLI commands in [docs/cli.md](./docs/cli.md).
