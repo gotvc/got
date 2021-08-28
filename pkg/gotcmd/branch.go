@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/gotvc/got/pkg/branches"
 	"github.com/spf13/cobra"
 )
 
@@ -36,7 +37,7 @@ var createBranchCmd = &cobra.Command{
 	Args:     cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		branchName := args[0]
-		_, err := repo.CreateBranch(ctx, branchName)
+		_, err := repo.CreateBranch(ctx, branchName, branches.NewParams(false))
 		return err
 	},
 }

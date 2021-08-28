@@ -48,12 +48,19 @@ func WithAverageSize(x int) Option {
 	}
 }
 
+func WithSeed(seed []byte) Option {
+	return func(o *Operator) {
+		o.seed = seed
+	}
+}
+
 // Operator holds common configuration for operations on gotkv instances.
 // It has nothing to do with the state of a particular gotkv instance. It is NOT analagous to a collection object.
 // It is safe for use by multiple goroutines.
 type Operator struct {
 	dop                  gdat.Operator
 	maxSize, averageSize int
+	seed                 []byte
 }
 
 func NewOperator(opts ...Option) Operator {
@@ -152,7 +159,7 @@ func (o *Operator) NewIterator(s Store, root Root, span Span) Iterator {
 }
 
 func (o *Operator) makeBuilder(s cadata.Store) *ptree.Builder {
-	return ptree.NewBuilder(s, &o.dop, o.averageSize, o.maxSize)
+	return ptree.NewBuilder(s, &o.dop, o.averageSize, o.maxSize, o.seed)
 }
 
 func (o *Operator) ForEach(ctx context.Context, s Store, root Root, span Span, fn func(Entry) error) error {

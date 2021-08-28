@@ -40,10 +40,11 @@ func (srv *spaceSrv) Serve(ctx context.Context) error {
 	return serveAsks(ctx, srv.swarm, srv.handleAsk)
 }
 
-func (s *spaceSrv) Create(ctx context.Context, bid BranchID) error {
+func (s *spaceSrv) Create(ctx context.Context, bid BranchID, params branches.Params) error {
 	req := SpaceReq{
-		Op:   opCreate,
-		Name: bid.Name,
+		Op:     opCreate,
+		Name:   bid.Name,
+		Params: params,
 	}
 	var resp SpaceRes
 	if err := askJson(ctx, s.swarm, bid.Peer, &resp, &req); err != nil {
@@ -119,7 +120,7 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 		s.log.Infof("%s from %v", req.Op, peer)
 		switch req.Op {
 		case opCreate:
-			return s.handleCreate(ctx, peer, req.Name)
+			return s.handleCreate(ctx, peer, req.Name, req.Params)
 		case opDelete:
 			return s.handleDelete(ctx, peer, req.Name)
 		case opExists:
@@ -141,11 +142,11 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 	return copy(resp, data)
 }
 
-func (s *spaceSrv) handleCreate(ctx context.Context, peer PeerID, name string) (*SpaceRes, error) {
+func (s *spaceSrv) handleCreate(ctx context.Context, peer PeerID, name string, params branches.Params) (*SpaceRes, error) {
 	if err := checkACL(s.acl, peer, name, true, opCreate); err != nil {
 		return nil, err
 	}
-	if _, err := s.space.Create(ctx, name); err != nil {
+	if _, err := s.space.Create(ctx, name, params); err != nil {
 		return nil, err
 	}
 	return &SpaceRes{}, nil
@@ -215,9 +216,10 @@ func checkACL(acl ACL, peer PeerID, name string, write bool, verb string) error 
 }
 
 type SpaceReq struct {
-	Op    string `json:"op"`
-	Name  string `json:"name"`
-	Limit int    `json:"limit,omitempty"`
+	Op     string          `json:"op"`
+	Name   string          `json:"name"`
+	Limit  int             `json:"limit,omitempty"`
+	Params branches.Params `json:"params,omitempty"`
 }
 
 type SpaceRes struct {
@@ -244,8 +246,8 @@ func newSpace(srv *spaceSrv, peer PeerID, newCell func(CellID) cells.Cell, newSt
 	}
 }
 
-func (r *space) Create(ctx context.Context, name string) (*branches.Branch, error) {
-	if err := r.srv.Create(ctx, BranchID{Peer: r.peer, Name: name}); err != nil {
+func (r *space) Create(ctx context.Context, name string, params branches.Params) (*branches.Branch, error) {
+	if err := r.srv.Create(ctx, BranchID{Peer: r.peer, Name: name}, params); err != nil {
 		return nil, err
 	}
 	b := r.makeBranch(name)

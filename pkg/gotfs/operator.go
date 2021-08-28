@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/pkg/errors"
@@ -33,12 +34,21 @@ func WithDataOperator(dop gdat.Operator) Option {
 	}
 }
 
+func WithSeed(seed []byte) Option {
+	return func(o *Operator) {
+		o.seed = append([]byte{}, seed...)
+	}
+}
+
 type Operator struct {
 	dop   gdat.Operator
 	gotkv gotkv.Operator
 
 	maxBlobSize                          int
 	averageSizeData, averageSizeMetadata int
+	seed                                 []byte
+
+	hashes *[256]uint64
 }
 
 func NewOperator(opts ...Option) Operator {
@@ -55,7 +65,9 @@ func NewOperator(opts ...Option) Operator {
 		gotkv.WithDataOperator(o.dop),
 		gotkv.WithAverageSize(o.averageSizeMetadata),
 		gotkv.WithMaxSize(o.maxBlobSize),
+		gotkv.WithSeed(o.seed),
 	)
+	o.hashes = chunking.DeriveHashes(o.seed)
 	return o
 }
 

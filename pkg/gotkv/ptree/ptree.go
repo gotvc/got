@@ -74,7 +74,7 @@ type Builder struct {
 	ctx context.Context
 }
 
-func NewBuilder(s cadata.Store, op *gdat.Operator, avgSize, maxSize int) *Builder {
+func NewBuilder(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed []byte) *Builder {
 	b := &Builder{
 		s:       s,
 		op:      op,
@@ -88,7 +88,7 @@ func NewBuilder(s cadata.Store, op *gdat.Operator, avgSize, maxSize int) *Builde
 }
 
 func (b *Builder) makeWriter(i int) *StreamWriter {
-	return NewStreamWriter(b.s, b.op, b.avgSize, b.maxSize, func(idx Index) error {
+	return NewStreamWriter(b.s, b.op, b.avgSize, b.maxSize, nil, func(idx Index) error {
 		switch {
 		case b.isDone && i == len(b.levels)-1:
 			b.root = &Root{
