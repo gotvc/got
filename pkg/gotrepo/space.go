@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"time"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/fs"
@@ -37,9 +38,11 @@ func (r *branchSpecDir) ForEach(ctx context.Context, fn func(string) error) erro
 	})
 }
 
-func (r *branchSpecDir) Create(ctx context.Context, name string) (*Branch, error) {
+func (r *branchSpecDir) Create(ctx context.Context, name string, params branches.Params) (*Branch, error) {
 	return r.CreateWithSpec(name, BranchSpec{
-		Volume: r.makeDefault(),
+		Volume:    r.makeDefault(),
+		Salt:      params.Salt,
+		CreatedAt: time.Now(),
 	})
 }
 
@@ -85,7 +88,10 @@ func (r *branchSpecDir) makeBranch(k string, spec BranchSpec) (*Branch, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Branch{Volume: *vol}, nil
+	return &Branch{
+		Volume: *vol,
+		Salt:   spec.Salt,
+	}, nil
 }
 
 func (r *branchSpecDir) makeVol(k string, spec VolumeSpec) (*Volume, error) {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/cipher"
+	"crypto/rand"
 	"encoding/base64"
 	"fmt"
 
@@ -11,6 +12,11 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/chacha20poly1305"
+)
+
+const (
+	purposeBranchNames = "got/space/names"
+	paddingBlockSize   = 16
 )
 
 type CryptoSpace struct {
@@ -25,9 +31,10 @@ func NewCryptoSpace(inner Space, secret []byte) Space {
 	}
 }
 
-func (r *CryptoSpace) Create(ctx context.Context, name string) (*Branch, error) {
+func (r *CryptoSpace) Create(ctx context.Context, name string, params Params) (*Branch, error) {
 	nameCtext := r.encryptName(name)
-	return r.inner.Create(ctx, nameCtext)
+	paramsCtext := r.encryptParams(params)
+	return r.inner.Create(ctx, nameCtext, paramsCtext)
 }
 
 func (r *CryptoSpace) Get(ctx context.Context, name string) (*Branch, error) {
@@ -36,8 +43,13 @@ func (r *CryptoSpace) Get(ctx context.Context, name string) (*Branch, error) {
 	if err != nil {
 		return nil, err
 	}
+	salt, err := r.decryptSalt(branch.Salt)
+	if err != nil {
+		return nil, err
+	}
 	return &Branch{
 		Volume: r.wrapVolume(name, branch.Volume),
+		Salt:   salt,
 	}, nil
 }
 
@@ -69,9 +81,10 @@ func (r *CryptoSpace) encryptName(x string) string {
 		secret [32]byte
 		nonce  [24]byte
 	)
-	deriveKey(secret[:], r.secret, "got/realm/names")
-	deriveKey(nonce[:], r.secret, "got/realm/name-nonces/"+x)
-	ctext := r.getAEAD(secret[:]).Seal(nil, nonce[:], []byte(x), nil)
+	deriveKey(secret[:], r.secret, purposeBranchNames)
+	deriveKey(nonce[:], r.secret, "got/space/name-nonces/"+x)
+	ptext := padBytes([]byte(x), paddingBlockSize)
+	ctext := r.getAEAD(secret[:]).Seal(nil, nonce[:], ptext, nil)
 	return fmt.Sprintf("%s.%s", enc.EncodeToString(nonce[:]), enc.EncodeToString(ctext[:]))
 }
 
@@ -90,18 +103,47 @@ func (r *CryptoSpace) decryptName(x string) (string, error) {
 		return "", err
 	}
 	var secret [32]byte
-	deriveKey(secret[:], r.secret, "got/realm/names-secret")
-
+	deriveKey(secret[:], r.secret, purposeBranchNames)
 	ptext, err := r.getAEAD(secret[:]).Open(nil, nonce[:], ctext, nil)
 	if err != nil {
 		return "", err
 	}
-	return string(ptext), nil
+	name, err := unpadBytes(ptext, paddingBlockSize)
+	if err != nil {
+		return "", err
+	}
+	return string(name), nil
+}
+
+func (r *CryptoSpace) encryptParams(x Params) Params {
+	return Params{
+		Salt: r.encryptSalt(x.Salt),
+	}
+}
+
+func (r *CryptoSpace) encryptSalt(x []byte) []byte {
+	var secret [32]byte
+	deriveKey(secret[:], r.secret, "got/space/branch-params")
+	var nonce [24]byte
+	readRandom(nonce[:])
+	saltCtext := r.getAEAD(secret[:]).Seal(nil, nonce[:], x, nil)
+	return append(nonce[:], saltCtext...)
+}
+
+func (r *CryptoSpace) decryptSalt(x []byte) ([]byte, error) {
+	var secret [32]byte
+	deriveKey(secret[:], r.secret, "got/space/branch-params")
+	if len(x) < 24 {
+		return nil, errors.Errorf("salt ctext not long enough to contain nonce")
+	}
+	nonce := x[:24]
+	ctext := x[24:]
+	return r.getAEAD(secret[:]).Open(nil, nonce, ctext, nil)
 }
 
 func (r *CryptoSpace) wrapVolume(name string, x Volume) Volume {
 	var secret [32]byte
-	deriveKey(secret[:], r.secret, "got/realm/cells/"+name)
+	deriveKey(secret[:], r.secret, "got/space/cells/"+name)
 	yCell := cryptocell.NewChaCha20Poly1305(x.Cell, secret[:])
 	return Volume{
 		Cell:     yCell,
@@ -115,4 +157,33 @@ func deriveKey(out []byte, secret []byte, purpose string) {
 	gdat.DeriveKey(out, secret, []byte(purpose))
 }
 
+func readRandom(out []byte) {
+	if _, err := rand.Read(out); err != nil {
+		panic(err)
+	}
+}
+
 var enc = base64.URLEncoding
+
+func padBytes(x []byte, blockSize int) []byte {
+	if blockSize > 255 {
+		panic("cannot pad with blocksize more than 255")
+	}
+	extra := blockSize - (len(x)+1)%blockSize
+	for i := 0; i < extra; i++ {
+		x = append(x, 0x00)
+	}
+	return append(x, uint8(extra+1))
+}
+
+func unpadBytes(x []byte, blockSize int) ([]byte, error) {
+	if len(x) < 1 {
+		return nil, errors.Errorf("bytes len=%d is not padded", len(x))
+	}
+	extra := int(x[len(x)-1])
+	end := len(x) - extra
+	if end < 0 {
+		return nil, errors.Errorf("bytes incorrectly padded")
+	}
+	return x[:end], nil
+}

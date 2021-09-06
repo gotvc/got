@@ -191,12 +191,13 @@ type StreamWriter struct {
 	ctx      context.Context
 }
 
-func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, onIndex IndexHandler) *StreamWriter {
+func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed []byte, onIndex IndexHandler) *StreamWriter {
 	w := &StreamWriter{
 		s:  s,
 		op: op,
 	}
-	w.chunker = chunking.NewContentDefined(avgSize, maxSize, nil, func(data []byte) error {
+	hashes := chunking.DeriveHashes(seed)
+	w.chunker = chunking.NewContentDefined(avgSize, maxSize, hashes, func(data []byte) error {
 		if w.firstKey == nil {
 			panic("firstKey should be set")
 		}

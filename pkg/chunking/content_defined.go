@@ -2,9 +2,11 @@ package chunking
 
 import (
 	"bytes"
+	"encoding/binary"
 	"math/bits"
 
 	"github.com/chmduquesne/rollinghash/buzhash64"
+	"github.com/gotvc/got/pkg/gdat"
 	"github.com/pkg/errors"
 )
 
@@ -120,4 +122,17 @@ func (c *ContentDefined) Flush() error {
 
 func atChunkBoundary(sum uint64, nbits int) bool {
 	return bits.TrailingZeros64(sum) >= nbits
+}
+
+func DeriveHashes(seed []byte) *[256]uint64 {
+	const purpose = "buzzhash64"
+	buf := make([]byte, 256*8)
+	gdat.DeriveKey(buf, seed, []byte(purpose))
+	hashes := [256]uint64{}
+	for i := range hashes {
+		start := i * 8
+		end := (i + 1) * 8
+		hashes[i] = binary.BigEndian.Uint64(buf[start:end])
+	}
+	return &hashes
 }

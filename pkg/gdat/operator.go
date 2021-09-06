@@ -11,9 +11,9 @@ type Store = cadata.Store
 
 type Option = func(*Operator)
 
-func WithEncryptionKeyFunc(kf KeyFunc) Option {
+func WithSalt(salt []byte) Option {
 	return func(o *Operator) {
-		o.kf = kf
+		o.kf = SaltedConvergent(salt)
 	}
 }
 

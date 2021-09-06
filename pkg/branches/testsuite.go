@@ -15,7 +15,7 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 		b, err := x.Get(ctx, "test")
 		require.Equal(t, ErrNotExist, err)
 		require.Nil(t, b)
-		_, err = x.Create(ctx, "test")
+		_, err = x.Create(ctx, "test", Params{})
 		require.NoError(t, err)
 		b, err = x.Get(ctx, "test")
 		require.NoError(t, err)

@@ -17,6 +17,7 @@ type Branch struct {
 	Volume      Volume
 	Annotations Annotations
 	CreatedAt   time.Time
+	Salt        []byte
 }
 
 var nameRegExp = regexp.MustCompile(`^[\w- =.]+$`)

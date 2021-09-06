@@ -3,6 +3,7 @@ package branches
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cells"
@@ -22,19 +23,34 @@ func IsExists(err error) bool {
 	return err == ErrExists
 }
 
+type Params struct {
+	Salt []byte
+}
+
+func NewParams(public bool) Params {
+	var salt []byte
+	if !public {
+		salt = make([]byte, 32)
+	}
+	readRandom(salt)
+	return Params{
+		Salt: salt,
+	}
+}
+
 // A Space holds named branches.
 type Space interface {
 	Get(ctx context.Context, name string) (*Branch, error)
-	Create(ctx context.Context, name string) (*Branch, error)
+	Create(ctx context.Context, name string, params Params) (*Branch, error)
 	Delete(ctx context.Context, name string) error
 	ForEach(ctx context.Context, fn func(string) error) error
 }
 
-func CreateIfNotExists(ctx context.Context, r Space, k string) (*Branch, error) {
+func CreateIfNotExists(ctx context.Context, r Space, k string, params Params) (*Branch, error) {
 	branch, err := r.Get(ctx, k)
 	if err != nil {
 		if IsNotExist(err) {
-			return r.Create(ctx, k)
+			return r.Create(ctx, k, params)
 		}
 		return nil, err
 	}
@@ -68,7 +84,7 @@ func (r *MemSpace) Get(ctx context.Context, name string) (*Branch, error) {
 	return &branch, nil
 }
 
-func (r *MemSpace) Create(ctx context.Context, name string) (*Branch, error) {
+func (r *MemSpace) Create(ctx context.Context, name string, params Params) (*Branch, error) {
 	if err := CheckName(name); err != nil {
 		return nil, err
 	}
@@ -84,6 +100,8 @@ func (r *MemSpace) Create(ctx context.Context, name string) (*Branch, error) {
 			FSStore:  r.newStore(),
 			RawStore: r.newStore(),
 		},
+		Salt:      params.Salt,
+		CreatedAt: time.Now(),
 	}
 	branch := r.branches[name]
 	return &branch, nil

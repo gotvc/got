@@ -10,6 +10,7 @@ import (
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/porting"
 	"github.com/gotvc/got/pkg/stores"
 )
 
@@ -38,30 +39,30 @@ func (r *Repo) Commit(ctx context.Context, snapInfo SnapInfo) error {
 		FS:  stores.AddWriteLayer(dst.FS, src.FS),
 		VC:  stores.AddWriteLayer(dst.VC, src.VC),
 	}
+	fsop := r.getFSOp(branch)
 	err = branches.Apply(ctx, *branch, src, func(x *Snap) (*Snap, error) {
 		y, err := gotvc.Change(ctx, src.VC, x, func(root *Root) (*Root, error) {
 			wasEmpty := false
 			if root == nil {
 				wasEmpty = true
-				if root, err = r.getFSOp().NewEmpty(ctx, src.FS); err != nil {
+				if root, err = fsop.NewEmpty(ctx, src.FS); err != nil {
 					return nil, err
 				}
 			}
 			log.Println("begin processing tracked paths")
 			if err := r.tracker.ForEach(ctx, func(target string) error {
 				if !wasEmpty {
-					if err := r.forEachToDelete(ctx, src.FS, *root, target, func(p string) error {
+					if err := r.forEachToDelete(ctx, fsop, src.FS, *root, target, func(p string) error {
 						var err error
-						root, err = r.deletePath(ctx, src.FS, *root, r.workingDir, p)
+						root, err = deletePath(ctx, fsop, src.FS, *root, r.workingDir, p)
 						return err
 					}); err != nil {
 						return err
 					}
 				}
 				if err := r.forEachToAdd(ctx, target, func(p string) error {
-					root, err = r.putPath(ctx, src.FS, src.Raw, *root, p)
+					root, err = r.putPath(ctx, fsop, src.FS, src.Raw, *root, r.workingDir, p)
 					if err != nil {
-						panic(err)
 						return err
 					}
 					return nil
@@ -104,8 +105,8 @@ func (r *Repo) StagingStore() cadata.Store {
 	return r.stagingStore()
 }
 
-func (r *Repo) forEachToDelete(ctx context.Context, ms Store, root Root, target string, fn func(p string) error) error {
-	return r.getFSOp().ForEach(ctx, ms, root, target, func(p string, md *gotfs.Metadata) error {
+func (r *Repo) forEachToDelete(ctx context.Context, fsop *gotfs.Operator, ms Store, root Root, target string, fn func(p string) error) error {
+	return fsop.ForEach(ctx, ms, root, target, func(p string, md *gotfs.Metadata) error {
 		exists, err := exists(r.workingDir, p)
 		if err != nil {
 			return err
@@ -127,18 +128,17 @@ func (r *Repo) forEachToAdd(ctx context.Context, target string, fn func(p string
 	return err
 }
 
-func (r *Repo) putPath(ctx context.Context, ms, ds Store, x Root, p string) (*Root, error) {
+func (r *Repo) putPath(ctx context.Context, fsop *gotfs.Operator, ms, ds Store, x Root, fsx fs.FS, p string) (*Root, error) {
 	log.Println("processing PUT:", p)
-	fileRoot, err := r.porter.Import(ctx, ms, ds, r.repoFS, p)
+	fileRoot, err := porting.ImportFile(ctx, fsop, ms, ds, fsx, p)
 	if err != nil {
 		return nil, err
 	}
-	return r.getFSOp().Graft(ctx, ms, x, p, *fileRoot)
+	return fsop.Graft(ctx, ms, x, p, *fileRoot)
 }
 
 // deletePath walks the path p in x and removes all the files which do not exist in fsx
-func (r *Repo) deletePath(ctx context.Context, ms Store, x Root, fsx fs.FS, p string) (*Root, error) {
-	fsop := r.getFSOp()
+func deletePath(ctx context.Context, fsop *gotfs.Operator, ms Store, x Root, fsx fs.FS, p string) (*Root, error) {
 	y := &x
 	err := fsop.ForEach(ctx, ms, x, p, func(p string, md *gotfs.Metadata) error {
 		exists, err := exists(fsx, p)

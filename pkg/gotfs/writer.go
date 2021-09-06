@@ -34,7 +34,7 @@ func (o *Operator) newWriter(ctx context.Context, s cadata.Store, onExtent exten
 		onExtent: onExtent,
 	}
 	// TODO: derive hashes from same salt used for convergent encryption.
-	w.chunker = chunking.NewContentDefined(o.averageSizeData, o.maxBlobSize, nil, w.onChunk)
+	w.chunker = chunking.NewContentDefined(o.averageSizeData, o.maxBlobSize, o.hashes, w.onChunk)
 	return w
 }
 

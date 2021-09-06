@@ -77,11 +77,10 @@ type Repo struct {
 	privateKey p2p.PrivateKey
 
 	workingDir FS // workingDir is repoFS with reserved paths filtered.
-	porter     *porter
 	tracker    *tracker
 
 	specDir *branchSpecDir
-	realm   Space
+	space   Space
 
 	cellManager  *cellManager
 	storeManager *storeManager
@@ -153,16 +152,15 @@ func Open(p string) (*Repo, error) {
 		dop:     gdat.NewOperator(),
 		fsop:    gotfs.NewOperator(),
 	}
-	r.porter = newPorter(db, []string{bucketPorter}, r.getFSOp())
 	fsStore := stores.NewFSStore(r.getSubFS(storePath), MaxBlobSize)
 	r.storeManager = newStoreManager(fsStore, r.db, bucketStores)
 	r.cellManager = newCellManager(db, []string{bucketCellData})
 
 	r.specDir = newBranchSpecDir(r.makeDefaultVolume, r.MakeCell, r.MakeStore, fs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
-	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster); err != nil {
+	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster, branches.NewParams(false)); err != nil {
 		return nil, err
 	}
-	r.realm, err = branches.NewMultiSpace([]branches.Layer{
+	r.space, err = branches.NewMultiSpace([]branches.Layer{
 		{Prefix: "", Target: r.specDir},
 	})
 	if err != nil {
@@ -187,7 +185,7 @@ func (r *Repo) WorkingDir() FS {
 }
 
 func (r *Repo) GetSpace() Space {
-	return r.realm
+	return r.space
 }
 
 func (r *Repo) GetACL() *Policy {
@@ -198,12 +196,15 @@ func (r *Repo) getSubFS(prefix string) fs.FS {
 	return fs.NewPrefixed(r.repoFS, prefix)
 }
 
-func (r *Repo) getFSOp() *gotfs.Operator {
-	return &r.fsop
-}
-
-func (r *Repo) getDataOp() *gdat.Operator {
-	return &r.dop
+func (r *Repo) getFSOp(b *branches.Branch) *gotfs.Operator {
+	dop := gdat.NewOperator(
+		gdat.WithSalt(b.Salt),
+	)
+	fsop := gotfs.NewOperator(
+		gotfs.WithDataOperator(dop),
+		gotfs.WithSeed(b.Salt),
+	)
+	return &fsop
 }
 
 func (r *Repo) UnionStore() cadata.Store {

@@ -8,8 +8,8 @@ import (
 )
 
 // CreateBranch creates a branch using the default spec.
-func (r *Repo) CreateBranch(ctx context.Context, name string) (*Branch, error) {
-	return r.realm.Create(ctx, name)
+func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Params) (*Branch, error) {
+	return r.space.Create(ctx, name, params)
 }
 
 // CreateBranchWithSpec creates a branch using spec
@@ -19,7 +19,7 @@ func (r *Repo) CreateBranchWithSpec(name string, spec BranchSpec) (*Branch, erro
 
 // DeleteBranch deletes a branch
 func (r *Repo) DeleteBranch(ctx context.Context, name string) error {
-	return r.realm.Delete(ctx, name)
+	return r.space.Delete(ctx, name)
 }
 
 // GetBranch returns the branch with the specified name
@@ -28,12 +28,12 @@ func (r *Repo) GetBranch(ctx context.Context, name string) (*Branch, error) {
 		_, branch, err := r.GetActiveBranch(ctx)
 		return branch, err
 	}
-	return r.realm.Get(ctx, name)
+	return r.space.Get(ctx, name)
 }
 
 // ForEachBranch calls fn once for each branch, or until an error is returned from fn
 func (r *Repo) ForEachBranch(ctx context.Context, fn func(string) error) error {
-	return r.realm.ForEach(ctx, fn)
+	return r.space.ForEach(ctx, fn)
 }
 
 // SetActiveBranch sets the active branch to name
@@ -84,7 +84,9 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	if err != nil {
 		return err
 	}
-	nextBranch, err := r.CreateBranch(ctx, next)
+	nextBranch, err := r.CreateBranch(ctx, next, branches.Params{
+		Salt: baseBranch.Salt,
+	})
 	if err != nil {
 		return err
 	}

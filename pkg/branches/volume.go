@@ -19,7 +19,7 @@ type Snap = gotvc.Snap
 // Volume is a Cell and a set of stores
 type Volume struct {
 	cells.Cell
-	RawStore, FSStore, VCStore cadata.Store
+	VCStore, FSStore, RawStore cadata.Store
 }
 
 func (v Volume) StoreTriple() Triple {
@@ -98,7 +98,7 @@ func applySnapshot(ctx context.Context, c cells.Cell, fn func(*Snap) (*Snap, err
 
 // Triple is an instance of the 3 stores needed to store a Got Snapshot
 type Triple struct {
-	Raw, FS, VC cadata.Store
+	VC, FS, Raw cadata.Store
 }
 
 func syncStores(ctx context.Context, dst, src Triple, snap gotvc.Snapshot) error {

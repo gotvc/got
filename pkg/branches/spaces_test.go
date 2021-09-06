@@ -44,3 +44,22 @@ func TestIsValidName(t *testing.T) {
 		require.Equal(t, expected, actual, "%s -> %v", x, actual)
 	}
 }
+
+func TestPadUnpad(t *testing.T) {
+	const blockSize = 16
+	const letters = "abcdefghijklmnopqrstuvwxyz"
+	for i := 0; i < 26; i++ {
+		in := letters[:i]
+		out := padBytes([]byte(in), blockSize)
+
+		// check that the output is a multiple of blockSize
+		require.Zero(t, len(out)%blockSize)
+		// check that the last byte is equal to the number of added bytes
+		require.Equal(t, len(out)-len(in), int(out[len(out)-1]))
+
+		// check that it is reversible
+		actual, err := unpadBytes(out, blockSize)
+		require.NoError(t, err)
+		require.Equal(t, string(in), string(actual))
+	}
+}
