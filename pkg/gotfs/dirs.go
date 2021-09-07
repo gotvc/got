@@ -7,6 +7,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/pkg/errors"
 )
@@ -25,6 +26,7 @@ func (o *Operator) NewEmpty(ctx context.Context, s Store) (*Root, error) {
 
 // Mkdir creates a directory at path p
 func (o *Operator) Mkdir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+	p = cleanPath(p)
 	if err := o.checkNoEntry(ctx, s, x, p); err != nil {
 		return nil, err
 	}
@@ -41,7 +43,7 @@ func (o *Operator) MkdirAll(ctx context.Context, s Store, x Root, p string) (*Ro
 	for i := range parts {
 		p2 := strings.Join(parts[:i+1], string(Sep))
 		_, err := o.GetDirMetadata(ctx, s, x, p2)
-		if os.IsNotExist(err) {
+		if posixfs.IsErrNotExist(err) {
 			x2, err := o.Mkdir(ctx, s, x, p2)
 			if err != nil {
 				return nil, err
@@ -103,6 +105,12 @@ func cleanName(p string) string {
 }
 
 func dirSpan(p string) gotkv.Span {
+	p = cleanPath(p)
+	k := makeMetadataKey(p)
+	return gotkv.PrefixSpan(k)
+}
+
+func SpanForPath(p string) gotkv.Span {
 	p = cleanPath(p)
 	k := makeMetadataKey(p)
 	return gotkv.PrefixSpan(k)

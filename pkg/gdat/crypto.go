@@ -10,6 +10,10 @@ import (
 	"golang.org/x/crypto/chacha20"
 )
 
+func Hash(x []byte) cadata.ID {
+	return blake2b.Sum256(x)
+}
+
 // DeriveKey uses the blake2b XOF to fill out.
 // The input to the XOF is additional and secret is used to key the XOF.
 func DeriveKey(out, secret, additional []byte) {
@@ -59,8 +63,7 @@ func (*DEK) String() string {
 }
 
 func postEncrypt(ctx context.Context, s cadata.Poster, keyFunc KeyFunc, data []byte) (cadata.ID, *DEK, error) {
-	id := cadata.DefaultHash(data)
-	dek := keyFunc(id)
+	dek := keyFunc(Hash(data))
 	ctext := make([]byte, len(data))
 	cryptoXOR(dek, ctext, data)
 	id, err := s.Post(ctx, ctext)

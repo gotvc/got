@@ -3,12 +3,13 @@ package gotrepo
 import (
 	"context"
 	"log"
+	"path"
 	"time"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/fs"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/porting"
 	"github.com/gotvc/got/pkg/stores"
@@ -42,39 +43,13 @@ func (r *Repo) Commit(ctx context.Context, snapInfo SnapInfo) error {
 	fsop := r.getFSOp(branch)
 	err = branches.Apply(ctx, *branch, src, func(x *Snap) (*Snap, error) {
 		y, err := gotvc.Change(ctx, src.VC, x, func(root *Root) (*Root, error) {
-			wasEmpty := false
-			if root == nil {
-				wasEmpty = true
-				if root, err = fsop.NewEmpty(ctx, src.FS); err != nil {
-					return nil, err
-				}
-			}
 			log.Println("begin processing tracked paths")
-			if err := r.tracker.ForEach(ctx, func(target string) error {
-				if !wasEmpty {
-					if err := r.forEachToDelete(ctx, fsop, src.FS, *root, target, func(p string) error {
-						var err error
-						root, err = deletePath(ctx, fsop, src.FS, *root, r.workingDir, p)
-						return err
-					}); err != nil {
-						return err
-					}
-				}
-				if err := r.forEachToAdd(ctx, target, func(p string) error {
-					root, err = r.putPath(ctx, fsop, src.FS, src.Raw, *root, r.workingDir, p)
-					if err != nil {
-						return err
-					}
-					return nil
-				}); err != nil {
-					return err
-				}
-				return nil
-			}); err != nil {
+			nextRoot, err := r.applyTrackerChanges(ctx, fsop, src.FS, src.Raw, root)
+			if err != nil {
 				return nil, err
 			}
 			log.Println("done processing tracked paths")
-			return root, nil
+			return nextRoot, nil
 		})
 		if err != nil {
 			return nil, err
@@ -105,55 +80,132 @@ func (r *Repo) StagingStore() cadata.Store {
 	return r.stagingStore()
 }
 
-func (r *Repo) forEachToDelete(ctx context.Context, fsop *gotfs.Operator, ms Store, root Root, target string, fn func(p string) error) error {
-	return fsop.ForEach(ctx, ms, root, target, func(p string, md *gotfs.Metadata) error {
-		exists, err := exists(r.workingDir, p)
+// applyTrackerChanges iterates through all the tracked paths and adds or deletes them from root
+// the new root, reflecting all of the changes indicated by the tracker, is returned.
+func (r *Repo) applyTrackerChanges(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, root *Root) (*Root, error) {
+	if root == nil {
+		var err error
+		root, err = fsop.NewEmpty(ctx, ms)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var changes []gotfs.Segment
+	if err := r.tracker.ForEach(ctx, func(target string) error {
+		pathRoot, err := porting.ImportPath(ctx, fsop, ms, ds, r.workingDir, target)
 		if err != nil {
 			return err
 		}
-		if exists {
-			return nil
+		if !gotfs.IsEmpty(*pathRoot) {
+			root, err = fsop.MkdirAll(ctx, ms, *root, path.Dir(target))
+			if err != nil {
+				return err
+			}
 		}
-		return fn(p)
-	})
-}
-
-func (r *Repo) forEachToAdd(ctx context.Context, target string, fn func(p string) error) error {
-	err := fs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ fs.DirEnt) error {
-		return fn(p)
-	})
-	if fs.IsErrNotExist(err) {
-		err = nil
-	}
-	return err
-}
-
-func (r *Repo) putPath(ctx context.Context, fsop *gotfs.Operator, ms, ds Store, x Root, fsx fs.FS, p string) (*Root, error) {
-	log.Println("processing PUT:", p)
-	fileRoot, err := porting.ImportFile(ctx, fsop, ms, ds, fsx, p)
-	if err != nil {
-		return nil, err
-	}
-	return fsop.Graft(ctx, ms, x, p, *fileRoot)
-}
-
-// deletePath walks the path p in x and removes all the files which do not exist in fsx
-func deletePath(ctx context.Context, fsop *gotfs.Operator, ms Store, x Root, fsx fs.FS, p string) (*Root, error) {
-	y := &x
-	err := fsop.ForEach(ctx, ms, x, p, func(p string, md *gotfs.Metadata) error {
-		exists, err := exists(fsx, p)
+		pathRoot, err = fsop.AddPrefix(ctx, ms, target, *pathRoot)
 		if err != nil {
 			return err
 		}
-		if exists {
-			return nil
-		}
-		log.Println("processing DEL:", p)
-		y, err = fsop.RemoveAll(ctx, ms, *y, p)
-		return err
-	})
-	if err != nil {
+		changes = append(changes, gotfs.Segment{
+			Root: *pathRoot,
+			Span: gotfs.SpanForPath(target),
+		})
+		return nil
+	}); err != nil {
 		return nil, err
 	}
-	return y, nil
+	segs := prepareChanges(*root, changes)
+	return fsop.Splice(ctx, ms, ds, segs)
 }
+
+// prepareChanges ensures that the segments represent the whole key space, using base to fill in any gaps.
+func prepareChanges(base gotfs.Root, changes []gotfs.Segment) []gotfs.Segment {
+	var segs []gotfs.Segment
+	for i := range changes {
+		// create the span to reference the root, should be inbetween the two entries from segs
+		var span gotkv.Span
+		if i > 0 {
+			span.Start = segs[i-1].Span.End
+		}
+		span.End = changes[i].Span.Start
+		segs = append(segs, gotfs.Segment{Root: base, Span: span})
+		segs = append(segs, changes[i])
+	}
+	if len(segs) > 0 {
+		segs = append(segs, gotfs.Segment{
+			Root: base,
+			Span: gotkv.Span{
+				Start: segs[len(segs)-1].Span.End,
+				End:   nil,
+			},
+		})
+	}
+	return segs
+}
+
+// func (r *Repo) forEachLeaf(ctx context.Context, fsop *gotfs.Operator, ms Store, root *Root, target string, fn func(p string) error) error {
+// 	eg := errgroup.Group{}
+// 	inWorking := make(chan string)
+// 	inSnapshot := make(chan string)
+// 	eg.Go(func() error {
+// 		defer close(inWorking)
+// 		err := posixfs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ posixfs.DirEnt) error {
+// 			inWorking <- p
+// 			return nil
+// 		})
+// 		if posixfs.IsErrNotExist(err) {
+// 			err = nil
+// 		}
+// 		return err
+// 	})
+// 	eg.Go(func() error {
+// 		defer close(inSnapshot)
+// 		if root == nil {
+// 			return nil
+// 		}
+// 		return fsop.ForEachFile(ctx, ms, *root, target, func(p string, _ *gotfs.Metadata) error {
+// 			inSnapshot <- p
+// 			return nil
+// 		})
+// 	})
+// 	eg.Go(func() error {
+// 		var p1, p2 *string
+// 		// while both are open
+// 		for {
+// 			if p1 == nil {
+// 				if p, open := <-inWorking; open {
+// 					p1 = &p
+// 				}
+// 			}
+// 			if p2 == nil {
+// 				if p, open := <-inSnapshot; open {
+// 					p2 = &p
+// 				}
+// 			}
+
+// 			var p string
+// 			switch {
+// 			case p1 != nil && p2 != nil:
+// 				if *p1 < *p2 {
+// 					p = *p1
+// 					p1 = nil
+// 				} else {
+// 					p = *p2
+// 					p2 = nil
+// 				}
+// 			case p1 != nil:
+// 				p = *p1
+// 				p1 = nil
+// 			case p2 != nil:
+// 				p = *p2
+// 				p2 = nil
+// 			default:
+// 				return nil
+// 			}
+// 			if err := fn(p); err != nil {
+// 				return err
+// 			}
+// 		}
+// 	})
+// 	return eg.Wait()
+// }

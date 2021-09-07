@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/stretchr/testify/require"
 )
 
@@ -85,5 +86,7 @@ func checkFileContent(t testing.TB, repo *Repo, p, content string) {
 func checkNotExists(t testing.TB, repo *Repo, p string) {
 	ctx := context.Background()
 	err := repo.Cat(ctx, p, io.Discard)
-	require.True(t, os.IsNotExist(err))
+	if err != nil && !posixfs.IsErrNotExist(err) {
+		require.NoError(t, err)
+	}
 }

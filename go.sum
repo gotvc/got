@@ -45,11 +45,12 @@ github.com/bgentry/speakeasy v0.1.0/go.mod h1:+zsyZBPWlz7T6j88CTgSN5bM796AkVf0kB
 github.com/bkaradzic/go-lz4 v0.0.0-20160924222819-7224d8d8f27e h1:2augTYh6E+XoNrrivZJBadpThP/dsvYKj0nzqfQ8tM4=
 github.com/bkaradzic/go-lz4 v0.0.0-20160924222819-7224d8d8f27e/go.mod h1:0YdlkowM3VswSROI7qDxhRvJ3sLhlFrRRwjwegp5jy4=
 github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBTaaSFSlLx/70C2HPIMNZpVV8+vt/A+FMnYP11g=
-github.com/brendoncarroll/go-p2p v0.0.0-20210819000259-cc04d176d6c1 h1:p4ft2Ml7/p9WzUVvE/Ep6Z+dEpoghGyip/P4eAMF+RA=
 github.com/brendoncarroll/go-p2p v0.0.0-20210819000259-cc04d176d6c1/go.mod h1:tXEfapNF/whaBeE9HD6wY/QofRZ0Sr01aAtQNB1Le9s=
+github.com/brendoncarroll/go-p2p v0.0.0-20210822202912-45e39d4c6c98 h1:3fLj68q5oPFpujVXnNuh0OpPT9C0ljFQ85QwH9H7Ekg=
+github.com/brendoncarroll/go-p2p v0.0.0-20210822202912-45e39d4c6c98/go.mod h1:tXEfapNF/whaBeE9HD6wY/QofRZ0Sr01aAtQNB1Le9s=
 github.com/brendoncarroll/go-state v0.0.0-20210627233638-99c825eb7040/go.mod h1:EQKdXJyc93dh3yN1wRYdKjAZk+MutF5DFwoW+Vqe5U0=
-github.com/brendoncarroll/go-state v0.0.0-20210724154322-8779b9922848 h1:WqRA4Lo7fpt0GF6AJGhMhT1E9HBHDfwWIsDjxWb4gw8=
-github.com/brendoncarroll/go-state v0.0.0-20210724154322-8779b9922848/go.mod h1:M86VCqKTis4CJcSvWCoB1OZHuRu3d1c05iS7+6HbBQI=
+github.com/brendoncarroll/go-state v0.0.0-20210903012623-d006328d202b h1:bHa85YZwok4xYzioiP8D8pTMhkafkU4nNxSzKx1pWCM=
+github.com/brendoncarroll/go-state v0.0.0-20210903012623-d006328d202b/go.mod h1:M86VCqKTis4CJcSvWCoB1OZHuRu3d1c05iS7+6HbBQI=
 github.com/buger/jsonparser v0.0.0-20181115193947-bf1c66bbce23/go.mod h1:bbYlZJ7hK1yFx9hf58LP0zeX7UjIGs20ufpu3evjr+s=
 github.com/calmh/xdr v1.1.0/go.mod h1:E8sz2ByAdXC8MbANf1LCRYzedSnnc+/sXXJs/PVqoeg=
 github.com/casbin/casbin/v2 v2.1.2/go.mod h1:YcPU1XXisHhLzuxH9coDNf2FbKpjGlbCg3n9yuLkIJQ=

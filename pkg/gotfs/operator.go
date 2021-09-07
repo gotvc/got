@@ -3,6 +3,7 @@ package gotfs
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -162,6 +163,12 @@ func (o *Operator) Graft(ctx context.Context, s cadata.Store, root Root, p strin
 	return b.Finish(ctx)
 }
 
+func (o *Operator) AddPrefix(ctx context.Context, s Store, p string, x Root) (*Root, error) {
+	p = cleanPath(p)
+	k := makeMetadataKey(p)
+	return o.gotkv.AddPrefix(ctx, s, x, k[:len(k)-1])
+}
+
 func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func(ref gdat.Ref) error) error {
 	var lastPath *string
 	var lastOffset *uint64
@@ -217,4 +224,28 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 		}
 		return nil
 	})
+}
+
+type Segment struct {
+	Span gotkv.Span
+	Root Root
+}
+
+func (s Segment) String() string {
+	return fmt.Sprintf("{ %v : %v}", s.Span, s.Root.Ref.CID)
+}
+
+func (o *Operator) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*Root, error) {
+	b := o.newBuilder(ctx, ms, ds)
+	for _, seg := range segs {
+		it := o.gotkv.NewIterator(ms, seg.Root, seg.Span)
+		if err := b.CopyFromIterator(ctx, it); err != nil {
+			return nil, err
+		}
+	}
+	return b.Finish()
+}
+
+func IsEmpty(root Root) bool {
+	return len(root.First) == 0
 }

@@ -9,7 +9,7 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 )
 
-type extentHandler = func(p string, offset uint64, part *Extent) error
+type extentHandler = func(ext *Extent) error
 
 // writer produces extents
 type writer struct {
@@ -19,8 +19,6 @@ type writer struct {
 	onExtent extentHandler
 
 	chunker *chunking.ContentDefined
-	path    *string
-	offset  uint64
 }
 
 func (o *Operator) newWriter(ctx context.Context, s cadata.Store, onExtent extentHandler) *writer {
@@ -33,32 +31,20 @@ func (o *Operator) newWriter(ctx context.Context, s cadata.Store, onExtent exten
 		s:        s,
 		onExtent: onExtent,
 	}
-	// TODO: derive hashes from same salt used for convergent encryption.
 	w.chunker = chunking.NewContentDefined(o.averageSizeData, o.maxBlobSize, o.hashes, w.onChunk)
 	return w
 }
 
-func (w *writer) BeginPath(p string) error {
-	if w.path != nil {
-		if err := w.chunker.Flush(); err != nil {
-			return err
-		}
-	}
-	w.chunker.Reset()
-	w.path = &p
-	w.offset = 0
-	return nil
-}
-
 func (w *writer) Write(p []byte) (int, error) {
-	if w.path == nil {
-		panic("must call BeginPath before Write")
-	}
 	return w.chunker.Write(p)
 }
 
 func (w *writer) Flush() error {
 	return w.chunker.Flush()
+}
+
+func (w *writer) Buffered() int {
+	return w.chunker.Buffered()
 }
 
 func (w *writer) onChunk(data []byte) error {
@@ -71,9 +57,8 @@ func (w *writer) onChunk(data []byte) error {
 		Length: uint32(len(data)),
 		Ref:    gdat.MarshalRef(*ref),
 	}
-	if err := w.onExtent(*w.path, w.offset, ext); err != nil {
+	if err := w.onExtent(ext); err != nil {
 		return err
 	}
-	w.offset += uint64(len(data))
 	return nil
 }

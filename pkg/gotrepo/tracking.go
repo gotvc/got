@@ -4,7 +4,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/brendoncarroll/go-state/fs"
+	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotfs"
 	bolt "go.etcd.io/bbolt"
 )
@@ -158,9 +158,9 @@ func bucketFromTx(tx *bolt.Tx, path []string) (*bolt.Bucket, error) {
 	return b, nil
 }
 
-func exists(x fs.FS, p string) (bool, error) {
+func exists(x posixfs.FS, p string) (bool, error) {
 	_, err := x.Stat(p)
-	if fs.IsErrNotExist(err) {
+	if posixfs.IsErrNotExist(err) {
 		return false, nil
 	}
 	if err != nil {
