@@ -2,8 +2,10 @@ package gotfs
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 
+	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
@@ -60,4 +62,18 @@ func appendUint64(buf []byte, n uint64) []byte {
 	nbytes := [8]byte{}
 	binary.BigEndian.PutUint64(nbytes[:], n)
 	return append(buf, nbytes[:]...)
+}
+
+func (o *Operator) getExtentF(ctx context.Context, s Store, ext *Extent, fn func(data []byte) error) error {
+	ref, err := gdat.ParseRef(ext.Ref)
+	if err != nil {
+		return err
+	}
+	return o.dop.GetF(ctx, s, *ref, func(data []byte) error {
+		if int(ext.Offset) >= len(data) {
+			return errors.Errorf("extent offset %d is >= len(data) %d", ext.Offset, len(data))
+		}
+		data = data[ext.Offset : ext.Offset+ext.Length]
+		return fn(data)
+	})
 }

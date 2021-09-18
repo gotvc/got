@@ -3,6 +3,7 @@ package stores
 import (
 	"bytes"
 	"context"
+	"sync"
 	"time"
 
 	"github.com/brendoncarroll/go-state/cadata"
@@ -25,6 +26,7 @@ type AsyncStore struct {
 	ctx    context.Context
 	eg     *errgroup.Group
 	todo   chan *bytes.Buffer
+	pool   sync.Pool
 }
 
 func NewAsyncStore(target Store, numWorkers int) *AsyncStore {
@@ -37,6 +39,11 @@ func NewAsyncStore(target Store, numWorkers int) *AsyncStore {
 		ctx:    ctx,
 		eg:     eg,
 		todo:   make(chan *bytes.Buffer),
+		pool: sync.Pool{
+			New: func() interface{} {
+				return bytes.NewBuffer(make([]byte, 0, target.MaxSize()))
+			},
+		},
 	}
 	for i := 0; i < numWorkers; i++ {
 		as.eg.Go(func() error {
@@ -50,6 +57,7 @@ func NewAsyncStore(target Store, numWorkers int) *AsyncStore {
 					return err
 				}
 				buf.Reset()
+				as.releasebuffer(buf)
 			}
 			return nil
 		})
@@ -59,9 +67,10 @@ func NewAsyncStore(target Store, numWorkers int) *AsyncStore {
 
 func (s *AsyncStore) Post(ctx context.Context, data []byte) (ID, error) {
 	// TODO: error if closed
-	buf := &bytes.Buffer{}
+	buf := s.acquireBuffer()
+	buf.Reset()
 	buf.Write(data)
-	id := cadata.DefaultHash(data)
+	id := s.target.Hash(data)
 	select {
 	case <-ctx.Done():
 		return ID{}, ctx.Err()
@@ -99,4 +108,13 @@ func (s *AsyncStore) Hash(x []byte) ID {
 
 func (s *AsyncStore) MaxSize() int {
 	return s.target.MaxSize()
+}
+
+func (s *AsyncStore) acquireBuffer() *bytes.Buffer {
+	x := s.pool.Get()
+	return x.(*bytes.Buffer)
+}
+
+func (s *AsyncStore) releasebuffer(x *bytes.Buffer) {
+	s.pool.Put(x)
 }

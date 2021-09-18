@@ -3,7 +3,6 @@ package branches
 import (
 	"context"
 	"encoding/json"
-	"log"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cells"
@@ -12,6 +11,7 @@ import (
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type Snap = gotvc.Snap
@@ -102,8 +102,8 @@ type Triple struct {
 }
 
 func syncStores(ctx context.Context, dst, src Triple, snap gotvc.Snapshot) error {
-	log.Println("begin syncing stores")
-	defer log.Println("done syncing stores")
+	logrus.Println("begin syncing stores")
+	defer logrus.Println("done syncing stores")
 	return gotvc.Sync(ctx, dst.VC, src.VC, snap, func(root gotfs.Root) error {
 		return gotfs.Sync(ctx, dst.FS, src.FS, root, func(ref gdat.Ref) error {
 			return cadata.Copy(ctx, dst.Raw, src.Raw, ref.CID)
@@ -130,11 +130,11 @@ func CleanupVolume(ctx context.Context, vol Volume) error {
 		}
 	}
 	for i := range keep {
-		log.Printf("keeping %d blobs", keep[i].Count())
+		logrus.Printf("keeping %d blobs", keep[i].Count())
 		if count, err := filterStore(ctx, ss[i], keep[i]); err != nil {
 			return err
 		} else {
-			log.Printf("deleted %d blobs", count)
+			logrus.Printf("deleted %d blobs", count)
 		}
 	}
 	return nil

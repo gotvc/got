@@ -17,7 +17,8 @@ func TestChunker(t *testing.T) {
 
 	var count int
 	var size int
-	c := NewContentDefined(avgSize, maxSize, nil, func(data []byte) error {
+	poly := DerivePolynomial(nil)
+	c := NewContentDefined(64, avgSize, maxSize, poly, func(data []byte) error {
 		count++
 		size += len(data)
 		require.LessOrEqual(t, len(data), maxSize)

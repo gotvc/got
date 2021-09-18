@@ -23,6 +23,10 @@ type Span struct {
 	Start, End []byte
 }
 
+func (s Span) String() string {
+	return fmt.Sprintf("[%q, %q)", s.Start, s.End)
+}
+
 func TotalSpan() Span {
 	return Span{}
 }

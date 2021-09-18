@@ -3,13 +3,13 @@ package gotvc
 import (
 	"context"
 	"encoding/json"
-	"log"
 	"time"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type (
@@ -215,7 +215,7 @@ func Sync(ctx context.Context, dst, src cadata.Store, snap Snapshot, syncRoot fu
 
 // Check ensures that snapshot is valid.
 func Check(ctx context.Context, s cadata.Store, snap Snapshot, checkRoot func(gotfs.Root) error) error {
-	log.Printf("checking commit #%d", snap.N)
+	logrus.Infof("checking commit #%d", snap.N)
 	if err := checkRoot(snap.Root); err != nil {
 		return err
 	}

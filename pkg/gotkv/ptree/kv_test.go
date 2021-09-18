@@ -13,7 +13,7 @@ import (
 func TestAddPrefix(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	s := cadata.NewMem(defaultMaxSize)
+	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
 	op := gdat.NewOperator()
 	b := NewBuilder(s, &op, defaultAvgSize, defaultMaxSize, nil)
 

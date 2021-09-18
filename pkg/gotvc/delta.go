@@ -3,10 +3,10 @@ package gotvc
 import (
 	"context"
 	"io"
-	"log"
 
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotkv"
+	"github.com/sirupsen/logrus"
 )
 
 type Delta struct {
@@ -101,7 +101,7 @@ func ApplyDelta(ctx context.Context, s Store, base *Snapshot, delta Delta) (*Sna
 		if root == nil {
 			return &delta.Additions, nil
 		}
-		log.Println("begin applying deletions")
+		logrus.Println("begin applying deletions")
 		err := kvop.ForEach(ctx, s, delta.Deletions, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
 			var err error
 			root, err = fsop.RemoveAll(ctx, s, *root, string(ent.Key))
@@ -110,14 +110,14 @@ func ApplyDelta(ctx context.Context, s Store, base *Snapshot, delta Delta) (*Sna
 		if err != nil {
 			return nil, err
 		}
-		log.Println("done applying deletions")
+		logrus.Println("done applying deletions")
 
-		log.Println("begin merging")
+		logrus.Println("begin merging")
 		root, err = kvop.Merge(ctx, s, base.Root, delta.Additions)
 		if err != nil {
 			return nil, err
 		}
-		log.Println("done merging")
+		logrus.Println("done merging")
 		return root, nil
 	})
 }

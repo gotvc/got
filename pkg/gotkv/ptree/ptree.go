@@ -186,6 +186,7 @@ type Iterator struct {
 	op   *gdat.Operator
 	root Root
 	span Span
+	pos  []byte
 }
 
 func NewIterator(s cadata.Store, op *gdat.Operator, root Root, span Span) *Iterator {
@@ -195,6 +196,7 @@ func NewIterator(s cadata.Store, op *gdat.Operator, root Root, span Span) *Itera
 		root: root,
 		span: span.Clone(),
 	}
+	it.pos = it.span.Start
 	return it
 }
 
@@ -219,7 +221,7 @@ func (it *Iterator) Peek(ctx context.Context) (*Entry, error) {
 }
 
 func (it *Iterator) peek(ctx context.Context) (int, *Entry, error) {
-	return peekTree(ctx, it.s, it.op, it.root, it.span.Start)
+	return peekTree(ctx, it.s, it.op, it.root, it.pos)
 }
 
 func (it *Iterator) Seek(ctx context.Context, k []byte) error {
@@ -228,12 +230,12 @@ func (it *Iterator) Seek(ctx context.Context, k []byte) error {
 }
 
 func (it *Iterator) setPos(k []byte) {
-	it.span.Start = append(it.span.Start[:0], k...)
+	it.pos = append(it.pos[:0], k...)
 }
 
 func (it *Iterator) setPosAfter(k []byte) {
 	it.setPos(k)
-	it.span.Start = append(it.span.Start, 0x00)
+	it.pos = append(it.pos, 0x00)
 }
 
 func peekEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Index, gteq []byte) (*Entry, error) {

@@ -12,7 +12,7 @@ import (
 
 func TestReadDir(t *testing.T) {
 	ctx := context.Background()
-	s := cadata.NewMem(DefaultMaxBlobSize)
+	s := cadata.NewMem(cadata.DefaultHash, DefaultMaxBlobSize)
 	op := NewOperator()
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
@@ -43,4 +43,30 @@ func TestReadDir(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, len(expected), i)
+}
+
+func TestMkdirAll(t *testing.T) {
+	ctx := context.Background()
+	s := cadata.NewMem(cadata.DefaultHash, DefaultMaxBlobSize)
+	op := NewOperator()
+	x, err := op.NewEmpty(ctx, s)
+	require.NoError(t, err)
+	x, err = op.MkdirAll(ctx, s, *x, "path/to/the/dir")
+	require.NoError(t, err)
+
+	requireChildren(t, &op, s, *x, "", []string{"path"})
+	requireChildren(t, &op, s, *x, "path", []string{"to"})
+	requireChildren(t, &op, s, *x, "path/to", []string{"the"})
+	requireChildren(t, &op, s, *x, "path/to/the", []string{"dir"})
+}
+
+func requireChildren(t *testing.T, op *Operator, s Store, x Root, p string, expected []string) {
+	ctx := context.Background()
+	var actual []string
+	err := op.ReadDir(ctx, s, x, p, func(e DirEnt) error {
+		actual = append(actual, e.Name)
+		return nil
+	})
+	require.NoError(t, err)
+	require.ElementsMatch(t, expected, actual)
 }

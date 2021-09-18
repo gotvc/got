@@ -13,7 +13,7 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/fs"
+	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/gdat"
@@ -54,7 +54,7 @@ const (
 )
 
 type (
-	FS = fs.FS
+	FS = posixfs.FS
 
 	Cell   = cells.Cell
 	Space  = branches.Space
@@ -90,8 +90,8 @@ type Repo struct {
 }
 
 func Init(p string) error {
-	repoDirFS := fs.NewDirFS(p)
-	if _, err := repoDirFS.Stat(configPath); fs.IsErrNotExist(err) {
+	repoDirFS := posixfs.NewDirFS(p)
+	if _, err := repoDirFS.Stat(configPath); posixfs.IsErrNotExist(err) {
 	} else if err != nil {
 		return err
 	} else {
@@ -126,12 +126,15 @@ func Init(p string) error {
 
 func Open(p string) (*Repo, error) {
 	ctx := context.TODO()
-	repoFS := fs.NewDirFS(p)
+	repoFS := posixfs.NewDirFS(p)
 	config, err := LoadConfig(repoFS, configPath)
 	if err != nil {
 		return nil, err
 	}
-	db, err := bolt.Open(dbPath(p), 0o644, &bolt.Options{Timeout: time.Second})
+	db, err := bolt.Open(dbPath(p), 0o644, &bolt.Options{
+		Timeout: time.Second,
+		NoSync:  true,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -145,7 +148,7 @@ func Open(p string) (*Repo, error) {
 		config:     *config,
 		privateKey: privateKey,
 		db:         db,
-		workingDir: fs.NewFiltered(repoFS, func(x string) bool {
+		workingDir: posixfs.NewFiltered(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
 		tracker: newTracker(db, []string{bucketTracker}),
@@ -156,7 +159,7 @@ func Open(p string) (*Repo, error) {
 	r.storeManager = newStoreManager(fsStore, r.db, bucketStores)
 	r.cellManager = newCellManager(db, []string{bucketCellData})
 
-	r.specDir = newBranchSpecDir(r.makeDefaultVolume, r.MakeCell, r.MakeStore, fs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
+	r.specDir = newBranchSpecDir(r.makeDefaultVolume, r.MakeCell, r.MakeStore, posixfs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
 	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster, branches.NewParams(false)); err != nil {
 		return nil, err
 	}
@@ -171,6 +174,7 @@ func Open(p string) (*Repo, error) {
 
 func (r *Repo) Close() (retErr error) {
 	for _, fn := range []func() error{
+		r.db.Sync,
 		r.db.Close,
 	} {
 		if err := fn(); retErr == nil {
@@ -192,8 +196,8 @@ func (r *Repo) GetACL() *Policy {
 	return r.policy
 }
 
-func (r *Repo) getSubFS(prefix string) fs.FS {
-	return fs.NewPrefixed(r.repoFS, prefix)
+func (r *Repo) getSubFS(prefix string) posixfs.FS {
+	return posixfs.NewPrefixed(r.repoFS, prefix)
 }
 
 func (r *Repo) getFSOp(b *branches.Branch) *gotfs.Operator {

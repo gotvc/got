@@ -10,7 +10,7 @@ import (
 	"io"
 
 	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-state/fs"
+	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/pkg/errors"
 )
 
@@ -26,26 +26,26 @@ func (r *Repo) GetPrivateKey() p2p.PrivateKey {
 	return r.privateKey
 }
 
-func LoadPrivateKey(fsx fs.FS, p string) (p2p.PrivateKey, error) {
-	data, err := fs.ReadFile(context.TODO(), fsx, p)
+func LoadPrivateKey(fsx posixfs.FS, p string) (p2p.PrivateKey, error) {
+	data, err := posixfs.ReadFile(context.TODO(), fsx, p)
 	if err != nil {
 		return nil, err
 	}
 	return parsePrivateKey(data)
 }
 
-func SavePrivateKey(fsx fs.FS, p string, privateKey p2p.PrivateKey) error {
+func SavePrivateKey(fsx posixfs.FS, p string, privateKey p2p.PrivateKey) error {
 	data := marshalPrivateKey(privateKey)
 	return writeIfNotExists(fsx, p, 0o600, bytes.NewReader(data))
 }
 
-func writeIfNotExists(fsx fs.FS, p string, mode fs.FileMode, r io.Reader) error {
-	f, err := fsx.OpenFile(p, fs.O_EXCL|fs.O_CREATE|fs.O_WRONLY, mode)
+func writeIfNotExists(fsx posixfs.FS, p string, mode posixfs.FileMode, r io.Reader) error {
+	f, err := fsx.OpenFile(p, posixfs.O_EXCL|posixfs.O_CREATE|posixfs.O_WRONLY, mode)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	if _, err := io.Copy(f.(fs.RegularFile), r); err != nil {
+	if _, err := io.Copy(f, r); err != nil {
 		return err
 	}
 	return f.Close()

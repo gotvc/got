@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/brendoncarroll/go-state/fs"
+	"github.com/brendoncarroll/go-state/posixfs"
 )
 
 type Config struct {
@@ -18,8 +18,8 @@ func DefaultConfig() Config {
 	}
 }
 
-func LoadConfig(fsx fs.FS, p string) (*Config, error) {
-	data, err := fs.ReadFile(context.TODO(), fsx, p)
+func LoadConfig(fsx posixfs.FS, p string) (*Config, error) {
+	data, err := posixfs.ReadFile(context.TODO(), fsx, p)
 	if err != nil {
 		return nil, err
 	}
@@ -30,10 +30,10 @@ func LoadConfig(fsx fs.FS, p string) (*Config, error) {
 	return config, nil
 }
 
-func SaveConfig(fsx fs.FS, p string, c Config) error {
+func SaveConfig(fsx posixfs.FS, p string, c Config) error {
 	data, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
 		return err
 	}
-	return fs.PutFile(context.TODO(), fsx, p, 0o644, bytes.NewReader(data))
+	return posixfs.PutFile(context.TODO(), fsx, p, 0o644, bytes.NewReader(data))
 }

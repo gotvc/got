@@ -3,55 +3,58 @@ package gotfs
 import (
 	"context"
 	"io"
-	"runtime"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
-	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
 )
 
 // CreateFileRoot creates a new filesystem with the contents read from r at the root
 func (o *Operator) CreateFileRoot(ctx context.Context, ms, ds Store, r io.Reader) (*Root, error) {
-	ams := stores.NewAsyncStore(ms, runtime.GOMAXPROCS(0))
-	ads := stores.NewAsyncStore(ds, runtime.GOMAXPROCS(0))
-	b := o.gotkv.NewBuilder(ams)
-
+	b := o.newBuilder(ctx, ms, ds)
+	defer b.Finish()
 	// metadata entry
 	md := Metadata{
 		Mode: 0o644,
 	}
-	k := makeMetadataKey("")
-	if err := b.Put(ctx, k, md.marshal()); err != nil {
+	if err := b.PutMetadata("", &md); err != nil {
 		return nil, err
 	}
-	// content
-	w := o.newWriter(ctx, ads, func(p string, offset uint64, ext *Extent) error {
-		extEnd := offset + uint64(ext.Length)
-		key := makeExtentKey(p, extEnd)
-		return b.Put(ctx, key, ext.marshal())
+	if _, err := io.Copy(b, r); err != nil {
+		return nil, err
+	}
+	return b.Finish()
+}
+
+// CreateExtents returns a list of extents created from r
+func (o *Operator) CreateExtents(ctx context.Context, ds Store, r io.Reader) ([]*Extent, error) {
+	var exts []*Extent
+	w := o.newWriter(ctx, ds, func(ext *Extent) error {
+		exts = append(exts, ext)
+		return nil
 	})
-	if err := w.BeginPath(""); err != nil {
-		return nil, err
-	}
 	if _, err := io.Copy(w, r); err != nil {
 		return nil, err
 	}
 	if err := w.Flush(); err != nil {
 		return nil, err
 	}
-	root, err := b.Finish(ctx)
-	if err != nil {
+	return exts, nil
+}
+
+func (o *Operator) CreateFileRootFromExtents(ctx context.Context, ms, ds Store, exts []*Extent) (*Root, error) {
+	b := o.newBuilder(ctx, ms, ds)
+	if err := b.PutMetadata("", &Metadata{
+		Mode: 0o644,
+	}); err != nil {
 		return nil, err
 	}
-	if err := ads.Close(); err != nil {
-		return nil, err
+	for _, ext := range exts {
+		if err := b.CopyExtent(ctx, ext); err != nil {
+			return nil, err
+		}
 	}
-	if err := ams.Close(); err != nil {
-		return nil, err
-	}
-	return root, nil
+	return b.Finish()
 }
 
 // CreateFile creates a file at p with data from r
@@ -130,20 +133,12 @@ func (o *Operator) readFromIterator(ctx context.Context, it gotkv.Iterator, ds c
 	if err != nil {
 		return 0, err
 	}
-	ref, err := gdat.ParseRef(ext.Ref)
-	if err != nil {
-		return 0, err
-	}
 	extentStart := extentEnd - uint64(ext.Length)
 	if start < extentStart {
 		return 0, errors.Errorf("incorrect extent extentStart=%d asked for start=%d", extentEnd, start)
 	}
 	var n int
-	if err := o.dop.GetF(ctx, ds, *ref, func(data []byte) error {
-		if int(ext.Offset) >= len(data) {
-			return errors.Errorf("extent offset %d is >= len(data) %d", ext.Offset, len(data))
-		}
-		data = data[ext.Offset : ext.Offset+ext.Length]
+	if err := o.getExtentF(ctx, ds, ext, func(data []byte) error {
 		n += copy(buf, data[start-extentStart:])
 		return nil
 	}); err != nil {

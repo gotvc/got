@@ -2,16 +2,18 @@ package gotrepo
 
 import (
 	"context"
-	"log"
+	"path"
+	"sort"
 	"time"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/fs"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/porting"
 	"github.com/gotvc/got/pkg/stores"
+	"github.com/sirupsen/logrus"
 )
 
 // SnapInfo is additional information that can be attached to a snapshot
@@ -24,7 +26,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo SnapInfo) error {
 	if yes, err := r.tracker.IsEmpty(ctx); err != nil {
 		return err
 	} else if yes {
-		log.Println("WARN: nothing to commit")
+		logrus.Warn("nothing to commit")
 		return nil
 	}
 	_, branch, err := r.GetActiveBranch(ctx)
@@ -42,39 +44,13 @@ func (r *Repo) Commit(ctx context.Context, snapInfo SnapInfo) error {
 	fsop := r.getFSOp(branch)
 	err = branches.Apply(ctx, *branch, src, func(x *Snap) (*Snap, error) {
 		y, err := gotvc.Change(ctx, src.VC, x, func(root *Root) (*Root, error) {
-			wasEmpty := false
-			if root == nil {
-				wasEmpty = true
-				if root, err = fsop.NewEmpty(ctx, src.FS); err != nil {
-					return nil, err
-				}
-			}
-			log.Println("begin processing tracked paths")
-			if err := r.tracker.ForEach(ctx, func(target string) error {
-				if !wasEmpty {
-					if err := r.forEachToDelete(ctx, fsop, src.FS, *root, target, func(p string) error {
-						var err error
-						root, err = deletePath(ctx, fsop, src.FS, *root, r.workingDir, p)
-						return err
-					}); err != nil {
-						return err
-					}
-				}
-				if err := r.forEachToAdd(ctx, target, func(p string) error {
-					root, err = r.putPath(ctx, fsop, src.FS, src.Raw, *root, r.workingDir, p)
-					if err != nil {
-						return err
-					}
-					return nil
-				}); err != nil {
-					return err
-				}
-				return nil
-			}); err != nil {
+			logrus.Println("begin processing tracked paths")
+			nextRoot, err := r.applyTrackerChanges(ctx, fsop, src.FS, src.Raw, root)
+			if err != nil {
 				return nil, err
 			}
-			log.Println("done processing tracked paths")
-			return root, nil
+			logrus.Println("done processing tracked paths")
+			return nextRoot, nil
 		})
 		if err != nil {
 			return nil, err
@@ -105,55 +81,130 @@ func (r *Repo) StagingStore() cadata.Store {
 	return r.stagingStore()
 }
 
-func (r *Repo) forEachToDelete(ctx context.Context, fsop *gotfs.Operator, ms Store, root Root, target string, fn func(p string) error) error {
-	return fsop.ForEach(ctx, ms, root, target, func(p string, md *gotfs.Metadata) error {
-		exists, err := exists(r.workingDir, p)
-		if err != nil {
-			return err
-		}
-		if exists {
-			return nil
-		}
-		return fn(p)
-	})
-}
-
-func (r *Repo) forEachToAdd(ctx context.Context, target string, fn func(p string) error) error {
-	err := fs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ fs.DirEnt) error {
-		return fn(p)
-	})
-	if fs.IsErrNotExist(err) {
-		err = nil
+// applyTrackerChanges iterates through all the tracked paths and adds or deletes them from root
+// the new root, reflecting all of the changes indicated by the tracker, is returned.
+func (r *Repo) applyTrackerChanges(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, root *Root) (*Root, error) {
+	ads := stores.NewAsyncStore(ds, 32)
+	porter := porting.NewPorter(fsop, r.workingDir, nil)
+	stage := newStage(fsop, ms, ads)
+	if err := r.tracker.ForEach(ctx, func(target string) error {
+		return stage.Add(ctx, porter, target)
+	}); err != nil {
+		return nil, err
 	}
-	return err
-}
-
-func (r *Repo) putPath(ctx context.Context, fsop *gotfs.Operator, ms, ds Store, x Root, fsx fs.FS, p string) (*Root, error) {
-	log.Println("processing PUT:", p)
-	fileRoot, err := porting.ImportFile(ctx, fsop, ms, ds, fsx, p)
+	root, err := stage.Apply(ctx, root)
 	if err != nil {
 		return nil, err
 	}
-	return fsop.Graft(ctx, ms, x, p, *fileRoot)
+	if err := ads.Close(); err != nil {
+		return nil, err
+	}
+	return root, nil
 }
 
-// deletePath walks the path p in x and removes all the files which do not exist in fsx
-func deletePath(ctx context.Context, fsop *gotfs.Operator, ms Store, x Root, fsx fs.FS, p string) (*Root, error) {
-	y := &x
-	err := fsop.ForEach(ctx, ms, x, p, func(p string, md *gotfs.Metadata) error {
-		exists, err := exists(fsx, p)
-		if err != nil {
-			return err
-		}
-		if exists {
-			return nil
-		}
-		log.Println("processing DEL:", p)
-		y, err = fsop.RemoveAll(ctx, ms, *y, p)
+type stage struct {
+	gotfs  *gotfs.Operator
+	ms, ds Store
+
+	changes map[string]gotfs.Root
+}
+
+func newStage(fsop *gotfs.Operator, ms, ds Store) *stage {
+	return &stage{
+		gotfs:   fsop,
+		ms:      ms,
+		ds:      ds,
+		changes: make(map[string]gotfs.Root),
+	}
+}
+
+func (s *stage) Add(ctx context.Context, porter porting.Porter, p string) error {
+	pathRoot, err := porter.ImportPath(ctx, s.ms, s.ds, p)
+	if err != nil {
 		return err
-	})
+	}
+	s.changes[p] = *pathRoot
+	return nil
+}
+
+func (s *stage) Rm(ctx context.Context, p string) error {
+	emptyRoot, err := s.gotfs.NewEmpty(ctx, s.ms)
+	if err != nil {
+		return err
+	}
+	s.changes[p] = *emptyRoot
+	return nil
+}
+
+func (s *stage) Apply(ctx context.Context, base *gotfs.Root) (*gotfs.Root, error) {
+	if base == nil {
+		var err error
+		base, err = s.gotfs.NewEmpty(ctx, s.ms)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var segs []gotfs.Segment
+	for _, p := range sortedMapKeys(s.changes) {
+		pathRoot := s.changes[p]
+		if !gotfs.IsEmpty(pathRoot) {
+			var err error
+			base, err = s.gotfs.MkdirAll(ctx, s.ms, *base, path.Dir(p))
+			if err != nil {
+				return nil, err
+			}
+		}
+		segRoot, err := s.gotfs.AddPrefix(ctx, s.ms, p, pathRoot)
+		if err != nil {
+			return nil, err
+		}
+		segs = append(segs, gotfs.Segment{
+			Root: *segRoot,
+			Span: gotfs.SpanForPath(p),
+		})
+	}
+	segs = prepareChanges(*base, segs)
+	logrus.Println("splicing...")
+	root, err := s.gotfs.Splice(ctx, s.ms, s.ds, segs)
 	if err != nil {
 		return nil, err
 	}
-	return y, nil
+	logrus.Println("done splicing.")
+	return root, nil
+}
+
+// prepareChanges ensures that the segments represent the whole key space, using base to fill in any gaps.
+func prepareChanges(base gotfs.Root, changes []gotfs.Segment) []gotfs.Segment {
+	var segs []gotfs.Segment
+	for i := range changes {
+		// create the span to reference the root, should be inbetween the two entries from segs
+		var baseSpan gotkv.Span
+		if i > 0 {
+			baseSpan.Start = segs[len(segs)-1].Span.End
+		}
+		baseSpan.End = changes[i].Span.Start
+		baseSeg := gotfs.Segment{Root: base, Span: baseSpan}
+
+		segs = append(segs, baseSeg)
+		segs = append(segs, changes[i])
+	}
+	if len(segs) > 0 {
+		segs = append(segs, gotfs.Segment{
+			Root: base,
+			Span: gotkv.Span{
+				Start: segs[len(segs)-1].Span.End,
+				End:   nil,
+			},
+		})
+	}
+	return segs
+}
+
+func sortedMapKeys(x map[string]gotfs.Root) []string {
+	var keys []string
+	for k := range x {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }
