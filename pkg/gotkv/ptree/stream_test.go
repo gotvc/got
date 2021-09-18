@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	defaultMaxSize = 1 << 14
+	defaultMaxSize = 1 << 21
 	defaultAvgSize = 1 << 13
 )
 
@@ -39,7 +39,7 @@ func TestStreamRW(t *testing.T) {
 	var refs []Ref
 	var idxs []Index
 
-	s := cadata.NewMem(defaultMaxSize)
+	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
 	sw := NewStreamWriter(s, &op, defaultAvgSize, defaultMaxSize, nil, func(idx Index) error {
 		idxs = append(idxs, idx)
 		refs = append(refs, idx.Ref)
@@ -74,6 +74,40 @@ func TestStreamRW(t *testing.T) {
 	require.Equal(t, io.EOF, err)
 }
 
+func TestStreamWriterChunkSize(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	op := gdat.NewOperator()
+	var refs []Ref
+
+	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
+	sw := NewStreamWriter(s, &op, defaultAvgSize, defaultMaxSize, nil, func(idx Index) error {
+		refs = append(refs, idx.Ref)
+		return nil
+	})
+
+	const N = 1e5
+	generateEntries(N, func(ent Entry) {
+		err := sw.Append(ctx, ent)
+		require.NoError(t, err)
+	})
+	err := sw.Flush(ctx)
+	require.NoError(t, err)
+
+	count := len(refs)
+	t.Log("count:", count)
+	var total int
+	for _, ref := range refs {
+		err := cadata.GetF(ctx, s, ref.CID, func(data []byte) error {
+			total += len(data)
+			return nil
+		})
+		require.NoError(t, err)
+	}
+	avgSize := total / count
+	withinTolerance(t, avgSize, defaultAvgSize, 0.1)
+}
+
 func generateEntries(n int, fn func(ent Entry)) {
 	for i := 0; i < n; i++ {
 		fn(Entry{
@@ -105,7 +139,9 @@ func BenchmarkStreamWriter(b *testing.B) {
 
 func withinTolerance(t *testing.T, x int, target int, tol float64) {
 	ok := math.Abs(float64(x)-float64(target)) < float64(target)*tol
-	require.True(t, ok)
+	if !ok {
+		t.Errorf("value (%d) not within tolerance (+/- %f) of target (%d)", x, tol, target)
+	}
 }
 
 func refSimilarity(as, bs []Ref) int {

@@ -2,8 +2,8 @@ package gotrepo
 
 import (
 	"context"
-	"log"
 	"path"
+	"sort"
 	"time"
 
 	"github.com/brendoncarroll/go-state/cadata"
@@ -13,6 +13,7 @@ import (
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/porting"
 	"github.com/gotvc/got/pkg/stores"
+	"github.com/sirupsen/logrus"
 )
 
 // SnapInfo is additional information that can be attached to a snapshot
@@ -25,7 +26,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo SnapInfo) error {
 	if yes, err := r.tracker.IsEmpty(ctx); err != nil {
 		return err
 	} else if yes {
-		log.Println("WARN: nothing to commit")
+		logrus.Warn("nothing to commit")
 		return nil
 	}
 	_, branch, err := r.GetActiveBranch(ctx)
@@ -43,12 +44,12 @@ func (r *Repo) Commit(ctx context.Context, snapInfo SnapInfo) error {
 	fsop := r.getFSOp(branch)
 	err = branches.Apply(ctx, *branch, src, func(x *Snap) (*Snap, error) {
 		y, err := gotvc.Change(ctx, src.VC, x, func(root *Root) (*Root, error) {
-			log.Println("begin processing tracked paths")
+			logrus.Println("begin processing tracked paths")
 			nextRoot, err := r.applyTrackerChanges(ctx, fsop, src.FS, src.Raw, root)
 			if err != nil {
 				return nil, err
 			}
-			log.Println("done processing tracked paths")
+			logrus.Println("done processing tracked paths")
 			return nextRoot, nil
 		})
 		if err != nil {
@@ -83,39 +84,93 @@ func (r *Repo) StagingStore() cadata.Store {
 // applyTrackerChanges iterates through all the tracked paths and adds or deletes them from root
 // the new root, reflecting all of the changes indicated by the tracker, is returned.
 func (r *Repo) applyTrackerChanges(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, root *Root) (*Root, error) {
-	if root == nil {
+	ads := stores.NewAsyncStore(ds, 32)
+	porter := porting.NewPorter(fsop, r.workingDir, nil)
+	stage := newStage(fsop, ms, ads)
+	if err := r.tracker.ForEach(ctx, func(target string) error {
+		return stage.Add(ctx, porter, target)
+	}); err != nil {
+		return nil, err
+	}
+	root, err := stage.Apply(ctx, root)
+	if err != nil {
+		return nil, err
+	}
+	if err := ads.Close(); err != nil {
+		return nil, err
+	}
+	return root, nil
+}
+
+type stage struct {
+	gotfs  *gotfs.Operator
+	ms, ds Store
+
+	changes map[string]gotfs.Root
+}
+
+func newStage(fsop *gotfs.Operator, ms, ds Store) *stage {
+	return &stage{
+		gotfs:   fsop,
+		ms:      ms,
+		ds:      ds,
+		changes: make(map[string]gotfs.Root),
+	}
+}
+
+func (s *stage) Add(ctx context.Context, porter porting.Porter, p string) error {
+	pathRoot, err := porter.ImportPath(ctx, s.ms, s.ds, p)
+	if err != nil {
+		return err
+	}
+	s.changes[p] = *pathRoot
+	return nil
+}
+
+func (s *stage) Rm(ctx context.Context, p string) error {
+	emptyRoot, err := s.gotfs.NewEmpty(ctx, s.ms)
+	if err != nil {
+		return err
+	}
+	s.changes[p] = *emptyRoot
+	return nil
+}
+
+func (s *stage) Apply(ctx context.Context, base *gotfs.Root) (*gotfs.Root, error) {
+	if base == nil {
 		var err error
-		root, err = fsop.NewEmpty(ctx, ms)
+		base, err = s.gotfs.NewEmpty(ctx, s.ms)
 		if err != nil {
 			return nil, err
 		}
 	}
-	var changes []gotfs.Segment
-	if err := r.tracker.ForEach(ctx, func(target string) error {
-		pathRoot, err := porting.ImportPath(ctx, fsop, ms, ds, r.workingDir, target)
-		if err != nil {
-			return err
-		}
-		if !gotfs.IsEmpty(*pathRoot) {
-			root, err = fsop.MkdirAll(ctx, ms, *root, path.Dir(target))
+	var segs []gotfs.Segment
+	for _, p := range sortedMapKeys(s.changes) {
+		pathRoot := s.changes[p]
+		if !gotfs.IsEmpty(pathRoot) {
+			var err error
+			base, err = s.gotfs.MkdirAll(ctx, s.ms, *base, path.Dir(p))
 			if err != nil {
-				return err
+				return nil, err
 			}
 		}
-		pathRoot, err = fsop.AddPrefix(ctx, ms, target, *pathRoot)
+		segRoot, err := s.gotfs.AddPrefix(ctx, s.ms, p, pathRoot)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		changes = append(changes, gotfs.Segment{
-			Root: *pathRoot,
-			Span: gotfs.SpanForPath(target),
+		segs = append(segs, gotfs.Segment{
+			Root: *segRoot,
+			Span: gotfs.SpanForPath(p),
 		})
-		return nil
-	}); err != nil {
+	}
+	segs = prepareChanges(*base, segs)
+	logrus.Println("splicing...")
+	root, err := s.gotfs.Splice(ctx, s.ms, s.ds, segs)
+	if err != nil {
 		return nil, err
 	}
-	segs := prepareChanges(*root, changes)
-	return fsop.Splice(ctx, ms, ds, segs)
+	logrus.Println("done splicing.")
+	return root, nil
 }
 
 // prepareChanges ensures that the segments represent the whole key space, using base to fill in any gaps.
@@ -123,12 +178,14 @@ func prepareChanges(base gotfs.Root, changes []gotfs.Segment) []gotfs.Segment {
 	var segs []gotfs.Segment
 	for i := range changes {
 		// create the span to reference the root, should be inbetween the two entries from segs
-		var span gotkv.Span
+		var baseSpan gotkv.Span
 		if i > 0 {
-			span.Start = segs[i-1].Span.End
+			baseSpan.Start = segs[len(segs)-1].Span.End
 		}
-		span.End = changes[i].Span.Start
-		segs = append(segs, gotfs.Segment{Root: base, Span: span})
+		baseSpan.End = changes[i].Span.Start
+		baseSeg := gotfs.Segment{Root: base, Span: baseSpan}
+
+		segs = append(segs, baseSeg)
 		segs = append(segs, changes[i])
 	}
 	if len(segs) > 0 {
@@ -143,69 +200,11 @@ func prepareChanges(base gotfs.Root, changes []gotfs.Segment) []gotfs.Segment {
 	return segs
 }
 
-// func (r *Repo) forEachLeaf(ctx context.Context, fsop *gotfs.Operator, ms Store, root *Root, target string, fn func(p string) error) error {
-// 	eg := errgroup.Group{}
-// 	inWorking := make(chan string)
-// 	inSnapshot := make(chan string)
-// 	eg.Go(func() error {
-// 		defer close(inWorking)
-// 		err := posixfs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ posixfs.DirEnt) error {
-// 			inWorking <- p
-// 			return nil
-// 		})
-// 		if posixfs.IsErrNotExist(err) {
-// 			err = nil
-// 		}
-// 		return err
-// 	})
-// 	eg.Go(func() error {
-// 		defer close(inSnapshot)
-// 		if root == nil {
-// 			return nil
-// 		}
-// 		return fsop.ForEachFile(ctx, ms, *root, target, func(p string, _ *gotfs.Metadata) error {
-// 			inSnapshot <- p
-// 			return nil
-// 		})
-// 	})
-// 	eg.Go(func() error {
-// 		var p1, p2 *string
-// 		// while both are open
-// 		for {
-// 			if p1 == nil {
-// 				if p, open := <-inWorking; open {
-// 					p1 = &p
-// 				}
-// 			}
-// 			if p2 == nil {
-// 				if p, open := <-inSnapshot; open {
-// 					p2 = &p
-// 				}
-// 			}
-
-// 			var p string
-// 			switch {
-// 			case p1 != nil && p2 != nil:
-// 				if *p1 < *p2 {
-// 					p = *p1
-// 					p1 = nil
-// 				} else {
-// 					p = *p2
-// 					p2 = nil
-// 				}
-// 			case p1 != nil:
-// 				p = *p1
-// 				p1 = nil
-// 			case p2 != nil:
-// 				p = *p2
-// 				p2 = nil
-// 			default:
-// 				return nil
-// 			}
-// 			if err := fn(p); err != nil {
-// 				return err
-// 			}
-// 		}
-// 	})
-// 	return eg.Wait()
-// }
+func sortedMapKeys(x map[string]gotfs.Root) []string {
+	var keys []string
+	for k := range x {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}

@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"io"
-	"log"
+	"math"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"
+	"github.com/minio/highwayhash"
 	"github.com/pkg/errors"
 )
 
@@ -184,7 +185,11 @@ type IndexHandler = func(Index) error
 type StreamWriter struct {
 	s       cadata.Store
 	op      *gdat.Operator
-	chunker *chunking.ContentDefined
+	onIndex IndexHandler
+
+	seed             []byte
+	avgSize, maxSize int
+	buf              bytes.Buffer
 
 	firstKey []byte
 	prevKey  []byte
@@ -192,23 +197,18 @@ type StreamWriter struct {
 }
 
 func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed []byte, onIndex IndexHandler) *StreamWriter {
-	w := &StreamWriter{
-		s:  s,
-		op: op,
+	for len(seed) < 32 {
+		seed = append(seed, 0x00)
 	}
-	hashes := chunking.DeriveHashes(seed)
-	w.chunker = chunking.NewContentDefined(avgSize, maxSize, hashes, func(data []byte) error {
-		if w.firstKey == nil {
-			panic("firstKey should be set")
-		}
-		ref, err := op.Post(w.ctx, w.s, data)
-		if err != nil {
-			return err
-		}
-		idx := Index{Ref: *ref, First: w.firstKey}
-		w.firstKey = nil
-		return onIndex(idx)
-	})
+	w := &StreamWriter{
+		s:       s,
+		op:      op,
+		onIndex: onIndex,
+
+		seed:    append([]byte{}, seed...),
+		avgSize: avgSize,
+		maxSize: maxSize,
+	}
 	return w
 }
 
@@ -216,57 +216,80 @@ func (w *StreamWriter) Append(ctx context.Context, ent Entry) error {
 	w.ctx = ctx
 	defer func() { w.ctx = nil }()
 	if w.prevKey != nil && bytes.Compare(ent.Key, w.prevKey) <= 0 {
-		log.Println("prev:", string(w.prevKey), string(ent.Key))
-		panic("out of order key")
+		panic(fmt.Sprintf("out of order key: prev=%q key=%q", w.prevKey, ent.Key))
 	}
-	buf := &bytes.Buffer{}
-	writeEntry(buf, w.prevKey, ent)
-	if w.chunker.WouldOverflow(buf.Bytes()) {
-		if err := w.chunker.Flush(); err != nil {
+	entryLen := w.computeEntryLen(ent)
+	if entryLen > w.maxSize {
+		return errors.Errorf("entry (size=%d) exceeds maximum size %d", entryLen, w.maxSize)
+	}
+	if entryLen+w.buf.Len() > w.maxSize {
+		if err := w.Flush(ctx); err != nil {
 			return err
 		}
-		return w.writeFirst(ctx, ent)
 	}
-	if w.firstKey == nil {
-		return w.writeFirst(ctx, ent)
-	}
-	if err := w.chunker.WriteNoSplit(buf.Bytes()); err != nil {
-		return err
-	}
-	w.setPrevKey(ent.Key)
-	return nil
-}
 
-func (w *StreamWriter) writeFirst(ctx context.Context, ent Entry) error {
-	if w.chunker.Buffered() > 0 {
-		panic("writeFirst called with partially full chunker")
-	}
-	if w.firstKey != nil {
-		panic("w.firstKey should be nil")
-	}
-	w.firstKey = append([]byte{}, ent.Key...)
 	buf := &bytes.Buffer{}
-	// the first key is always fully compressed.  It is provided from the layer above.
-	writeEntry(buf, ent.Key, ent)
-	if err := w.chunker.WriteNoSplit(buf.Bytes()); err != nil {
+	if w.firstKey == nil {
+		if w.buf.Len() > 0 {
+			panic("writeFirst called with partially full chunker")
+		}
+		if w.firstKey != nil {
+			panic("w.firstKey should be nil")
+		}
+		w.firstKey = append([]byte{}, ent.Key...)
+		// the first key is always fully compressed.  It is provided from the layer above.
+		writeEntry(buf, ent.Key, ent)
+	} else {
+		writeEntry(buf, w.prevKey, ent)
+	}
+	if _, err := w.buf.Write(buf.Bytes()); err != nil {
 		return err
 	}
 	w.setPrevKey(ent.Key)
+	if w.splitAfter(buf.Bytes()) {
+		if err := w.Flush(ctx); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 func (w *StreamWriter) Buffered() int {
-	return w.chunker.Buffered()
+	return w.buf.Len()
 }
 
 func (w *StreamWriter) Flush(ctx context.Context) error {
 	w.ctx = ctx
 	defer func() { w.ctx = nil }()
-	return w.chunker.Flush()
+	ref, err := w.op.Post(ctx, w.s, w.buf.Bytes())
+	if err != nil {
+		return err
+	}
+	if err := w.onIndex(Index{
+		First: w.firstKey,
+		Ref:   *ref,
+	}); err != nil {
+		return err
+	}
+	w.firstKey = nil
+	w.buf.Reset()
+	return nil
 }
 
 func (w *StreamWriter) setPrevKey(k []byte) {
 	w.prevKey = append(w.prevKey[:0], k...)
+}
+
+func (w *StreamWriter) splitAfter(data []byte) bool {
+	r := highwayhash.Sum64(data, w.seed)
+	prob := math.MaxUint64 / uint64(w.avgSize) * uint64(len(data))
+	return r < prob
+}
+
+func (w *StreamWriter) computeEntryLen(ent Entry) int {
+	buf := bytes.Buffer{}
+	writeEntry(&buf, w.prevKey, ent)
+	return buf.Len()
 }
 
 type StreamMerger struct {

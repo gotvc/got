@@ -15,7 +15,7 @@ import (
 func TestBuilder(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultMaxSize)
+	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	op := gdat.NewOperator()
 	b := NewBuilder(s, &op, defaultAvgSize, defaultMaxSize, nil)
 
@@ -31,7 +31,7 @@ func TestBuilder(t *testing.T) {
 func TestBuildIterate(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultMaxSize)
+	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	op := gdat.NewOperator()
 	b := NewBuilder(s, &op, defaultAvgSize, defaultMaxSize, nil)
 
@@ -57,7 +57,7 @@ func TestBuildIterate(t *testing.T) {
 func TestMutate(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultMaxSize)
+	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	op := gdat.NewOperator()
 	b := NewBuilder(s, &op, defaultAvgSize, defaultMaxSize, nil)
 

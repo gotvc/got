@@ -40,20 +40,34 @@ func (o *Operator) Mkdir(ctx context.Context, s Store, x Root, p string) (*Root,
 func (o *Operator) MkdirAll(ctx context.Context, s Store, x Root, p string) (*Root, error) {
 	p = cleanPath(p)
 	parts := strings.Split(p, string(Sep))
+	y := &x
+	var err error
+	y, err = o.ensureDir(ctx, s, x, "")
+	if err != nil {
+		return nil, err
+	}
 	for i := range parts {
 		p2 := strings.Join(parts[:i+1], string(Sep))
-		_, err := o.GetDirMetadata(ctx, s, x, p2)
-		if posixfs.IsErrNotExist(err) {
-			x2, err := o.Mkdir(ctx, s, x, p2)
-			if err != nil {
-				return nil, err
-			}
-			x = *x2
-		} else if err != nil {
+		y, err = o.ensureDir(ctx, s, *y, p2)
+		if err != nil {
 			return nil, err
 		}
 	}
-	return &x, nil
+	return y, nil
+}
+
+func (o *Operator) ensureDir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+	y := &x
+	_, err := o.GetDirMetadata(ctx, s, x, p)
+	if posixfs.IsErrNotExist(err) {
+		y, err = o.Mkdir(ctx, s, x, p)
+		if err != nil {
+			return nil, err
+		}
+	} else if err != nil {
+		return nil, err
+	}
+	return y, nil
 }
 
 // ReadDir calls fn for every child of the directory at p.

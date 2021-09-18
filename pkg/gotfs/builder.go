@@ -57,8 +57,8 @@ func (b *builder) Write(p []byte) (int, error) {
 	return b.w.Write(p)
 }
 
-func (b *builder) CopyFrom(ctx context.Context, root Root) error {
-	it := b.o.gotkv.NewIterator(b.ms, root, gotkv.TotalSpan())
+func (b *builder) CopyFrom(ctx context.Context, root Root, span gotkv.Span) error {
+	it := b.o.gotkv.NewIterator(b.ms, root, span)
 	return gotkv.CopyAll(ctx, b.mBuilder, it)
 }
 
@@ -73,10 +73,6 @@ func (b *builder) CopyExtent(ctx context.Context, ext *Extent) error {
 		_, err := b.w.Write(data)
 		return err
 	})
-}
-
-func (b *builder) CopyFromIterator(ctx context.Context, it gotkv.Iterator) error {
-	return gotkv.CopyAll(ctx, b.mBuilder, it)
 }
 
 // PutExtent write an entry for the extent

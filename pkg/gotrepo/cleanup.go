@@ -2,10 +2,10 @@ package gotrepo
 
 import (
 	"context"
-	"log"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/branches"
+	"github.com/sirupsen/logrus"
 )
 
 func (r *Repo) Cleanup(ctx context.Context) error {
@@ -24,10 +24,10 @@ func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	log.Println("begin cleanup on", name)
+	logrus.Println("begin cleanup on", name)
 	if err := branches.CleanupVolume(ctx, branch.Volume); err != nil {
 		return err
 	}
-	log.Println("done cleanup on", name)
+	logrus.Println("done cleanup on", name)
 	return nil
 }

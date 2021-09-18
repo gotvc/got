@@ -1,9 +1,13 @@
 package gotcmd
 
-import "github.com/spf13/cobra"
+import (
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/spf13/cobra"
+)
 
 func init() {
 	rootCmd.AddCommand(debugCmd)
+	rootCmd.AddCommand(derefCmd)
 }
 
 var debugCmd = &cobra.Command{
@@ -21,5 +25,25 @@ var debugCmd = &cobra.Command{
 		default:
 			return nil
 		}
+	},
+}
+
+var derefCmd = &cobra.Command{
+	Use:     "deref",
+	PreRunE: loadRepo,
+	Hidden:  true,
+	Args:    cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		p := args[0]
+		var ref gdat.Ref
+		if err := ref.UnmarshalText([]byte(p)); err != nil {
+			return err
+		}
+		s := repo.UnionStore()
+		dop := gdat.NewOperator()
+		return dop.GetF(ctx, s, ref, func(data []byte) error {
+			_, err := cmd.OutOrStdout().Write(data)
+			return err
+		})
 	},
 }

@@ -19,7 +19,7 @@ func (r *Repo) Untrack(ctx context.Context, p string) error {
 
 func (r *Repo) ForEachTracked(ctx context.Context, fn func(p string, isDelete bool) error) error {
 	return r.tracker.ForEach(ctx, func(p string) error {
-		exists, err := exists(r.workingDir, p)
+		exists, err := existsInFS(r.workingDir, p)
 		if err != nil {
 			return err
 		}
@@ -158,7 +158,7 @@ func bucketFromTx(tx *bolt.Tx, path []string) (*bolt.Bucket, error) {
 	return b, nil
 }
 
-func exists(x posixfs.FS, p string) (bool, error) {
+func existsInFS(x posixfs.FS, p string) (bool, error) {
 	_, err := x.Stat(p)
 	if posixfs.IsErrNotExist(err) {
 		return false, nil

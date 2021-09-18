@@ -31,7 +31,7 @@ func (o *Operator) newWriter(ctx context.Context, s cadata.Store, onExtent exten
 		s:        s,
 		onExtent: onExtent,
 	}
-	w.chunker = chunking.NewContentDefined(o.averageSizeData, o.maxBlobSize, o.hashes, w.onChunk)
+	w.chunker = chunking.NewContentDefined(o.minSizeData, o.averageSizeData, o.maxBlobSize, o.poly, w.onChunk)
 	return w
 }
 
@@ -57,8 +57,5 @@ func (w *writer) onChunk(data []byte) error {
 		Length: uint32(len(data)),
 		Ref:    gdat.MarshalRef(*ref),
 	}
-	if err := w.onExtent(ext); err != nil {
-		return err
-	}
-	return nil
+	return w.onExtent(ext)
 }

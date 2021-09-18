@@ -419,7 +419,7 @@ func newTempStore() *tempStore {
 	return &tempStore{
 		handles: make(map[uint64]cadata.ID),
 		rcs:     make(map[cadata.ID]uint64),
-		store:   cadata.NewMem(maxBlobSize),
+		store:   cadata.NewMem(cadata.DefaultHash, maxBlobSize),
 	}
 }
 

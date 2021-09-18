@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"strings"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/chmduquesne/rollinghash/rabinkarp64"
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type (
@@ -23,6 +24,7 @@ type (
 
 const (
 	DefaultMaxBlobSize             = 1 << 21
+	DefaultMinBlobSizeData         = 1 << 12
 	DefaultAverageBlobSizeData     = 1 << 20
 	DefaultAverageBlobSizeMetadata = 1 << 13
 )
@@ -45,17 +47,18 @@ type Operator struct {
 	dop   gdat.Operator
 	gotkv gotkv.Operator
 
-	maxBlobSize                          int
-	averageSizeData, averageSizeMetadata int
-	seed                                 []byte
+	maxBlobSize                                       int
+	minSizeData, averageSizeData, averageSizeMetadata int
+	seed                                              []byte
 
-	hashes *[256]uint64
+	poly rabinkarp64.Pol
 }
 
 func NewOperator(opts ...Option) Operator {
 	o := Operator{
 		dop:                 gdat.NewOperator(),
 		maxBlobSize:         DefaultMaxBlobSize,
+		minSizeData:         DefaultMinBlobSizeData,
 		averageSizeData:     DefaultAverageBlobSizeData,
 		averageSizeMetadata: DefaultAverageBlobSizeMetadata,
 	}
@@ -68,7 +71,7 @@ func NewOperator(opts ...Option) Operator {
 		gotkv.WithMaxSize(o.maxBlobSize),
 		gotkv.WithSeed(o.seed),
 	)
-	o.hashes = chunking.DeriveHashes(o.seed)
+	o.poly = chunking.DerivePolynomial(o.seed)
 	return o
 }
 
@@ -175,9 +178,9 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 	return o.gotkv.ForEach(ctx, s, root, gotkv.Span{}, func(ent gotkv.Entry) error {
 		switch {
 		case lastPath == nil:
-			log.Printf("checking root")
+			logrus.Printf("checking root")
 			if !bytes.Equal(ent.Key, []byte{Sep}) {
-				log.Printf("first key: %q", ent.Key)
+				logrus.Printf("first key: %q", ent.Key)
 				return errors.Errorf("filesystem is missing root")
 			}
 			p := ""
@@ -191,7 +194,7 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 			if err != nil {
 				return err
 			}
-			log.Printf("checking %q", p)
+			logrus.Printf("checking %q", p)
 			if !strings.HasPrefix(*lastPath, parentPath(p)) {
 				return errors.Errorf("path %s did not have parent", p)
 			}
@@ -238,8 +241,7 @@ func (s Segment) String() string {
 func (o *Operator) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*Root, error) {
 	b := o.newBuilder(ctx, ms, ds)
 	for _, seg := range segs {
-		it := o.gotkv.NewIterator(ms, seg.Root, seg.Span)
-		if err := b.CopyFromIterator(ctx, it); err != nil {
+		if err := b.CopyFrom(ctx, seg.Root, seg.Span); err != nil {
 			return nil, err
 		}
 	}

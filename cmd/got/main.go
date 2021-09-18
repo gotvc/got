@@ -1,13 +1,12 @@
 package main
 
 import (
-	"log"
-
 	"github.com/gotvc/got/pkg/gotcmd"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
 	if err := gotcmd.Execute(); err != nil {
-		log.Fatal(err)
+		logrus.Fatal(err)
 	}
 }

@@ -11,7 +11,7 @@ import (
 
 func TestNewEmpty(t *testing.T) {
 	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultMaxSize)
+	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	op := newTestOperator(t)
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
@@ -58,7 +58,7 @@ func TestPutGetMany(t *testing.T) {
 func testSetup(t *testing.T) (context.Context, cadata.Store, *Root) {
 	ctx := context.Background()
 	op := newTestOperator(t)
-	s := cadata.NewMem(cadata.DefaultMaxSize)
+	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	return ctx, s, x

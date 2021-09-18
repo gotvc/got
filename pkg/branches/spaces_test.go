@@ -14,7 +14,7 @@ func TestMemSpace(t *testing.T) {
 
 func newTestSpace(t testing.TB) Space {
 	newStore := func() cadata.Store {
-		return cadata.NewMem(1 << 20)
+		return cadata.NewMem(cadata.DefaultHash, 1<<20)
 	}
 	newCell := func() cells.Cell {
 		return cells.NewMem()

@@ -131,7 +131,10 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	db, err := bolt.Open(dbPath(p), 0o644, &bolt.Options{Timeout: time.Second})
+	db, err := bolt.Open(dbPath(p), 0o644, &bolt.Options{
+		Timeout: time.Second,
+		NoSync:  true,
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -171,6 +174,7 @@ func Open(p string) (*Repo, error) {
 
 func (r *Repo) Close() (retErr error) {
 	for _, fn := range []func() error{
+		r.db.Sync,
 		r.db.Close,
 	} {
 		if err := fn(); retErr == nil {
