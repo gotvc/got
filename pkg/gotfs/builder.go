@@ -3,18 +3,15 @@ package gotfs
 import (
 	"context"
 	"io/fs"
-	"runtime"
 	sync "sync"
 
 	"github.com/gotvc/got/pkg/gotkv"
-	"github.com/gotvc/got/pkg/stores"
 )
 
 type builder struct {
 	o        *Operator
 	ctx      context.Context
 	ms, ds   Store
-	ads      *stores.AsyncStore
 	w        *writer
 	mBuilder gotkv.Builder
 	path     *string
@@ -31,9 +28,8 @@ func (o *Operator) newBuilder(ctx context.Context, ms, ds Store) *builder {
 		ctx: ctx,
 		ms:  ms,
 		ds:  ds,
-		ads: stores.NewAsyncStore(ms, runtime.GOMAXPROCS(0)),
 	}
-	b.w = o.newWriter(ctx, b.ads, b.handleExtent)
+	b.w = o.newWriter(ctx, b.ds, b.handleExtent)
 	b.mBuilder = o.gotkv.NewBuilder(b.ms)
 	return b
 }
@@ -97,9 +93,6 @@ func (b *builder) Finish() (*Root, error) {
 
 func (b *builder) finish() (*Root, error) {
 	if err := b.w.Flush(); err != nil {
-		return nil, err
-	}
-	if err := b.ads.Close(); err != nil {
 		return nil, err
 	}
 	return b.mBuilder.Finish(b.ctx)
