@@ -201,7 +201,7 @@ func (w *StreamWriter) Append(ctx context.Context, ent Entry) error {
 	}
 
 	// TODO: remove this and just write to the underlying buffer
-	buf := &bytes.Buffer{}
+	offset := w.buf.Len()
 	if w.firstKey == nil {
 		if w.buf.Len() > 0 {
 			panic("writeFirst called with partially full chunker")
@@ -211,14 +211,11 @@ func (w *StreamWriter) Append(ctx context.Context, ent Entry) error {
 		}
 		w.firstKey = append([]byte{}, ent.Key...)
 		// the first key is always fully compressed.  It is provided from the layer above.
-		writeEntry(buf, w.firstKey, ent)
+		writeEntry(&w.buf, w.firstKey, ent)
 	} else {
-		writeEntry(buf, w.prevKey, ent)
+		writeEntry(&w.buf, w.prevKey, ent)
 	}
-	if _, err := w.buf.Write(buf.Bytes()); err != nil {
-		return err
-	}
-	if w.splitAfter(buf.Bytes()) {
+	if w.splitAfter(w.buf.Bytes()[offset:]) {
 		if err := w.Flush(ctx); err != nil {
 			return err
 		}
