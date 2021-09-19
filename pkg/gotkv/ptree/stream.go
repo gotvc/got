@@ -223,14 +223,12 @@ func (w *StreamWriter) Append(ctx context.Context, ent Entry) error {
 	if entryLen > w.maxSize {
 		return errors.Errorf("entry (size=%d) exceeds maximum size %d", entryLen, w.maxSize)
 	}
-	//log.Printf("append key=%q prevKey=%q firstKey=%q isFirst=%t entryLen=%d buf=%d", ent.Key, w.prevKey, w.firstKey, w.firstKey == nil, entryLen, w.Buffered())
 	if entryLen+w.buf.Len() > w.maxSize {
 		if err := w.Flush(ctx); err != nil {
 			return err
 		}
 	}
 
-	// TODO: remove this and just write to the underlying buffer
 	offset := w.buf.Len()
 	if w.firstKey == nil {
 		if w.buf.Len() > 0 {
