@@ -18,7 +18,7 @@ type (
 
 func MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, error) {
 	op := gdat.NewOperator()
-	sr := NewStreamReader(s, &op, rootToIndex(x))
+	sr := NewStreamReader(s, &op, []Index{rootToIndex(x)})
 	ent, err := maxEntry(ctx, sr, under)
 	if err != nil {
 		return nil, err
@@ -105,7 +105,7 @@ func DebugTree(s cadata.Store, x Root) {
 			indent += "  "
 		}
 		ctx := context.TODO()
-		sr := NewStreamReader(s, &op, Index{Ref: x.Ref, First: x.First})
+		sr := NewStreamReader(s, &op, []Index{{Ref: x.Ref, First: x.First}})
 		fmt.Printf("%sTREE NODE: %s %d\n", indent, x.Ref.CID.String(), x.Depth)
 		if x.Depth == 0 {
 			for {

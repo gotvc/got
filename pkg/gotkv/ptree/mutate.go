@@ -42,7 +42,7 @@ func mutate(ctx context.Context, b *Builder, idx Index, depth int, mut Mutation)
 // index at depth d has references to d - 1, where 0 is data.
 func mutateTree(ctx context.Context, b *Builder, idx Index, depth int, mut Mutation) error {
 	fnCalled := false
-	sr := NewStreamReader(b.s, b.op, idx)
+	sr := NewStreamReader(b.s, b.op, []Index{idx})
 	var ent Entry
 	for {
 		if err := sr.Next(ctx, &ent); err != nil {
@@ -88,7 +88,7 @@ func mutateEntries(ctx context.Context, b *Builder, target Index, mut Mutation) 
 		fnCalled = true
 		return mut.Fn(ent)
 	}
-	sr := NewStreamReader(b.s, b.op, target)
+	sr := NewStreamReader(b.s, b.op, []Index{target})
 	var inEnt Entry
 	for {
 		if err := sr.Next(ctx, &inEnt); err != nil {
@@ -131,7 +131,7 @@ func copyTree(ctx context.Context, b *Builder, depth int, idx Index) error {
 		return copyEntries(ctx, b, idx)
 	}
 
-	sr := NewStreamReader(b.s, b.op, idx)
+	sr := NewStreamReader(b.s, b.op, []Index{idx})
 	var ent Entry
 	for {
 		if err := sr.Next(ctx, &ent); err != nil {
@@ -153,7 +153,7 @@ func copyTree(ctx context.Context, b *Builder, depth int, idx Index) error {
 
 // copyEntries resolves index (which should be depth=1), and writes each entry to b
 func copyEntries(ctx context.Context, b *Builder, idx Index) error {
-	sr := NewStreamReader(b.s, b.op, idx)
+	sr := NewStreamReader(b.s, b.op, []Index{idx})
 	var ent Entry
 	for {
 		if err := sr.Next(ctx, &ent); err != nil {

@@ -93,57 +93,87 @@ func (r *blobReader) setPrevKey(x []byte) {
 }
 
 type StreamReader struct {
-	s   cadata.Store
-	op  *gdat.Operator
-	idx Index
-	br  *blobReader
+	s         cadata.Store
+	op        *gdat.Operator
+	idxs      []Index
+	nextIndex int
+	br        *blobReader
 }
 
-func NewStreamReader(s cadata.Store, op *gdat.Operator, idx Index) *StreamReader {
+func NewStreamReader(s cadata.Store, op *gdat.Operator, idxs []Index) *StreamReader {
+	for i := 0; i < len(idxs)-1; i++ {
+		if bytes.Compare(idxs[i].First, idxs[i+1].First) >= 0 {
+			panic("StreamReader: unordered indexes")
+		}
+	}
 	return &StreamReader{
-		s:   s,
-		op:  op,
-		idx: idx,
+		s:    s,
+		op:   op,
+		idxs: idxs,
 	}
 }
 
 func (r *StreamReader) Next(ctx context.Context, ent *Entry) error {
-	br, err := r.getBlobReader(ctx)
-	if err != nil {
-		return err
-	}
-	return br.Next(ctx, ent)
+	return r.withBlobReader(ctx, func(br *blobReader) error {
+		return br.Next(ctx, ent)
+	})
 }
 
 func (r *StreamReader) Peek(ctx context.Context, ent *Entry) error {
-	br, err := r.getBlobReader(ctx)
-	if err != nil {
-		return err
-	}
-	return br.Peek(ctx, ent)
+	return r.withBlobReader(ctx, func(br *blobReader) error {
+		return br.Peek(ctx, ent)
+	})
 }
 
 func (r *StreamReader) Seek(ctx context.Context, gteq []byte) error {
-	br, err := r.getBlobReader(ctx)
-	if err != nil {
-		return err
-	}
-	return br.Seek(ctx, gteq)
-}
-
-func (r *StreamReader) getBlobReader(ctx context.Context) (*blobReader, error) {
-	if r.br == nil {
-		err := r.op.GetF(ctx, r.s, r.idx.Ref, func(data []byte) error {
-			data2 := append([]byte{}, data...)
-			br := newBlobReader(r.idx.First, data2)
-			r.br = &br
-			return nil
-		})
-		if err != nil {
-			return nil, err
+	var targetIndex int
+	for i := 1; i < len(r.idxs); i++ {
+		if bytes.Compare(r.idxs[i].First, gteq) < 0 {
+			targetIndex = i
+		} else {
+			break
 		}
 	}
-	return r.br, nil
+	if r.br == nil || r.nextIndex != targetIndex+1 {
+		var err error
+		r.br, err = r.getBlobReader(ctx, r.idxs[targetIndex])
+		if err != nil {
+			return err
+		}
+		r.nextIndex = targetIndex + 1
+	}
+	return r.br.Seek(ctx, gteq)
+}
+
+func (r *StreamReader) withBlobReader(ctx context.Context, fn func(*blobReader) error) error {
+	if r.br == nil {
+		if r.nextIndex == len(r.idxs) {
+			return kv.EOS
+		}
+		idx := r.idxs[r.nextIndex]
+		r.nextIndex++
+		var err error
+		r.br, err = r.getBlobReader(ctx, idx)
+		if err != nil {
+			return err
+		}
+	}
+	err := fn(r.br)
+	if err == kv.EOS {
+		r.br = nil
+		return r.withBlobReader(ctx, fn)
+	}
+	return err
+}
+
+func (r *StreamReader) getBlobReader(ctx context.Context, idx Index) (*blobReader, error) {
+	var br blobReader
+	err := r.op.GetF(ctx, r.s, idx.Ref, func(data []byte) error {
+		data2 := append([]byte{}, data...)
+		br = newBlobReader(idx.First, data2)
+		return nil
+	})
+	return &br, err
 }
 
 type IndexHandler = func(Index) error

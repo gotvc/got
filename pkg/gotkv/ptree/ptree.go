@@ -239,7 +239,7 @@ func (it *Iterator) setPosAfter(k []byte) {
 }
 
 func peekEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Index, gteq []byte, ent *Entry) error {
-	sr := NewStreamReader(s, op, idx)
+	sr := NewStreamReader(s, op, []Index{idx})
 	if err := sr.Seek(ctx, gteq); err != nil {
 		return err
 	}
@@ -299,7 +299,7 @@ func ListChildren(ctx context.Context, s cadata.Store, op *gdat.Operator, root R
 	if root.Depth < 1 {
 		return nil, errors.Errorf("cannot list children of root with depth=%d", root.Depth)
 	}
-	sr := NewStreamReader(s, op, rootToIndex(root))
+	sr := NewStreamReader(s, op, []Index{rootToIndex(root)})
 	var idxs []Index
 	var ent Entry
 	for {
@@ -321,7 +321,7 @@ func ListChildren(ctx context.Context, s cadata.Store, op *gdat.Operator, root R
 // ListEntries
 func ListEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Index) ([]Entry, error) {
 	var ents []Entry
-	sr := NewStreamReader(s, op, idx)
+	sr := NewStreamReader(s, op, []Index{idx})
 	for {
 		var ent Entry
 		if err := sr.Next(ctx, &ent); err != nil {
@@ -332,4 +332,18 @@ func ListEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Ind
 		}
 		ents = append(ents, ent)
 	}
+}
+
+type indexReader struct {
+	sr *StreamReader
+}
+
+func newIndexReader(ctx context.Context, s cadata.Store, op *gdat.Operator, idxs []Index) *indexReader {
+	return &indexReader{
+		sr: NewStreamReader(s, op, idxs),
+	}
+}
+
+func (r *indexReader) Next(ctx context.Context, idx Index) error {
+	return nil
 }
