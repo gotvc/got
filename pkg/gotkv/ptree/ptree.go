@@ -333,17 +333,3 @@ func ListEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Ind
 		ents = append(ents, ent)
 	}
 }
-
-type indexReader struct {
-	sr *StreamReader
-}
-
-func newIndexReader(ctx context.Context, s cadata.Store, op *gdat.Operator, idxs []Index) *indexReader {
-	return &indexReader{
-		sr: NewStreamReader(s, op, idxs),
-	}
-}
-
-func (r *indexReader) Next(ctx context.Context, idx Index) error {
-	return nil
-}
