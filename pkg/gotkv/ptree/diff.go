@@ -3,10 +3,10 @@ package ptree
 import (
 	"bytes"
 	"context"
-	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotkv/kv"
 )
 
 type DiffFn = func(key, leftValue, rightValue []byte) error
@@ -17,36 +17,35 @@ func Diff(ctx context.Context, s cadata.Store, left, right Root, span Span, fn D
 	leftIt := NewIterator(s, &op, left, span)
 	rightIt := NewIterator(s, &op, right, span)
 
-	var leftEnt, rightEnt *Entry
+	var leftExists, rightExists bool
+	var leftEnt, rightEnt Entry
 	emitLeft := func() {
 		fn(leftEnt.Key, leftEnt.Value, nil)
-		leftEnt = nil
+		leftExists = false
 	}
 	emitRight := func() {
 		fn(rightEnt.Key, nil, rightEnt.Value)
-		rightEnt = nil
+		rightExists = false
 	}
 	for {
-		if leftEnt == nil {
-			var err error
-			leftEnt, err = leftIt.Next(ctx)
-			if err != nil && err != io.EOF {
+		if !leftExists {
+			if err := leftIt.Next(ctx, &leftEnt); err != nil && err != kv.EOS {
 				return err
 			}
+			leftExists = true
 		}
-		if rightEnt == nil {
-			var err error
-			rightEnt, err = rightIt.Next(ctx)
-			if err != nil && err != io.EOF {
+		if !rightExists {
+			if err := rightIt.Next(ctx, &rightEnt); err != nil && err != kv.EOS {
 				return err
 			}
+			rightExists = true
 		}
 		switch {
-		case leftEnt == nil && rightEnt == nil:
+		case !leftExists && !rightExists:
 			return nil
-		case leftEnt != nil && rightEnt == nil:
+		case leftExists && !rightExists:
 			emitLeft()
-		case leftEnt == nil && rightEnt != nil:
+		case !leftExists && rightExists:
 			emitRight()
 		default:
 			cmp := bytes.Compare(leftEnt.Key, rightEnt.Key)
@@ -54,7 +53,7 @@ func Diff(ctx context.Context, s cadata.Store, left, right Root, span Span, fn D
 				if !bytes.Equal(leftEnt.Value, rightEnt.Value) {
 					fn(leftEnt.Key, leftEnt.Value, rightEnt.Value)
 				}
-				leftEnt, rightEnt = nil, nil
+				leftExists, rightExists = false, false
 			} else if cmp < 0 {
 				emitLeft()
 			} else if cmp > 0 {

@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"math"
 	"strconv"
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotkv/kv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,9 +27,10 @@ func TestEntry(t *testing.T) {
 		Value: []byte("value1"),
 	}
 	writeEntry(buf, nil, expected)
-	actual, err := readEntry(bytes.NewReader(buf.Bytes()), nil)
+	var actual Entry
+	err := readEntry(&actual, bytes.NewReader(buf.Bytes()), nil, defaultMaxSize)
 	require.NoError(t, err)
-	require.Equal(t, expected, *actual)
+	require.Equal(t, expected, actual)
 }
 
 func TestStreamRW(t *testing.T) {
@@ -54,24 +55,15 @@ func TestStreamRW(t *testing.T) {
 	err := sw.Flush(ctx)
 	require.NoError(t, err)
 
-	var sr *StreamReader
+	sr := NewStreamReader(s, &op, idxs)
+	var ent Entry
 	for i := 0; i < N; i++ {
-		if sr == nil {
-			idx := idxs[0]
-			idxs = idxs[1:]
-			sr = NewStreamReader(s, &op, idx)
-		}
-		ent, err := sr.Next(ctx)
-		if err == io.EOF {
-			sr = nil
-			i--
-			continue
-		}
+		err := sr.Next(ctx, &ent)
 		require.NoError(t, err)
 		require.Equal(t, string(keyFromInt(i)), string(ent.Key))
 	}
-	_, err = sr.Next(ctx)
-	require.Equal(t, io.EOF, err)
+	err = sr.Next(ctx, &ent)
+	require.Equal(t, kv.EOS, err)
 }
 
 func TestStreamWriterChunkSize(t *testing.T) {

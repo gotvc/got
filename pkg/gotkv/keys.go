@@ -1,8 +1,6 @@
 package gotkv
 
-import (
-	"github.com/gotvc/got/pkg/gotkv/ptree"
-)
+import "github.com/gotvc/got/pkg/gotkv/kv"
 
 // PrefixSpan returns a Span that includes all keys with prefix p
 func PrefixSpan(p []byte) Span {
@@ -31,13 +29,13 @@ func PrefixEnd(prefix []byte) []byte {
 }
 
 func KeyAfter(x []byte) []byte {
-	return ptree.KeyAfter(x)
+	return kv.KeyAfter(x)
 }
 
 func TotalSpan() Span {
-	return ptree.TotalSpan()
+	return kv.TotalSpan()
 }
 
 func SingleKeySpan(k []byte) Span {
-	return ptree.SingleItemSpan(k)
+	return kv.SingleItemSpan(k)
 }

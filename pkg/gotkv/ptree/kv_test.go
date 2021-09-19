@@ -34,9 +34,10 @@ func TestAddPrefix(t *testing.T) {
 	t.Logf("produced %d blobs", s.Len())
 
 	it := NewIterator(s, &op, *root, Span{})
+	var ent Entry
 	for i := 0; i < N; i++ {
-		ent, err := it.Next(ctx)
+		err := it.Next(ctx, &ent)
 		require.NoError(t, err, "at %d", i)
-		require.True(t, bytes.HasPrefix(ent.Key, prefix))
+		require.True(t, bytes.HasPrefix(ent.Key, prefix), "at %d: %q does not have prefix %q", i, ent.Key, prefix)
 	}
 }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotkv/kv"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
@@ -22,6 +23,7 @@ type (
 )
 
 var ErrKeyNotFound = errors.Errorf("key not found")
+var EOS = kv.EOS
 
 var defaultReadOnlyOperator = &Operator{dop: gdat.NewOperator()}
 
