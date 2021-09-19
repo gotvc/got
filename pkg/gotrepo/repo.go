@@ -19,7 +19,6 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotkv"
-	"github.com/gotvc/got/pkg/gotkv/ptree"
 	"github.com/gotvc/got/pkg/gotnet"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/stores"
@@ -217,39 +216,6 @@ func (r *Repo) UnionStore() cadata.Store {
 
 func dbPath(x string) string {
 	return filepath.Join(x, gotPrefix, "local.db")
-}
-
-func (r *Repo) DebugDB(ctx context.Context, w io.Writer) error {
-	return r.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(bucketDefault))
-		if b != nil {
-			fmt.Fprintf(w, "BUCKET: %s\n", bucketDefault)
-			dumpBucket(w, b)
-		}
-		b = tx.Bucket([]byte(bucketCellData))
-		if b != nil {
-			fmt.Fprintf(w, "BUCKET: %s\n", bucketCellData)
-			dumpBucket(w, b)
-		}
-		return nil
-	})
-}
-
-func (r *Repo) DebugFS(ctx context.Context, w io.Writer) error {
-	_, branch, err := r.GetActiveBranch(ctx)
-	if err != nil {
-		return err
-	}
-	vol := branch.Volume
-	x, err := branches.GetHead(ctx, *branch)
-	if err != nil {
-		return err
-	}
-	if x == nil {
-		return errors.Errorf("no snapshot, no root")
-	}
-	ptree.DebugTree(vol.FSStore, x.Root)
-	return nil
 }
 
 func dumpBucket(w io.Writer, b *bolt.Bucket) {

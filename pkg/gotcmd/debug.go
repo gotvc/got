@@ -22,6 +22,8 @@ var debugCmd = &cobra.Command{
 			return repo.DebugDB(ctx, cmd.OutOrStdout())
 		case "fs":
 			return repo.DebugFS(ctx, cmd.OutOrStdout())
+		case "kv":
+			return repo.DebugKV(ctx, cmd.OutOrStdout())
 		default:
 			return nil
 		}
