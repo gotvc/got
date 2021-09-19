@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotkv/kv"
 	"github.com/pkg/errors"
 )
 
@@ -22,7 +22,7 @@ type Root struct {
 
 func ParseRoot(x []byte) (*Root, error) {
 	br := bytes.NewReader(x)
-	refData, err := readLPBytes(br)
+	refData, err := readLPBytes(nil, br, gdat.MaxRefBinaryLen)
 	if err != nil {
 		return nil, err
 	}
@@ -37,7 +37,7 @@ func ParseRoot(x []byte) (*Root, error) {
 	if depth > maxTreeDepth {
 		return nil, errors.Errorf("tree exceeds max tree depth (%d > %d)", depth, maxTreeDepth)
 	}
-	first, err := readLPBytes(br)
+	first, err := readLPBytes(nil, br, maxKeySize)
 	if err != nil {
 		return nil, err
 	}
@@ -112,6 +112,7 @@ func (b *Builder) makeWriter(i int) *StreamWriter {
 func (b *Builder) Put(ctx context.Context, key, value []byte) error {
 	b.ctx = ctx
 	defer func() { b.ctx = nil }()
+
 	if b.isDone {
 		return errors.Errorf("builder is closed")
 	}
@@ -128,6 +129,7 @@ func (b *Builder) Put(ctx context.Context, key, value []byte) error {
 func (b *Builder) Finish(ctx context.Context) (*Root, error) {
 	b.ctx = ctx
 	defer func() { b.ctx = nil }()
+
 	if b.isDone {
 		return nil, errors.Errorf("builder is closed")
 	}
@@ -200,28 +202,26 @@ func NewIterator(s cadata.Store, op *gdat.Operator, root Root, span Span) *Itera
 	return it
 }
 
-func (it *Iterator) Next(ctx context.Context) (*Entry, error) {
-	ent, err := it.Peek(ctx)
-	if err != nil {
-		return nil, err
+func (it *Iterator) Next(ctx context.Context, ent *Entry) error {
+	if err := it.Peek(ctx, ent); err != nil {
+		return err
 	}
 	it.setPosAfter(ent.Key)
-	return ent, nil
+	return nil
 }
 
-func (it *Iterator) Peek(ctx context.Context) (*Entry, error) {
-	_, ent, err := it.peek(ctx)
-	if err != nil {
-		return nil, err
+func (it *Iterator) Peek(ctx context.Context, ent *Entry) error {
+	if _, err := it.peek(ctx, ent); err != nil {
+		return err
 	}
 	if it.span.LessThan(ent.Key) {
-		return nil, io.EOF
+		return kv.EOS
 	}
-	return ent, nil
+	return nil
 }
 
-func (it *Iterator) peek(ctx context.Context) (int, *Entry, error) {
-	return peekTree(ctx, it.s, it.op, it.root, it.pos)
+func (it *Iterator) peek(ctx context.Context, ent *Entry) (int, error) {
+	return peekTree(ctx, it.s, it.op, it.root, it.pos, ent)
 }
 
 func (it *Iterator) Seek(ctx context.Context, k []byte) error {
@@ -238,74 +238,60 @@ func (it *Iterator) setPosAfter(k []byte) {
 	it.pos = append(it.pos, 0x00)
 }
 
-func peekEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Index, gteq []byte) (*Entry, error) {
-	entries, err := ListEntries(ctx, s, op, idx)
-	if err != nil {
-		return nil, err
+func peekEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Index, gteq []byte, ent *Entry) error {
+	sr := NewStreamReader(s, op, idx)
+	if err := sr.Seek(ctx, gteq); err != nil {
+		return err
 	}
-	for _, ent := range entries {
-		// ent.Key >= gteq
-		if bytes.Compare(ent.Key, gteq) >= 0 {
-			return &ent, nil
-		}
-	}
-	return nil, io.EOF
+	return sr.Next(ctx, ent)
 }
 
-func peekTree(ctx context.Context, s cadata.Store, op *gdat.Operator, root Root, gteq []byte) (int, *Entry, error) {
+func peekTree(ctx context.Context, s cadata.Store, op *gdat.Operator, root Root, gteq []byte, ent *Entry) (int, error) {
 	if root.Depth == 0 {
 		idx := rootToIndex(root)
-		ent, err := peekEntries(ctx, s, op, idx, gteq)
-		if err != nil {
-			return 0, nil, err
+		if err := peekEntries(ctx, s, op, idx, gteq, ent); err != nil {
+			return 0, err
 		}
 		var syncLevel int
 		if bytes.Equal(ent.Key, idx.First) {
 			syncLevel = 1
 		}
-		return syncLevel, ent, nil
+		return syncLevel, nil
 	} else {
 		idxs, err := ListChildren(ctx, s, op, root)
 		if err != nil {
-			return 0, nil, err
+			return 0, err
 		}
 		for i := 0; i < len(idxs); i++ {
 			// if the first element in the next is also lteq then skip.
 			if i+1 < len(idxs) && bytes.Compare(idxs[i+1].First, gteq) <= 0 {
 				continue
 			}
-			syncLevel, ent, err := peekTree(ctx, s, op, indexToRoot(idxs[i], root.Depth-1), gteq)
-			if err == io.EOF {
+			syncLevel, err := peekTree(ctx, s, op, indexToRoot(idxs[i], root.Depth-1), gteq, ent)
+			if err == kv.EOS {
 				continue
 			}
 			if i == 0 {
 				syncLevel++
 			}
-			return syncLevel, ent, err
+			return syncLevel, err
 		}
+		return 0, kv.EOS
 	}
-	return 0, nil, io.EOF
 }
 
 // CopyAll copies all the entries from it to b.
 func CopyAll(ctx context.Context, b *Builder, it *Iterator) error {
-	for {
-		if err := copyEntry(ctx, b, it); err != nil {
-			if err == io.EOF {
-				break
-			}
+	var ent Entry
+	for err := it.Next(ctx, &ent); err != kv.EOS; err = it.Next(ctx, &ent) {
+		if err != nil {
+			return err
+		}
+		if err := b.Put(ctx, ent.Key, ent.Value); err != nil {
 			return err
 		}
 	}
 	return nil
-}
-
-func copyEntry(ctx context.Context, b *Builder, it *Iterator) error {
-	ent, err := it.Next(ctx)
-	if err != nil {
-		return err
-	}
-	return b.Put(ctx, ent.Key, ent.Value)
 }
 
 // ListChildren returns the immediate children of root if any.
@@ -315,15 +301,15 @@ func ListChildren(ctx context.Context, s cadata.Store, op *gdat.Operator, root R
 	}
 	sr := NewStreamReader(s, op, rootToIndex(root))
 	var idxs []Index
+	var ent Entry
 	for {
-		ent, err := sr.Next(ctx)
-		if err != nil {
-			if err == io.EOF {
+		if err := sr.Next(ctx, &ent); err != nil {
+			if err == kv.EOS {
 				break
 			}
 			return nil, err
 		}
-		idx, err := entryToIndex(*ent)
+		idx, err := entryToIndex(ent)
 		if err != nil {
 			return nil, err
 		}
@@ -337,14 +323,13 @@ func ListEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Ind
 	var ents []Entry
 	sr := NewStreamReader(s, op, idx)
 	for {
-		ent, err := sr.Next(ctx)
-		if err != nil {
-			if err == io.EOF {
-				break
+		var ent Entry
+		if err := sr.Next(ctx, &ent); err != nil {
+			if err == kv.EOS {
+				return ents, nil
 			}
 			return nil, err
 		}
-		ents = append(ents, *ent)
+		ents = append(ents, ent)
 	}
-	return ents, nil
 }

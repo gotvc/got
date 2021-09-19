@@ -4,94 +4,24 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotkv/kv"
 	"github.com/pkg/errors"
 )
 
-// Entry is a single entry in a stream/tree
-type Entry struct {
-	Key, Value []byte
-}
-
-// A span of keys [Start, End)
-// If you want to include a specific end key, use the KeyAfter function.
-// nil is interpretted as no bound, not as a 0 length key.  This behaviour is only releveant for End.
-type Span struct {
-	Start, End []byte
-}
-
-func (s Span) String() string {
-	return fmt.Sprintf("[%q, %q)", s.Start, s.End)
-}
-
-func TotalSpan() Span {
-	return Span{}
-}
-
-func SingleItemSpan(x []byte) Span {
-	return Span{
-		Start: x,
-		End:   KeyAfter(x),
-	}
-}
-
-// LessThan returns true if every key in the Span is below key
-func (s Span) LessThan(key []byte) bool {
-	return s.End != nil && bytes.Compare(s.End, key) <= 0
-}
-
-// GreaterThan returns true if every key in the span is greater than k
-func (s Span) GreaterThan(k []byte) bool {
-	return s.Start != nil && bytes.Compare(s.Start, k) > 0
-}
-
-func (s Span) Contains(k []byte) bool {
-	return !s.GreaterThan(k) && !s.LessThan(k)
-}
-
-func (s Span) Clone() Span {
-	var start, end []byte
-	if s.Start != nil {
-		start = append([]byte{}, s.Start...)
-	}
-	if s.End != nil {
-		end = append([]byte{}, s.End...)
-	}
-	return Span{
-		Start: start,
-		End:   end,
-	}
-}
-
-// KeyAfter returns the key immediately after x.
-// There will be no key less than the result and greater than x
-func KeyAfter(x []byte) []byte {
-	y := append([]byte{}, x...)
-	return append(y, 0x00)
-}
+type (
+	Span  = kv.Span
+	Entry = kv.Entry
+)
 
 func MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, error) {
 	op := gdat.NewOperator()
 	sr := NewStreamReader(s, &op, rootToIndex(x))
-	var ent *Entry
-	for {
-		ent2, err := sr.Next(ctx)
-		if err != nil {
-			if err == io.EOF {
-				break
-			}
-			return nil, err
-		}
-		if under != nil && bytes.Compare(ent2.Key, under) >= 0 {
-			break
-		}
-		ent = ent2
-	}
-	if ent == nil {
-		return nil, io.EOF
+	ent, err := maxEntry(ctx, sr, under)
+	if err != nil {
+		return nil, err
 	}
 	if x.Depth == 0 {
 		return ent.Key, nil
@@ -101,6 +31,25 @@ func MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, 
 		return nil, err
 	}
 	return MaxKey(ctx, s, indexToRoot(idx, x.Depth-1), under)
+}
+
+func maxEntry(ctx context.Context, sr *StreamReader, under []byte) (ret *Entry, _ error) {
+	// TODO: this can be more efficient using Peek
+	var ent Entry
+	for err := sr.Next(ctx, &ent); err != kv.EOS; err = sr.Next(ctx, &ent) {
+		if err != nil {
+			return nil, err
+		}
+		if under != nil && bytes.Compare(ent.Key, under) >= 0 {
+			break
+		}
+		ent2 := ent.Clone()
+		ret = &ent2
+	}
+	if ret == nil {
+		return nil, kv.EOS
+	}
+	return ret, nil
 }
 
 // AddPrefix returns a new version of root with the prefix prepended to all the keys
@@ -160,9 +109,9 @@ func DebugTree(s cadata.Store, x Root) {
 		fmt.Printf("%sTREE NODE: %s %d\n", indent, x.Ref.CID.String(), x.Depth)
 		if x.Depth == 0 {
 			for {
-				ent, err := sr.Next(ctx)
-				if err != nil {
-					if err == io.EOF {
+				var ent Entry
+				if err := sr.Next(ctx, &ent); err != nil {
+					if err == kv.EOS {
 						break
 					}
 					panic(err)
@@ -171,9 +120,9 @@ func DebugTree(s cadata.Store, x Root) {
 			}
 		} else {
 			for {
-				ent, err := sr.Next(ctx)
-				if err != nil {
-					if err == io.EOF {
+				var ent Entry
+				if err := sr.Next(ctx, &ent); err != nil {
+					if err == kv.EOS {
 						break
 					}
 					panic(err)

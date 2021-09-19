@@ -2,13 +2,13 @@ package gotfs
 
 import (
 	"context"
-	"io"
 	"os"
 	"path"
 	"strings"
 
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/gotkv/kv"
 	"github.com/pkg/errors"
 )
 
@@ -79,7 +79,7 @@ func (o *Operator) ReadDir(ctx context.Context, s Store, x Root, p string, fn fu
 	}
 	for {
 		dirEnt, err := di.Next(ctx)
-		if err == io.EOF {
+		if err == kv.EOS {
 			break
 		}
 		if err != nil {
@@ -144,7 +144,7 @@ func (o *Operator) newDirIterator(ctx context.Context, s Store, x Root, p string
 	}
 	span := dirSpan(p)
 	iter := o.gotkv.NewIterator(s, x, span)
-	if _, err := iter.Next(ctx); err != nil {
+	if err := iter.Next(ctx, &gotkv.Entry{}); err != nil {
 		return nil, err
 	}
 	return &dirIterator{
@@ -156,8 +156,8 @@ func (o *Operator) newDirIterator(ctx context.Context, s Store, x Root, p string
 }
 
 func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
-	ent, err := di.iter.Next(ctx)
-	if err != nil {
+	var ent gotkv.Entry
+	if err := di.iter.Next(ctx, &ent); err != nil {
 		return nil, err
 	}
 	if isExtentKey(ent.Key) {

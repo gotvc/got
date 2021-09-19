@@ -3,10 +3,10 @@ package gotkv
 import (
 	"context"
 	"fmt"
-	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotkv/kv"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
 )
 
@@ -15,8 +15,21 @@ type Builder interface {
 	Finish(ctx context.Context) (*Root, error)
 }
 
+// Iterator iterates over entries
+//
+// e.g.
+// if err := it.Seek(ctx, key); err != nil {
+//   return err
+// }
+// var ent Entry
+// for err := it.Next(ctx, &ent); err != EOS; err = it.Next(ctx, &ent) {
+//   if err != nil {
+//	   return err
+//   }
+//   // use ent here. ent will be valid until the next call to it.Next
+// }
 type Iterator interface {
-	Next(ctx context.Context) (*Entry, error)
+	Next(ctx context.Context, ent *Entry) error
 	Seek(ctx context.Context, key []byte) error
 }
 
@@ -78,16 +91,17 @@ func NewOperator(opts ...Option) Operator {
 
 func (o *Operator) Put(ctx context.Context, s cadata.Store, x Root, key, value []byte) (*Root, error) {
 	return ptree.Mutate(ctx, o.makeBuilder(s), x, ptree.Mutation{
-		Span: ptree.SingleItemSpan(key),
+		Span: kv.SingleItemSpan(key),
 		Fn:   func(*Entry) []Entry { return []Entry{{Key: key, Value: value}} },
 	})
 }
 
 func (o *Operator) GetF(ctx context.Context, s cadata.Store, x Root, key []byte, fn func([]byte) error) error {
-	it := o.NewIterator(s, x, ptree.SingleItemSpan(key))
-	ent, err := it.Next(ctx)
+	it := o.NewIterator(s, x, kv.SingleItemSpan(key))
+	var ent Entry
+	err := it.Next(ctx, &ent)
 	if err != nil {
-		if err == io.EOF {
+		if err == kv.EOS {
 			err = ErrKeyNotFound
 		}
 		return err
@@ -107,7 +121,7 @@ func (o *Operator) Get(ctx context.Context, s cadata.Store, x Root, key []byte) 
 }
 
 func (o *Operator) Delete(ctx context.Context, s cadata.Store, x Root, key []byte) (*Root, error) {
-	span := ptree.SingleItemSpan(key)
+	span := kv.SingleItemSpan(key)
 	return o.DeleteSpan(ctx, s, x, span)
 }
 
@@ -164,19 +178,18 @@ func (o *Operator) makeBuilder(s cadata.Store) *ptree.Builder {
 
 func (o *Operator) ForEach(ctx context.Context, s Store, root Root, span Span, fn func(Entry) error) error {
 	it := o.NewIterator(s, root, span)
+	var ent Entry
 	for {
-		ent, err := it.Next(ctx)
-		if err != nil {
-			if err == io.EOF {
-				break
+		if err := it.Next(ctx, &ent); err != nil {
+			if err == kv.EOS {
+				return nil
 			}
 			return err
 		}
-		if err := fn(*ent); err != nil {
+		if err := fn(ent); err != nil {
 			return err
 		}
 	}
-	return nil
 }
 
 func (o *Operator) Diff(ctx context.Context, s cadata.Store, left, right Root, span Span, fn ptree.DiffFn) error {

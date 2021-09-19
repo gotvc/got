@@ -9,6 +9,8 @@ import (
 	"github.com/pkg/errors"
 )
 
+const MaxRefBinaryLen = cadata.IDSize + DEKSize
+
 type Ref struct {
 	CID cadata.ID
 	DEK DEK

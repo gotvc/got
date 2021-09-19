@@ -56,7 +56,9 @@ func Convergent(ptextHash cadata.ID) DEK {
 	return dek
 }
 
-type DEK [32]byte
+const DEKSize = 32
+
+type DEK [DEKSize]byte
 
 func (*DEK) String() string {
 	return "{ 32 byte DEK }"

@@ -103,7 +103,7 @@ func (o *Operator) ReadFileAt(ctx context.Context, ms, ds Store, x Root, p strin
 	for n < len(buf) {
 		n2, err := o.readFromIterator(ctx, it, ds, start, buf[n:])
 		if err != nil {
-			if err == io.EOF {
+			if err == gotkv.EOS {
 				break
 			}
 			return n, err
@@ -118,8 +118,8 @@ func (o *Operator) ReadFileAt(ctx context.Context, ms, ds Store, x Root, p strin
 }
 
 func (o *Operator) readFromIterator(ctx context.Context, it gotkv.Iterator, ds cadata.Store, start uint64, buf []byte) (int, error) {
-	ent, err := it.Next(ctx)
-	if err != nil {
+	var ent gotkv.Entry
+	if err := it.Next(ctx, &ent); err != nil {
 		return 0, err
 	}
 	_, extentEnd, err := splitExtentKey(ent.Key)

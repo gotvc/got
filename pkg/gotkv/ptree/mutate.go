@@ -2,9 +2,9 @@ package ptree
 
 import (
 	"context"
-	"io"
 
 	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotkv/kv"
 )
 
 // Mutate applies the mutation mut, to the tree root.
@@ -43,15 +43,15 @@ func mutate(ctx context.Context, b *Builder, idx Index, depth int, mut Mutation)
 func mutateTree(ctx context.Context, b *Builder, idx Index, depth int, mut Mutation) error {
 	fnCalled := false
 	sr := NewStreamReader(b.s, b.op, idx)
+	var ent Entry
 	for {
-		ent, err := sr.Next(ctx)
-		if err != nil {
-			if err == io.EOF {
+		if err := sr.Next(ctx, &ent); err != nil {
+			if err == kv.EOS {
 				break
 			}
 			return err
 		}
-		idx2, err := entryToIndex(*ent)
+		idx2, err := entryToIndex(ent)
 		if err != nil {
 			return err
 		}
@@ -63,8 +63,8 @@ func mutateTree(ctx context.Context, b *Builder, idx Index, depth int, mut Mutat
 			continue
 		}
 		// at this point the first entry must be <= the span
-		ent2, err := sr.Peek(ctx)
-		if err != nil && err != io.EOF {
+		var ent2 Entry
+		if err := sr.Peek(ctx, &ent2); err != nil && err != kv.EOS {
 			return err
 		}
 		if err == nil && mut.Span.GreaterThan(ent2.Key) {
@@ -89,10 +89,10 @@ func mutateEntries(ctx context.Context, b *Builder, target Index, mut Mutation) 
 		return mut.Fn(ent)
 	}
 	sr := NewStreamReader(b.s, b.op, target)
+	var inEnt Entry
 	for {
-		inEnt, err := sr.Next(ctx)
-		if err != nil {
-			if err == io.EOF {
+		if err := sr.Next(ctx, &inEnt); err != nil {
+			if err == kv.EOS {
 				err = nil
 			}
 			return err
@@ -106,7 +106,7 @@ func mutateEntries(ctx context.Context, b *Builder, target Index, mut Mutation) 
 			}
 		}
 		if mut.Span.Contains(inEnt.Key) {
-			outEnts := fn(inEnt)
+			outEnts := fn(&inEnt)
 			for _, outEnt := range outEnts {
 				if err := b.Put(ctx, outEnt.Key, outEnt.Value); err != nil {
 					return err
@@ -132,15 +132,15 @@ func copyTree(ctx context.Context, b *Builder, depth int, idx Index) error {
 	}
 
 	sr := NewStreamReader(b.s, b.op, idx)
+	var ent Entry
 	for {
-		ent, err := sr.Next(ctx)
-		if err != nil {
-			if err == io.EOF {
+		if err := sr.Next(ctx, &ent); err != nil {
+			if err == kv.EOS {
 				break
 			}
 			return err
 		}
-		idx2, err := entryToIndex(*ent)
+		idx2, err := entryToIndex(ent)
 		if err != nil {
 			return err
 		}
@@ -154,10 +154,10 @@ func copyTree(ctx context.Context, b *Builder, depth int, idx Index) error {
 // copyEntries resolves index (which should be depth=1), and writes each entry to b
 func copyEntries(ctx context.Context, b *Builder, idx Index) error {
 	sr := NewStreamReader(b.s, b.op, idx)
+	var ent Entry
 	for {
-		ent, err := sr.Next(ctx)
-		if err != nil {
-			if err == io.EOF {
+		if err := sr.Next(ctx, &ent); err != nil {
+			if err == kv.EOS {
 				break
 			}
 			return err
@@ -189,7 +189,10 @@ func entryToIndex(ent Entry) (Index, error) {
 	if err != nil {
 		return Index{}, err
 	}
-	return Index{First: ent.Key, Ref: *ref}, nil
+	return Index{
+		First: append([]byte{}, ent.Key...),
+		Ref:   *ref,
+	}, nil
 }
 
 func indexToRoot(idx Index, depth uint8) Root {
