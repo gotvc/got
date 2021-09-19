@@ -197,6 +197,10 @@ type StreamWriter struct {
 }
 
 func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed []byte, onIndex IndexHandler) *StreamWriter {
+	if len(seed) > 32 {
+		panic("len(seed) must be <= 32")
+	}
+	seed = append([]byte{}, seed...)
 	for len(seed) < 32 {
 		seed = append(seed, 0x00)
 	}
@@ -205,7 +209,7 @@ func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, se
 		op:      op,
 		onIndex: onIndex,
 
-		seed:    append([]byte{}, seed...),
+		seed:    seed,
 		avgSize: avgSize,
 		maxSize: maxSize,
 	}
@@ -215,6 +219,7 @@ func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, se
 func (w *StreamWriter) Append(ctx context.Context, ent Entry) error {
 	w.ctx = ctx
 	defer func() { w.ctx = nil }()
+
 	if w.prevKey != nil && bytes.Compare(ent.Key, w.prevKey) <= 0 {
 		panic(fmt.Sprintf("out of order key: prev=%q key=%q", w.prevKey, ent.Key))
 	}
@@ -261,6 +266,10 @@ func (w *StreamWriter) Buffered() int {
 func (w *StreamWriter) Flush(ctx context.Context) error {
 	w.ctx = ctx
 	defer func() { w.ctx = nil }()
+
+	if w.Buffered() == 0 {
+		return nil
+	}
 	ref, err := w.op.Post(ctx, w.s, w.buf.Bytes())
 	if err != nil {
 		return err
