@@ -260,6 +260,9 @@ func Dump(ctx context.Context, s Store, root Root, w io.Writer) error {
 	it := op.gotkv.NewIterator(s, root, gotkv.TotalSpan())
 	var ent gotkv.Entry
 	for err := it.Next(ctx, &ent); err != gotkv.EOS; err = it.Next(ctx, &ent) {
+		if err != nil {
+			return err
+		}
 		switch {
 		case isExtentKey(ent.Key):
 			ext, err := parseExtent(ent.Value)
