@@ -196,18 +196,17 @@ func Sync(ctx context.Context, dst, src cadata.Store, snap Snapshot, syncRoot fu
 		// Skip if the parent is already copied.
 		if exists, err := dst.Exists(ctx, snap.Parent.CID); err != nil {
 			return err
-		} else if exists {
-			return nil
-		}
-		parent, err := GetSnapshot(ctx, src, *snap.Parent)
-		if err != nil {
-			return err
-		}
-		if err := Sync(ctx, dst, src, *parent, syncRoot); err != nil {
-			return err
-		}
-		if err := cadata.Copy(ctx, dst, src, snap.Parent.CID); err != nil {
-			return err
+		} else if !exists {
+			parent, err := GetSnapshot(ctx, src, *snap.Parent)
+			if err != nil {
+				return err
+			}
+			if err := Sync(ctx, dst, src, *parent, syncRoot); err != nil {
+				return err
+			}
+			if err := cadata.Copy(ctx, dst, src, snap.Parent.CID); err != nil {
+				return err
+			}
 		}
 	}
 	return syncRoot(snap.Root)

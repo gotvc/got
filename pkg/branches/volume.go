@@ -36,23 +36,22 @@ func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
 		if err != nil {
 			return nil, err
 		}
-		if x == nil {
-			return goal, err
-		}
 		goalRef, err := gotvc.PostSnapshot(ctx, cadata.Void{}, *goal)
 		if err != nil {
 			return nil, err
 		}
-		xRef, err := gotvc.PostSnapshot(ctx, cadata.Void{}, *x)
-		if err != nil {
-			return nil, err
-		}
-		hasAncestor, err := gotvc.HasAncestor(ctx, src.VCStore, *goalRef, *xRef)
-		if err != nil {
-			return nil, err
-		}
-		if !force && !hasAncestor {
-			return nil, errors.Errorf("cannot CAS, dst ref is not parent of src ref")
+		if x != nil {
+			xRef, err := gotvc.PostSnapshot(ctx, cadata.Void{}, *x)
+			if err != nil {
+				return nil, err
+			}
+			hasAncestor, err := gotvc.HasAncestor(ctx, src.VCStore, *goalRef, *xRef)
+			if err != nil {
+				return nil, err
+			}
+			if !force && !hasAncestor {
+				return nil, errors.Errorf("cannot CAS, dst ref is not parent of src ref")
+			}
 		}
 		if err := syncStores(ctx, dst.StoreTriple(), src.StoreTriple(), *goal); err != nil {
 			return nil, err

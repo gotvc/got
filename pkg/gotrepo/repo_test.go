@@ -116,6 +116,28 @@ func TestCommitDir(t *testing.T) {
 	}
 }
 
+func TestFork(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	repo := newTestRepo(t)
+	fs := repo.WorkingDir()
+
+	filePath := "README.md"
+	const N = 10
+	for i := 0; i < N; i++ {
+		posixfs.PutFile(ctx, fs, filePath, 0o644, strings.NewReader("test-"+strconv.Itoa(i)))
+		require.NoError(t, repo.Track(ctx, filePath))
+		require.NoError(t, repo.Commit(ctx, SnapInfo{}))
+	}
+
+	require.NoError(t, repo.Fork(ctx, "", "branch2"))
+	require.NoError(t, repo.History(ctx, "branch2", func(_ Ref, _ Snap) error {
+		return nil
+	}))
+	commitCount := countCommits(t, repo, "branch2")
+	require.Equal(t, N, commitCount)
+}
+
 func newTestRepo(t testing.TB) *Repo {
 	dirpath := t.TempDir()
 	t.Log("testing in", dirpath)
@@ -177,4 +199,14 @@ func checkNotExists(t testing.TB, repo *Repo, p string) {
 	t.Helper()
 	found := exists(t, repo, p)
 	require.False(t, found)
+}
+
+func countCommits(t testing.TB, repo *Repo, branchName string) int {
+	ctx := context.Background()
+	var count int
+	repo.History(ctx, branchName, func(_ Ref, _ Snap) error {
+		count++
+		return nil
+	})
+	return count
 }
