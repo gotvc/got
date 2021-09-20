@@ -36,16 +36,10 @@ func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
 		if err != nil {
 			return nil, err
 		}
-		goalRef, err := gotvc.PostSnapshot(ctx, cadata.Void{}, *goal)
-		if err != nil {
-			return nil, err
-		}
 		if x != nil {
-			xRef, err := gotvc.PostSnapshot(ctx, cadata.Void{}, *x)
-			if err != nil {
-				return nil, err
-			}
-			hasAncestor, err := gotvc.HasAncestor(ctx, src.VCStore, *goalRef, *xRef)
+			goalRef := gotvc.RefFromSnapshot(*goal)
+			xRef := gotvc.RefFromSnapshot(*x)
+			hasAncestor, err := gotvc.HasAncestor(ctx, src.VCStore, goalRef, xRef)
 			if err != nil {
 				return nil, err
 			}

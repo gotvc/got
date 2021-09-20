@@ -190,6 +190,14 @@ func parseSnapshot(data []byte) (*Snapshot, error) {
 	return &snap, nil
 }
 
+func RefFromSnapshot(snap Snapshot) Ref {
+	ref, err := PostSnapshot(context.Background(), cadata.Void{}, snap)
+	if err != nil {
+		panic(err)
+	}
+	return *ref
+}
+
 // Sync ensures dst has all of the data reachable from snap.
 func Sync(ctx context.Context, dst, src cadata.Store, snap Snapshot, syncRoot func(gotfs.Root) error) error {
 	if snap.Parent != nil {
