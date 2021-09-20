@@ -2,6 +2,7 @@ package chunking
 
 import (
 	"bytes"
+	"math"
 	"math/bits"
 
 	"github.com/chmduquesne/rollinghash/rabinkarp64"
@@ -91,15 +92,22 @@ func (c *ContentDefined) Flush() error {
 
 func roll(rh *rollingHash, buf *bytes.Buffer, b byte) {
 	if buf.Len() < windowSize {
-		rh.Write([]byte{b})
+		if _, err := rh.Write([]byte{b}); err != nil {
+			panic(err)
+		}
 	} else {
 		rh.Roll(b)
 	}
-	buf.WriteByte(b)
+	if err := buf.WriteByte(b); err != nil {
+		panic(err)
+	}
 }
 
 func atChunkBoundary(sum uint64, nbits int) bool {
-	return bits.TrailingZeros64(sum) >= nbits
+	// this is to prevent runs of zeros from producing the minimum chunk size
+	const alternatingBits = uint64(0x55555555_55555555)
+
+	return (sum^alternatingBits)&lowBitsMask(nbits) == 0
 }
 
 func DerivePolynomial(seed []byte) rabinkarp64.Pol {
@@ -114,4 +122,9 @@ func DerivePolynomial(seed []byte) rabinkarp64.Pol {
 		panic(err)
 	}
 	return poly
+}
+
+// lowBitsMask return an integer with the low n bits set
+func lowBitsMask(n int) uint64 {
+	return ^(math.MaxUint64 << n)
 }
