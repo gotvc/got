@@ -42,24 +42,6 @@ func IsDescendentOf(ctx context.Context, s Store, x, a Snapshot) (bool, error) {
 	return IsDescendentOf(ctx, s, *parent, a)
 }
 
-// HasAncestor returns whether x has a as an ancestor.
-// As a special case, x is considered to be it's own ancestor
-func HasAncestor(ctx context.Context, s Store, x, a Snapshot) (bool, error) {
-	op := NewOperator()
-	op.readOnly = true
-	if x.Equals(a) {
-		return true, nil
-	}
-	if x.Parent == nil {
-		return false, nil
-	}
-	snap, err := op.GetSnapshot(ctx, s, *x.Parent)
-	if err != nil {
-		return false, err
-	}
-	return HasAncestor(ctx, s, *snap, a)
-}
-
 // Sync ensures dst has all of the data reachable from snap.
 func Sync(ctx context.Context, dst, src cadata.Store, snap Snapshot, syncRoot func(gotfs.Root) error) error {
 	op := NewOperator()
