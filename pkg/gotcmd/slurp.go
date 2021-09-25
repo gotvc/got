@@ -3,8 +3,8 @@ package gotcmd
 import (
 	"os"
 
-	"github.com/gotvc/got"
 	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/serde"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -36,7 +36,7 @@ var slurpCmd = &cobra.Command{
 			return err
 		}
 		w := cmd.OutOrStdout()
-		data, err := got.MarshalPEM(root)
+		data, err := serde.MarshalPEM(root)
 		if err != nil {
 			return err
 		}

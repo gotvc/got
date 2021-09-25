@@ -5,12 +5,11 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"math"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/gotkv/kv"
+	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/minio/highwayhash"
 	"github.com/pkg/errors"
 )
@@ -45,7 +44,7 @@ func (r *blobReader) Seek(ctx context.Context, gteq []byte) error {
 	var ent Entry
 	for {
 		if err := r.Peek(ctx, &ent); err != nil {
-			if err == kv.EOS {
+			if err == kvstreams.EOS {
 				return nil
 			}
 			return err
@@ -83,7 +82,7 @@ func (r *blobReader) Peek(ctx context.Context, ent *Entry) error {
 // next reads the next entry, but does not update r.prevKey
 func (r *blobReader) next(ctx context.Context, ent *Entry) error {
 	if r.br.Len() == 0 {
-		return kv.EOS
+		return kvstreams.EOS
 	}
 	return readEntry(ent, &r.br, r.prevKey, r.br.Len())
 }
@@ -148,7 +147,7 @@ func (r *StreamReader) Seek(ctx context.Context, gteq []byte) error {
 func (r *StreamReader) withBlobReader(ctx context.Context, fn func(*blobReader) error) error {
 	if r.br == nil {
 		if r.nextIndex == len(r.idxs) {
-			return kv.EOS
+			return kvstreams.EOS
 		}
 		idx := r.idxs[r.nextIndex]
 		r.nextIndex++
@@ -159,7 +158,7 @@ func (r *StreamReader) withBlobReader(ctx context.Context, fn func(*blobReader) 
 		}
 	}
 	err := fn(r.br)
-	if err == kv.EOS {
+	if err == kvstreams.EOS {
 		r.br = nil
 		return r.withBlobReader(ctx, fn)
 	}
@@ -296,80 +295,6 @@ func (w *StreamWriter) computeEntryLen(ent Entry) int {
 		prevKey = ent.Key
 	}
 	return computeEntryLen(prevKey, ent)
-}
-
-type StreamMerger struct {
-	streams []kv.Iterator
-}
-
-func NewStreamMerger(s cadata.Store, streams []kv.Iterator) *StreamMerger {
-	return &StreamMerger{
-		streams: streams,
-	}
-}
-
-func (sm *StreamMerger) Next(ctx context.Context, ent *Entry) error {
-	sr, err := sm.selectStream(ctx)
-	if err != nil {
-		return err
-	}
-	if err := sr.Next(ctx, ent); err != nil {
-		return err
-	}
-	if err != nil {
-		return err
-	}
-	return sm.advancePast(ctx, ent.Key)
-}
-
-func (sm *StreamMerger) Peek(ctx context.Context, ent *Entry) error {
-	sr, err := sm.selectStream(ctx)
-	if err != nil {
-		return err
-	}
-	return sr.Peek(ctx, ent)
-}
-
-func (sm *StreamMerger) advancePast(ctx context.Context, key []byte) error {
-	var ent Entry
-	for _, sr := range sm.streams {
-		if err := sr.Peek(ctx, &ent); err != nil {
-			if err == kv.EOS {
-				continue
-			}
-			return err
-		}
-		// if the stream is behind, advance it.
-		if bytes.Compare(ent.Key, key) <= 0 {
-			if err := sr.Next(ctx, &ent); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-// selectStream will never return an ended stream
-func (sm *StreamMerger) selectStream(ctx context.Context) (kv.Iterator, error) {
-	var minKey []byte
-	nextIndex := len(sm.streams)
-	var ent Entry
-	for i, sr := range sm.streams {
-		if err := sr.Peek(ctx, &ent); err != nil {
-			if err == kv.EOS {
-				continue
-			}
-			return nil, err
-		}
-		if minKey == nil || bytes.Compare(ent.Key, minKey) <= 0 {
-			minKey = ent.Key
-			nextIndex = i
-		}
-	}
-	if nextIndex < len(sm.streams) {
-		return sm.streams[nextIndex], nil
-	}
-	return nil, io.EOF
 }
 
 const maxKeySize = 4096

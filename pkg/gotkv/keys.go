@@ -1,6 +1,6 @@
 package gotkv
 
-import "github.com/gotvc/got/pkg/gotkv/kv"
+import "github.com/gotvc/got/pkg/gotkv/kvstreams"
 
 // PrefixSpan returns a Span that includes all keys with prefix p
 func PrefixSpan(p []byte) Span {
@@ -29,13 +29,13 @@ func PrefixEnd(prefix []byte) []byte {
 }
 
 func KeyAfter(x []byte) []byte {
-	return kv.KeyAfter(x)
+	return kvstreams.KeyAfter(x)
 }
 
 func TotalSpan() Span {
-	return kv.TotalSpan()
+	return kvstreams.TotalSpan()
 }
 
 func SingleKeySpan(k []byte) Span {
-	return kv.SingleItemSpan(k)
+	return kvstreams.SingleItemSpan(k)
 }

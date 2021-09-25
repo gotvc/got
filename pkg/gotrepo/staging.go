@@ -4,7 +4,6 @@ import (
 	"context"
 	"path"
 	"sort"
-	"time"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/branches"
@@ -16,13 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// SnapInfo is additional information that can be attached to a snapshot
-type SnapInfo struct {
-	Message   string
-	CreatedAt *time.Time
-}
-
-func (r *Repo) Commit(ctx context.Context, snapInfo SnapInfo) error {
+func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 	if yes, err := r.tracker.IsEmpty(ctx); err != nil {
 		return err
 	} else if yes {
@@ -36,28 +29,28 @@ func (r *Repo) Commit(ctx context.Context, snapInfo SnapInfo) error {
 	src := r.stagingTriple()
 	dst := branch.Volume.StoreTriple()
 	// writes go to src, but reads from src should fallback to dst
-	src = branches.Triple{
+	src = branches.StoreTriple{
 		Raw: stores.AddWriteLayer(dst.Raw, src.Raw),
 		FS:  stores.AddWriteLayer(dst.FS, src.FS),
 		VC:  stores.AddWriteLayer(dst.VC, src.VC),
 	}
 	fsop := r.getFSOp(branch)
+	vcop := r.getVCOp(branch)
 	err = branches.Apply(ctx, *branch, src, func(x *Snap) (*Snap, error) {
-		y, err := gotvc.Change(ctx, src.VC, x, func(root *Root) (*Root, error) {
-			logrus.Println("begin processing tracked paths")
-			nextRoot, err := r.applyTrackerChanges(ctx, fsop, src.FS, src.Raw, root)
-			if err != nil {
-				return nil, err
-			}
-			logrus.Println("done processing tracked paths")
-			return nextRoot, nil
-		})
+		var root *Root
+		if x != nil {
+			root = &x.Root
+		}
+		logrus.Println("begin processing tracked paths")
+		nextRoot, err := r.applyTrackerChanges(ctx, fsop, src.FS, src.Raw, root)
 		if err != nil {
 			return nil, err
 		}
-		y.CreatedAt = snapInfo.CreatedAt
-		y.Message = snapInfo.Message
-		return y, nil
+		logrus.Println("done processing tracked paths")
+		if err != nil {
+			return nil, err
+		}
+		return vcop.NewSnapshot(ctx, src.VC, x, *nextRoot, snapInfo)
 	})
 	if err != nil {
 		return err
@@ -69,8 +62,8 @@ func (r *Repo) stagingStore() cadata.Store {
 	return r.storeManager.GetStore(0)
 }
 
-func (r *Repo) stagingTriple() branches.Triple {
-	return branches.Triple{
+func (r *Repo) stagingTriple() branches.StoreTriple {
+	return branches.StoreTriple{
 		VC:  r.stagingStore(),
 		FS:  r.stagingStore(),
 		Raw: r.stagingStore(),

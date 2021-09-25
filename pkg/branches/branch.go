@@ -34,7 +34,7 @@ func CheckName(name string) error {
 }
 
 // SetHead forcibly sets the head of the branch.
-func SetHead(ctx context.Context, b Branch, src Triple, snap Snap) error {
+func SetHead(ctx context.Context, b Branch, src StoreTriple, snap Snap) error {
 	return applySnapshot(ctx, b.Volume.Cell, func(s *Snap) (*Snap, error) {
 		if err := syncStores(ctx, b.Volume.StoreTriple(), src, snap); err != nil {
 			return nil, err
@@ -48,15 +48,15 @@ func GetHead(ctx context.Context, b Branch) (*Snap, error) {
 	return getSnapshot(ctx, b.Volume.Cell)
 }
 
-// Apply applies fn to branch, any missing data will be pulled from srcStores
-func Apply(ctx context.Context, b Branch, srcStores Triple, fn func(*Snap) (*Snap, error)) error {
+// Apply applies fn to branch, any missing data will be pulled from scratch
+func Apply(ctx context.Context, b Branch, scratch StoreTriple, fn func(*Snap) (*Snap, error)) error {
 	return applySnapshot(ctx, b.Volume.Cell, func(x *Snap) (*Snap, error) {
 		y, err := fn(x)
 		if err != nil {
 			return nil, err
 		}
 		if y != nil {
-			if err := syncStores(ctx, b.Volume.StoreTriple(), srcStores, *y); err != nil {
+			if err := syncStores(ctx, b.Volume.StoreTriple(), scratch, *y); err != nil {
 				return nil, err
 			}
 		}
@@ -64,7 +64,7 @@ func Apply(ctx context.Context, b Branch, srcStores Triple, fn func(*Snap) (*Sna
 	})
 }
 
-func History(ctx context.Context, b Branch, fn func(ref gdat.Ref, snap Snap) error) error {
+func History(ctx context.Context, b Branch, vcop *gotvc.Operator, fn func(ref gdat.Ref, snap Snap) error) error {
 	snap, err := GetHead(ctx, b)
 	if err != nil {
 		return err
@@ -72,5 +72,9 @@ func History(ctx context.Context, b Branch, fn func(ref gdat.Ref, snap Snap) err
 	if snap == nil {
 		return nil
 	}
-	return gotvc.ForEachAncestor(ctx, b.Volume.VCStore, *snap, fn)
+	ref := vcop.RefFromSnapshot(*snap)
+	if err := fn(ref, *snap); err != nil {
+		return err
+	}
+	return gotvc.ForEach(ctx, b.Volume.VCStore, *snap.Parent, fn)
 }

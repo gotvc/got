@@ -6,7 +6,7 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/gotkv/kv"
+	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
 )
 
@@ -30,6 +30,7 @@ type Builder interface {
 // }
 type Iterator interface {
 	Next(ctx context.Context, ent *Entry) error
+	Peek(ctx context.Context, ent *Entry) error
 	Seek(ctx context.Context, key []byte) error
 }
 
@@ -91,17 +92,17 @@ func NewOperator(opts ...Option) Operator {
 
 func (o *Operator) Put(ctx context.Context, s cadata.Store, x Root, key, value []byte) (*Root, error) {
 	return ptree.Mutate(ctx, o.makeBuilder(s), x, ptree.Mutation{
-		Span: kv.SingleItemSpan(key),
+		Span: kvstreams.SingleItemSpan(key),
 		Fn:   func(*Entry) []Entry { return []Entry{{Key: key, Value: value}} },
 	})
 }
 
 func (o *Operator) GetF(ctx context.Context, s cadata.Store, x Root, key []byte, fn func([]byte) error) error {
-	it := o.NewIterator(s, x, kv.SingleItemSpan(key))
+	it := o.NewIterator(s, x, kvstreams.SingleItemSpan(key))
 	var ent Entry
 	err := it.Next(ctx, &ent)
 	if err != nil {
-		if err == kv.EOS {
+		if err == kvstreams.EOS {
 			err = ErrKeyNotFound
 		}
 		return err
@@ -121,7 +122,7 @@ func (o *Operator) Get(ctx context.Context, s cadata.Store, x Root, key []byte) 
 }
 
 func (o *Operator) Delete(ctx context.Context, s cadata.Store, x Root, key []byte) (*Root, error) {
-	span := kv.SingleItemSpan(key)
+	span := kvstreams.SingleItemSpan(key)
 	return o.DeleteSpan(ctx, s, x, span)
 }
 
@@ -181,7 +182,7 @@ func (o *Operator) ForEach(ctx context.Context, s Store, root Root, span Span, f
 	var ent Entry
 	for {
 		if err := it.Next(ctx, &ent); err != nil {
-			if err == kv.EOS {
+			if err == kvstreams.EOS {
 				return nil
 			}
 			return err
@@ -192,6 +193,7 @@ func (o *Operator) ForEach(ctx context.Context, s Store, root Root, span Span, f
 	}
 }
 
-func (o *Operator) Diff(ctx context.Context, s cadata.Store, left, right Root, span Span, fn ptree.DiffFn) error {
-	return ptree.Diff(ctx, s, left, right, span, fn)
+func (o *Operator) Diff(ctx context.Context, s cadata.Store, left, right Root, span Span, fn kvstreams.DiffFn) error {
+	leftIt, rightIt := o.NewIterator(s, left, span), o.NewIterator(s, right, span)
+	return kvstreams.Diff(ctx, s, leftIt, rightIt, span, fn)
 }

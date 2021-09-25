@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/gotkv/ptree"
+	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -70,6 +70,31 @@ func TakeLeft(k, l, r []byte) ([]byte, error) {
 	return l, nil
 }
 
-func (op *Operator) Merge(ctx context.Context, s cadata.Store, roots ...Root) (*Root, error) {
-	return ptree.Merge(ctx, op.makeBuilder(s), roots)
+// Merge performs a key-wise merge on the tree
+func (o *Operator) Merge(ctx context.Context, s cadata.Store, roots []Root) (*Root, error) {
+	b := o.makeBuilder(s)
+	if err := o.merge(ctx, s, b, roots); err != nil {
+		return nil, err
+	}
+	return b.Finish(ctx)
+}
+
+func (o *Operator) merge(ctx context.Context, s cadata.Store, b Builder, roots []Root) error {
+	streams := make([]kvstreams.Iterator, len(roots))
+	for i := range roots {
+		streams[i] = o.NewIterator(s, roots[i], kvstreams.TotalSpan())
+	}
+	sm := kvstreams.NewMerger(s, streams)
+	var ent Entry
+	for {
+		if err := sm.Next(ctx, &ent); err != nil {
+			if err == kvstreams.EOS {
+				return nil
+			}
+			return err
+		}
+		if err := b.Put(ctx, ent.Key, ent.Value); err != nil {
+			return err
+		}
+	}
 }

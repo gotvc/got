@@ -199,15 +199,25 @@ func (r *Repo) getSubFS(prefix string) posixfs.FS {
 	return posixfs.NewPrefixed(r.repoFS, prefix)
 }
 
-func (r *Repo) getFSOp(b *branches.Branch) *gotfs.Operator {
-	dop := gdat.NewOperator(
+func (r *Repo) getDataOp(b *branches.Branch) gdat.Operator {
+	return gdat.NewOperator(
 		gdat.WithSalt(b.Salt),
 	)
+}
+
+func (r *Repo) getFSOp(b *branches.Branch) *gotfs.Operator {
 	fsop := gotfs.NewOperator(
-		gotfs.WithDataOperator(dop),
+		gotfs.WithDataOperator(r.getDataOp(b)),
 		gotfs.WithSeed(b.Salt),
 	)
 	return &fsop
+}
+
+func (r *Repo) getVCOp(b *branches.Branch) *gotvc.Operator {
+	vcop := gotvc.NewOperator(
+		gotvc.WithDataOperator(r.getDataOp(b)),
+	)
+	return &vcop
 }
 
 func (r *Repo) UnionStore() cadata.Store {

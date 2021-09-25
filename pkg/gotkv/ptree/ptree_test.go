@@ -8,7 +8,7 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/gotkv/kv"
+	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/stretchr/testify/require"
 )
 
@@ -74,14 +74,14 @@ func TestMutate(t *testing.T) {
 	k := keyFromInt(int(N) / 3)
 	v := []byte("new changed value")
 	root, err = Mutate(ctx, NewBuilder(s, &op, defaultAvgSize, defaultMaxSize, nil), *root, Mutation{
-		Span: kv.SingleItemSpan(k),
+		Span: kvstreams.SingleItemSpan(k),
 		Fn:   func(*Entry) []Entry { return []Entry{{Key: k, Value: v}} },
 	})
 	require.NoError(t, err)
 	require.NotNil(t, root)
 
 	// check that our key is there
-	it := NewIterator(s, &op, *root, kv.SingleItemSpan(k))
+	it := NewIterator(s, &op, *root, kvstreams.SingleItemSpan(k))
 	var ent Entry
 	err = it.Next(ctx, &ent)
 	require.NoError(t, err)
@@ -89,10 +89,10 @@ func TestMutate(t *testing.T) {
 	require.Equal(t, ent.Key, k)
 	require.Equal(t, string(v), string(ent.Value))
 	err = it.Next(ctx, &ent)
-	require.Equal(t, err, kv.EOS)
+	require.Equal(t, err, kvstreams.EOS)
 
 	// check that all the other keys are there too
-	it = NewIterator(s, &op, *root, kv.TotalSpan())
+	it = NewIterator(s, &op, *root, kvstreams.TotalSpan())
 	generateEntries(N, func(expected Entry) {
 		err := it.Next(ctx, &ent)
 		require.NoError(t, err)
@@ -101,5 +101,5 @@ func TestMutate(t *testing.T) {
 		}
 	})
 	err = it.Next(ctx, &ent)
-	require.Equal(t, err, kv.EOS)
+	require.Equal(t, err, kvstreams.EOS)
 }

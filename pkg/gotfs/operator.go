@@ -231,6 +231,7 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 	})
 }
 
+// Segment is a span of a GotFS instance.
 type Segment struct {
 	Span gotkv.Span
 	Root Root

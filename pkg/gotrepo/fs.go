@@ -58,7 +58,8 @@ func (r *Repo) Check(ctx context.Context) error {
 	if snap == nil {
 		return nil
 	}
-	return gotvc.Check(ctx, vol.VCStore, *snap, func(root gotfs.Root) error {
+	vcop := gotvc.NewOperator()
+	return vcop.Check(ctx, vol.VCStore, *snap, func(root gotfs.Root) error {
 		return r.getFSOp(branch).Check(ctx, vol.FSStore, root, func(ref gdat.Ref) error {
 			return nil
 		})
