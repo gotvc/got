@@ -72,7 +72,7 @@ func History(ctx context.Context, b Branch, vcop *gotvc.Operator, fn func(ref gd
 	if snap == nil {
 		return nil
 	}
-	ref := vcop.RefFromSnapshot(*snap)
+	ref := vcop.RefFromSnapshot(*snap, b.Volume.VCStore)
 	if err := fn(ref, *snap); err != nil {
 		return err
 	}
