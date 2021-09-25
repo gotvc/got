@@ -49,14 +49,14 @@ func GetHead(ctx context.Context, b Branch) (*Snap, error) {
 }
 
 // Apply applies fn to branch, any missing data will be pulled from scratch
-func Apply(ctx context.Context, b Branch, scratch StoreTriple, fn func(*Snap) (*Snap, error)) error {
+func Apply(ctx context.Context, b Branch, src StoreTriple, fn func(*Snap) (*Snap, error)) error {
 	return applySnapshot(ctx, b.Volume.Cell, func(x *Snap) (*Snap, error) {
 		y, err := fn(x)
 		if err != nil {
 			return nil, err
 		}
 		if y != nil {
-			if err := syncStores(ctx, b.Volume.StoreTriple(), scratch, *y); err != nil {
+			if err := syncStores(ctx, b.Volume.StoreTriple(), src, *y); err != nil {
 				return nil, err
 			}
 		}
