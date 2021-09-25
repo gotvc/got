@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
@@ -26,62 +27,65 @@ type Snapshot struct {
 
 	Message   string     `json:"message,omitempty"`
 	CreatedAt *time.Time `json:"created_at,omitempty"`
+	Creator   p2p.PeerID `json:"creator,omitempty"`
 }
 
-func NewSnapshot(ctx context.Context, s cadata.Store, root Root, parentRef *gdat.Ref) (*Snapshot, error) {
-	if parentRef == nil {
-		return &Snapshot{
-			N:      0,
-			Root:   root,
-			Parent: nil,
-		}, nil
+func (a Snapshot) Equals(b Snapshot) bool {
+	var parentsEqual bool
+	switch {
+	case a.Parent == nil && b.Parent == nil:
+		parentsEqual = true
+	case a.Parent != nil && b.Parent != nil:
+		parentsEqual = gdat.Equal(*a.Parent, *b.Parent)
 	}
-	parent, err := GetSnapshot(ctx, s, *parentRef)
-	if err != nil {
-		return nil, err
-	}
-	return &Snapshot{
-		N:      parent.N + 1,
-		Root:   root,
-		Parent: parentRef,
-	}, nil
+	return a.N == b.N &&
+		gotfs.Equal(a.Root, b.Root) &&
+		parentsEqual
 }
 
-func Change(ctx context.Context, s cadata.Store, base *Snapshot, fn func(root *gotfs.Root) (*gotfs.Root, error)) (*Snapshot, error) {
+type SnapInfo struct {
+	Message   string
+	CreatedAt *time.Time
+}
+
+func (o *Operator) NewSnapshot(ctx context.Context, s cadata.Store, parent *Snapshot, root Root, sinfo SnapInfo) (*Snapshot, error) {
 	var parentRef *Ref
 	var n uint64
-	var root *Root
-	if base != nil {
+	if parent != nil {
 		var err error
-		parentRef, err = PostSnapshot(ctx, s, *base)
+		parentRef, err = o.PostSnapshot(ctx, s, *parent)
 		if err != nil {
 			return nil, err
 		}
-		n = base.N + 1
-		root = &base.Root
-	}
-	root, err := fn(root)
-	if err != nil {
-		return nil, err
+		n = parent.N + 1
 	}
 	return &Snapshot{
-		Parent: parentRef,
 		N:      n,
-		Root:   *root,
+		Root:   root,
+		Parent: parentRef,
+
+		Message:   sinfo.Message,
+		CreatedAt: sinfo.CreatedAt,
 	}, nil
 }
 
+// NewZero creates a new snapshot with no parent
+func (op *Operator) NewZero(ctx context.Context, s cadata.Store, root Root, sinfo SnapInfo) (*Snapshot, error) {
+	return op.NewSnapshot(ctx, s, nil, root, sinfo)
+}
+
 // PostSnapshot marshals the snapshot and posts it to the store
-func PostSnapshot(ctx context.Context, s Store, x Snapshot) (*Ref, error) {
-	dop := gdat.NewOperator()
-	return dop.Post(ctx, s, marshalSnapshot(x))
+func (op *Operator) PostSnapshot(ctx context.Context, s Store, x Snapshot) (*Ref, error) {
+	if op.readOnly {
+		panic("gotvc: operator is read-only. This is a bug.")
+	}
+	return op.dop.Post(ctx, s, marshalSnapshot(x))
 }
 
 // GetSnapshot retrieves the snapshot referenced by ref from the store.
-func GetSnapshot(ctx context.Context, s Store, ref Ref) (*Snapshot, error) {
-	dop := gdat.NewOperator()
+func (op *Operator) GetSnapshot(ctx context.Context, s Store, ref Ref) (*Snapshot, error) {
 	var x *Snapshot
-	if err := dop.GetF(ctx, s, ref, func(data []byte) error {
+	if err := op.dop.GetF(ctx, s, ref, func(data []byte) error {
 		var err error
 		x, err = parseSnapshot(data)
 		return err
@@ -93,14 +97,14 @@ func GetSnapshot(ctx context.Context, s Store, ref Ref) (*Snapshot, error) {
 
 // Squash turns multiple snapshots into one.
 // It preserves the latest version of the data, but destroys versioning granularity
-func Squash(ctx context.Context, s Store, x Snapshot, n int) (*Snapshot, error) {
+func (op *Operator) Squash(ctx context.Context, s Store, x Snapshot, n int) (*Snapshot, error) {
 	if n < 1 {
 		return nil, errors.Errorf("cannot squash single commit")
 	}
 	if x.Parent == nil {
 		return nil, errors.Errorf("cannot squash no parent")
 	}
-	parent, err := GetSnapshot(ctx, s, *x.Parent)
+	parent, err := op.GetSnapshot(ctx, s, *x.Parent)
 	if err != nil {
 		return nil, err
 	}
@@ -111,67 +115,12 @@ func Squash(ctx context.Context, s Store, x Snapshot, n int) (*Snapshot, error) 
 			Parent: parent.Parent,
 		}, nil
 	}
-	y, err := Squash(ctx, s, *parent, n-1)
+	y, err := op.Squash(ctx, s, *parent, n-1)
 	if err != nil {
 		return nil, err
 	}
 	y.Root = x.Root
 	return y, nil
-}
-
-func Rebase(ctx context.Context, s Store, xs []Snapshot, onto Snapshot) ([]Snapshot, error) {
-	var deltas []Delta
-	for _, x := range xs {
-		var delta Delta
-		if x.Parent != nil {
-			parent, err := GetSnapshot(ctx, s, *x.Parent)
-			if err != nil {
-				return nil, err
-			}
-			d, err := Diff(ctx, s, x, *parent)
-			if err != nil {
-				return nil, err
-			}
-			delta = *d
-		} else {
-			d, err := DiffWithNothing(ctx, s, x)
-			if err != nil {
-				return nil, err
-			}
-			delta = *d
-		}
-		deltas = append(deltas, delta)
-	}
-	var ys []Snapshot
-	for i, delta := range deltas {
-		var base Snapshot
-		if i == 0 {
-			base = onto
-		} else {
-			base = ys[i-1]
-		}
-		y, err := ApplyDelta(ctx, s, &base, delta)
-		if err != nil {
-			return nil, err
-		}
-		ys = append(ys, *y)
-	}
-	return ys, nil
-}
-
-// HasAncestor returns whether x has a as an ancestor
-func HasAncestor(ctx context.Context, s Store, x, a Ref) (bool, error) {
-	if gdat.Equal(x, a) {
-		return true, nil
-	}
-	snap, err := GetSnapshot(ctx, s, x)
-	if err != nil {
-		return false, err
-	}
-	if snap.Parent == nil {
-		return false, nil
-	}
-	return HasAncestor(ctx, s, *snap.Parent, a)
 }
 
 func marshalSnapshot(x Snapshot) []byte {
@@ -190,38 +139,19 @@ func parseSnapshot(data []byte) (*Snapshot, error) {
 	return &snap, nil
 }
 
-func RefFromSnapshot(snap Snapshot) Ref {
-	ref, err := PostSnapshot(context.Background(), cadata.Void{}, snap)
+// RefFromSnapshot computes a ref for snap if it was posted to s.
+// It only calls s.Hash and s.MaxSize; it does not mutate s.
+func (op *Operator) RefFromSnapshot(snap Snapshot, s cadata.Store) Ref {
+	s2 := cadata.NewVoid(s.Hash, s.MaxSize())
+	ref, err := op.PostSnapshot(context.Background(), s2, snap)
 	if err != nil {
 		panic(err)
 	}
 	return *ref
 }
 
-// Sync ensures dst has all of the data reachable from snap.
-func Sync(ctx context.Context, dst, src cadata.Store, snap Snapshot, syncRoot func(gotfs.Root) error) error {
-	if snap.Parent != nil {
-		// Skip if the parent is already copied.
-		if exists, err := dst.Exists(ctx, snap.Parent.CID); err != nil {
-			return err
-		} else if !exists {
-			parent, err := GetSnapshot(ctx, src, *snap.Parent)
-			if err != nil {
-				return err
-			}
-			if err := Sync(ctx, dst, src, *parent, syncRoot); err != nil {
-				return err
-			}
-			if err := cadata.Copy(ctx, dst, src, snap.Parent.CID); err != nil {
-				return err
-			}
-		}
-	}
-	return syncRoot(snap.Root)
-}
-
 // Check ensures that snapshot is valid.
-func Check(ctx context.Context, s cadata.Store, snap Snapshot, checkRoot func(gotfs.Root) error) error {
+func (o *Operator) Check(ctx context.Context, s cadata.Store, snap Snapshot, checkRoot func(gotfs.Root) error) error {
 	logrus.Infof("checking commit #%d", snap.N)
 	if err := checkRoot(snap.Root); err != nil {
 		return err
@@ -229,31 +159,9 @@ func Check(ctx context.Context, s cadata.Store, snap Snapshot, checkRoot func(go
 	if snap.Parent == nil {
 		return nil
 	}
-	parent, err := GetSnapshot(ctx, s, *snap.Parent)
+	parent, err := o.GetSnapshot(ctx, s, *snap.Parent)
 	if err != nil {
 		return err
 	}
-	return Check(ctx, s, *parent, checkRoot)
-}
-
-// ForEachAncestor call fn once for each ancestor of snap, and snap in reverse order.
-func ForEachAncestor(ctx context.Context, s cadata.Store, snap Snapshot, fn func(Ref, Snapshot) error) error {
-	ref, err := PostSnapshot(ctx, cadata.Void{}, snap)
-	if err != nil {
-		return err
-	}
-	for {
-		if err := fn(*ref, snap); err != nil {
-			return err
-		}
-		if snap.Parent == nil {
-			return nil
-		}
-		next, err := GetSnapshot(ctx, s, *snap.Parent)
-		if err != nil {
-			return err
-		}
-		ref = snap.Parent
-		snap = *next
-	}
+	return o.Check(ctx, s, *parent, checkRoot)
 }

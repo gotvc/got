@@ -1,4 +1,4 @@
-package kv
+package kvstreams
 
 import (
 	"bytes"
@@ -27,6 +27,19 @@ type Iterator interface {
 	Next(ctx context.Context, ent *Entry) error
 	Seek(ctx context.Context, gteq []byte) error
 	Peek(ctx context.Context, ent *Entry) error
+}
+
+func ForEach(ctx context.Context, it Iterator, fn func(ent Entry) error) error {
+	var ent Entry
+	for err := it.Next(ctx, &ent); err != EOS; err = it.Next(ctx, &ent) {
+		if err != nil {
+			return err
+		}
+		if err := fn(ent); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // A span of keys [Start, End)

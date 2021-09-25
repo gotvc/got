@@ -101,7 +101,7 @@ func (r *Repo) History(ctx context.Context, name string, fn func(ref Ref, s Snap
 	if err != nil {
 		return err
 	}
-	return branches.History(ctx, *branch, fn)
+	return branches.History(ctx, *branch, r.getVCOp(branch), fn)
 }
 
 func getActiveBranch(db *bolt.DB) (string, error) {

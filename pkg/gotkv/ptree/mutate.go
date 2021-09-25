@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/gotkv/kv"
+	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
 
 // Mutate applies the mutation mut, to the tree root.
@@ -46,7 +46,7 @@ func mutateTree(ctx context.Context, b *Builder, idx Index, depth int, mut Mutat
 	var ent Entry
 	for {
 		if err := sr.Next(ctx, &ent); err != nil {
-			if err == kv.EOS {
+			if err == kvstreams.EOS {
 				break
 			}
 			return err
@@ -64,7 +64,7 @@ func mutateTree(ctx context.Context, b *Builder, idx Index, depth int, mut Mutat
 		}
 		// at this point the first entry must be <= the span
 		var ent2 Entry
-		if err := sr.Peek(ctx, &ent2); err != nil && err != kv.EOS {
+		if err := sr.Peek(ctx, &ent2); err != nil && err != kvstreams.EOS {
 			return err
 		}
 		if err == nil && mut.Span.GreaterThan(ent2.Key) {
@@ -92,7 +92,7 @@ func mutateEntries(ctx context.Context, b *Builder, target Index, mut Mutation) 
 	var inEnt Entry
 	for {
 		if err := sr.Next(ctx, &inEnt); err != nil {
-			if err == kv.EOS {
+			if err == kvstreams.EOS {
 				err = nil
 			}
 			return err
@@ -135,7 +135,7 @@ func copyTree(ctx context.Context, b *Builder, depth int, idx Index) error {
 	var ent Entry
 	for {
 		if err := sr.Next(ctx, &ent); err != nil {
-			if err == kv.EOS {
+			if err == kvstreams.EOS {
 				break
 			}
 			return err
@@ -157,7 +157,7 @@ func copyEntries(ctx context.Context, b *Builder, idx Index) error {
 	var ent Entry
 	for {
 		if err := sr.Next(ctx, &ent); err != nil {
-			if err == kv.EOS {
+			if err == kvstreams.EOS {
 				break
 			}
 			return err

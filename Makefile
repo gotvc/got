@@ -22,3 +22,7 @@ drop-replace:
 	go mod edit -dropreplace=github.com/brendoncarroll/go-p2p
 	go mod edit -dropreplace=github.com/brendoncarroll/go-state
 	go mod edit -dropreplace=github.com/inet256/inet256
+
+precommit: drop-replace test
+	go mod tidy
+	

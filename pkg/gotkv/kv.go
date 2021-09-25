@@ -5,7 +5,7 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/gotkv/kv"
+	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
@@ -23,7 +23,7 @@ type (
 )
 
 var ErrKeyNotFound = errors.Errorf("key not found")
-var EOS = kv.EOS
+var EOS = kvstreams.EOS
 
 var defaultReadOnlyOperator = &Operator{dop: gdat.NewOperator()}
 
@@ -96,7 +96,7 @@ func Populate(ctx context.Context, s Store, x Root, set stores.Set, entryFn func
 	} else if exists {
 		return nil
 	}
-	if x.Depth == 0 {
+	if ptree.PointsToEntries(x) {
 		ents, err := ptree.ListEntries(ctx, s, &op, ptree.Index{First: x.First, Ref: x.Ref})
 		if err != nil {
 			return err

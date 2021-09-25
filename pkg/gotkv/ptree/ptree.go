@@ -7,7 +7,7 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/gotkv/kv"
+	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/pkg/errors"
 )
 
@@ -215,7 +215,7 @@ func (it *Iterator) Peek(ctx context.Context, ent *Entry) error {
 		return err
 	}
 	if it.span.LessThan(ent.Key) {
-		return kv.EOS
+		return kvstreams.EOS
 	}
 	return nil
 }
@@ -268,7 +268,7 @@ func peekTree(ctx context.Context, s cadata.Store, op *gdat.Operator, root Root,
 				continue
 			}
 			syncLevel, err := peekTree(ctx, s, op, indexToRoot(idxs[i], root.Depth-1), gteq, ent)
-			if err == kv.EOS {
+			if err == kvstreams.EOS {
 				continue
 			}
 			if i == 0 {
@@ -276,14 +276,14 @@ func peekTree(ctx context.Context, s cadata.Store, op *gdat.Operator, root Root,
 			}
 			return syncLevel, err
 		}
-		return 0, kv.EOS
+		return 0, kvstreams.EOS
 	}
 }
 
 // CopyAll copies all the entries from it to b.
 func CopyAll(ctx context.Context, b *Builder, it *Iterator) error {
 	var ent Entry
-	for err := it.Next(ctx, &ent); err != kv.EOS; err = it.Next(ctx, &ent) {
+	for err := it.Next(ctx, &ent); err != kvstreams.EOS; err = it.Next(ctx, &ent) {
 		if err != nil {
 			return err
 		}
@@ -296,7 +296,7 @@ func CopyAll(ctx context.Context, b *Builder, it *Iterator) error {
 
 // ListChildren returns the immediate children of root if any.
 func ListChildren(ctx context.Context, s cadata.Store, op *gdat.Operator, root Root) ([]Index, error) {
-	if root.Depth < 1 {
+	if PointsToEntries(root) {
 		return nil, errors.Errorf("cannot list children of root with depth=%d", root.Depth)
 	}
 	sr := NewStreamReader(s, op, []Index{rootToIndex(root)})
@@ -304,7 +304,7 @@ func ListChildren(ctx context.Context, s cadata.Store, op *gdat.Operator, root R
 	var ent Entry
 	for {
 		if err := sr.Next(ctx, &ent); err != nil {
-			if err == kv.EOS {
+			if err == kvstreams.EOS {
 				break
 			}
 			return nil, err
@@ -325,11 +325,19 @@ func ListEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Ind
 	for {
 		var ent Entry
 		if err := sr.Next(ctx, &ent); err != nil {
-			if err == kv.EOS {
+			if err == kvstreams.EOS {
 				return ents, nil
 			}
 			return nil, err
 		}
 		ents = append(ents, ent)
 	}
+}
+
+func PointsToEntries(root Root) bool {
+	return root.Depth == 0
+}
+
+func PointsToIndexes(root Root) bool {
+	return root.Depth > 0
 }

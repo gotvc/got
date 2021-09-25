@@ -8,7 +8,6 @@ import (
 
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotkv"
-	"github.com/gotvc/got/pkg/gotkv/kv"
 	"github.com/pkg/errors"
 )
 
@@ -79,7 +78,7 @@ func (o *Operator) ReadDir(ctx context.Context, s Store, x Root, p string, fn fu
 	}
 	for {
 		dirEnt, err := di.Next(ctx)
-		if err == kv.EOS {
+		if err == gotkv.EOS {
 			break
 		}
 		if err != nil {

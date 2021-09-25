@@ -1,22 +1,16 @@
-package ptree
+package kvstreams
 
 import (
 	"bytes"
 	"context"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/gotkv/kv"
 )
 
 type DiffFn = func(key, leftValue, rightValue []byte) error
 
-// Diff calls fn with all the keys and values that are different between the two trees.
-func Diff(ctx context.Context, s cadata.Store, left, right Root, span Span, fn DiffFn) error {
-	op := gdat.NewOperator()
-	leftIt := NewIterator(s, &op, left, span)
-	rightIt := NewIterator(s, &op, right, span)
-
+// Diff calls fn with all the keys and values that are different between the two Iterators
+func Diff(ctx context.Context, s cadata.Store, leftIt, rightIt Iterator, span Span, fn DiffFn) error {
 	var leftExists, rightExists bool
 	var leftEnt, rightEnt Entry
 	emitLeft := func() {
@@ -29,13 +23,13 @@ func Diff(ctx context.Context, s cadata.Store, left, right Root, span Span, fn D
 	}
 	for {
 		if !leftExists {
-			if err := leftIt.Next(ctx, &leftEnt); err != nil && err != kv.EOS {
+			if err := leftIt.Next(ctx, &leftEnt); err != nil && err != EOS {
 				return err
 			}
 			leftExists = true
 		}
 		if !rightExists {
-			if err := rightIt.Next(ctx, &rightEnt); err != nil && err != kv.EOS {
+			if err := rightIt.Next(ctx, &rightEnt); err != nil && err != EOS {
 				return err
 			}
 			rightExists = true

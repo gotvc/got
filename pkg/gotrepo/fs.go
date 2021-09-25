@@ -7,7 +7,6 @@ import (
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/gotvc/got/pkg/gotvc"
 )
 
 func (r *Repo) Ls(ctx context.Context, p string, fn func(gotfs.DirEnt) error) error {
@@ -58,7 +57,8 @@ func (r *Repo) Check(ctx context.Context) error {
 	if snap == nil {
 		return nil
 	}
-	return gotvc.Check(ctx, vol.VCStore, *snap, func(root gotfs.Root) error {
+	vcop := r.getVCOp(branch)
+	return vcop.Check(ctx, vol.VCStore, *snap, func(root gotfs.Root) error {
 		return r.getFSOp(branch).Check(ctx, vol.FSStore, root, func(ref gdat.Ref) error {
 			return nil
 		})

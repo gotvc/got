@@ -12,6 +12,7 @@ import (
 
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/sync/errgroup"
@@ -46,7 +47,7 @@ func TestCommit(t *testing.T) {
 	err = repo.Track(ctx, p)
 	require.NoError(t, err)
 
-	err = repo.Commit(ctx, SnapInfo{})
+	err = repo.Commit(ctx, gotvc.SnapInfo{})
 	require.NoError(t, err)
 
 	checkFileContent(t, repo, p, strings.NewReader(fileContents))
@@ -57,7 +58,7 @@ func TestCommit(t *testing.T) {
 	// track both
 	require.NoError(t, repo.Track(ctx, p))
 	require.NoError(t, repo.Track(ctx, p2))
-	err = repo.Commit(ctx, SnapInfo{})
+	err = repo.Commit(ctx, gotvc.SnapInfo{})
 	require.NoError(t, err)
 
 	checkNotExists(t, repo, p)
@@ -81,7 +82,7 @@ func TestCommitLargeFile(t *testing.T) {
 	}
 	require.NoError(t, posixfs.PutFile(ctx, fs, p, 0o644, newReader()))
 	require.NoError(t, repo.Track(ctx, p))
-	require.NoError(t, repo.Commit(ctx, SnapInfo{}))
+	require.NoError(t, repo.Commit(ctx, gotvc.SnapInfo{}))
 	checkExists(t, repo, p)
 	checkFileContent(t, repo, p, newReader())
 }
@@ -107,7 +108,7 @@ func TestCommitDir(t *testing.T) {
 		require.NoError(t, posixfs.PutFile(ctx, fs, p, 0o644, strings.NewReader(content)))
 	}
 	require.NoError(t, repo.Track(ctx, dirpath))
-	require.NoError(t, repo.Commit(ctx, SnapInfo{}))
+	require.NoError(t, repo.Commit(ctx, gotvc.SnapInfo{}))
 	for i := 0; i < N; i++ {
 		p := getPath(i)
 		content := getContent(i)
@@ -127,7 +128,7 @@ func TestFork(t *testing.T) {
 	for i := 0; i < N; i++ {
 		posixfs.PutFile(ctx, fs, filePath, 0o644, strings.NewReader("test-"+strconv.Itoa(i)))
 		require.NoError(t, repo.Track(ctx, filePath))
-		require.NoError(t, repo.Commit(ctx, SnapInfo{}))
+		require.NoError(t, repo.Commit(ctx, gotvc.SnapInfo{}))
 	}
 
 	require.NoError(t, repo.Fork(ctx, "", "branch2"))

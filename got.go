@@ -1,21 +1,18 @@
 package got
 
 import (
-	"encoding/json"
-	"encoding/pem"
-
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotrepo"
-	"github.com/pkg/errors"
+	"github.com/gotvc/got/pkg/gotvc"
 )
 
 type (
 	Repo     = gotrepo.Repo
 	Root     = gotfs.Root
 	Ref      = gdat.Ref
-	SnapInfo = gotrepo.SnapInfo
-	Snap     = gotrepo.Snap
+	SnapInfo = gotvc.SnapInfo
+	Snap     = gotvc.Snap
 )
 
 func InitRepo(p string) error {
@@ -24,34 +21,4 @@ func InitRepo(p string) error {
 
 func OpenRepo(p string) (*Repo, error) {
 	return gotrepo.Open(p)
-}
-
-func MarshalPEM(x interface{}) ([]byte, error) {
-	ty, err := getPEMType(x)
-	if err != nil {
-		return nil, err
-	}
-	data, err := json.Marshal(x)
-	if err != nil {
-		return nil, err
-	}
-	return marshalPEM(ty, data), nil
-}
-
-func getPEMType(x interface{}) (string, error) {
-	switch x := x.(type) {
-	case Root, *Root:
-		return "GOTFS ROOT", nil
-	case Snap, *Snap:
-		return "GOT SNAPSHOT", nil
-	default:
-		return "", errors.Errorf("unknown type %T", x)
-	}
-}
-
-func marshalPEM(ty string, data []byte) []byte {
-	return pem.EncodeToMemory(&pem.Block{
-		Type:  ty,
-		Bytes: data,
-	})
 }

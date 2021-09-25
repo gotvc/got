@@ -22,8 +22,8 @@ type Volume struct {
 	VCStore, FSStore, RawStore cadata.Store
 }
 
-func (v Volume) StoreTriple() Triple {
-	return Triple{
+func (v Volume) StoreTriple() StoreTriple {
+	return StoreTriple{
 		Raw: v.RawStore,
 		FS:  v.FSStore,
 		VC:  v.VCStore,
@@ -37,9 +37,7 @@ func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
 			return nil, err
 		}
 		if x != nil {
-			goalRef := gotvc.RefFromSnapshot(*goal)
-			xRef := gotvc.RefFromSnapshot(*x)
-			hasAncestor, err := gotvc.HasAncestor(ctx, src.VCStore, goalRef, xRef)
+			hasAncestor, err := gotvc.IsDescendentOf(ctx, src.VCStore, *goal, *x)
 			if err != nil {
 				return nil, err
 			}
@@ -55,10 +53,13 @@ func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
 }
 
 func getSnapshot(ctx context.Context, c cells.Cell) (*Snap, error) {
-	data, err := cells.GetBytes(ctx, c)
+	const maxSnapshotSize = 4096
+	buf := [maxSnapshotSize]byte{}
+	n, err := c.Read(ctx, buf[:])
 	if err != nil {
 		return nil, err
 	}
+	data := buf[:n]
 	if len(data) == 0 {
 		return nil, nil
 	}
@@ -70,31 +71,31 @@ func getSnapshot(ctx context.Context, c cells.Cell) (*Snap, error) {
 }
 
 func applySnapshot(ctx context.Context, c cells.Cell, fn func(*Snap) (*Snap, error)) error {
-	return cells.Apply(ctx, c, func(data []byte) ([]byte, error) {
-		var x *Snap
-		if len(data) > 0 {
-			x = &Snap{}
-			if err := json.Unmarshal(data, &x); err != nil {
+	return cells.Apply(ctx, c, func(xData []byte) ([]byte, error) {
+		var xSnap *Snap
+		if len(xData) > 0 {
+			xSnap = &Snap{}
+			if err := json.Unmarshal(xData, &xSnap); err != nil {
 				return nil, err
 			}
 		}
-		y, err := fn(x)
+		ySnap, err := fn(xSnap)
 		if err != nil {
 			return nil, err
 		}
-		if y == nil {
+		if ySnap == nil {
 			return nil, nil
 		}
-		return json.Marshal(*y)
+		return json.Marshal(*ySnap)
 	})
 }
 
-// Triple is an instance of the 3 stores needed to store a Got Snapshot
-type Triple struct {
+// StoreTriple is an instance of the 3 stores needed to store a Got Snapshot
+type StoreTriple struct {
 	VC, FS, Raw cadata.Store
 }
 
-func syncStores(ctx context.Context, dst, src Triple, snap gotvc.Snapshot) error {
+func syncStores(ctx context.Context, dst, src StoreTriple, snap gotvc.Snapshot) error {
 	logrus.Println("begin syncing stores")
 	defer logrus.Println("done syncing stores")
 	return gotvc.Sync(ctx, dst.VC, src.VC, snap, func(root gotfs.Root) error {
@@ -116,7 +117,7 @@ func CleanupVolume(ctx context.Context, vol Volume) error {
 	}
 	keep := [3]stores.MemSet{{}, {}, {}}
 	if start != nil {
-		if err := reachableVC(ctx, ss[0], *start, keep[0], func(root gotfs.Root) error {
+		if err := gotvc.Populate(ctx, ss[0], *start, keep[0], func(root gotfs.Root) error {
 			return gotfs.Populate(ctx, ss[1], root, keep[1], keep[2])
 		}); err != nil {
 			return err
@@ -147,13 +148,4 @@ func filterStore(ctx context.Context, s cadata.Store, set cadata.Set) (int, erro
 		return s.Delete(ctx, id)
 	})
 	return count, err
-}
-
-func reachableVC(ctx context.Context, s cadata.Store, start gotvc.Snapshot, set stores.Set, fn func(root gotfs.Root) error) error {
-	return gotvc.ForEachAncestor(ctx, s, start, func(ref gdat.Ref, snap gotvc.Snapshot) error {
-		if err := fn(snap.Root); err != nil {
-			return err
-		}
-		return set.Add(ctx, ref.CID)
-	})
 }

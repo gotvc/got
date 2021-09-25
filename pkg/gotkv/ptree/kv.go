@@ -7,13 +7,13 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/gotkv/kv"
+	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/pkg/errors"
 )
 
 type (
-	Span  = kv.Span
-	Entry = kv.Entry
+	Span  = kvstreams.Span
+	Entry = kvstreams.Entry
 )
 
 func MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, error) {
@@ -36,7 +36,7 @@ func MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, 
 func maxEntry(ctx context.Context, sr *StreamReader, under []byte) (ret *Entry, _ error) {
 	// TODO: this can be more efficient using Peek
 	var ent Entry
-	for err := sr.Next(ctx, &ent); err != kv.EOS; err = sr.Next(ctx, &ent) {
+	for err := sr.Next(ctx, &ent); err != kvstreams.EOS; err = sr.Next(ctx, &ent) {
 		if err != nil {
 			return nil, err
 		}
@@ -47,7 +47,7 @@ func maxEntry(ctx context.Context, sr *StreamReader, under []byte) (ret *Entry, 
 		ret = &ent2
 	}
 	if ret == nil {
-		return nil, kv.EOS
+		return nil, kvstreams.EOS
 	}
 	return ret, nil
 }
@@ -111,7 +111,7 @@ func DebugTree(s cadata.Store, x Root) {
 			for {
 				var ent Entry
 				if err := sr.Next(ctx, &ent); err != nil {
-					if err == kv.EOS {
+					if err == kvstreams.EOS {
 						break
 					}
 					panic(err)
@@ -122,7 +122,7 @@ func DebugTree(s cadata.Store, x Root) {
 			for {
 				var ent Entry
 				if err := sr.Next(ctx, &ent); err != nil {
-					if err == kv.EOS {
+					if err == kvstreams.EOS {
 						break
 					}
 					panic(err)
