@@ -29,7 +29,6 @@ import (
 // default bucket
 const (
 	bucketDefault = "default"
-	keyStaging    = "STAGING"
 	keyActive     = "ACTIVE"
 	nameMaster    = "master"
 	MaxBlobSize   = gotfs.DefaultMaxBlobSize
@@ -39,6 +38,7 @@ const (
 	bucketCellData = "cells"
 	bucketStores   = "stores"
 	bucketTracker  = "tracker"
+	bucketStaging  = "staging"
 	bucketPorter   = "porter"
 )
 

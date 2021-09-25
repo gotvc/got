@@ -27,16 +27,11 @@ type FileOp struct {
 
 type Stage struct {
 	storage Storage
-	gotfs   *gotfs.Operator
-	ms, ds  cadata.Store
 }
 
-func New(stor Storage, fsop *gotfs.Operator, ms, ds cadata.Store) *Stage {
+func New(stor Storage) *Stage {
 	return &Stage{
 		storage: stor,
-		gotfs:   fsop,
-		ms:      ms,
-		ds:      ds,
 	}
 }
 
@@ -58,7 +53,7 @@ func (s *Stage) Delete(ctx context.Context, p string) error {
 	return s.storage.Put([]byte(p), jsonMarshal(fo))
 }
 
-func (s *Stage) Untrack(ctx context.Context, p string) error {
+func (s *Stage) Discard(ctx context.Context, p string) error {
 	p = cleanPath(p)
 	return s.storage.Delete([]byte(p))
 }
@@ -78,15 +73,15 @@ func (s *Stage) Reset() error {
 	return s.storage.DeleteAll()
 }
 
-func (s *Stage) Apply(ctx context.Context, base *gotfs.Root) (*gotfs.Root, error) {
+func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, base *gotfs.Root) (*gotfs.Root, error) {
 	if base == nil {
 		var err error
-		base, err = s.gotfs.NewEmpty(ctx, s.ms)
+		base, err = fsop.NewEmpty(ctx, ms)
 		if err != nil {
 			return nil, err
 		}
 	}
-	emptyRoot, err := s.gotfs.NewEmpty(ctx, s.ms)
+	emptyRoot, err := fsop.NewEmpty(ctx, ms)
 	if err != nil {
 		return nil, err
 	}
@@ -96,7 +91,7 @@ func (s *Stage) Apply(ctx context.Context, base *gotfs.Root) (*gotfs.Root, error
 		switch {
 		case fileOp.Put != nil:
 			var err error
-			base, err = s.gotfs.MkdirAll(ctx, s.ms, *base, path.Dir(p))
+			base, err = fsop.MkdirAll(ctx, ms, *base, path.Dir(p))
 			if err != nil {
 				return err
 			}
@@ -107,7 +102,7 @@ func (s *Stage) Apply(ctx context.Context, base *gotfs.Root) (*gotfs.Root, error
 			logrus.Warnf("empty op for path %q", p)
 			return nil
 		}
-		segRoot, err := s.gotfs.AddPrefix(ctx, s.ms, p, pathRoot)
+		segRoot, err := fsop.AddPrefix(ctx, ms, p, pathRoot)
 		if err != nil {
 			return err
 		}
@@ -122,7 +117,7 @@ func (s *Stage) Apply(ctx context.Context, base *gotfs.Root) (*gotfs.Root, error
 	}
 	segs = prepareChanges(*base, segs)
 	logrus.Println("splicing...")
-	root, err := s.gotfs.Splice(ctx, s.ms, s.ds, segs)
+	root, err := fsop.Splice(ctx, ms, ds, segs)
 	if err != nil {
 		return nil, err
 	}
