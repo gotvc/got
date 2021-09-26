@@ -26,7 +26,7 @@ var statusCmd = &cobra.Command{
 		}
 		fmt.Fprintf(w, "ACTIVE: %s\n", name)
 		fmt.Fprintf(w, "TRACKED PATHS:\n")
-		return repo.ForEachStaging(ctx, func(p string, fsop staging.FileOp) error {
+		return repo.ForEachStaging(ctx, func(p string, fsop staging.Operation) error {
 			desc := "ADD"
 			if fsop.Delete {
 				desc = "DEL"

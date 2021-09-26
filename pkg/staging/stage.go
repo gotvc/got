@@ -20,7 +20,7 @@ type Storage interface {
 	DeleteAll() error
 }
 
-type FileOp struct {
+type Operation struct {
 	Delete bool        `json:"del,omitempty"`
 	Put    *gotfs.Root `json:"put,omitempty"`
 }
@@ -38,16 +38,16 @@ func New(stor Storage) *Stage {
 // Put replaces a file at p with root
 func (s *Stage) Put(ctx context.Context, p string, root gotfs.Root) error {
 	p = cleanPath(p)
-	fo := FileOp{
+	op := Operation{
 		Put: &root,
 	}
-	return s.storage.Put([]byte(p), jsonMarshal(fo))
+	return s.storage.Put([]byte(p), jsonMarshal(op))
 }
 
 // Delete removes a file at p with root
 func (s *Stage) Delete(ctx context.Context, p string) error {
 	p = cleanPath(p)
-	fo := FileOp{
+	fo := Operation{
 		Delete: true,
 	}
 	return s.storage.Put([]byte(p), jsonMarshal(fo))
@@ -58,10 +58,10 @@ func (s *Stage) Discard(ctx context.Context, p string) error {
 	return s.storage.Delete([]byte(p))
 }
 
-func (s *Stage) ForEach(ctx context.Context, fn func(p string, op FileOp) error) error {
+func (s *Stage) ForEach(ctx context.Context, fn func(p string, op Operation) error) error {
 	return s.storage.ForEach(func(k, v []byte) error {
 		p := string(k)
-		var fo FileOp
+		var fo Operation
 		if err := json.Unmarshal(v, &fo); err != nil {
 			return err
 		}
@@ -95,7 +95,7 @@ func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.S
 		return nil, err
 	}
 	var segs []gotfs.Segment
-	err = s.ForEach(ctx, func(p string, fileOp FileOp) error {
+	err = s.ForEach(ctx, func(p string, fileOp Operation) error {
 		var pathRoot gotfs.Root
 		switch {
 		case fileOp.Put != nil:

@@ -6,14 +6,47 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/porting"
 	"github.com/gotvc/got/pkg/staging"
 	"github.com/gotvc/got/pkg/stores"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
-func (r *Repo) Track(ctx context.Context, paths ...string) error {
+// Add adds paths from the working directory to the staging area.
+// Directories are traversed, and only paths are added.
+// Adding a directory will update any existing paths and add new ones, it will not remove paths
+// from version control
+func (r *Repo) Add(ctx context.Context, paths ...string) error {
+	branch, err := r.GetBranch(ctx, "")
+	if err != nil {
+		return err
+	}
+	storeTriple := r.stagingTriple()
+	ms := storeTriple.FS
+	ds := storeTriple.Raw
+	porter := porting.NewPorter(r.getFSOp(branch), r.workingDir, nil)
+	stage := r.getStage()
+	for _, target := range paths {
+		if err := posixfs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ posixfs.DirEnt) error {
+			fileRoot, err := porter.ImportFile(ctx, ms, ds, p)
+			if err != nil {
+				return err
+			}
+			return stage.Put(ctx, p, *fileRoot)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Put replaces a path (file or directory) with whatever is in the working directory
+// Adding a file updates the file.
+// Adding a directory will delete paths not in the working directory, and add paths in the working directory.
+func (r *Repo) Put(ctx context.Context, paths ...string) error {
 	branch, err := r.GetBranch(ctx, "")
 	if err != nil {
 		return err
@@ -41,6 +74,33 @@ func (r *Repo) Track(ctx context.Context, paths ...string) error {
 	return nil
 }
 
+// Rm deletes a path known to version control.
+func (r *Repo) Rm(ctx context.Context, paths ...string) error {
+	branch, err := r.GetBranch(ctx, "")
+	if err != nil {
+		return err
+	}
+	snap, err := branches.GetHead(ctx, *branch)
+	if err != nil {
+		return err
+	}
+	st := r.stagingTriple()
+	fsop := r.getFSOp(branch)
+	stage := r.getStage()
+	for _, target := range paths {
+		if snap == nil {
+			return errors.Errorf("path %q not found", target)
+		}
+		if err := fsop.ForEachFile(ctx, st.FS, snap.Root, target, func(p string, _ *gotfs.Metadata) error {
+			return stage.Delete(ctx, p)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Discard removes any staged changes for a path
 func (r *Repo) Discard(ctx context.Context, paths ...string) error {
 	for _, p := range paths {
 		if err := r.stage.Discard(ctx, p); err != nil {
@@ -54,7 +114,7 @@ func (r Repo) Clear(ctx context.Context) error {
 	return r.stage.Reset()
 }
 
-func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, fo staging.FileOp) error) error {
+func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, fo staging.Operation) error) error {
 	return r.stage.ForEach(ctx, fn)
 }
 
@@ -80,7 +140,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 	}
 	fsop := r.getFSOp(branch)
 	vcop := r.getVCOp(branch)
-	err = branches.Apply(ctx, *branch, src, func(x *Snap) (*Snap, error) {
+	if err := branches.Apply(ctx, *branch, src, func(x *Snap) (*Snap, error) {
 		var root *Root
 		if x != nil {
 			root = &x.Root
@@ -92,8 +152,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 		}
 		logrus.Println("done applying staged changes")
 		return vcop.NewSnapshot(ctx, src.VC, x, *nextRoot, snapInfo)
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
 	return r.getStage().Reset()
