@@ -101,5 +101,5 @@ func TestMutate(t *testing.T) {
 		}
 	})
 	err = it.Next(ctx, &ent)
-	require.Equal(t, err, kvstreams.EOS)
+	require.Equal(t, kvstreams.EOS, err)
 }

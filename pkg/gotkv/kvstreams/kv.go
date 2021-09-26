@@ -29,6 +29,14 @@ type Iterator interface {
 	Peek(ctx context.Context, ent *Entry) error
 }
 
+func Peek(ctx context.Context, it Iterator) (*Entry, error) {
+	var ent Entry
+	if err := it.Peek(ctx, &ent); err != nil {
+		return nil, err
+	}
+	return &ent, nil
+}
+
 func ForEach(ctx context.Context, it Iterator, fn func(ent Entry) error) error {
 	var ent Entry
 	for err := it.Next(ctx, &ent); err != EOS; err = it.Next(ctx, &ent) {

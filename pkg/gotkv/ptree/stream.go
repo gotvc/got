@@ -38,9 +38,6 @@ func newBlobReader(firstKey []byte, data []byte) blobReader {
 }
 
 func (r *blobReader) Seek(ctx context.Context, gteq []byte) error {
-	if bytes.Compare(gteq, r.prevKey) < 0 {
-		r.prevKey = append(r.prevKey[:0], r.firstKey...)
-	}
 	var ent Entry
 	for {
 		if err := r.Peek(ctx, &ent); err != nil {
@@ -125,9 +122,12 @@ func (r *StreamReader) Peek(ctx context.Context, ent *Entry) error {
 }
 
 func (r *StreamReader) Seek(ctx context.Context, gteq []byte) error {
+	if len(r.idxs) < 1 {
+		return nil
+	}
 	var targetIndex int
 	for i := 1; i < len(r.idxs); i++ {
-		if bytes.Compare(r.idxs[i].First, gteq) < 0 {
+		if bytes.Compare(r.idxs[i].First, gteq) <= 0 {
 			targetIndex = i
 		} else {
 			break
