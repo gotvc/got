@@ -6,14 +6,14 @@ import (
 )
 
 func init() {
-	rootCmd.AddCommand(trackCmd)
-	rootCmd.AddCommand(untrackCmd)
+	rootCmd.AddCommand(addCmd)
+	rootCmd.AddCommand(discardCmd)
 	rootCmd.AddCommand(clearCmd)
 }
 
-var trackCmd = &cobra.Command{
-	Use:     "track",
-	Short:   "tracks a path to be included in the next commit",
+var addCmd = &cobra.Command{
+	Use:     "add",
+	Short:   "adds a path to the staging area",
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) < 1 {
@@ -24,22 +24,21 @@ var trackCmd = &cobra.Command{
 	},
 }
 
-var untrackCmd = &cobra.Command{
-	Use:     "untrack",
-	Short:   "stops tracking a path to be included in the next commit",
+var discardCmd = &cobra.Command{
+	Use:     "discard",
+	Short:   "discards any changes staged for a path",
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) < 1 {
 			return errors.Errorf("path argument required")
 		}
-		p := args[0]
-		return repo.Untrack(ctx, p)
+		return repo.Discard(ctx, args[1:]...)
 	},
 }
 
 var clearCmd = &cobra.Command{
 	Use:     "clear",
-	Short:   "untracks all paths",
+	Short:   "clears the staging area",
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		return repo.Clear(ctx)

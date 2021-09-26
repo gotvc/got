@@ -36,10 +36,8 @@ func NewPorter(fsop *gotfs.Operator, pfs posixfs.FS, cache Cache) Porter {
 func (pr *Porter) ImportPath(ctx context.Context, ms, ds cadata.Store, p string) (*gotfs.Root, error) {
 	logrus.Infof("importing path %q", p)
 	stat, err := pr.posixfs.Stat(p)
-	if err != nil && !posixfs.IsErrNotExist(err) {
+	if err != nil {
 		return nil, err
-	} else if posixfs.IsErrNotExist(err) {
-		return pr.gotfs.NewEmpty(ctx, ms)
 	}
 	if !stat.Mode().IsDir() {
 		return pr.ImportFile(ctx, ms, ds, p)

@@ -21,6 +21,7 @@ import (
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotnet"
 	"github.com/gotvc/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/staging"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
@@ -76,7 +77,7 @@ type Repo struct {
 	privateKey p2p.PrivateKey
 
 	workingDir FS // workingDir is repoFS with reserved paths filtered.
-	tracker    *tracker
+	stage      *staging.Stage
 
 	specDir *branchSpecDir
 	space   Space
@@ -150,9 +151,9 @@ func Open(p string) (*Repo, error) {
 		workingDir: posixfs.NewFiltered(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
-		tracker: newTracker(db, []string{bucketTracker}),
-		dop:     gdat.NewOperator(),
-		fsop:    gotfs.NewOperator(),
+		stage: staging.New(staging.NewBoltStorage(db, bucketStaging)),
+		dop:   gdat.NewOperator(),
+		fsop:  gotfs.NewOperator(),
 	}
 	fsStore := stores.NewFSStore(r.getSubFS(storePath), MaxBlobSize)
 	r.storeManager = newStoreManager(fsStore, r.db, bucketStores)
@@ -272,4 +273,48 @@ func randomUint64() uint64 {
 		panic(err)
 	}
 	return binary.BigEndian.Uint64(buf[:])
+}
+
+func bucketFromTx(tx *bolt.Tx, path []string) (*bolt.Bucket, error) {
+	type bucketer interface {
+		Bucket([]byte) *bolt.Bucket
+		CreateBucketIfNotExists([]byte) (*bolt.Bucket, error)
+	}
+	getBucket := func(b bucketer, key string) (*bolt.Bucket, error) {
+		if tx.Writable() {
+			return b.CreateBucketIfNotExists([]byte(key))
+		} else {
+			return tx.Bucket([]byte(key)), nil
+		}
+	}
+	b, err := getBucket(tx, path[0])
+	if err != nil {
+		return nil, err
+	}
+	if b == nil {
+		return b, nil
+	}
+	path = path[1:]
+	for len(path) > 0 {
+		b, err = getBucket(b, path[0])
+		if err != nil {
+			return nil, err
+		}
+		if b == nil {
+			return b, nil
+		}
+		path = path[1:]
+	}
+	return b, nil
+}
+
+func existsInFS(x posixfs.FS, p string) (bool, error) {
+	_, err := x.Stat(p)
+	if posixfs.IsErrNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
 }

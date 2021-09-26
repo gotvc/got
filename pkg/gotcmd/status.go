@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/staging"
 	"github.com/spf13/cobra"
 )
 
@@ -25,9 +26,9 @@ var statusCmd = &cobra.Command{
 		}
 		fmt.Fprintf(w, "ACTIVE: %s\n", name)
 		fmt.Fprintf(w, "TRACKED PATHS:\n")
-		return repo.ForEachTracked(ctx, func(p string, isDelete bool) error {
+		return repo.ForEachStaging(ctx, func(p string, fsop staging.FileOp) error {
 			desc := "ADD"
-			if isDelete {
+			if fsop.Delete {
 				desc = "DEL"
 			}
 			fmt.Fprintf(w, "\t%s %s\n", desc, p)

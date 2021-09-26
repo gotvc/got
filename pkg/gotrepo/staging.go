@@ -4,8 +4,8 @@ import (
 	"context"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/branches"
-	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/porting"
 	"github.com/gotvc/got/pkg/staging"
@@ -13,8 +13,53 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+func (r *Repo) Track(ctx context.Context, paths ...string) error {
+	branch, err := r.GetBranch(ctx, "")
+	if err != nil {
+		return err
+	}
+	storeTriple := r.stagingTriple()
+	ms := storeTriple.FS
+	ds := storeTriple.Raw
+	porter := porting.NewPorter(r.getFSOp(branch), r.workingDir, nil)
+	stage := r.stage
+	for _, p := range paths {
+		root, err := porter.ImportPath(ctx, ms, ds, p)
+		if err != nil && !posixfs.IsErrNotExist(err) {
+			return err
+		}
+		if posixfs.IsErrNotExist(err) {
+			if err := stage.Delete(ctx, p); err != nil {
+				return err
+			}
+		} else {
+			if err := stage.Put(ctx, p, *root); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (r *Repo) Discard(ctx context.Context, paths ...string) error {
+	for _, p := range paths {
+		if err := r.stage.Discard(ctx, p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r Repo) Clear(ctx context.Context) error {
+	return r.stage.Reset()
+}
+
+func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, fo staging.FileOp) error) error {
+	return r.stage.ForEach(ctx, fn)
+}
+
 func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
-	if yes, err := r.tracker.IsEmpty(ctx); err != nil {
+	if yes, err := r.stage.IsEmpty(ctx); err != nil {
 		return err
 	} else if yes {
 		logrus.Warn("nothing to commit")
@@ -40,24 +85,18 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 		if x != nil {
 			root = &x.Root
 		}
-		logrus.Println("begin processing tracked paths")
-		nextRoot, err := r.applyTrackerChanges(ctx, fsop, src.FS, src.Raw, root)
+		logrus.Println("begin applying staged changes")
+		nextRoot, err := r.stage.Apply(ctx, fsop, src.FS, src.Raw, root)
 		if err != nil {
 			return nil, err
 		}
-		logrus.Println("done processing tracked paths")
-		if err != nil {
-			return nil, err
-		}
+		logrus.Println("done applying staged changes")
 		return vcop.NewSnapshot(ctx, src.VC, x, *nextRoot, snapInfo)
 	})
 	if err != nil {
 		return err
 	}
-	if err := r.getStage().Reset(); err != nil {
-		return err
-	}
-	return r.tracker.Clear(ctx)
+	return r.getStage().Reset()
 }
 
 func (r *Repo) stagingStore() cadata.Store {
@@ -74,31 +113,6 @@ func (r *Repo) stagingTriple() branches.StoreTriple {
 
 func (r *Repo) StagingStore() cadata.Store {
 	return r.stagingStore()
-}
-
-// applyTrackerChanges iterates through all the tracked paths and adds or deletes them from root
-// the new root, reflecting all of the changes indicated by the tracker, is returned.
-func (r *Repo) applyTrackerChanges(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, root *Root) (*Root, error) {
-	ads := stores.NewAsyncStore(ds, 32)
-	porter := porting.NewPorter(fsop, r.workingDir, nil)
-	stage := r.getStage()
-	if err := r.tracker.ForEach(ctx, func(target string) error {
-		root, err := porter.ImportPath(ctx, ms, ds, target)
-		if err != nil {
-			return err
-		}
-		return stage.Put(ctx, target, *root)
-	}); err != nil {
-		return nil, err
-	}
-	root, err := stage.Apply(ctx, fsop, ms, ds, root)
-	if err != nil {
-		return nil, err
-	}
-	if err := ads.Close(); err != nil {
-		return nil, err
-	}
-	return root, nil
 }
 
 func (r *Repo) getStage() *staging.Stage {

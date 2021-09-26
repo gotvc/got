@@ -73,6 +73,15 @@ func (s *Stage) Reset() error {
 	return s.storage.DeleteAll()
 }
 
+func (s *Stage) IsEmpty(ctx context.Context) (bool, error) {
+	var count int
+	err := s.storage.ForEach(func(_, _ []byte) error {
+		count++
+		return nil
+	})
+	return count == 0, err
+}
+
 func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, base *gotfs.Root) (*gotfs.Root, error) {
 	if base == nil {
 		var err error
