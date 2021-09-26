@@ -67,12 +67,18 @@ func NewOperator(opts ...Option) Operator {
 	for _, opt := range opts {
 		opt(&o)
 	}
+	// derive another seed for gotkv to use
+	// this is done out of an abundance of caution since a non-cryptographic hash is
+	// salted with this value in gotkv.
+	var gotKVSeed [32]byte
+	gdat.DeriveKey(gotKVSeed[:], o.seed, []byte("gotkv"))
 	o.gotkv = gotkv.NewOperator(
 		gotkv.WithDataOperator(o.dop),
 		gotkv.WithAverageSize(o.averageSizeMetadata),
 		gotkv.WithMaxSize(o.maxBlobSize),
-		gotkv.WithSeed(o.seed),
+		gotkv.WithSeed(gotKVSeed[:]),
 	)
+	// The polynomial will be derived from the seed using a cryptographic XOF
 	o.poly = chunking.DerivePolynomial(o.seed)
 	return o
 }
