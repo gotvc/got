@@ -38,7 +38,6 @@ const (
 const (
 	bucketCellData = "cells"
 	bucketStores   = "stores"
-	bucketTracker  = "tracker"
 	bucketStaging  = "staging"
 	bucketPorter   = "porter"
 )
@@ -306,15 +305,4 @@ func bucketFromTx(tx *bolt.Tx, path []string) (*bolt.Bucket, error) {
 		path = path[1:]
 	}
 	return b, nil
-}
-
-func existsInFS(x posixfs.FS, p string) (bool, error) {
-	_, err := x.Stat(p)
-	if posixfs.IsErrNotExist(err) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	return true, nil
 }
