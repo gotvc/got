@@ -1,6 +1,7 @@
 package staging
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"path"
@@ -9,6 +10,7 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotkv"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -35,9 +37,12 @@ func New(stor Storage) *Stage {
 	}
 }
 
-// Put replaces a file at p with root
+// Put replaces a path at p with root
 func (s *Stage) Put(ctx context.Context, p string, root gotfs.Root) error {
 	p = cleanPath(p)
+	if err := s.CheckConflict(ctx, p); err != nil {
+		return err
+	}
 	op := Operation{
 		Put: &root,
 	}
@@ -47,6 +52,9 @@ func (s *Stage) Put(ctx context.Context, p string, root gotfs.Root) error {
 // Delete removes a file at p with root
 func (s *Stage) Delete(ctx context.Context, p string) error {
 	p = cleanPath(p)
+	if err := s.CheckConflict(ctx, p); err != nil {
+		return err
+	}
 	fo := Operation{
 		Delete: true,
 	}
@@ -58,6 +66,22 @@ func (s *Stage) Discard(ctx context.Context, p string) error {
 	return s.storage.Delete([]byte(p))
 }
 
+func (s *Stage) Get(ctx context.Context, p string) (*Operation, error) {
+	p = cleanPath(p)
+	data, err := s.storage.Get([]byte(p))
+	if err != nil {
+		return nil, err
+	}
+	if len(data) < 1 {
+		return nil, nil
+	}
+	var op Operation
+	if err := json.Unmarshal(data, &op); err != nil {
+		return nil, err
+	}
+	return &op, nil
+}
+
 func (s *Stage) ForEach(ctx context.Context, fn func(p string, op Operation) error) error {
 	return s.storage.ForEach(func(k, v []byte) error {
 		p := string(k)
@@ -67,6 +91,35 @@ func (s *Stage) ForEach(ctx context.Context, fn func(p string, op Operation) err
 		}
 		return fn(p, fo)
 	})
+}
+
+func (s *Stage) CheckConflict(ctx context.Context, p string) error {
+	newError := func(p, conflictPath string) error {
+		return errors.Errorf("cannot add %q to stage. conflicts with entry for %q", p, conflictPath)
+	}
+	p = cleanPath(p)
+	// check for ancestors
+	parts := strings.Split(p, "/")
+	for i := len(parts) - 1; i > 0; i-- {
+		conflictPath := strings.Join(parts[:i], "/")
+		data, err := s.storage.Get([]byte(cleanPath(conflictPath)))
+		if err != nil {
+			return err
+		}
+		if len(data) > 0 {
+			return newError(p, conflictPath)
+		}
+	}
+	// check for descendents
+	if err := s.storage.ForEach(func(k, _ []byte) error {
+		if bytes.HasPrefix(k, []byte(p+"/")) {
+			return newError(p, string(k))
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Stage) Reset() error {
@@ -170,5 +223,10 @@ func jsonMarshal(x interface{}) []byte {
 }
 
 func cleanPath(p string) string {
-	return strings.Trim(p, "/")
+	p = path.Clean(p)
+	p = strings.Trim(p, "/")
+	if p == "." {
+		p = ""
+	}
+	return p
 }

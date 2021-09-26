@@ -31,6 +31,9 @@ func (r *Repo) Add(ctx context.Context, paths ...string) error {
 	stage := r.getStage()
 	for _, target := range paths {
 		if err := posixfs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ posixfs.DirEnt) error {
+			if err := stage.CheckConflict(ctx, p); err != nil {
+				return err
+			}
 			fileRoot, err := porter.ImportFile(ctx, ms, ds, p)
 			if err != nil {
 				return err
@@ -57,6 +60,9 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 	porter := porting.NewPorter(r.getFSOp(branch), r.workingDir, nil)
 	stage := r.stage
 	for _, p := range paths {
+		if err := stage.CheckConflict(ctx, p); err != nil {
+			return err
+		}
 		root, err := porter.ImportPath(ctx, ms, ds, p)
 		if err != nil && !posixfs.IsErrNotExist(err) {
 			return err

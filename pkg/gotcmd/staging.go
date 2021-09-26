@@ -8,6 +8,7 @@ import (
 func init() {
 	rootCmd.AddCommand(addCmd)
 	rootCmd.AddCommand(rmCmd)
+	rootCmd.AddCommand(putCmd)
 	rootCmd.AddCommand(discardCmd)
 	rootCmd.AddCommand(clearCmd)
 }
@@ -52,9 +53,10 @@ var putCmd = &cobra.Command{
 }
 
 var discardCmd = &cobra.Command{
-	Use:   "discard",
-	Short: "discards any changes staged for a path",
-	Args:  cobra.MinimumNArgs(1),
+	Use:     "discard",
+	Short:   "discards any changes staged for a path",
+	PreRunE: loadRepo,
+	Args:    cobra.MinimumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) < 1 {
 			return errors.Errorf("path argument required")

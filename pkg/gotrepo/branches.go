@@ -1,9 +1,11 @@
 package gotrepo
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/gotvc/got/pkg/branches"
+	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -38,9 +40,20 @@ func (r *Repo) ForEachBranch(ctx context.Context, fn func(string) error) error {
 
 // SetActiveBranch sets the active branch to name
 func (r *Repo) SetActiveBranch(ctx context.Context, name string) error {
-	_, err := r.GetSpace().Get(ctx, name)
+	branch, err := r.GetBranch(ctx, name)
 	if err != nil {
 		return err
+	}
+	current, err := r.GetBranch(ctx, "")
+	if err != nil {
+		return err
+	}
+	isEmpty, err := r.stage.IsEmpty(ctx)
+	if err != nil {
+		return err
+	}
+	if !(isEmpty || bytes.Equal(branch.Salt, current.Salt)) {
+		return errors.Errorf("staging must be empty to change to a branch with a different salt")
 	}
 	return setActiveBranch(r.db, name)
 }
