@@ -11,15 +11,16 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/pkg/errors"
 )
 
 const pemTypePrivateKey = "PRIVATE KEY"
 
-type PrivateKey = p2p.PrivateKey
+type PrivateKey = inet256.PrivateKey
 
-func (r *Repo) GetID() p2p.PeerID {
-	return p2p.NewPeerID(r.privateKey.Public())
+func (r *Repo) GetID() inet256.Addr {
+	return inet256.NewAddr(r.privateKey.Public())
 }
 
 func (r *Repo) GetPrivateKey() p2p.PrivateKey {

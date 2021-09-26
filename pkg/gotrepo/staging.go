@@ -26,6 +26,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 	if err != nil {
 		return err
 	}
+	snapInfo.Creator = r.GetID()
 	src := r.stagingTriple()
 	dst := branch.Volume.StoreTriple()
 	// writes go to src, but reads from src should fallback to dst

@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -25,9 +25,10 @@ type Snapshot struct {
 	Root   gotfs.Root `json:"root"`
 	Parent *gdat.Ref  `json:"parent"`
 
-	Message   string     `json:"message,omitempty"`
-	CreatedAt *time.Time `json:"created_at,omitempty"`
-	Creator   p2p.PeerID `json:"creator,omitempty"`
+	Message   string         `json:"message,omitempty"`
+	CreatedAt *time.Time     `json:"created_at,omitempty"`
+	Creator   inet256.Addr   `json:"creator,omitempty"`
+	Authors   []inet256.Addr `json:"authors,omitempty"`
 }
 
 func (a Snapshot) Equals(b Snapshot) bool {
@@ -46,6 +47,8 @@ func (a Snapshot) Equals(b Snapshot) bool {
 type SnapInfo struct {
 	Message   string
 	CreatedAt *time.Time
+	Authors   []inet256.Addr
+	Creator   inet256.Addr
 }
 
 func (o *Operator) NewSnapshot(ctx context.Context, s cadata.Store, parent *Snapshot, root Root, sinfo SnapInfo) (*Snapshot, error) {
@@ -66,6 +69,8 @@ func (o *Operator) NewSnapshot(ctx context.Context, s cadata.Store, parent *Snap
 
 		Message:   sinfo.Message,
 		CreatedAt: sinfo.CreatedAt,
+		Creator:   sinfo.Creator,
+		Authors:   sinfo.Authors,
 	}, nil
 }
 
