@@ -1,10 +1,12 @@
 package gotcmd
 
 import (
+	"bufio"
 	"fmt"
 
+	"github.com/fatih/color"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/gotvc/got/pkg/staging"
+	"github.com/gotvc/got/pkg/gotrepo"
 	"github.com/spf13/cobra"
 )
 
@@ -19,21 +21,29 @@ var statusCmd = &cobra.Command{
 	Use:     "status",
 	PreRunE: loadRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		w := cmd.OutOrStdout()
 		name, _, err := repo.GetActiveBranch(ctx)
 		if err != nil {
 			return err
 		}
-		fmt.Fprintf(w, "ACTIVE: %s\n", name)
-		fmt.Fprintf(w, "TRACKED PATHS:\n")
-		return repo.ForEachStaging(ctx, func(p string, fsop staging.Operation) error {
-			desc := "ADD"
-			if fsop.Delete {
-				desc = "DEL"
+		bufw := bufio.NewWriter(cmd.OutOrStdout())
+		fmt.Fprintf(bufw, "ACTIVE: %s\n", name)
+		fmt.Fprintf(bufw, "STAGING:\n")
+		if err := repo.ForEachStaging(ctx, func(p string, op gotrepo.Operation) error {
+			var desc = "UNKNOWN"
+			switch {
+			case op.Delete:
+				desc = color.RedString("DELETE")
+			case op.Create != nil:
+				desc = color.GreenString("CREATE")
+			case op.Modify != nil:
+				desc = color.YellowString("MODIFY")
 			}
-			fmt.Fprintf(w, "\t%s %s\n", desc, p)
+			fmt.Fprintf(bufw, "\t%7s %s\n", desc, p)
 			return nil
-		})
+		}); err != nil {
+			return err
+		}
+		return bufw.Flush()
 	},
 }
 

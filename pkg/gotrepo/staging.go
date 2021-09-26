@@ -120,8 +120,44 @@ func (r Repo) Clear(ctx context.Context) error {
 	return r.stage.Reset()
 }
 
-func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, fo staging.Operation) error) error {
-	return r.stage.ForEach(ctx, fn)
+type Operation struct {
+	Create   *Root
+	Modify   *Root
+	Delete   bool
+	MoveFrom *string
+}
+
+func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op Operation) error) error {
+	_, branch, err := r.GetActiveBranch(ctx)
+	if err != nil {
+		return err
+	}
+	snap, err := branches.GetHead(ctx, *branch)
+	if err != nil {
+		return err
+	}
+	if snap == nil {
+		return errors.Errorf("branch is empty")
+	}
+	fsop := r.getFSOp(branch)
+	return r.stage.ForEach(ctx, func(p string, sop staging.Operation) error {
+		var op Operation
+		switch {
+		case sop.Delete:
+			op.Delete = true
+		case sop.Put != nil:
+			md, err := fsop.GetMetadata(ctx, branch.Volume.FSStore, snap.Root, p)
+			if err != nil && !posixfs.IsErrNotExist(err) {
+				return err
+			}
+			if md == nil {
+				op.Create = sop.Put
+			} else {
+				op.Modify = sop.Put
+			}
+		}
+		return fn(p, op)
+	})
 }
 
 func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {

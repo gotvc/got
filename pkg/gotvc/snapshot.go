@@ -76,6 +76,10 @@ func (o *Operator) NewSnapshot(ctx context.Context, s cadata.Store, parent *Snap
 
 // NewZero creates a new snapshot with no parent
 func (op *Operator) NewZero(ctx context.Context, s cadata.Store, root Root, sinfo SnapInfo) (*Snapshot, error) {
+	if sinfo.CreatedAt != nil {
+		createdAt := sinfo.CreatedAt.UTC()
+		sinfo.CreatedAt = &createdAt
+	}
 	return op.NewSnapshot(ctx, s, nil, root, sinfo)
 }
 
