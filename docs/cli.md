@@ -29,17 +29,22 @@ Lists the children of path in the filesystem contained in the current branch.
 ### `got cat <path>`
 Writes the contents of the file at path, from the filesystem contained in the current branch, to stdout.
 
-## Tracking
-These commands manage what content will be committed.
+## Staging
+These commands control what content will be committed.
 
-### `got track <path>`
-Start tracking the path. The path will be considered during the next commit.
-If the path does not exist, then it will be deleted.
-A path will be interpretted as both a file and a directory so `foo` will try to add or delete a file `foo`, and all files under a directory `foo`.
+### `got add <path>`
+Add the files at or below path to the staging area.
 
-### `got untrack <path>`
-Stop tracking the path, if it is tracked.
-Does not error if the path is not tracked.
+### `got put <path>`
+Add the file or directory to the staging area.
+`put` on a file is that same as `add`.
+`put` on a directory will also delete any files not in the directory.
+
+### `got rm <path>`
+Mark the file for deletion in the staging area.
+ 
+### `got discard <path>`
+Discard any staged operations for this path.
 
 ### `got clear`
 Untracks everything.

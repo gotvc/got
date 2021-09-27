@@ -2,21 +2,166 @@ package gotrepo
 
 import (
 	"context"
-	"path"
-	"sort"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/porting"
+	"github.com/gotvc/got/pkg/staging"
 	"github.com/gotvc/got/pkg/stores"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
+// Add adds paths from the working directory to the staging area.
+// Directories are traversed, and only paths are added.
+// Adding a directory will update any existing paths and add new ones, it will not remove paths
+// from version control
+func (r *Repo) Add(ctx context.Context, paths ...string) error {
+	branch, err := r.GetBranch(ctx, "")
+	if err != nil {
+		return err
+	}
+	storeTriple := r.stagingTriple()
+	ms := storeTriple.FS
+	ds := storeTriple.Raw
+	porter := porting.NewPorter(r.getFSOp(branch), r.workingDir, nil)
+	stage := r.getStage()
+	for _, target := range paths {
+		if err := posixfs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ posixfs.DirEnt) error {
+			if err := stage.CheckConflict(ctx, p); err != nil {
+				return err
+			}
+			fileRoot, err := porter.ImportFile(ctx, ms, ds, p)
+			if err != nil {
+				return err
+			}
+			return stage.Put(ctx, p, *fileRoot)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Put replaces a path (file or directory) with whatever is in the working directory
+// Adding a file updates the file.
+// Adding a directory will delete paths not in the working directory, and add paths in the working directory.
+func (r *Repo) Put(ctx context.Context, paths ...string) error {
+	branch, err := r.GetBranch(ctx, "")
+	if err != nil {
+		return err
+	}
+	storeTriple := r.stagingTriple()
+	ms := storeTriple.FS
+	ds := storeTriple.Raw
+	porter := porting.NewPorter(r.getFSOp(branch), r.workingDir, nil)
+	stage := r.stage
+	for _, p := range paths {
+		if err := stage.CheckConflict(ctx, p); err != nil {
+			return err
+		}
+		root, err := porter.ImportPath(ctx, ms, ds, p)
+		if err != nil && !posixfs.IsErrNotExist(err) {
+			return err
+		}
+		if posixfs.IsErrNotExist(err) {
+			if err := stage.Delete(ctx, p); err != nil {
+				return err
+			}
+		} else {
+			if err := stage.Put(ctx, p, *root); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+// Rm deletes a path known to version control.
+func (r *Repo) Rm(ctx context.Context, paths ...string) error {
+	branch, err := r.GetBranch(ctx, "")
+	if err != nil {
+		return err
+	}
+	snap, err := branches.GetHead(ctx, *branch)
+	if err != nil {
+		return err
+	}
+	st := r.stagingTriple()
+	fsop := r.getFSOp(branch)
+	stage := r.getStage()
+	for _, target := range paths {
+		if snap == nil {
+			return errors.Errorf("path %q not found", target)
+		}
+		if err := fsop.ForEachFile(ctx, st.FS, snap.Root, target, func(p string, _ *gotfs.Metadata) error {
+			return stage.Delete(ctx, p)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Discard removes any staged changes for a path
+func (r *Repo) Discard(ctx context.Context, paths ...string) error {
+	for _, p := range paths {
+		if err := r.stage.Discard(ctx, p); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r Repo) Clear(ctx context.Context) error {
+	return r.stage.Reset()
+}
+
+type Operation struct {
+	Create   *Root
+	Modify   *Root
+	Delete   bool
+	MoveFrom *string
+}
+
+func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op Operation) error) error {
+	_, branch, err := r.GetActiveBranch(ctx)
+	if err != nil {
+		return err
+	}
+	snap, err := branches.GetHead(ctx, *branch)
+	if err != nil {
+		return err
+	}
+	if snap == nil {
+		return errors.Errorf("branch is empty")
+	}
+	fsop := r.getFSOp(branch)
+	return r.stage.ForEach(ctx, func(p string, sop staging.Operation) error {
+		var op Operation
+		switch {
+		case sop.Delete:
+			op.Delete = true
+		case sop.Put != nil:
+			md, err := fsop.GetMetadata(ctx, branch.Volume.FSStore, snap.Root, p)
+			if err != nil && !posixfs.IsErrNotExist(err) {
+				return err
+			}
+			if md == nil {
+				op.Create = sop.Put
+			} else {
+				op.Modify = sop.Put
+			}
+		}
+		return fn(p, op)
+	})
+}
+
 func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
-	if yes, err := r.tracker.IsEmpty(ctx); err != nil {
+	if yes, err := r.stage.IsEmpty(ctx); err != nil {
 		return err
 	} else if yes {
 		logrus.Warn("nothing to commit")
@@ -37,26 +182,22 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 	}
 	fsop := r.getFSOp(branch)
 	vcop := r.getVCOp(branch)
-	err = branches.Apply(ctx, *branch, src, func(x *Snap) (*Snap, error) {
+	if err := branches.Apply(ctx, *branch, src, func(x *Snap) (*Snap, error) {
 		var root *Root
 		if x != nil {
 			root = &x.Root
 		}
-		logrus.Println("begin processing tracked paths")
-		nextRoot, err := r.applyTrackerChanges(ctx, fsop, src.FS, src.Raw, root)
+		logrus.Println("begin applying staged changes")
+		nextRoot, err := r.stage.Apply(ctx, fsop, src.FS, src.Raw, root)
 		if err != nil {
 			return nil, err
 		}
-		logrus.Println("done processing tracked paths")
-		if err != nil {
-			return nil, err
-		}
+		logrus.Println("done applying staged changes")
 		return vcop.NewSnapshot(ctx, src.VC, x, *nextRoot, snapInfo)
-	})
-	if err != nil {
+	}); err != nil {
 		return err
 	}
-	return r.tracker.Clear(ctx)
+	return r.getStage().Reset()
 }
 
 func (r *Repo) stagingStore() cadata.Store {
@@ -75,130 +216,7 @@ func (r *Repo) StagingStore() cadata.Store {
 	return r.stagingStore()
 }
 
-// applyTrackerChanges iterates through all the tracked paths and adds or deletes them from root
-// the new root, reflecting all of the changes indicated by the tracker, is returned.
-func (r *Repo) applyTrackerChanges(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, root *Root) (*Root, error) {
-	ads := stores.NewAsyncStore(ds, 32)
-	porter := porting.NewPorter(fsop, r.workingDir, nil)
-	stage := newStage(fsop, ms, ads)
-	if err := r.tracker.ForEach(ctx, func(target string) error {
-		return stage.Add(ctx, porter, target)
-	}); err != nil {
-		return nil, err
-	}
-	root, err := stage.Apply(ctx, root)
-	if err != nil {
-		return nil, err
-	}
-	if err := ads.Close(); err != nil {
-		return nil, err
-	}
-	return root, nil
-}
-
-type stage struct {
-	gotfs  *gotfs.Operator
-	ms, ds Store
-
-	changes map[string]gotfs.Root
-}
-
-func newStage(fsop *gotfs.Operator, ms, ds Store) *stage {
-	return &stage{
-		gotfs:   fsop,
-		ms:      ms,
-		ds:      ds,
-		changes: make(map[string]gotfs.Root),
-	}
-}
-
-func (s *stage) Add(ctx context.Context, porter porting.Porter, p string) error {
-	pathRoot, err := porter.ImportPath(ctx, s.ms, s.ds, p)
-	if err != nil {
-		return err
-	}
-	s.changes[p] = *pathRoot
-	return nil
-}
-
-func (s *stage) Rm(ctx context.Context, p string) error {
-	emptyRoot, err := s.gotfs.NewEmpty(ctx, s.ms)
-	if err != nil {
-		return err
-	}
-	s.changes[p] = *emptyRoot
-	return nil
-}
-
-func (s *stage) Apply(ctx context.Context, base *gotfs.Root) (*gotfs.Root, error) {
-	if base == nil {
-		var err error
-		base, err = s.gotfs.NewEmpty(ctx, s.ms)
-		if err != nil {
-			return nil, err
-		}
-	}
-	var segs []gotfs.Segment
-	for _, p := range sortedMapKeys(s.changes) {
-		pathRoot := s.changes[p]
-		if !gotfs.IsEmpty(pathRoot) {
-			var err error
-			base, err = s.gotfs.MkdirAll(ctx, s.ms, *base, path.Dir(p))
-			if err != nil {
-				return nil, err
-			}
-		}
-		segRoot, err := s.gotfs.AddPrefix(ctx, s.ms, p, pathRoot)
-		if err != nil {
-			return nil, err
-		}
-		segs = append(segs, gotfs.Segment{
-			Root: *segRoot,
-			Span: gotfs.SpanForPath(p),
-		})
-	}
-	segs = prepareChanges(*base, segs)
-	logrus.Println("splicing...")
-	root, err := s.gotfs.Splice(ctx, s.ms, s.ds, segs)
-	if err != nil {
-		return nil, err
-	}
-	logrus.Println("done splicing.")
-	return root, nil
-}
-
-// prepareChanges ensures that the segments represent the whole key space, using base to fill in any gaps.
-func prepareChanges(base gotfs.Root, changes []gotfs.Segment) []gotfs.Segment {
-	var segs []gotfs.Segment
-	for i := range changes {
-		// create the span to reference the root, should be inbetween the two entries from segs
-		var baseSpan gotkv.Span
-		if i > 0 {
-			baseSpan.Start = segs[len(segs)-1].Span.End
-		}
-		baseSpan.End = changes[i].Span.Start
-		baseSeg := gotfs.Segment{Root: base, Span: baseSpan}
-
-		segs = append(segs, baseSeg)
-		segs = append(segs, changes[i])
-	}
-	if len(segs) > 0 {
-		segs = append(segs, gotfs.Segment{
-			Root: base,
-			Span: gotkv.Span{
-				Start: segs[len(segs)-1].Span.End,
-				End:   nil,
-			},
-		})
-	}
-	return segs
-}
-
-func sortedMapKeys(x map[string]gotfs.Root) []string {
-	var keys []string
-	for k := range x {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
+func (r *Repo) getStage() *staging.Stage {
+	storage := staging.NewBoltStorage(r.db, bucketStaging)
+	return staging.New(storage)
 }

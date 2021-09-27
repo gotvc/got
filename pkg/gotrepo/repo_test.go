@@ -44,7 +44,7 @@ func TestCommit(t *testing.T) {
 	fileContents := "file contents\n"
 	err := posixfs.PutFile(ctx, fs, p, 00644, strings.NewReader(fileContents))
 	require.NoError(t, err)
-	err = repo.Track(ctx, p)
+	err = repo.Put(ctx, p)
 	require.NoError(t, err)
 
 	err = repo.Commit(ctx, gotvc.SnapInfo{})
@@ -56,8 +56,8 @@ func TestCommit(t *testing.T) {
 	require.NoError(t, posixfs.DeleteFile(ctx, fs, p))
 	require.NoError(t, posixfs.PutFile(ctx, fs, p2, 0o644, strings.NewReader(fileContents)))
 	// track both
-	require.NoError(t, repo.Track(ctx, p))
-	require.NoError(t, repo.Track(ctx, p2))
+	require.NoError(t, repo.Put(ctx, p))
+	require.NoError(t, repo.Put(ctx, p2))
 	err = repo.Commit(ctx, gotvc.SnapInfo{})
 	require.NoError(t, err)
 
@@ -81,7 +81,7 @@ func TestCommitLargeFile(t *testing.T) {
 		return io.LimitReader(rng, size)
 	}
 	require.NoError(t, posixfs.PutFile(ctx, fs, p, 0o644, newReader()))
-	require.NoError(t, repo.Track(ctx, p))
+	require.NoError(t, repo.Put(ctx, p))
 	require.NoError(t, repo.Commit(ctx, gotvc.SnapInfo{}))
 	checkExists(t, repo, p)
 	checkFileContent(t, repo, p, newReader())
@@ -107,7 +107,7 @@ func TestCommitDir(t *testing.T) {
 		content := getContent(i)
 		require.NoError(t, posixfs.PutFile(ctx, fs, p, 0o644, strings.NewReader(content)))
 	}
-	require.NoError(t, repo.Track(ctx, dirpath))
+	require.NoError(t, repo.Put(ctx, dirpath))
 	require.NoError(t, repo.Commit(ctx, gotvc.SnapInfo{}))
 	for i := 0; i < N; i++ {
 		p := getPath(i)
@@ -127,7 +127,7 @@ func TestFork(t *testing.T) {
 	const N = 10
 	for i := 0; i < N; i++ {
 		posixfs.PutFile(ctx, fs, filePath, 0o644, strings.NewReader("test-"+strconv.Itoa(i)))
-		require.NoError(t, repo.Track(ctx, filePath))
+		require.NoError(t, repo.Put(ctx, filePath))
 		require.NoError(t, repo.Commit(ctx, gotvc.SnapInfo{}))
 	}
 

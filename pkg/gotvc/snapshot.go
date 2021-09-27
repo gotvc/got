@@ -62,6 +62,10 @@ func (o *Operator) NewSnapshot(ctx context.Context, s cadata.Store, parent *Snap
 		}
 		n = parent.N + 1
 	}
+	if sinfo.CreatedAt != nil {
+		createdAt := sinfo.CreatedAt.UTC()
+		sinfo.CreatedAt = &createdAt
+	}
 	return &Snapshot{
 		N:      n,
 		Root:   root,
