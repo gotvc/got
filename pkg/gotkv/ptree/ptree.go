@@ -269,11 +269,11 @@ func (it *Iterator) getReader(ctx context.Context, i int) (*StreamReader, error)
 		}
 		it.srs[i+1] = nil
 		it.srs[i] = NewStreamReader(it.s, it.op, idxs)
-		// TODO: seeking does not work on the higher levels
 		if i == 0 {
 			return it.srs[i].Seek(ctx, it.pos)
+		} else {
+			return it.srs[i].SeekIndexes(ctx, it.pos)
 		}
-		return nil
 	}); err != nil {
 		return nil, err
 	}
@@ -302,11 +302,11 @@ func (it *Iterator) initRoot(ctx context.Context) error {
 		return nil
 	}
 	it.srs[i] = NewStreamReader(it.s, it.op, []Index{rootToIndex(it.root)})
-	// TODO: seeking does not work on the higher levels
 	if i == 0 {
 		return it.srs[i].Seek(ctx, it.pos)
+	} else {
+		return it.srs[i].SeekIndexes(ctx, it.pos)
 	}
-	return nil
 }
 
 func readIndexes(ctx context.Context, it kvstreams.Iterator) ([]Index, error) {
@@ -323,48 +323,6 @@ func readIndexes(ctx context.Context, it kvstreams.Iterator) ([]Index, error) {
 	}
 	return idxs, nil
 }
-
-// func peekEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Index, gteq []byte, ent *Entry) error {
-// 	sr := NewStreamReader(s, op, []Index{idx})
-// 	if err := sr.Seek(ctx, gteq); err != nil {
-// 		return err
-// 	}
-// 	return sr.Next(ctx, ent)
-// }
-
-// func peekTree(ctx context.Context, s cadata.Store, op *gdat.Operator, root Root, gteq []byte, ent *Entry) (int, error) {
-// 	if root.Depth == 0 {
-// 		idx := rootToIndex(root)
-// 		if err := peekEntries(ctx, s, op, idx, gteq, ent); err != nil {
-// 			return 0, err
-// 		}
-// 		var syncLevel int
-// 		if bytes.Equal(ent.Key, idx.First) {
-// 			syncLevel = 1
-// 		}
-// 		return syncLevel, nil
-// 	} else {
-// 		idxs, err := ListChildren(ctx, s, op, root)
-// 		if err != nil {
-// 			return 0, err
-// 		}
-// 		for i := 0; i < len(idxs); i++ {
-// 			// if the first element in the next is also lteq then skip.
-// 			if i+1 < len(idxs) && bytes.Compare(idxs[i+1].First, gteq) <= 0 {
-// 				continue
-// 			}
-// 			syncLevel, err := peekTree(ctx, s, op, indexToRoot(idxs[i], root.Depth-1), gteq, ent)
-// 			if err == kvstreams.EOS {
-// 				continue
-// 			}
-// 			if i == 0 {
-// 				syncLevel++
-// 			}
-// 			return syncLevel, err
-// 		}
-// 		return 0, kvstreams.EOS
-// 	}
-// }
 
 // CopyAll copies all the entries from it to b.
 func CopyAll(ctx context.Context, b *Builder, it *Iterator) error {

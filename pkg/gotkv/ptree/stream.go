@@ -37,6 +37,26 @@ func newBlobReader(firstKey []byte, data []byte) blobReader {
 	}
 }
 
+func (r *blobReader) SeekIndexes(ctx context.Context, gteq []byte) error {
+	var ent Entry
+	for {
+		// if the prevKey is already <= gteq, then don't bother with this
+		if bytes.Compare(r.prevKey, gteq) <= 0 {
+			return nil
+		}
+		// check to see if the next key is also <= gteq
+		if err := r.Peek(ctx, &ent); err != nil {
+			return err
+		}
+		if bytes.Compare(ent.Key, gteq) >= 0 {
+			return nil
+		}
+		if err := r.Next(ctx, &ent); err != nil {
+			return err
+		}
+	}
+}
+
 func (r *blobReader) Seek(ctx context.Context, gteq []byte) error {
 	var ent Entry
 	for {
@@ -121,7 +141,27 @@ func (r *StreamReader) Peek(ctx context.Context, ent *Entry) error {
 	})
 }
 
+func (r *StreamReader) SeekIndexes(ctx context.Context, gteq []byte) error {
+	if err := r.seekCommon(ctx, gteq); err != nil {
+		return err
+	}
+	if r.br == nil {
+		return nil
+	}
+	return r.br.SeekIndexes(ctx, gteq)
+}
+
 func (r *StreamReader) Seek(ctx context.Context, gteq []byte) error {
+	if err := r.seekCommon(ctx, gteq); err != nil {
+		return err
+	}
+	if r.br == nil {
+		return nil
+	}
+	return r.br.Seek(ctx, gteq)
+}
+
+func (r *StreamReader) seekCommon(ctx context.Context, gteq []byte) error {
 	if len(r.idxs) < 1 {
 		return nil
 	}
@@ -141,7 +181,7 @@ func (r *StreamReader) Seek(ctx context.Context, gteq []byte) error {
 		}
 		r.nextIndex = targetIndex + 1
 	}
-	return r.br.Seek(ctx, gteq)
+	return nil
 }
 
 func (r *StreamReader) withBlobReader(ctx context.Context, fn func(*blobReader) error) error {
