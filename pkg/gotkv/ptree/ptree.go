@@ -237,6 +237,10 @@ func (it *Iterator) Seek(ctx context.Context, gteq []byte) error {
 	return it.initRoot(ctx)
 }
 
+func (it *Iterator) syncedAt(i int) bool {
+	return it.srs[i] == nil
+}
+
 func (it *Iterator) withReader(ctx context.Context, i int, fn func(sr *StreamReader) error) error {
 	for {
 		sr, err := it.getReader(ctx, i)

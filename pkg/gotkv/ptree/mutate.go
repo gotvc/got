@@ -7,6 +7,14 @@ import (
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
 
+// Mutation represents a mutation to the stream
+// if there is nothing in the Span, Fn will be called once with nil
+// otherwise Fn will be called once for every item in the Span.
+type Mutation struct {
+	Span Span
+	Fn   func(*Entry) []Entry
+}
+
 // Mutate applies the mutation mut, to the tree root.
 func Mutate(ctx context.Context, b *Builder, root Root, mut Mutation) (*Root, error) {
 	fnCalled := false
@@ -167,14 +175,6 @@ func copyEntries(ctx context.Context, b *Builder, idx Index) error {
 		}
 	}
 	return nil
-}
-
-// Mutation represents a mutation to the tree
-// if there is nothing in the Span, Fn will be called once with nil
-// otherwise Fn will be called once for every item in the Span.
-type Mutation struct {
-	Span Span
-	Fn   func(*Entry) []Entry
 }
 
 func indexToEntry(idx Index) Entry {
