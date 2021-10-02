@@ -106,11 +106,3 @@ func KeyAfter(x []byte) []byte {
 	y := append([]byte{}, x...)
 	return append(y, 0x00)
 }
-
-// Mutation represents a mutation to the stream
-// if there is nothing in the Span, Fn will be called once with nil
-// otherwise Fn will be called once for every item in the Span.
-type Mutation struct {
-	Span Span
-	Fn   func(*Entry) []Entry
-}
