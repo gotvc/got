@@ -12,8 +12,10 @@ github.com/anmitsu/go-shlex v0.0.0-20161002113705-648efa622239/go.mod h1:2FmKhYU
 github.com/armon/consul-api v0.0.0-20180202201655-eb2c6b5be1b6/go.mod h1:grANhF5doyWs3UAsr3K4I6qtAmlQcZDesFNEHPZAzj8=
 github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24TaqPxmxbtue+5NUziq4I4S80YR8gNf3Q=
 github.com/bradfitz/go-smtpd v0.0.0-20170404230938-deb6d6237625/go.mod h1:HYsPBTaaSFSlLx/70C2HPIMNZpVV8+vt/A+FMnYP11g=
-github.com/brendoncarroll/go-p2p v0.0.0-20210919135625-d98b36c3d8ad h1:jlxLTSYclUpDocUu8Sl+CJ3Hcc3PxlfHnvL3+K8tRr8=
-github.com/brendoncarroll/go-p2p v0.0.0-20210919135625-d98b36c3d8ad/go.mod h1:IYW1gZ9twSWJrkAil9jLMtHnVlAJ0wVc9Y5WpNlv9Oc=
+github.com/brendoncarroll/go-p2p v0.0.0-20211002194329-11957ecde702 h1:STGtW7Gg7LzgZ1lZWlL8UqrtS3sLC/OStbOBbU6+nkM=
+github.com/brendoncarroll/go-p2p v0.0.0-20211002194329-11957ecde702/go.mod h1:IYW1gZ9twSWJrkAil9jLMtHnVlAJ0wVc9Y5WpNlv9Oc=
+github.com/brendoncarroll/go-p2p v0.0.0-20211002230533-c130f8910d9a h1:1g41xZYPy7/i7BqbPHKQ2HS6mas4BhqR+jde/5JT3mo=
+github.com/brendoncarroll/go-p2p v0.0.0-20211002230533-c130f8910d9a/go.mod h1:IYW1gZ9twSWJrkAil9jLMtHnVlAJ0wVc9Y5WpNlv9Oc=
 github.com/brendoncarroll/go-state v0.0.0-20210627233638-99c825eb7040/go.mod h1:EQKdXJyc93dh3yN1wRYdKjAZk+MutF5DFwoW+Vqe5U0=
 github.com/brendoncarroll/go-state v0.0.0-20210925160250-39541eea7883 h1:LhffiqQ3xfTZCPgDkZ2oXg+PGvFBF/zGFtUTRnw+d4M=
 github.com/brendoncarroll/go-state v0.0.0-20210925160250-39541eea7883/go.mod h1:M86VCqKTis4CJcSvWCoB1OZHuRu3d1c05iS7+6HbBQI=
@@ -95,8 +97,8 @@ github.com/hashicorp/hcl v1.0.0/go.mod h1:E5yfLk+7swimpb2L/Alb/PJmXilQ/rhwaUYs4T
 github.com/hpcloud/tail v1.0.0/go.mod h1:ab1qPbhIpdTxEkNHXyeSf5vhxWSCs/tWer42PpOxQnU=
 github.com/inconshreveable/mousetrap v1.0.0 h1:Z8tu5sraLXCXIcARxBp/8cbvlwVa7Z1NHg9XEKhtSvM=
 github.com/inconshreveable/mousetrap v1.0.0/go.mod h1:PxqpIevigyE2G7u3NXJIT2ANytuPF1OarO4DADm73n8=
-github.com/inet256/inet256 v0.0.0-20210919142222-0b686ff654de h1:5TG6fBuiZGEjUDrh8khk5Gi4kAxka+pS/VezEiNV2z4=
-github.com/inet256/inet256 v0.0.0-20210919142222-0b686ff654de/go.mod h1:1fM3QAOz/8r3G3vC9ICOS8IZJmJrKzbTSJogTHi4zcs=
+github.com/inet256/inet256 v0.0.0-20211002220016-dec03c1b956e h1:QI9zLqUjC5w2kk+LaBAKiL1jaEG5l6eaVF9BM5kvDq4=
+github.com/inet256/inet256 v0.0.0-20211002220016-dec03c1b956e/go.mod h1:eFWc2LgulhcxzVBxjTZN/jqVx5JjR1IV+whttlsY1tE=
 github.com/jellevandenhooff/dkim v0.0.0-20150330215556-f50fe3d243e1/go.mod h1:E0B/fFc00Y+Rasa88328GlI/XbtyysCtTHZS8h7IrBU=
 github.com/jonboulle/clockwork v0.1.1-0.20190114141812-62fb9bc030d1 h1:qBCV/RLV02TSfQa7tFmxTihnG+u+7JXByOkhlkR5rmQ=
 github.com/jonboulle/clockwork v0.1.1-0.20190114141812-62fb9bc030d1/go.mod h1:Ii8DK3G1RaLaWxj9trq07+26W01tbo22gdxWY5EU2bo=
