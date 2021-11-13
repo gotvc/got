@@ -3,13 +3,13 @@ module github.com/gotvc/got
 go 1.15
 
 require (
-	github.com/brendoncarroll/go-p2p v0.0.0-20211002230533-c130f8910d9a
+	github.com/brendoncarroll/go-p2p v0.0.0-20211024183131-c0c41d099b71
 	github.com/brendoncarroll/go-state v0.0.0-20210925160250-39541eea7883
 	github.com/chmduquesne/rollinghash v0.0.0-20180912150627-a60f8e7142b5
 	github.com/fatih/color v1.13.0
 	github.com/golang/protobuf v1.5.2
 	github.com/hashicorp/golang-lru v0.5.1
-	github.com/inet256/inet256 v0.0.0-20211002220016-dec03c1b956e
+	github.com/inet256/inet256 v0.0.3-0.20211113215210-af74a7e08d26
 	github.com/minio/highwayhash v1.0.2
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.7.0

@@ -86,12 +86,12 @@ func newTestPair(t testing.TB) (s1, s2 *side) {
 }
 
 func newTestSide(t testing.TB, inetSrv inet256.Service, privKey p2p.PrivateKey) *side {
-	node, err := inetSrv.CreateNode(context.Background(), privKey)
+	node, err := inetSrv.Open(context.Background(), privKey)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, node.Close())
 	})
-	swarm := mbapp.New(inet256client.NewSwarm(node, privKey.Public()), MaxMessageSize)
+	swarm := mbapp.New(inet256client.NewSwarm(node), MaxMessageSize)
 	newStore := func() cadata.Store { return cadata.NewMem(cadata.DefaultHash, 1<<20) }
 	space := branches.NewMem(newStore, cells.NewMem)
 	srv := New(Params{

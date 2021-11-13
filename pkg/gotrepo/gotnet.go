@@ -32,12 +32,12 @@ func (r *Repo) getGotNet() (*gotnet.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	node, err := client.CreateNode(ctx, r.privateKey)
+	node, err := client.Open(ctx, r.privateKey)
 	if err != nil {
 		return nil, err
 	}
 	logrus.Println("setup INET256 node", node.LocalAddr())
-	swarm := inet256client.NewSwarm(node, r.privateKey.Public())
+	swarm := inet256client.NewSwarm(node)
 	mux := p2pmux.NewStringSecureAskMux(swarm)
 	srv := gotnet.New(gotnet.Params{
 		Logger: logrus.StandardLogger(),
