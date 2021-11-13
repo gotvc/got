@@ -188,6 +188,7 @@ type Iterator struct {
 	op   *gdat.Operator
 	root Root
 	span Span
+	srs  []*StreamReader
 	pos  []byte
 }
 
@@ -197,87 +198,130 @@ func NewIterator(s cadata.Store, op *gdat.Operator, root Root, span Span) *Itera
 		op:   op,
 		root: root,
 		span: span.Clone(),
+		srs:  make([]*StreamReader, root.Depth+1),
 	}
-	it.pos = it.span.Start
+	it.setPos(span.Start)
 	return it
 }
 
 func (it *Iterator) Next(ctx context.Context, ent *Entry) error {
-	if err := it.Peek(ctx, ent); err != nil {
+	if err := it.initRoot(ctx); err != nil {
+		return err
+	}
+	if err := it.withReader(ctx, 0, func(sr *StreamReader) error {
+		return sr.Next(ctx, ent)
+	}); err != nil {
 		return err
 	}
 	it.setPosAfter(ent.Key)
-	return nil
+	return it.checkAfterSpan(ent)
 }
 
 func (it *Iterator) Peek(ctx context.Context, ent *Entry) error {
-	if _, err := it.peek(ctx, ent); err != nil {
+	if err := it.initRoot(ctx); err != nil {
 		return err
 	}
+	if err := it.withReader(ctx, 0, func(sr *StreamReader) error {
+		return sr.Peek(ctx, ent)
+	}); err != nil {
+		return err
+	}
+	return it.checkAfterSpan(ent)
+}
+
+func (it *Iterator) Seek(ctx context.Context, gteq []byte) error {
+	it.setPos(gteq)
+	for i := range it.srs {
+		it.srs[i] = nil
+	}
+	return it.initRoot(ctx)
+}
+
+func (it *Iterator) withReader(ctx context.Context, i int, fn func(sr *StreamReader) error) error {
+	for {
+		sr, err := it.getReader(ctx, i)
+		if err != nil {
+			return err
+		}
+		if err := fn(sr); err != nil {
+			if err == kvstreams.EOS {
+				it.srs[i] = nil
+				continue
+			}
+			return err
+		} else {
+			return nil
+		}
+	}
+}
+
+func (it *Iterator) getReader(ctx context.Context, i int) (*StreamReader, error) {
+	if i >= len(it.srs) {
+		return nil, kvstreams.EOS
+	}
+	if it.srs[i] != nil {
+		return it.srs[i], nil
+	}
+	if err := it.withReader(ctx, i+1, func(srAbove *StreamReader) error {
+		idxs, err := readIndexes(ctx, srAbove)
+		if err != nil {
+			return err
+		}
+		it.srs[i+1] = nil
+		it.srs[i] = NewStreamReader(it.s, it.op, idxs)
+		if i == 0 {
+			return it.srs[i].Seek(ctx, it.pos)
+		} else {
+			return it.srs[i].SeekIndexes(ctx, it.pos)
+		}
+	}); err != nil {
+		return nil, err
+	}
+	return it.srs[i], nil
+}
+
+func (it *Iterator) checkAfterSpan(ent *Entry) error {
 	if it.span.LessThan(ent.Key) {
 		return kvstreams.EOS
 	}
 	return nil
 }
 
-func (it *Iterator) peek(ctx context.Context, ent *Entry) (int, error) {
-	return peekTree(ctx, it.s, it.op, it.root, it.pos, ent)
+func (it *Iterator) setPos(x []byte) {
+	it.pos = append(it.pos[:0], x...)
 }
 
-func (it *Iterator) Seek(ctx context.Context, k []byte) error {
-	it.setPos(k)
-	return nil
-}
-
-func (it *Iterator) setPos(k []byte) {
-	it.pos = append(it.pos[:0], k...)
-}
-
-func (it *Iterator) setPosAfter(k []byte) {
-	it.setPos(k)
+func (it *Iterator) setPosAfter(x []byte) {
+	it.setPos(x)
 	it.pos = append(it.pos, 0x00)
 }
 
-func peekEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Index, gteq []byte, ent *Entry) error {
-	sr := NewStreamReader(s, op, []Index{idx})
-	if err := sr.Seek(ctx, gteq); err != nil {
-		return err
+func (it *Iterator) initRoot(ctx context.Context) error {
+	i := len(it.srs) - 1
+	if it.srs[i] != nil {
+		return nil
 	}
-	return sr.Next(ctx, ent)
+	it.srs[i] = NewStreamReader(it.s, it.op, []Index{rootToIndex(it.root)})
+	if i == 0 {
+		return it.srs[i].Seek(ctx, it.pos)
+	} else {
+		return it.srs[i].SeekIndexes(ctx, it.pos)
+	}
 }
 
-func peekTree(ctx context.Context, s cadata.Store, op *gdat.Operator, root Root, gteq []byte, ent *Entry) (int, error) {
-	if root.Depth == 0 {
-		idx := rootToIndex(root)
-		if err := peekEntries(ctx, s, op, idx, gteq, ent); err != nil {
-			return 0, err
-		}
-		var syncLevel int
-		if bytes.Equal(ent.Key, idx.First) {
-			syncLevel = 1
-		}
-		return syncLevel, nil
-	} else {
-		idxs, err := ListChildren(ctx, s, op, root)
+func readIndexes(ctx context.Context, it kvstreams.Iterator) ([]Index, error) {
+	var idxs []Index
+	if err := kvstreams.ForEach(ctx, it, func(ent Entry) error {
+		idx, err := entryToIndex(ent)
 		if err != nil {
-			return 0, err
+			return err
 		}
-		for i := 0; i < len(idxs); i++ {
-			// if the first element in the next is also lteq then skip.
-			if i+1 < len(idxs) && bytes.Compare(idxs[i+1].First, gteq) <= 0 {
-				continue
-			}
-			syncLevel, err := peekTree(ctx, s, op, indexToRoot(idxs[i], root.Depth-1), gteq, ent)
-			if err == kvstreams.EOS {
-				continue
-			}
-			if i == 0 {
-				syncLevel++
-			}
-			return syncLevel, err
-		}
-		return 0, kvstreams.EOS
+		idxs = append(idxs, idx)
+		return nil
+	}); err != nil {
+		return nil, err
 	}
+	return idxs, nil
 }
 
 // CopyAll copies all the entries from it to b.
