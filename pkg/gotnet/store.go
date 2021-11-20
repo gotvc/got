@@ -484,6 +484,9 @@ func (s *store) Get(ctx context.Context, id cadata.ID, buf []byte) (int, error) 
 }
 
 func (s *store) Post(ctx context.Context, data []byte) (cadata.ID, error) {
+	if len(data) > s.MaxSize() {
+		return cadata.ID{}, cadata.ErrTooLarge
+	}
 	id, x := s.blobPullSrv.store.Hold(data)
 	defer s.blobPullSrv.store.Release(x)
 	return id, s.blobMainSrv.PushTo(ctx, s.sid, []cadata.ID{id})

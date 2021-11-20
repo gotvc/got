@@ -1,13 +1,15 @@
 package gotvc
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
-	"time"
+	"sort"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/tai64"
 	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -21,23 +23,30 @@ type (
 )
 
 type Snapshot struct {
-	N      uint64     `json:"n"`
-	Root   gotfs.Root `json:"root"`
-	Parent *gdat.Ref  `json:"parent"`
+	N       uint64     `json:"n"`
+	Root    gotfs.Root `json:"root"`
+	Parents []gdat.Ref `json:"parents"`
 
-	Message   string         `json:"message,omitempty"`
-	CreatedAt *time.Time     `json:"created_at,omitempty"`
-	Creator   inet256.Addr   `json:"creator,omitempty"`
-	Authors   []inet256.Addr `json:"authors,omitempty"`
+	CreatedAt  tai64.TAI64    `json:"created_at"`
+	Creator    inet256.Addr   `json:"creator,omitempty"`
+	AuthoredAt tai64.TAI64    `json:"authored_at"`
+	Authors    []inet256.Addr `json:"authors,omitempty"`
+
+	Message string `json:"message"`
 }
 
 func (a Snapshot) Equals(b Snapshot) bool {
 	var parentsEqual bool
-	switch {
-	case a.Parent == nil && b.Parent == nil:
+	if len(a.Parents) != len(b.Parents) {
+		parentsEqual = false
+	} else {
 		parentsEqual = true
-	case a.Parent != nil && b.Parent != nil:
-		parentsEqual = gdat.Equal(*a.Parent, *b.Parent)
+		for i := range a.Parents {
+			parentsEqual = gdat.Equal(a.Parents[i], b.Parents[i])
+			if !parentsEqual {
+				break
+			}
+		}
 	}
 	return a.N == b.N &&
 		gotfs.Equal(a.Root, b.Root) &&
@@ -45,36 +54,42 @@ func (a Snapshot) Equals(b Snapshot) bool {
 }
 
 type SnapInfo struct {
-	Message   string
-	CreatedAt *time.Time
-	Authors   []inet256.Addr
-	Creator   inet256.Addr
+	CreatedAt  tai64.TAI64
+	Creator    inet256.Addr
+	AuthoredAt tai64.TAI64
+	Authors    []inet256.Addr
+
+	Message string
 }
 
-func (o *Operator) NewSnapshot(ctx context.Context, s cadata.Store, parent *Snapshot, root Root, sinfo SnapInfo) (*Snapshot, error) {
-	var parentRef *Ref
+func (o *Operator) NewSnapshot(ctx context.Context, s cadata.Store, parents []Snapshot, root Root, sinfo SnapInfo) (*Snapshot, error) {
 	var n uint64
-	if parent != nil {
-		var err error
-		parentRef, err = o.PostSnapshot(ctx, s, *parent)
+	parentRefs := make([]Ref, len(parents))
+	for i, parent := range parents {
+		parentRef, err := o.PostSnapshot(ctx, s, parent)
 		if err != nil {
 			return nil, err
 		}
-		n = parent.N + 1
+		if n < parent.N+1 {
+			n = parent.N + 1
+		}
+		parentRefs[i] = *parentRef
 	}
-	if sinfo.CreatedAt != nil {
-		createdAt := sinfo.CreatedAt.UTC()
-		sinfo.CreatedAt = &createdAt
-	}
+	sort.Slice(parentRefs, func(i, j int) bool {
+		a, b := parentRefs[i].CID, parentRefs[j].CID
+		return a.Cmp(b) < 0
+	})
 	return &Snapshot{
-		N:      n,
-		Root:   root,
-		Parent: parentRef,
+		N:       n,
+		Root:    root,
+		Parents: parentRefs,
 
-		Message:   sinfo.Message,
-		CreatedAt: sinfo.CreatedAt,
-		Creator:   sinfo.Creator,
-		Authors:   sinfo.Authors,
+		CreatedAt:  sinfo.CreatedAt,
+		Creator:    sinfo.Creator,
+		AuthoredAt: sinfo.AuthoredAt,
+		Authors:    sinfo.Authors,
+
+		Message: sinfo.Message,
 	}, nil
 }
 
@@ -110,18 +125,21 @@ func (op *Operator) Squash(ctx context.Context, s Store, x Snapshot, n int) (*Sn
 	if n < 1 {
 		return nil, errors.Errorf("cannot squash single commit")
 	}
-	if x.Parent == nil {
+	if len(x.Parents) < 1 {
 		return nil, errors.Errorf("cannot squash no parent")
 	}
-	parent, err := op.GetSnapshot(ctx, s, *x.Parent)
+	if len(x.Parents) > 1 {
+		return nil, errors.Errorf("cannot rebase > 1 parents")
+	}
+	parent, err := op.GetSnapshot(ctx, s, x.Parents[0])
 	if err != nil {
 		return nil, err
 	}
 	if n == 1 {
 		return &Snapshot{
-			N:      parent.N,
-			Root:   x.Root,
-			Parent: parent.Parent,
+			N:       parent.N,
+			Root:    x.Root,
+			Parents: parent.Parents,
 		}, nil
 	}
 	y, err := op.Squash(ctx, s, *parent, n-1)
@@ -161,16 +179,26 @@ func (op *Operator) RefFromSnapshot(snap Snapshot, s cadata.Store) Ref {
 
 // Check ensures that snapshot is valid.
 func (o *Operator) Check(ctx context.Context, s cadata.Store, snap Snapshot, checkRoot func(gotfs.Root) error) error {
-	logrus.Infof("checking commit #%d", snap.N)
+	logrus.Infof("checking snapshot #%d", snap.N)
 	if err := checkRoot(snap.Root); err != nil {
 		return err
 	}
-	if snap.Parent == nil {
+	if len(snap.Parents) == 0 {
 		return nil
 	}
-	parent, err := o.GetSnapshot(ctx, s, *snap.Parent)
-	if err != nil {
-		return err
+	for i := 0; i < len(snap.Parents)-1; i++ {
+		if bytes.Compare(snap.Parents[i].CID[:], snap.Parents[i+1].CID[:]) < 0 {
+			return errors.Errorf("unsorted parents")
+		}
 	}
-	return o.Check(ctx, s, *parent, checkRoot)
+	for _, parentRef := range snap.Parents {
+		parent, err := o.GetSnapshot(ctx, s, parentRef)
+		if err != nil {
+			return err
+		}
+		if err := o.Check(ctx, s, *parent, checkRoot); err != nil {
+			return err
+		}
+	}
+	return nil
 }

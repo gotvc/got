@@ -76,5 +76,5 @@ func History(ctx context.Context, b Branch, vcop *gotvc.Operator, fn func(ref gd
 	if err := fn(ref, *snap); err != nil {
 		return err
 	}
-	return gotvc.ForEach(ctx, b.Volume.VCStore, *snap.Parent, fn)
+	return gotvc.ForEach(ctx, b.Volume.VCStore, snap.Parents, fn)
 }

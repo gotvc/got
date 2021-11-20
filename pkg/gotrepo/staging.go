@@ -120,33 +120,40 @@ func (r Repo) Clear(ctx context.Context) error {
 	return r.stage.Reset()
 }
 
-type Operation struct {
+type FileOperation struct {
 	Create   *Root
 	Modify   *Root
 	Delete   bool
 	MoveFrom *string
 }
 
-func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op Operation) error) error {
+func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOperation) error) error {
 	_, branch, err := r.GetActiveBranch(ctx)
 	if err != nil {
 		return err
 	}
+	fsop := r.getFSOp(branch)
 	snap, err := branches.GetHead(ctx, *branch)
 	if err != nil {
 		return err
 	}
-	if snap == nil {
-		return errors.Errorf("branch is empty")
+	var root gotfs.Root
+	if snap != nil {
+		root = snap.Root
+	} else {
+		rootPtr, err := fsop.NewEmpty(ctx, branch.Volume.FSStore)
+		if err != nil {
+			return err
+		}
+		root = *rootPtr
 	}
-	fsop := r.getFSOp(branch)
 	return r.stage.ForEach(ctx, func(p string, sop staging.Operation) error {
-		var op Operation
+		var op FileOperation
 		switch {
 		case sop.Delete:
 			op.Delete = true
 		case sop.Put != nil:
-			md, err := fsop.GetMetadata(ctx, branch.Volume.FSStore, snap.Root, p)
+			md, err := fsop.GetMetadata(ctx, branch.Volume.FSStore, root, p)
 			if err != nil && !posixfs.IsErrNotExist(err) {
 				return err
 			}
@@ -172,6 +179,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 		return err
 	}
 	snapInfo.Creator = r.GetID()
+	snapInfo.Authors = append(snapInfo.Authors, r.GetID())
 	src := r.stagingTriple()
 	dst := branch.Volume.StoreTriple()
 	// writes go to src, but reads from src should fallback to dst
@@ -193,7 +201,11 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 			return nil, err
 		}
 		logrus.Println("done applying staged changes")
-		return vcop.NewSnapshot(ctx, src.VC, x, *nextRoot, snapInfo)
+		var parents []Snap
+		if x != nil {
+			parents = []Snap{*x}
+		}
+		return vcop.NewSnapshot(ctx, src.VC, parents, *nextRoot, snapInfo)
 	}); err != nil {
 		return err
 	}
