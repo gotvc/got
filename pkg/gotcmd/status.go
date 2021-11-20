@@ -28,7 +28,7 @@ var statusCmd = &cobra.Command{
 		bufw := bufio.NewWriter(cmd.OutOrStdout())
 		fmt.Fprintf(bufw, "ACTIVE: %s\n", name)
 		fmt.Fprintf(bufw, "STAGING:\n")
-		if err := repo.ForEachStaging(ctx, func(p string, op gotrepo.Operation) error {
+		if err := repo.ForEachStaging(ctx, func(p string, op gotrepo.FileOperation) error {
 			var desc = "UNKNOWN"
 			switch {
 			case op.Delete:
