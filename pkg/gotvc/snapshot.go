@@ -7,9 +7,9 @@ import (
 	"sort"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/gotvc/got/pkg/tai64"
 	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"

@@ -6,8 +6,8 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got"
-	"github.com/gotvc/got/pkg/tai64"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 )
@@ -24,7 +24,7 @@ var commitCmd = &cobra.Command{
 	PostRunE: closeRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		// TODO get message from -m flag
-		now := tai64.Now()
+		now := tai64.Now().TAI64()
 		return repo.Commit(ctx, got.SnapInfo{
 			Message:    "",
 			CreatedAt:  now,
