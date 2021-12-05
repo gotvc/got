@@ -43,13 +43,13 @@ func (r *CryptoSpace) Get(ctx context.Context, name string) (*Branch, error) {
 	if err != nil {
 		return nil, err
 	}
-	salt, err := r.decryptSalt(branch.Salt[:])
+	salt, err := r.decryptSalt(branch.Salt)
 	if err != nil {
 		return nil, err
 	}
 	return &Branch{
 		Volume: r.wrapVolume(name, branch.Volume),
-		Salt:   salt[:],
+		Salt:   salt,
 	}, nil
 }
 
