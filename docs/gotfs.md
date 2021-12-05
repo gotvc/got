@@ -62,6 +62,6 @@ To read from a file in GotFS you first lookup the metadata entry for the path of
 If there is not an entry at the path or the entry is not for a regular file, then return an error.
 
 Then convert the offset to read from to a key.
-Seek to the first extent after that key.
-The extent referenced by that extent will end at the offset in the key, and will contain data overlapping the target range.
+Seek to the first entry after that key.
+The extent referenced by that entry will end at the offset in the key, and will contain data overlapping the target range.
 
