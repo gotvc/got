@@ -2,11 +2,12 @@ package chunking
 
 import (
 	"bytes"
+	"io"
 	"math"
 	"math/bits"
+	"math/rand"
 
 	"github.com/chmduquesne/rollinghash/rabinkarp64"
-	"golang.org/x/crypto/blake2b"
 )
 
 const windowSize = 64
@@ -110,14 +111,11 @@ func atChunkBoundary(sum uint64, nbits int) bool {
 	return (sum^alternatingBits)&lowBitsMask(nbits) == 0
 }
 
-func DerivePolynomial(seed []byte) rabinkarp64.Pol {
-	const purpose = "rabinkarp64"
-	xof, err := blake2b.NewXOF(blake2b.OutputLengthUnknown, seed)
-	if err != nil {
-		panic(err)
+func DerivePolynomial(rng io.Reader) rabinkarp64.Pol {
+	if rng == nil {
+		rng = rand.New(rand.NewSource(0))
 	}
-	xof.Write([]byte(purpose))
-	poly, err := rabinkarp64.DerivePolynomial(xof)
+	poly, err := rabinkarp64.DerivePolynomial(rng)
 	if err != nil {
 		panic(err)
 	}

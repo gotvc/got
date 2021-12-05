@@ -44,7 +44,7 @@ var historyCmd = &cobra.Command{
 		eg.Go(func() error {
 			err := repo.History(ctx, "", func(ref got.Ref, c got.Snap) error {
 				fmt.Fprintf(pw, "#%04d\t%v\n", c.N, ref.CID)
-				fmt.Fprintf(pw, "Created At: %v\n", c.CreatedAt)
+				fmt.Fprintf(pw, "Created At: %v\n", c.CreatedAt.GoTime().Local().String())
 				fmt.Fprintf(pw, "Message: %s\n", c.Message)
 				fmt.Fprintln(pw)
 				return nil

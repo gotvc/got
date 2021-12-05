@@ -15,24 +15,7 @@ type Builder interface {
 	Finish(ctx context.Context) (*Root, error)
 }
 
-// Iterator iterates over entries
-//
-// e.g.
-// if err := it.Seek(ctx, key); err != nil {
-//   return err
-// }
-// var ent Entry
-// for err := it.Next(ctx, &ent); err != EOS; err = it.Next(ctx, &ent) {
-//   if err != nil {
-//	   return err
-//   }
-//   // use ent here. ent will be valid until the next call to it.Next
-// }
-type Iterator interface {
-	Next(ctx context.Context, ent *Entry) error
-	Peek(ctx context.Context, ent *Entry) error
-	Seek(ctx context.Context, key []byte) error
-}
+type Iterator = kvstreams.Iterator
 
 type Option func(op *Operator)
 
@@ -62,7 +45,10 @@ func WithAverageSize(x int) Option {
 	}
 }
 
-func WithSeed(seed []byte) Option {
+func WithSeed(seed *[32]byte) Option {
+	if seed == nil {
+		panic("seed cannot be nil")
+	}
 	return func(o *Operator) {
 		o.seed = seed
 	}
@@ -74,7 +60,7 @@ func WithSeed(seed []byte) Option {
 type Operator struct {
 	dop                  gdat.Operator
 	maxSize, averageSize int
-	seed                 []byte
+	seed                 *[32]byte
 }
 
 func NewOperator(opts ...Option) Operator {

@@ -66,6 +66,7 @@ type Builder struct {
 	s                cadata.Store
 	op               *gdat.Operator
 	avgSize, maxSize int
+	seed             *[32]byte
 
 	levels []*StreamWriter
 	isDone bool
@@ -74,12 +75,13 @@ type Builder struct {
 	ctx context.Context
 }
 
-func NewBuilder(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed []byte) *Builder {
+func NewBuilder(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed *[32]byte) *Builder {
 	b := &Builder{
 		s:       s,
 		op:      op,
 		avgSize: avgSize,
 		maxSize: maxSize,
+		seed:    seed,
 	}
 	b.levels = []*StreamWriter{
 		b.makeWriter(0),
@@ -88,7 +90,7 @@ func NewBuilder(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed []
 }
 
 func (b *Builder) makeWriter(i int) *StreamWriter {
-	return NewStreamWriter(b.s, b.op, b.avgSize, b.maxSize, nil, func(idx Index) error {
+	return NewStreamWriter(b.s, b.op, b.avgSize, b.maxSize, b.seed, func(idx Index) error {
 		switch {
 		case b.isDone && i == len(b.levels)-1:
 			b.root = &Root{
@@ -315,6 +317,13 @@ func readIndexes(ctx context.Context, it kvstreams.Iterator) ([]Index, error) {
 		idx, err := entryToIndex(ent)
 		if err != nil {
 			return err
+		}
+		if len(idxs) > 0 {
+			prev := idxs[len(idxs)-1].First
+			next := idx.First
+			if bytes.Compare(prev, next) >= 0 {
+				return errors.Errorf("ptree: indexes out of order %q >= %q", prev, next)
+			}
 		}
 		idxs = append(idxs, idx)
 		return nil

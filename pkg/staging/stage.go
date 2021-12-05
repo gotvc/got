@@ -9,7 +9,6 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -177,7 +176,7 @@ func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.S
 	if err != nil {
 		return nil, err
 	}
-	segs = prepareChanges(*base, segs)
+	segs = gotfs.ChangesOnBase(*base, segs)
 	logrus.Println("splicing...")
 	root, err := fsop.Splice(ctx, ms, ds, segs)
 	if err != nil {
@@ -185,33 +184,6 @@ func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.S
 	}
 	logrus.Println("done splicing.")
 	return root, nil
-}
-
-// prepareChanges ensures that the segments represent the whole key space, using base to fill in any gaps.
-func prepareChanges(base gotfs.Root, changes []gotfs.Segment) []gotfs.Segment {
-	var segs []gotfs.Segment
-	for i := range changes {
-		// create the span to reference the root, should be inbetween the two entries from segs
-		var baseSpan gotkv.Span
-		if i > 0 {
-			baseSpan.Start = segs[len(segs)-1].Span.End
-		}
-		baseSpan.End = changes[i].Span.Start
-		baseSeg := gotfs.Segment{Root: base, Span: baseSpan}
-
-		segs = append(segs, baseSeg)
-		segs = append(segs, changes[i])
-	}
-	if len(segs) > 0 {
-		segs = append(segs, gotfs.Segment{
-			Root: base,
-			Span: gotkv.Span{
-				Start: segs[len(segs)-1].Span.End,
-				End:   nil,
-			},
-		})
-	}
-	return segs
 }
 
 func jsonMarshal(x interface{}) []byte {

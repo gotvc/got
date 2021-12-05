@@ -3,10 +3,10 @@ package branches
 import (
 	"context"
 	"sync"
-	"time"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cells"
+	"github.com/brendoncarroll/go-tai64"
 	"github.com/pkg/errors"
 )
 
@@ -101,7 +101,7 @@ func (r *MemSpace) Create(ctx context.Context, name string, params Params) (*Bra
 			RawStore: r.newStore(),
 		},
 		Salt:      params.Salt,
-		CreatedAt: time.Now(),
+		CreatedAt: tai64.Now().TAI64(),
 	}
 	branch := r.branches[name]
 	return &branch, nil

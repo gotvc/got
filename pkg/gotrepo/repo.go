@@ -199,23 +199,20 @@ func (r *Repo) getSubFS(prefix string) posixfs.FS {
 	return posixfs.NewPrefixed(r.repoFS, prefix)
 }
 
-func (r *Repo) getDataOp(b *branches.Branch) gdat.Operator {
-	return gdat.NewOperator(
-		gdat.WithSalt(b.Salt),
-	)
-}
-
 func (r *Repo) getFSOp(b *branches.Branch) *gotfs.Operator {
+	var seed [32]byte
+	gdat.DeriveKey(seed[:], saltFromBytes(b.Salt), []byte("gotfs"))
 	fsop := gotfs.NewOperator(
-		gotfs.WithDataOperator(r.getDataOp(b)),
-		gotfs.WithSeed(b.Salt),
+		gotfs.WithSeed(&seed),
 	)
 	return &fsop
 }
 
 func (r *Repo) getVCOp(b *branches.Branch) *gotvc.Operator {
+	var seed [32]byte
+	gdat.DeriveKey(seed[:], saltFromBytes(b.Salt), []byte("gotvc"))
 	vcop := gotvc.NewOperator(
-		gotvc.WithDataOperator(r.getDataOp(b)),
+		gotvc.WithSeed(&seed),
 	)
 	return &vcop
 }
@@ -305,4 +302,13 @@ func bucketFromTx(tx *bolt.Tx, path []string) (*bolt.Bucket, error) {
 		path = path[1:]
 	}
 	return b, nil
+}
+
+func saltFromBytes(x []byte) *[32]byte {
+	var salt *[32]byte
+	if len(x) > 0 {
+		salt = &[32]byte{}
+		copy(salt[:], x)
+	}
+	return salt
 }

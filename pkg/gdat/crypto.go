@@ -16,7 +16,7 @@ func Hash(x []byte) cadata.ID {
 
 // DeriveKey uses the blake2b XOF to fill out.
 // The input to the XOF is additional and secret is used to key the XOF.
-func DeriveKey(out, secret, additional []byte) {
+func DeriveKey(out []byte, secret *[32]byte, additional []byte) {
 	if len(out) == 0 {
 		return
 	}
@@ -24,7 +24,7 @@ func DeriveKey(out, secret, additional []byte) {
 	if len(out) < math.MaxUint32 {
 		outputLength = uint32(len(out))
 	}
-	xof, err := blake2b.NewXOF(outputLength, secret)
+	xof, err := blake2b.NewXOF(outputLength, secret[:])
 	if err != nil {
 		panic(err)
 	}
@@ -36,12 +36,26 @@ func DeriveKey(out, secret, additional []byte) {
 	}
 }
 
+// DeriveStream returns a cryptographically secure psuedorandom stream
+// derived from a high entropy secret, and arbitrary additional bytes.
+func DeriveStream(secret *[32]byte, additional []byte) io.Reader {
+	outputLength := uint32(blake2b.OutputLengthUnknown)
+	xof, err := blake2b.NewXOF(outputLength, secret[:])
+	if err != nil {
+		panic(err)
+	}
+	if _, err := xof.Write(additional); err != nil {
+		panic(err)
+	}
+	return xof
+}
+
 // KeyFunc produces a key for a given blob
 type KeyFunc func(ptextHash cadata.ID) DEK
 
 // SaltedConvergent uses salt to generate convergent keys for each blob.
-func SaltedConvergent(salt []byte) KeyFunc {
-	salt = append([]byte{}, salt...)
+func SaltedConvergent(salt *[32]byte) KeyFunc {
+	salt = cloneSalt(salt)
 	return func(ptextHash cadata.ID) DEK {
 		dek := DEK{}
 		DeriveKey(dek[:], salt, ptextHash[:])
@@ -51,9 +65,7 @@ func SaltedConvergent(salt []byte) KeyFunc {
 
 // Convergent generates a DEK depending only on ptextHash
 func Convergent(ptextHash cadata.ID) DEK {
-	dek := DEK{}
-	DeriveKey(dek[:], nil, ptextHash[:])
-	return dek
+	return DEK(ptextHash)
 }
 
 const DEKSize = 32
@@ -95,4 +107,9 @@ func cryptoXOR(key DEK, dst, src []byte) {
 		panic(err)
 	}
 	cipher.XORKeyStream(dst, src)
+}
+
+func cloneSalt(x *[32]byte) *[32]byte {
+	y := *x
+	return &y
 }

@@ -21,13 +21,13 @@ const (
 
 type CryptoSpace struct {
 	inner  Space
-	secret []byte
+	secret *[32]byte
 }
 
-func NewCryptoSpace(inner Space, secret []byte) Space {
+func NewCryptoSpace(inner Space, secret *[32]byte) Space {
 	return &CryptoSpace{
+		secret: secret,
 		inner:  inner,
-		secret: append([]byte{}, secret...),
 	}
 }
 
@@ -153,7 +153,7 @@ func (r *CryptoSpace) wrapVolume(name string, x Volume) Volume {
 	}
 }
 
-func deriveKey(out []byte, secret []byte, purpose string) {
+func deriveKey(out []byte, secret *[32]byte, purpose string) {
 	gdat.DeriveKey(out, secret, []byte(purpose))
 }
 
