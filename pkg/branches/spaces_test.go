@@ -25,8 +25,8 @@ func newTestSpace(t testing.TB) Space {
 func TestCryptoSpace(t *testing.T) {
 	TestSpace(t, func(t testing.TB) Space {
 		mem := newTestSpace(t)
-		secret := make([]byte, 32)
-		return NewCryptoSpace(mem, secret)
+		secret := [32]byte{}
+		return NewCryptoSpace(mem, &secret)
 	})
 }
 

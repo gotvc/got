@@ -11,7 +11,7 @@ type Store = cadata.Store
 
 type Option = func(*Operator)
 
-func WithSalt(salt []byte) Option {
+func WithSalt(salt *[32]byte) Option {
 	return func(o *Operator) {
 		o.kf = SaltedConvergent(salt)
 	}

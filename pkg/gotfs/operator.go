@@ -39,9 +39,9 @@ func WithDataOperator(dop gdat.Operator) Option {
 	}
 }
 
-func WithSeed(seed []byte) Option {
+func WithSeed(seed *[32]byte) Option {
 	return func(o *Operator) {
-		o.seed = append([]byte{}, seed...)
+		o.seed = seed
 	}
 }
 
@@ -51,7 +51,7 @@ type Operator struct {
 
 	maxBlobSize                                       int
 	minSizeData, averageSizeData, averageSizeMetadata int
-	seed                                              []byte
+	seed                                              *[32]byte
 
 	poly rabinkarp64.Pol
 }
@@ -63,6 +63,7 @@ func NewOperator(opts ...Option) Operator {
 		minSizeData:         DefaultMinBlobSizeData,
 		averageSizeData:     DefaultAverageBlobSizeData,
 		averageSizeMetadata: DefaultAverageBlobSizeMetadata,
+		seed:                &[32]byte{},
 	}
 	for _, opt := range opts {
 		opt(&o)
@@ -76,10 +77,10 @@ func NewOperator(opts ...Option) Operator {
 		gotkv.WithDataOperator(o.dop),
 		gotkv.WithAverageSize(o.averageSizeMetadata),
 		gotkv.WithMaxSize(o.maxBlobSize),
-		gotkv.WithSeed(gotKVSeed[:]),
+		gotkv.WithSeed(&gotKVSeed),
 	)
 	// The polynomial will be derived from the seed using a cryptographic XOF
-	o.poly = chunking.DerivePolynomial(o.seed)
+	o.poly = chunking.DerivePolynomial(gdat.DeriveStream(o.seed, []byte("chunking")))
 	return o
 }
 

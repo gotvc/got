@@ -222,7 +222,7 @@ type StreamWriter struct {
 	op      *gdat.Operator
 	onIndex IndexHandler
 
-	seed             []byte
+	seed             *[32]byte
 	avgSize, maxSize int
 	buf              bytes.Buffer
 
@@ -231,13 +231,9 @@ type StreamWriter struct {
 	ctx      context.Context
 }
 
-func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed []byte, onIndex IndexHandler) *StreamWriter {
-	if len(seed) > 32 {
-		panic("len(seed) must be <= 32")
-	}
-	seed = append([]byte{}, seed...)
-	for len(seed) < 32 {
-		seed = append(seed, 0x00)
+func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed *[32]byte, onIndex IndexHandler) *StreamWriter {
+	if seed == nil {
+		seed = &[32]byte{}
 	}
 	w := &StreamWriter{
 		s:       s,
@@ -324,7 +320,7 @@ func (w *StreamWriter) setPrevKey(k []byte) {
 }
 
 func (w *StreamWriter) splitAfter(data []byte) bool {
-	r := highwayhash.Sum64(data, w.seed)
+	r := highwayhash.Sum64(data, w.seed[:])
 	prob := math.MaxUint64 / uint64(w.avgSize) * uint64(len(data))
 	return r < prob
 }

@@ -62,7 +62,10 @@ func WithAverageSize(x int) Option {
 	}
 }
 
-func WithSeed(seed []byte) Option {
+func WithSeed(seed *[32]byte) Option {
+	if seed == nil {
+		panic("seed cannot be nil")
+	}
 	return func(o *Operator) {
 		o.seed = seed
 	}
@@ -74,7 +77,7 @@ func WithSeed(seed []byte) Option {
 type Operator struct {
 	dop                  gdat.Operator
 	maxSize, averageSize int
-	seed                 []byte
+	seed                 *[32]byte
 }
 
 func NewOperator(opts ...Option) Operator {

@@ -41,7 +41,7 @@ func (r *branchSpecDir) ForEach(ctx context.Context, fn func(string) error) erro
 func (r *branchSpecDir) Create(ctx context.Context, name string, params branches.Params) (*Branch, error) {
 	return r.CreateWithSpec(name, BranchSpec{
 		Volume:    r.makeDefault(),
-		Salt:      params.Salt,
+		Salt:      saltFromBytes(params.Salt),
 		CreatedAt: time.Now(),
 	})
 }
@@ -88,9 +88,13 @@ func (r *branchSpecDir) makeBranch(k string, spec BranchSpec) (*Branch, error) {
 	if err != nil {
 		return nil, err
 	}
+	var salt []byte
+	if spec.Salt != nil {
+		salt = spec.Salt[:]
+	}
 	return &Branch{
 		Volume: *vol,
-		Salt:   spec.Salt,
+		Salt:   salt,
 	}, nil
 }
 

@@ -42,7 +42,7 @@ func (r *Repo) MakeStore(spec StoreSpec) (Store, error) {
 
 type BranchSpec struct {
 	Volume    VolumeSpec `json:"volume"`
-	Salt      []byte     `json:"salt"`
+	Salt      *[32]byte  `json:"salt"`
 	CreatedAt time.Time  `json:"created_at"`
 }
 
