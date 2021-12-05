@@ -119,7 +119,7 @@ type StreamReader struct {
 func NewStreamReader(s cadata.Store, op *gdat.Operator, idxs []Index) *StreamReader {
 	for i := 0; i < len(idxs)-1; i++ {
 		if bytes.Compare(idxs[i].First, idxs[i+1].First) >= 0 {
-			panic("StreamReader: unordered indexes")
+			panic(fmt.Sprintf("StreamReader: unordered indexes %q >= %q", idxs[i].First, idxs[i+1].First))
 		}
 	}
 	return &StreamReader{

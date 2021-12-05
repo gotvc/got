@@ -15,24 +15,7 @@ type Builder interface {
 	Finish(ctx context.Context) (*Root, error)
 }
 
-// Iterator iterates over entries
-//
-// e.g.
-// if err := it.Seek(ctx, key); err != nil {
-//   return err
-// }
-// var ent Entry
-// for err := it.Next(ctx, &ent); err != EOS; err = it.Next(ctx, &ent) {
-//   if err != nil {
-//	   return err
-//   }
-//   // use ent here. ent will be valid until the next call to it.Next
-// }
-type Iterator interface {
-	Next(ctx context.Context, ent *Entry) error
-	Peek(ctx context.Context, ent *Entry) error
-	Seek(ctx context.Context, key []byte) error
-}
+type Iterator = kvstreams.Iterator
 
 type Option func(op *Operator)
 

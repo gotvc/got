@@ -3,7 +3,6 @@ package kvstreams
 import (
 	"bytes"
 	"context"
-	goerrors "errors"
 	"fmt"
 )
 
@@ -21,8 +20,21 @@ func (e Entry) Clone() Entry {
 }
 
 // EOS signals the end of a stream
-var EOS = goerrors.New("end of stream")
+var EOS = fmt.Errorf("end of stream")
 
+// Iterator iterates over entries
+//
+// e.g.
+// if err := it.Seek(ctx, key); err != nil {
+//   return err
+// }
+// var ent Entry
+// for err := it.Next(ctx, &ent); err != EOS; err = it.Next(ctx, &ent) {
+//   if err != nil {
+//	   return err
+//   }
+//   // use ent here. ent will be valid until the next call to it.Next
+// }
 type Iterator interface {
 	Next(ctx context.Context, ent *Entry) error
 	Seek(ctx context.Context, gteq []byte) error

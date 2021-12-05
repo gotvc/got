@@ -318,6 +318,13 @@ func readIndexes(ctx context.Context, it kvstreams.Iterator) ([]Index, error) {
 		if err != nil {
 			return err
 		}
+		if len(idxs) > 0 {
+			prev := idxs[len(idxs)-1].First
+			next := idx.First
+			if bytes.Compare(prev, next) >= 0 {
+				return errors.Errorf("ptree: indexes out of order %q >= %q", prev, next)
+			}
+		}
 		idxs = append(idxs, idx)
 		return nil
 	}); err != nil {
