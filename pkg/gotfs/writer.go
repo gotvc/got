@@ -48,7 +48,7 @@ func (w *writer) Buffered() int {
 }
 
 func (w *writer) onChunk(data []byte) error {
-	ref, err := w.o.dop.Post(w.ctx, w.s, data)
+	ref, err := w.o.rawOp.Post(w.ctx, w.s, data)
 	if err != nil {
 		return err
 	}

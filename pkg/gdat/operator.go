@@ -12,6 +12,9 @@ type Store = cadata.Store
 type Option = func(*Operator)
 
 func WithSalt(salt *[32]byte) Option {
+	if salt == nil {
+		panic("gdat.WithSalt called with nil")
+	}
 	return func(o *Operator) {
 		o.kf = SaltedConvergent(salt)
 	}

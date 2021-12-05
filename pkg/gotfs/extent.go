@@ -69,7 +69,7 @@ func (o *Operator) getExtentF(ctx context.Context, s Store, ext *Extent, fn func
 	if err != nil {
 		return err
 	}
-	return o.dop.GetF(ctx, s, *ref, func(data []byte) error {
+	return o.rawOp.GetF(ctx, s, *ref, func(data []byte) error {
 		if int(ext.Offset) >= len(data) {
 			return errors.Errorf("extent offset %d is >= len(data) %d", ext.Offset, len(data))
 		}

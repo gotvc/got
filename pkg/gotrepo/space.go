@@ -88,13 +88,9 @@ func (r *branchSpecDir) makeBranch(k string, spec BranchSpec) (*Branch, error) {
 	if err != nil {
 		return nil, err
 	}
-	var salt []byte
-	if spec.Salt != nil {
-		salt = spec.Salt[:]
-	}
 	return &Branch{
 		Volume: *vol,
-		Salt:   salt,
+		Salt:   spec.Salt,
 	}, nil
 }
 

@@ -33,54 +33,73 @@ const (
 
 type Option func(o *Operator)
 
-func WithDataOperator(dop gdat.Operator) Option {
-	return func(o *Operator) {
-		o.dop = dop
-	}
-}
-
 func WithSeed(seed *[32]byte) Option {
 	return func(o *Operator) {
 		o.seed = seed
 	}
 }
 
-type Operator struct {
-	dop   gdat.Operator
-	gotkv gotkv.Operator
+// WithMetaCacheSize sets the size of the cache for metadata
+func WithMetaCacheSize(n int) Option {
+	return func(o *Operator) {
+		o.metaCacheSize = n
+	}
+}
 
+// WithContentCacheSize sets the size of the cache for raw data
+func WithContentCacheSize(n int) Option {
+	return func(o *Operator) {
+		o.rawCacheSize = n
+	}
+}
+
+type Operator struct {
 	maxBlobSize                                       int
 	minSizeData, averageSizeData, averageSizeMetadata int
 	seed                                              *[32]byte
+	rawCacheSize, metaCacheSize                       int
 
-	poly rabinkarp64.Pol
+	rawOp gdat.Operator
+	gotkv gotkv.Operator
+	poly  rabinkarp64.Pol
 }
 
 func NewOperator(opts ...Option) Operator {
 	o := Operator{
-		dop:                 gdat.NewOperator(),
 		maxBlobSize:         DefaultMaxBlobSize,
 		minSizeData:         DefaultMinBlobSizeData,
 		averageSizeData:     DefaultAverageBlobSizeData,
 		averageSizeMetadata: DefaultAverageBlobSizeMetadata,
 		seed:                &[32]byte{},
+		rawCacheSize:        8,
+		metaCacheSize:       16,
 	}
 	for _, opt := range opts {
 		opt(&o)
 	}
-	// derive another seed for gotkv to use
-	// this is done out of an abundance of caution since a non-cryptographic hash is
-	// salted with this value in gotkv.
-	var gotKVSeed [32]byte
-	gdat.DeriveKey(gotKVSeed[:], o.seed, []byte("gotkv"))
+
+	// data
+	var rawSeed [32]byte
+	gdat.DeriveKey(rawSeed[:], o.seed, []byte("raw"))
+	o.rawOp = gdat.NewOperator(
+		gdat.WithSalt(&rawSeed),
+		gdat.WithCacheSize(o.rawCacheSize),
+	)
+	o.poly = chunking.DerivePolynomial(gdat.DeriveStream(o.seed, []byte("chunking")))
+
+	// metadata
+	var metaSeed [32]byte
+	gdat.DeriveKey(metaSeed[:], o.seed, []byte("gotkv"))
+	metaOp := gdat.NewOperator(
+		gdat.WithSalt(&metaSeed),
+		gdat.WithCacheSize(o.metaCacheSize),
+	)
 	o.gotkv = gotkv.NewOperator(
-		gotkv.WithDataOperator(o.dop),
+		gotkv.WithDataOperator(metaOp),
 		gotkv.WithAverageSize(o.averageSizeMetadata),
 		gotkv.WithMaxSize(o.maxBlobSize),
-		gotkv.WithSeed(&gotKVSeed),
+		gotkv.WithSeed(&metaSeed),
 	)
-	// The polynomial will be derived from the seed using a cryptographic XOF
-	o.poly = chunking.DerivePolynomial(gdat.DeriveStream(o.seed, []byte("chunking")))
 	return o
 }
 

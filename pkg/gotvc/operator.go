@@ -6,23 +6,31 @@ import (
 
 type Option = func(o *Operator)
 
-func WithDataOperator(dop gdat.Operator) Option {
+func WithSeed(seed *[32]byte) Option {
 	return func(o *Operator) {
-		o.dop = dop
+		o.seed = seed
 	}
 }
 
 type Operator struct {
-	dop      gdat.Operator
-	readOnly bool
+	seed      *[32]byte
+	cacheSize int
+	readOnly  bool
+	dop       gdat.Operator
 }
 
 func NewOperator(opts ...Option) Operator {
 	op := Operator{
-		dop: gdat.NewOperator(),
+		cacheSize: 256,
 	}
 	for _, opt := range opts {
 		opt(&op)
 	}
+	var gdatOpts []gdat.Option
+	gdatOpts = append(gdatOpts, gdat.WithCacheSize(op.cacheSize))
+	if op.seed != nil {
+		gdatOpts = append(gdatOpts, gdat.WithSalt(op.seed))
+	}
+	op.dop = gdat.NewOperator(gdatOpts...)
 	return op
 }
