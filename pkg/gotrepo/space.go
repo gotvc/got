@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/branches"
 )
 
@@ -42,7 +42,7 @@ func (r *branchSpecDir) Create(ctx context.Context, name string, params branches
 	return r.CreateWithSpec(name, BranchSpec{
 		Volume:    r.makeDefault(),
 		Salt:      params.Salt,
-		CreatedAt: time.Now(),
+		CreatedAt: tai64.Now().TAI64(),
 	})
 }
 

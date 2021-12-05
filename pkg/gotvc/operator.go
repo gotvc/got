@@ -22,15 +22,11 @@ type Operator struct {
 func NewOperator(opts ...Option) Operator {
 	op := Operator{
 		cacheSize: 256,
+		seed:      &[32]byte{},
 	}
 	for _, opt := range opts {
 		opt(&op)
 	}
-	var gdatOpts []gdat.Option
-	gdatOpts = append(gdatOpts, gdat.WithCacheSize(op.cacheSize))
-	if op.seed != nil {
-		gdatOpts = append(gdatOpts, gdat.WithSalt(op.seed))
-	}
-	op.dop = gdat.NewOperator(gdatOpts...)
+	op.dop = gdat.NewOperator(gdat.WithSalt(op.seed), gdat.WithCacheSize(op.cacheSize))
 	return op
 }

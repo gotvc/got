@@ -3,8 +3,8 @@ package branches
 import (
 	"context"
 	"regexp"
-	"time"
 
+	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/pkg/errors"
@@ -16,7 +16,7 @@ type Annotations = map[string]string
 type Branch struct {
 	Volume      Volume
 	Annotations Annotations
-	CreatedAt   time.Time
+	CreatedAt   tai64.TAI64
 	Salt        []byte
 }
 

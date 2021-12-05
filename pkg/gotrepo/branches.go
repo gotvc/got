@@ -52,7 +52,7 @@ func (r *Repo) SetActiveBranch(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if !(isEmpty || bytes.Equal(branch.Salt[:], current.Salt[:])) {
+	if !(isEmpty || bytes.Equal(branch.Salt, current.Salt)) {
 		return errors.Errorf("staging must be empty to change to a branch with a different salt")
 	}
 	return setActiveBranch(r.db, name)
