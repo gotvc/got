@@ -98,7 +98,7 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 		return err
 	}
 	nextBranch, err := r.CreateBranch(ctx, next, branches.Params{
-		Salt: baseBranch.Salt[:],
+		Salt: baseBranch.Salt,
 	})
 	if err != nil {
 		return err
