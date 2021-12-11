@@ -13,6 +13,7 @@ import (
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
+	"github.com/gotvc/got/pkg/gotiam"
 )
 
 type BranchID struct {
@@ -21,16 +22,14 @@ type BranchID struct {
 }
 
 type spaceSrv struct {
-	space branches.Space
-	acl   ACL
+	open  OpenFunc
 	swarm p2p.AskSwarm
 	log   *logrus.Logger
 }
 
-func newSpaceSrv(space branches.Space, acl ACL, swarm p2p.AskSwarm) *spaceSrv {
+func newSpaceSrv(open OpenFunc, swarm p2p.AskSwarm) *spaceSrv {
 	return &spaceSrv{
-		space: space,
-		acl:   acl,
+		open:  open,
 		swarm: swarm,
 		log:   logrus.StandardLogger(),
 	}
@@ -110,8 +109,9 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 	defer cf()
 	res, err := func() (*SpaceRes, error) {
 		peer := msg.Src.(inet256.Addr)
-		if !s.acl.CanReadAny(peer) && !s.acl.CanWriteAny(peer) {
-			return nil, ErrNotAllowed{Subject: peer}
+		space := s.open(peer)
+		if space == nil {
+			return nil, gotiam.ErrNotAllowed{Subject: peer}
 		}
 		var req SpaceReq
 		if err := json.Unmarshal(msg.Payload, &req); err != nil {
@@ -143,30 +143,24 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 }
 
 func (s *spaceSrv) handleCreate(ctx context.Context, peer PeerID, name string, params branches.Params) (*SpaceRes, error) {
-	if err := checkACL(s.acl, peer, name, true, opCreate); err != nil {
-		return nil, err
-	}
-	if _, err := s.space.Create(ctx, name, params); err != nil {
+	space := s.open(peer)
+	if _, err := space.Create(ctx, name, params); err != nil {
 		return nil, err
 	}
 	return &SpaceRes{}, nil
 }
 
 func (s *spaceSrv) handleDelete(ctx context.Context, peer PeerID, name string) (*SpaceRes, error) {
-	if err := checkACL(s.acl, peer, name, true, opDelete); err != nil {
-		return nil, err
-	}
-	if err := s.space.Delete(ctx, name); err != nil {
+	space := s.open(peer)
+	if err := space.Delete(ctx, name); err != nil {
 		return nil, err
 	}
 	return &SpaceRes{}, nil
 }
 
 func (s *spaceSrv) handleExists(ctx context.Context, peer PeerID, name string) (*SpaceRes, error) {
-	if err := checkACL(s.acl, peer, name, false, opExists); err != nil {
-		return nil, err
-	}
-	_, err := s.space.Get(ctx, name)
+	space := s.open(peer)
+	_, err := space.Get(ctx, name)
 	if err != nil && err != branches.ErrNotExist {
 		return nil, err
 	}
@@ -177,11 +171,9 @@ func (s *spaceSrv) handleExists(ctx context.Context, peer PeerID, name string) (
 }
 
 func (s *spaceSrv) handleList(ctx context.Context, peer PeerID, first string, limit int) (*SpaceRes, error) {
-	if err := checkACL(s.acl, peer, "", false, opList); err != nil {
-		return nil, err
-	}
+	space := s.open(peer)
 	var names []string
-	if err := s.space.ForEach(ctx, func(x string) error {
+	if err := space.ForEach(ctx, func(x string) error {
 		if len(names) >= limit {
 			return nil
 		}
@@ -191,28 +183,6 @@ func (s *spaceSrv) handleList(ctx context.Context, peer PeerID, first string, li
 		return nil, err
 	}
 	return &SpaceRes{Names: names}, nil
-}
-
-func checkACL(acl ACL, peer PeerID, name string, write bool, verb string) error {
-	var err error
-	if write {
-		if !acl.CanWrite(peer, name) {
-			err = ErrNotAllowed{
-				Subject: peer,
-				Verb:    verb,
-				Object:  name,
-			}
-		}
-	} else {
-		if !acl.CanRead(peer, name) {
-			err = ErrNotAllowed{
-				Subject: peer,
-				Verb:    verb,
-				Object:  name,
-			}
-		}
-	}
-	return err
 }
 
 type SpaceReq struct {

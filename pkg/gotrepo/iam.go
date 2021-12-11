@@ -2,64 +2,24 @@ package gotrepo
 
 import (
 	"bytes"
+	"context"
+	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
+	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/gotiam"
 	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/pkg/errors"
 )
 
-const (
-	methodWrite = "WRITE"
-	methodRead  = "READ"
-)
-
 type PeerID = inet256.Addr
 
-type Policy struct {
-	rules []Rule
-}
-
-func (p Policy) CanWriteAny(peerID PeerID) (ret bool) {
-	// can cas any cell
-	for _, r := range p.rules {
-		ret = ret || (r.Subject == peerID && r.Method == methodWrite)
-	}
-	return ret
-}
-
-func (p Policy) CanReadAny(peerID PeerID) (ret bool) {
-	// can get any cell
-	for _, r := range p.rules {
-		ret = ret || (r.Subject == peerID && r.Method == methodRead)
-	}
-	return ret
-}
-
-func (p Policy) CanWrite(peerID PeerID, name string) (ret bool) {
-	return p.canDo(peerID, methodWrite, name)
-}
-
-func (p Policy) CanRead(peerID PeerID, name string) (ret bool) {
-	return p.canDo(peerID, methodRead, name)
-}
-
-func (p Policy) canDo(peerID PeerID, method, object string) (ret bool) {
-	ret = false
-	for _, r := range p.rules {
-		if r.Allows(peerID, method, object) {
-			ret = true
-		}
-		if r.Denies(peerID, method, object) {
-			return false
-		}
-	}
-	return ret
-}
-
-func ParsePolicy(data []byte) (*Policy, error) {
+func ParsePolicy(data []byte) (*gotiam.Policy, error) {
 	lines := bytes.Split(data, []byte("\n"))
-	var rules []Rule
+	var rules []gotiam.Rule
 	for i, line := range lines {
 		line = bytes.TrimSpace(line)
 		if len(line) == 0 {
@@ -71,32 +31,23 @@ func ParsePolicy(data []byte) (*Policy, error) {
 		}
 		rules = append(rules, *r)
 	}
-	return &Policy{
-		rules: rules,
-	}, nil
+	return &gotiam.Policy{Rules: rules}, nil
 }
 
-func (p Policy) Marshal() []byte {
+func MarshalIAMPolicy(p gotiam.Policy) []byte {
 	var lines [][]byte
-	for _, r := range p.rules {
-		lines = append(lines, r.Marshal())
+	for _, r := range p.Rules {
+		lines = append(lines, MarshalIAMRule(r))
 	}
 	return bytes.Join(lines, []byte("\n"))
 }
 
-type Rule struct {
-	Allow   bool
-	Subject PeerID
-	Method  string
-	Object  *regexp.Regexp
-}
-
-func ParseRule(data []byte) (*Rule, error) {
+func ParseRule(data []byte) (*gotiam.Rule, error) {
 	parts := bytes.SplitN(data, []byte(" "), 4)
 	if len(parts) < 4 {
 		return nil, errors.Errorf("too few fields")
 	}
-	r := Rule{}
+	r := gotiam.Rule{}
 	// Allow/Deny
 	switch string(parts[0]) {
 	case "ALLOW":
@@ -114,7 +65,7 @@ func ParseRule(data []byte) (*Rule, error) {
 	r.Subject = id
 	// Verb
 	switch string(parts[2]) {
-	case methodWrite, methodRead:
+	case gotiam.OpLook, gotiam.OpTouch:
 		r.Method = string(parts[1])
 	default:
 		return nil, errors.Errorf("invalid method %s", string(parts[0]))
@@ -128,21 +79,7 @@ func ParseRule(data []byte) (*Rule, error) {
 	return &r, nil
 }
 
-func (r Rule) Matches(sub PeerID, method, obj string) bool {
-	return sub == r.Subject &&
-		method == r.Method &&
-		r.Object.MatchString(obj)
-}
-
-func (r Rule) Allows(sub PeerID, method, obj string) bool {
-	return r.Matches(sub, method, obj) && r.Allow
-}
-
-func (r Rule) Denies(sub PeerID, method, obj string) bool {
-	return r.Matches(sub, method, obj) && !r.Allow
-}
-
-func (r Rule) MarshalText() ([]byte, error) {
+func MarshalIAMRule(r gotiam.Rule) []byte {
 	var action string
 	if r.Allow {
 		action = "ALLOW"
@@ -151,10 +88,63 @@ func (r Rule) MarshalText() ([]byte, error) {
 	}
 	parts := []string{action, r.Subject.String(), r.Method, r.Object.String()}
 	s := strings.Join(parts, " ")
-	return []byte(s), nil
+	return []byte(s)
 }
 
-func (r Rule) Marshal() []byte {
-	data, _ := r.MarshalText()
-	return data
+type iamEngine struct {
+	repoFS posixfs.FS
+
+	mu     sync.RWMutex
+	policy gotiam.Policy
+}
+
+func newIAMEngine(repoFS posixfs.FS) (*iamEngine, error) {
+	e := &iamEngine{repoFS: repoFS}
+	pol, err := e.loadPolicy()
+	if err != nil {
+		return nil, err
+	}
+	e.policy = *pol
+	return e, nil
+}
+
+func (e *iamEngine) loadPolicy() (*gotiam.Policy, error) {
+	p := filepath.FromSlash(policyPath)
+	data, err := posixfs.ReadFile(context.TODO(), e.repoFS, p)
+	if err != nil {
+		return nil, err
+	}
+	return ParsePolicy(data)
+}
+
+func (e *iamEngine) savePolicy(x gotiam.Policy) error {
+	p := filepath.FromSlash(policyPath)
+	data := MarshalIAMPolicy(e.policy)
+	return posixfs.PutFile(context.TODO(), e.repoFS, p, 0644, bytes.NewReader(data))
+}
+
+func (e *iamEngine) getPolicy() gotiam.Policy {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.policy
+}
+
+func (e *iamEngine) Update(fn func(x gotiam.Policy) gotiam.Policy) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	x := gotiam.Policy{Rules: append([]gotiam.Rule{}, e.policy.Rules...)}
+	y := fn(x)
+	if err := e.savePolicy(y); err != nil {
+		return err
+	}
+	pol, err := e.loadPolicy()
+	if err != nil {
+		return err
+	}
+	e.policy = *pol
+	return nil
+}
+
+func (e *iamEngine) GetSpace(x branches.Space, peerID PeerID) branches.Space {
+	return gotiam.NewSpace(x, e.getPolicy(), peerID)
 }

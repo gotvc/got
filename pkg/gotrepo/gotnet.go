@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/brendoncarroll/go-p2p/p/p2pmux"
+	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotnet"
 	"github.com/inet256/inet256/client/go_client/inet256client"
 	"github.com/sirupsen/logrus"
@@ -41,9 +42,10 @@ func (r *Repo) getGotNet() (*gotnet.Service, error) {
 	mux := p2pmux.NewStringSecureAskMux(swarm)
 	srv := gotnet.New(gotnet.Params{
 		Logger: logrus.StandardLogger(),
-		ACL:    r.GetACL(),
-		Mux:    mux,
-		Space:  r.GetSpace(),
+		Open: func(peer PeerID) branches.Space {
+			return r.iamEngine.GetSpace(r.GetSpace(), peer)
+		},
+		Mux: mux,
 	})
 	r.gotNet = srv
 	go r.gotNet.Serve()

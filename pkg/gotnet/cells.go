@@ -6,7 +6,6 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cells"
-	"github.com/gotvc/got/pkg/branches"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -19,15 +18,13 @@ type CellID struct {
 }
 
 type cellSrv struct {
-	space branches.Space
-	acl   ACL
+	open  OpenFunc
 	swarm p2p.AskSwarm
 }
 
-func newCellSrv(space branches.Space, acl ACL, swarm p2p.AskSwarm) *cellSrv {
+func newCellSrv(open OpenFunc, swarm p2p.AskSwarm) *cellSrv {
 	cs := &cellSrv{
-		space: space,
-		acl:   acl,
+		open:  open,
 		swarm: swarm,
 	}
 	return cs
@@ -95,10 +92,8 @@ func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 }
 
 func (cs *cellSrv) handleCAS(ctx context.Context, peer PeerID, name string, actual, prev, next []byte) (int, error) {
-	if err := checkACL(cs.acl, peer, name, true, "CAS"); err != nil {
-		return 0, err
-	}
-	branch, err := cs.space.Get(ctx, name)
+	space := cs.open(peer)
+	branch, err := space.Get(ctx, name)
 	if err != nil {
 		return 0, err
 	}
@@ -108,10 +103,8 @@ func (cs *cellSrv) handleCAS(ctx context.Context, peer PeerID, name string, actu
 }
 
 func (cs *cellSrv) handleRead(ctx context.Context, peer PeerID, name string, buf []byte) (int, error) {
-	if err := checkACL(cs.acl, peer, name, false, opGet); err != nil {
-		return 0, err
-	}
-	branch, err := cs.space.Get(ctx, name)
+	space := cs.open(peer)
+	branch, err := space.Get(ctx, name)
 	if err != nil {
 		return 0, err
 	}

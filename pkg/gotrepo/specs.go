@@ -6,7 +6,9 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cells/httpcell"
 	"github.com/brendoncarroll/go-tai64"
+	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
+	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/pkg/errors"
 )
 
@@ -160,13 +162,42 @@ func (r *Repo) MakeCell(spec CellSpec) (Cell, error) {
 	}
 }
 
-type MultiSpaceSpec []LayerSpaceSpec
+type MultiSpaceSpec []SpaceLayerSpec
 
-type LayerSpaceSpec struct {
+type SpaceLayerSpec struct {
 	Prefix string    `json:"prefix"`
 	Target SpaceSpec `json:"target"`
 }
 
 type SpaceSpec struct {
-	Peer *p2p.PeerID `json:"peer,omitempty"`
+	Peer *inet256.ID `json:"peer,omitempty"`
+}
+
+func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
+	switch {
+	case spec.Peer != nil:
+		return r.gotNet.GetSpace(*spec.Peer), nil
+	default:
+		return nil, errors.Errorf("empty SpaceSpec")
+	}
+}
+
+func (r *Repo) spaceFromSpecs(specs []SpaceLayerSpec) (branches.Space, error) {
+	var layers []branches.Layer
+	for _, spec := range specs {
+		space, err := r.MakeSpace(spec.Target)
+		if err != nil {
+			return nil, err
+		}
+		layer := branches.Layer{
+			Prefix: spec.Prefix,
+			Target: space,
+		}
+		layers = append(layers, layer)
+	}
+	layers = append(layers, branches.Layer{
+		Prefix: "",
+		Target: r.specDir,
+	})
+	return branches.NewMultiSpace(layers)
 }

@@ -4,17 +4,18 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"path/filepath"
 
 	"github.com/brendoncarroll/go-state/posixfs"
 )
 
 type Config struct {
-	Spaces []SpaceSpec `json:"realms"`
+	Spaces []SpaceLayerSpec `json:"spaces"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		Spaces: []SpaceSpec{},
+		Spaces: []SpaceLayerSpec{},
 	}
 }
 
@@ -36,4 +37,15 @@ func SaveConfig(fsx posixfs.FS, p string, c Config) error {
 		return err
 	}
 	return posixfs.PutFile(context.TODO(), fsx, p, 0o644, bytes.NewReader(data))
+}
+
+// ConfigureRepo applies fn to the config of the repo at repoPath
+func ConfigureRepo(fs posixfs.FS, repoPath string, fn func(x Config) Config) error {
+	p := filepath.Join(repoPath, filepath.FromSlash(configPath))
+	configX, err := LoadConfig(fs, p)
+	if err != nil {
+		return err
+	}
+	configY := fn(*configX)
+	return SaveConfig(fs, p, configY)
 }

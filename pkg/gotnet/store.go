@@ -8,6 +8,7 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/gotiam"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -31,14 +32,14 @@ const (
 type blobPullSrv struct {
 	store *tempStore
 	swarm p2p.AskSwarm
-	acl   ACL
+	open  OpenFunc
 }
 
-func newBlobPullSrv(ts *tempStore, acl ACL, x p2p.AskSwarm) *blobPullSrv {
+func newBlobPullSrv(open OpenFunc, ts *tempStore, x p2p.AskSwarm) *blobPullSrv {
 	srv := &blobPullSrv{
 		store: ts,
 		swarm: x,
-		acl:   acl,
+		open:  open,
 	}
 	return srv
 }
@@ -66,8 +67,8 @@ func (s *blobPullSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Messag
 	peer := msg.Src.(PeerID)
 	var n int
 	if err := func() error {
-		if err := checkACL(s.acl, peer, "blobs", false, "GET"); err != nil {
-			return err
+		if space := s.open(peer); space == nil {
+			return gotiam.ErrNotAllowed{Subject: peer, Object: "blobs", Verb: "GET"}
 		}
 		id := cadata.IDFromBytes(msg.Payload)
 		var err error
@@ -99,16 +100,14 @@ func checkPullReply(id cadata.ID, peer PeerID, reply []byte) error {
 type blobMainSrv struct {
 	swarm       p2p.AskSwarm
 	blobPullSrv *blobPullSrv
-	space       branches.Space
-	acl         ACL
+	open        OpenFunc
 }
 
-func newBlobMainSrv(space branches.Space, blobGet *blobPullSrv, acl ACL, swarm p2p.AskSwarm) *blobMainSrv {
+func newBlobMainSrv(open OpenFunc, blobGet *blobPullSrv, swarm p2p.AskSwarm) *blobMainSrv {
 	srv := &blobMainSrv{
 		blobPullSrv: blobGet,
 		swarm:       swarm,
-		acl:         acl,
-		space:       space,
+		open:        open,
 	}
 	return srv
 }
@@ -241,14 +240,12 @@ func (s *blobMainSrv) handleAsk(ctx context.Context, respBuf []byte, msg p2p.Mes
 }
 
 func (s *blobMainSrv) handleGet(ctx context.Context, peer PeerID, req BlobReq, buf []byte) (int, error) {
-	if err := checkACL(s.acl, peer, req.Branch, false, opGet); err != nil {
-		return 0, err
-	}
+	space := s.open(peer)
 	if len(req.IDs) != 1 {
 		return 0, errors.Errorf("must request exactly one blob at a time")
 	}
 	id := req.IDs[0]
-	b, err := s.space.Get(ctx, req.Branch)
+	b, err := space.Get(ctx, req.Branch)
 	if err != nil {
 		return 0, err
 	}
@@ -260,14 +257,8 @@ func (s *blobMainSrv) handleGet(ctx context.Context, peer PeerID, req BlobReq, b
 }
 
 func (s *blobMainSrv) handlePost(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
-	if !s.acl.CanWrite(peer, req.Branch) {
-		return nil, ErrNotAllowed{
-			Subject: peer,
-			Verb:    opPost,
-			Object:  req.Branch,
-		}
-	}
-	branch, err := s.space.Get(ctx, req.Branch)
+	space := s.open(peer)
+	branch, err := space.Get(ctx, req.Branch)
 	if err != nil {
 		return nil, err
 	}
@@ -300,10 +291,8 @@ func (s *blobMainSrv) handlePost(ctx context.Context, peer PeerID, req BlobReq) 
 }
 
 func (s *blobMainSrv) handleExists(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
-	if !s.acl.CanRead(peer, req.Branch) {
-		return nil, ErrNotAllowed{Subject: peer, Verb: opExists, Object: req.Branch}
-	}
-	branch, err := s.space.Get(ctx, req.Branch)
+	space := s.open(peer)
+	branch, err := space.Get(ctx, req.Branch)
 	if err != nil {
 		return nil, err
 	}
@@ -325,10 +314,8 @@ func (s *blobMainSrv) handleExists(ctx context.Context, peer PeerID, req BlobReq
 }
 
 func (s *blobMainSrv) handleDelete(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
-	if !s.acl.CanWrite(peer, req.Branch) {
-		return nil, ErrNotAllowed{Subject: peer, Verb: opDelete, Object: req.Branch}
-	}
-	branch, err := s.space.Get(ctx, req.Branch)
+	space := s.open(peer)
+	branch, err := space.Get(ctx, req.Branch)
 	if err != nil {
 		return nil, err
 	}
@@ -349,10 +336,8 @@ func (s *blobMainSrv) handleDelete(ctx context.Context, peer PeerID, req BlobReq
 }
 
 func (s *blobMainSrv) handleList(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
-	if !s.acl.CanRead(peer, req.Branch) {
-		return nil, ErrNotAllowed{Subject: peer, Verb: opList, Object: req.Branch}
-	}
-	branch, err := s.space.Get(ctx, req.Branch)
+	space := s.open(peer)
+	branch, err := space.Get(ctx, req.Branch)
 	if err != nil {
 		return nil, err
 	}
