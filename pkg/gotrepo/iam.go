@@ -66,7 +66,7 @@ func ParseRule(data []byte) (*gotiam.Rule, error) {
 	// Verb
 	switch string(parts[2]) {
 	case gotiam.OpLook, gotiam.OpTouch:
-		r.Verb = string(parts[1])
+		r.Verb = string(parts[2])
 	default:
 		return nil, errors.Errorf("invalid method %s", string(parts[0]))
 	}
@@ -114,7 +114,11 @@ func (e *iamEngine) loadPolicy() (*gotiam.Policy, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ParsePolicy(data)
+	pol, err := ParsePolicy(data)
+	if err != nil {
+		return nil, errors.Wrapf(err, "parsing policy file")
+	}
+	return pol, nil
 }
 
 func (e *iamEngine) savePolicy(x gotiam.Policy) error {
@@ -129,10 +133,10 @@ func (e *iamEngine) getPolicy() gotiam.Policy {
 	return e.policy
 }
 
-func (e *iamEngine) Update(fn func(x gotiam.Policy) gotiam.Policy) error {
+func (e *iamEngine) Update(fn func(gotiam.Policy) gotiam.Policy) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	x := gotiam.Policy{Rules: append([]gotiam.Rule{}, e.policy.Rules...)}
+	x := clonePolicy(e.policy)
 	y := fn(x)
 	if err := e.savePolicy(y); err != nil {
 		return err
@@ -145,6 +149,14 @@ func (e *iamEngine) Update(fn func(x gotiam.Policy) gotiam.Policy) error {
 	return nil
 }
 
+func (e *iamEngine) GetPolicy() gotiam.Policy {
+	return clonePolicy(e.getPolicy())
+}
+
 func (e *iamEngine) GetSpace(x branches.Space, peerID PeerID) branches.Space {
 	return gotiam.NewSpace(x, e.getPolicy(), peerID)
+}
+
+func clonePolicy(x gotiam.Policy) gotiam.Policy {
+	return gotiam.Policy{Rules: append([]gotiam.Rule{}, x.Rules...)}
 }

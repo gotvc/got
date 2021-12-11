@@ -14,7 +14,6 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
-	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 
@@ -194,12 +193,12 @@ func (r *Repo) GetSpace() Space {
 	return r.space
 }
 
-func (r *Repo) LocalID() inet256.Addr {
-	return inet256.NewAddr(r.privateKey.Public())
-}
-
 func (r *Repo) UpdateIAMPolicy(fn func(gotiam.Policy) gotiam.Policy) error {
 	return r.iamEngine.Update(fn)
+}
+
+func (r *Repo) GetIAMPolicy() gotiam.Policy {
+	return r.iamEngine.GetPolicy()
 }
 
 func (r *Repo) getSubFS(prefix string) posixfs.FS {
