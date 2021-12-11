@@ -20,7 +20,7 @@ type Policy struct {
 func (p Policy) CanTouchAny(peerID PeerID) (ret bool) {
 	// can cas any cell
 	for _, r := range p.Rules {
-		ret = ret || (r.Subject == peerID && r.Method == OpTouch)
+		ret = ret || (r.Subject == peerID && r.Verb == OpTouch)
 	}
 	return ret
 }
@@ -28,7 +28,7 @@ func (p Policy) CanTouchAny(peerID PeerID) (ret bool) {
 func (p Policy) CanLookAny(peerID PeerID) (ret bool) {
 	// can get any cell
 	for _, r := range p.Rules {
-		ret = ret || (r.Subject == peerID && r.Method == OpLook)
+		ret = ret || (r.Subject == peerID && r.Verb == OpLook)
 	}
 	return ret
 }
@@ -57,13 +57,13 @@ func (p Policy) canDo(peerID PeerID, method, object string) (ret bool) {
 type Rule struct {
 	Allow   bool
 	Subject PeerID
-	Method  string
+	Verb    string
 	Object  *regexp.Regexp
 }
 
 func (r Rule) Matches(sub PeerID, method, obj string) bool {
 	return sub == r.Subject &&
-		method == r.Method &&
+		method == r.Verb &&
 		r.Object.MatchString(obj)
 }
 

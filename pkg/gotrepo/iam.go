@@ -66,7 +66,7 @@ func ParseRule(data []byte) (*gotiam.Rule, error) {
 	// Verb
 	switch string(parts[2]) {
 	case gotiam.OpLook, gotiam.OpTouch:
-		r.Method = string(parts[1])
+		r.Verb = string(parts[1])
 	default:
 		return nil, errors.Errorf("invalid method %s", string(parts[0]))
 	}
@@ -86,7 +86,7 @@ func MarshalIAMRule(r gotiam.Rule) []byte {
 	} else {
 		action = "DENY"
 	}
-	parts := []string{action, r.Subject.String(), r.Method, r.Object.String()}
+	parts := []string{action, r.Subject.String(), r.Verb, r.Object.String()}
 	s := strings.Join(parts, " ")
 	return []byte(s)
 }

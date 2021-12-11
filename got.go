@@ -1,7 +1,6 @@
 package got
 
 import (
-	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotrepo"
@@ -26,6 +25,5 @@ func OpenRepo(p string) (*Repo, error) {
 }
 
 func ConfigureRepo(p string, fn func(RepoConfig) RepoConfig) error {
-	fs := posixfs.NewOSFS()
-	return gotrepo.ConfigureRepo(fs, p, fn)
+	return gotrepo.ConfigureRepo(p, fn)
 }

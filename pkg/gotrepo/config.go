@@ -40,7 +40,8 @@ func SaveConfig(fsx posixfs.FS, p string, c Config) error {
 }
 
 // ConfigureRepo applies fn to the config of the repo at repoPath
-func ConfigureRepo(fs posixfs.FS, repoPath string, fn func(x Config) Config) error {
+func ConfigureRepo(repoPath string, fn func(x Config) Config) error {
+	fs := posixfs.NewOSFS()
 	p := filepath.Join(repoPath, filepath.FromSlash(configPath))
 	configX, err := LoadConfig(fs, p)
 	if err != nil {

@@ -14,6 +14,10 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/inet256/inet256/pkg/inet256"
+	"github.com/pkg/errors"
+	bolt "go.etcd.io/bbolt"
+
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/gdat"
@@ -24,9 +28,6 @@ import (
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/staging"
 	"github.com/gotvc/got/pkg/stores"
-	"github.com/inet256/inet256/pkg/inet256"
-	"github.com/pkg/errors"
-	bolt "go.etcd.io/bbolt"
 )
 
 // default bucket
