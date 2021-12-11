@@ -395,8 +395,8 @@ type tempStore struct {
 	mu          sync.Mutex
 	n           uint64
 	blobHandles map[uint64]cadata.ID
-	rcs         map[cadata.ID]uint64
 	peerHandles map[uint64]PeerID
+	blobRCs     map[cadata.ID]uint64
 	peerRCs     map[PeerID]uint64
 
 	store *cadata.MemStore
@@ -406,7 +406,7 @@ func newTempStore() *tempStore {
 	return &tempStore{
 		blobHandles: make(map[uint64]cadata.ID),
 		peerHandles: make(map[uint64]PeerID),
-		rcs:         make(map[cadata.ID]uint64),
+		blobRCs:     make(map[cadata.ID]uint64),
 		peerRCs:     make(map[PeerID]uint64),
 		store:       cadata.NewMem(cadata.DefaultHash, maxBlobSize),
 	}
@@ -430,7 +430,7 @@ func (ts *tempStore) Hold(data []byte, peer PeerID) (cadata.ID, uint64) {
 	x := ts.n
 	ts.n++
 	ts.blobHandles[x] = id
-	ts.rcs[id]++
+	ts.blobRCs[id]++
 	ts.peerHandles[x] = peer
 	ts.peerRCs[peer]++
 	return id, x
@@ -443,22 +443,25 @@ func (ts *tempStore) Release(x uint64) {
 	if !exists {
 		return
 	}
-	ts.rcs[id]--
-	if ts.rcs[id] == 0 {
-		delete(ts.rcs, id)
+	peer, exists := ts.peerHandles[x]
+	if !exists {
+		panic("blob exists for handle but not peer")
+	}
+	// blob
+	ts.blobRCs[id]--
+	if ts.blobRCs[id] == 0 {
+		delete(ts.blobRCs, id)
+		if err := ts.store.Delete(context.Background(), id); err != nil {
+			panic(err)
+		}
 	}
 	delete(ts.blobHandles, x)
-
-	peer := ts.peerHandles[x]
+	// peer
 	ts.peerRCs[peer]--
 	if ts.peerRCs[peer] == 0 {
 		delete(ts.peerRCs, peer)
 	}
 	delete(ts.peerHandles, x)
-
-	if err := ts.store.Delete(context.Background(), id); err != nil {
-		panic(err)
-	}
 }
 
 func (ts *tempStore) IsAllowed(x PeerID) bool {
