@@ -3,7 +3,6 @@ package gotnet
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/p2pmux"
@@ -37,26 +36,13 @@ const (
 
 type PeerID = inet256.Addr
 
-type ErrNotAllowed struct {
-	Subject      PeerID
-	Verb, Object string
-}
-
-func (e ErrNotAllowed) Error() string {
-	return fmt.Sprintf("%v cannot perform %s on %s", e.Subject, e.Object, e.Verb)
-}
-
-type ACL interface {
-	CanWriteAny(PeerID) bool
-	CanReadAny(PeerID) bool
-	CanWrite(id PeerID, name string) bool
-	CanRead(id PeerID, name string) bool
-}
+// OpenFunc is the type a function which returns a view of a Space
+// based on a PeerID
+type OpenFunc = func(PeerID) branches.Space
 
 type Params struct {
 	Mux    p2pmux.StringSecureAskMux
-	ACL    ACL
-	Space  branches.Space
+	Open   OpenFunc
 	Logger *logrus.Logger
 }
 
@@ -73,10 +59,10 @@ func New(params Params) *Service {
 	srv := &Service{
 		mux: params.Mux,
 	}
-	srv.blobPullSrv = newBlobPullSrv(newTempStore(), params.ACL, params.Mux.Open(channelBlobPull))
-	srv.blobMainSrv = newBlobMainSrv(params.Space, srv.blobPullSrv, params.ACL, params.Mux.Open(channelBlobMain))
-	srv.cellSrv = newCellSrv(params.Space, params.ACL, params.Mux.Open(channelCell))
-	srv.spaceSrv = newSpaceSrv(params.Space, params.ACL, params.Mux.Open(channelSpace))
+	srv.blobPullSrv = newBlobPullSrv(params.Open, newTempStore(), params.Mux.Open(channelBlobPull))
+	srv.blobMainSrv = newBlobMainSrv(params.Open, srv.blobPullSrv, params.Mux.Open(channelBlobMain))
+	srv.cellSrv = newCellSrv(params.Open, params.Mux.Open(channelCell))
+	srv.spaceSrv = newSpaceSrv(params.Open, params.Mux.Open(channelSpace))
 	return srv
 }
 

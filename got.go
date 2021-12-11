@@ -8,11 +8,12 @@ import (
 )
 
 type (
-	Repo     = gotrepo.Repo
-	Root     = gotfs.Root
-	Ref      = gdat.Ref
-	SnapInfo = gotvc.SnapInfo
-	Snap     = gotvc.Snap
+	Repo       = gotrepo.Repo
+	Root       = gotfs.Root
+	Ref        = gdat.Ref
+	SnapInfo   = gotvc.SnapInfo
+	Snap       = gotvc.Snap
+	RepoConfig = gotrepo.Config
 )
 
 func InitRepo(p string) error {
@@ -21,4 +22,8 @@ func InitRepo(p string) error {
 
 func OpenRepo(p string) (*Repo, error) {
 	return gotrepo.Open(p)
+}
+
+func ConfigureRepo(p string, fn func(RepoConfig) RepoConfig) error {
+	return gotrepo.ConfigureRepo(p, fn)
 }

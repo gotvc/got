@@ -14,17 +14,19 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/pkg/errors"
+	bolt "go.etcd.io/bbolt"
+
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/gotiam"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotnet"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/staging"
 	"github.com/gotvc/got/pkg/stores"
-	"github.com/pkg/errors"
-	bolt "go.etcd.io/bbolt"
 )
 
 // default bucket
@@ -72,19 +74,17 @@ type Repo struct {
 	repoFS     FS // repoFS is the directory that the repo is in
 	db         *bolt.DB
 	config     Config
-	policy     *Policy
 	privateKey p2p.PrivateKey
 
 	workingDir FS // workingDir is repoFS with reserved paths filtered.
 	stage      *staging.Stage
 
-	specDir *branchSpecDir
-	space   Space
+	specDir   *branchSpecDir
+	space     branches.Space
+	iamEngine *iamEngine
 
 	cellManager  *cellManager
 	storeManager *storeManager
-	dop          gdat.Operator
-	fsop         gotfs.Operator
 	gotNet       *gotnet.Service
 }
 
@@ -151,8 +151,6 @@ func Open(p string) (*Repo, error) {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
 		stage: staging.New(staging.NewBoltStorage(db, bucketStaging)),
-		dop:   gdat.NewOperator(),
-		fsop:  gotfs.NewOperator(),
 	}
 	fsStore := stores.NewFSStore(r.getSubFS(storePath), MaxBlobSize)
 	r.storeManager = newStoreManager(fsStore, r.db, bucketStores)
@@ -162,25 +160,29 @@ func Open(p string) (*Repo, error) {
 	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster, branches.NewParams(false)); err != nil {
 		return nil, err
 	}
-	r.space, err = branches.NewMultiSpace([]branches.Layer{
-		{Prefix: "", Target: r.specDir},
-	})
-	if err != nil {
+	if r.space, err = r.spaceFromSpecs(r.config.Spaces); err != nil {
+		return nil, err
+	}
+	if r.iamEngine, err = newIAMEngine(r.repoFS); err != nil {
 		return nil, err
 	}
 	return r, nil
 }
 
-func (r *Repo) Close() (retErr error) {
+func (r *Repo) Close() error {
+	var errs []error
 	for _, fn := range []func() error{
 		r.db.Sync,
 		r.db.Close,
 	} {
-		if err := fn(); retErr == nil {
-			retErr = err
+		if err := fn(); err != nil {
+			errs = append(errs, err)
 		}
 	}
-	return retErr
+	if len(errs) > 0 {
+		return fmt.Errorf("errors while closing: %v", errs)
+	}
+	return nil
 }
 
 func (r *Repo) WorkingDir() FS {
@@ -191,8 +193,12 @@ func (r *Repo) GetSpace() Space {
 	return r.space
 }
 
-func (r *Repo) GetACL() *Policy {
-	return r.policy
+func (r *Repo) UpdateIAMPolicy(fn func(gotiam.Policy) gotiam.Policy) error {
+	return r.iamEngine.Update(fn)
+}
+
+func (r *Repo) GetIAMPolicy() gotiam.Policy {
+	return r.iamEngine.GetPolicy()
 }
 
 func (r *Repo) getSubFS(prefix string) posixfs.FS {

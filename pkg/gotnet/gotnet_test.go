@@ -95,9 +95,8 @@ func newTestSide(t testing.TB, inetSrv inet256.Service, privKey p2p.PrivateKey) 
 	newStore := func() cadata.Store { return cadata.NewMem(cadata.DefaultHash, 1<<20) }
 	space := branches.NewMem(newStore, cells.NewMem)
 	srv := New(Params{
-		Space: space,
-		ACL:   newAllACL(),
-		Mux:   p2pmux.NewStringSecureAskMux(swarm),
+		Open: func(PeerID) branches.Space { return space },
+		Mux:  p2pmux.NewStringSecureAskMux(swarm),
 	})
 	return &side{
 		space: space,
@@ -105,14 +104,3 @@ func newTestSide(t testing.TB, inetSrv inet256.Service, privKey p2p.PrivateKey) 
 		swarm: swarm,
 	}
 }
-
-type allACL struct{}
-
-func newAllACL() ACL {
-	return allACL{}
-}
-
-func (allACL) CanRead(PeerID, string) bool  { return true }
-func (allACL) CanReadAny(PeerID) bool       { return true }
-func (allACL) CanWrite(PeerID, string) bool { return true }
-func (allACL) CanWriteAny(PeerID) bool      { return true }
