@@ -13,7 +13,6 @@ import (
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
-	"github.com/gotvc/got/pkg/gotiam"
 )
 
 type BranchID struct {
@@ -109,10 +108,6 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 	defer cf()
 	res, err := func() (*SpaceRes, error) {
 		peer := msg.Src.(inet256.Addr)
-		space := s.open(peer)
-		if space == nil {
-			return nil, gotiam.ErrNotAllowed{Subject: peer}
-		}
 		var req SpaceReq
 		if err := json.Unmarshal(msg.Payload, &req); err != nil {
 			return nil, err

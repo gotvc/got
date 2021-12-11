@@ -67,8 +67,8 @@ func (s *blobPullSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Messag
 	peer := msg.Src.(PeerID)
 	var n int
 	if err := func() error {
-		if space := s.open(peer); space == nil {
-			return gotiam.ErrNotAllowed{Subject: peer, Object: "blobs", Verb: "GET"}
+		if !s.store.IsAllowed(peer) {
+			return gotiam.ErrNotAllowed{Subject: peer, Verb: "PULL"}
 		}
 		id := cadata.IDFromBytes(msg.Payload)
 		var err error
@@ -392,19 +392,23 @@ type BlobResp struct {
 
 // tempStore provides a holding area for blobs that are about to be pulled
 type tempStore struct {
-	mu      sync.Mutex
-	n       uint64
-	handles map[uint64]cadata.ID
-	rcs     map[cadata.ID]uint64
+	mu          sync.Mutex
+	n           uint64
+	blobHandles map[uint64]cadata.ID
+	rcs         map[cadata.ID]uint64
+	peerHandles map[uint64]PeerID
+	peerRCs     map[PeerID]uint64
 
 	store *cadata.MemStore
 }
 
 func newTempStore() *tempStore {
 	return &tempStore{
-		handles: make(map[uint64]cadata.ID),
-		rcs:     make(map[cadata.ID]uint64),
-		store:   cadata.NewMem(cadata.DefaultHash, maxBlobSize),
+		blobHandles: make(map[uint64]cadata.ID),
+		peerHandles: make(map[uint64]PeerID),
+		rcs:         make(map[cadata.ID]uint64),
+		peerRCs:     make(map[PeerID]uint64),
+		store:       cadata.NewMem(cadata.DefaultHash, maxBlobSize),
 	}
 }
 
@@ -416,7 +420,7 @@ func (ts *tempStore) MaxSize() int {
 	return ts.store.MaxSize()
 }
 
-func (ts *tempStore) Hold(data []byte) (cadata.ID, uint64) {
+func (ts *tempStore) Hold(data []byte, peer PeerID) (cadata.ID, uint64) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
 	id, err := ts.store.Post(context.TODO(), data)
@@ -425,15 +429,17 @@ func (ts *tempStore) Hold(data []byte) (cadata.ID, uint64) {
 	}
 	x := ts.n
 	ts.n++
-	ts.handles[x] = id
+	ts.blobHandles[x] = id
 	ts.rcs[id]++
+	ts.peerHandles[x] = peer
+	ts.peerRCs[peer]++
 	return id, x
 }
 
 func (ts *tempStore) Release(x uint64) {
 	ts.mu.Lock()
 	defer ts.mu.Unlock()
-	id, exists := ts.handles[x]
+	id, exists := ts.blobHandles[x]
 	if !exists {
 		return
 	}
@@ -441,10 +447,25 @@ func (ts *tempStore) Release(x uint64) {
 	if ts.rcs[id] == 0 {
 		delete(ts.rcs, id)
 	}
-	delete(ts.handles, x)
+	delete(ts.blobHandles, x)
+
+	peer := ts.peerHandles[x]
+	ts.peerRCs[peer]--
+	if ts.peerRCs[peer] == 0 {
+		delete(ts.peerRCs, peer)
+	}
+	delete(ts.peerHandles, x)
+
 	if err := ts.store.Delete(context.Background(), id); err != nil {
 		panic(err)
 	}
+}
+
+func (ts *tempStore) IsAllowed(x PeerID) bool {
+	ts.mu.Lock()
+	defer ts.mu.Unlock()
+	_, exists := ts.peerRCs[x]
+	return exists
 }
 
 var _ cadata.Store = &store{}
@@ -472,7 +493,7 @@ func (s *store) Post(ctx context.Context, data []byte) (cadata.ID, error) {
 	if len(data) > s.MaxSize() {
 		return cadata.ID{}, cadata.ErrTooLarge
 	}
-	id, x := s.blobPullSrv.store.Hold(data)
+	id, x := s.blobPullSrv.store.Hold(data, s.sid.Peer)
 	defer s.blobPullSrv.store.Release(x)
 	return id, s.blobMainSrv.PushTo(ctx, s.sid, []cadata.ID{id})
 }
