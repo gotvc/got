@@ -342,6 +342,9 @@ func removeFromSet(b *bolt.Bucket, setID StoreID, id cadata.ID) error {
 }
 
 func isInSet(b *bolt.Bucket, setID StoreID, id cadata.ID) (bool, error) {
+	if b == nil {
+		return false, nil
+	}
 	b = b.Bucket([]byte(setsBucketName))
 	if b == nil {
 		return false, nil

@@ -14,7 +14,7 @@ type Store struct {
 }
 
 func newStore(x cadata.Store, check func(bool, string) error) *Store {
-	return &Store{inner: x}
+	return &Store{inner: x, check: check}
 }
 
 func (s *Store) Post(ctx context.Context, data []byte) (cadata.ID, error) {

@@ -10,7 +10,7 @@ require (
 	github.com/fatih/color v1.13.0
 	github.com/golang/protobuf v1.5.2
 	github.com/hashicorp/golang-lru v0.5.1
-	github.com/inet256/inet256 v0.0.3-0.20211113215210-af74a7e08d26
+	github.com/inet256/inet256 v0.0.3-0.20211126215737-b6ba04689986
 	github.com/minio/highwayhash v1.0.2
 	github.com/pkg/errors v0.9.1
 	github.com/sirupsen/logrus v1.7.0

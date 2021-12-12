@@ -155,15 +155,14 @@ func Open(p string) (*Repo, error) {
 	fsStore := stores.NewFSStore(r.getSubFS(storePath), MaxBlobSize)
 	r.storeManager = newStoreManager(fsStore, r.db, bucketStores)
 	r.cellManager = newCellManager(db, []string{bucketCellData})
-
-	r.specDir = newBranchSpecDir(r.makeDefaultVolume, r.MakeCell, r.MakeStore, posixfs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
-	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster, branches.NewParams(false)); err != nil {
+	if r.iamEngine, err = newIAMEngine(r.repoFS); err != nil {
 		return nil, err
 	}
+	r.specDir = newBranchSpecDir(r.makeDefaultVolume, r.MakeCell, r.MakeStore, posixfs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
 	if r.space, err = r.spaceFromSpecs(r.config.Spaces); err != nil {
 		return nil, err
 	}
-	if r.iamEngine, err = newIAMEngine(r.repoFS); err != nil {
+	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster, branches.NewParams(false)); err != nil {
 		return nil, err
 	}
 	return r, nil

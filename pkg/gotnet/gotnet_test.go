@@ -7,7 +7,6 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/mbapp"
-	"github.com/brendoncarroll/go-p2p/p/p2pmux"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cadata/storetest"
 	"github.com/brendoncarroll/go-state/cells/celltest"
@@ -95,8 +94,8 @@ func newTestSide(t testing.TB, inetSrv inet256.Service, privKey p2p.PrivateKey) 
 	newStore := func() cadata.Store { return cadata.NewMem(cadata.DefaultHash, 1<<20) }
 	space := branches.NewMem(newStore, cells.NewMem)
 	srv := New(Params{
-		Open: func(PeerID) branches.Space { return space },
-		Mux:  p2pmux.NewStringSecureAskMux(swarm),
+		Open:  func(PeerID) branches.Space { return space },
+		Swarm: swarm,
 	})
 	return &side{
 		space: space,

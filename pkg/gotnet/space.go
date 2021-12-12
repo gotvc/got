@@ -3,6 +3,7 @@ package gotnet
 import (
 	"context"
 	"encoding/json"
+	"sort"
 	"time"
 
 	"github.com/brendoncarroll/go-p2p"
@@ -100,6 +101,12 @@ func (s *spaceSrv) List(ctx context.Context, peer PeerID, first string, limit in
 	if resp.Error != nil {
 		return nil, errors.New(*resp.Error)
 	}
+	if !sort.StringsAreSorted(resp.Names) {
+		return nil, errors.Errorf("branch names are unsorted")
+	}
+	if len(resp.Names) > 0 && resp.Names[0] < first {
+		return nil, errors.Errorf("bad branch listing: %s < %s", resp.Names[0], first)
+	}
 	return resp.Names, nil
 }
 
@@ -172,11 +179,15 @@ func (s *spaceSrv) handleList(ctx context.Context, peer PeerID, first string, li
 		if len(names) >= limit {
 			return nil
 		}
+		if x < first {
+			return nil
+		}
 		names = append(names, x)
 		return nil
 	}); err != nil {
 		return nil, err
 	}
+	sort.Strings(names)
 	return &SpaceRes{Names: names}, nil
 }
 
@@ -251,6 +262,9 @@ func (r *space) ForEach(ctx context.Context, fn func(string) error) error {
 		if err != nil {
 			return err
 		}
+		if len(names) == 0 || (len(names) == 1 && names[0] == first) {
+			break
+		}
 		for _, name := range names {
 			if name == first {
 				continue
@@ -258,9 +272,6 @@ func (r *space) ForEach(ctx context.Context, fn func(string) error) error {
 			if err := fn(name); err != nil {
 				return err
 			}
-		}
-		if len(names) == 0 {
-			break
 		}
 		first = names[len(names)-1]
 	}
