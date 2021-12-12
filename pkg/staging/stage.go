@@ -65,6 +65,8 @@ func (s *Stage) Discard(ctx context.Context, p string) error {
 	return s.storage.Delete([]byte(p))
 }
 
+// Get returns the operation, if any, staged for the path p
+// If there is no operation staged Get returns (nil, nil)
 func (s *Stage) Get(ctx context.Context, p string) (*Operation, error) {
 	p = cleanPath(p)
 	data, err := s.storage.Get([]byte(p))
@@ -163,12 +165,9 @@ func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.S
 			logrus.Warnf("empty op for path %q", p)
 			return nil
 		}
-		segRoot, err := fsop.AddPrefix(ctx, ms, p, pathRoot)
-		if err != nil {
-			return err
-		}
+		segRoot := fsop.AddPrefix(pathRoot, p)
 		segs = append(segs, gotfs.Segment{
-			Root: *segRoot,
+			Root: segRoot,
 			Span: gotfs.SpanForPath(p),
 		})
 		return nil

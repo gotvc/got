@@ -8,9 +8,6 @@ Prints information about the active branch, and tracked paths.
 ### `got commit [-m <message>]`
 Creates a new snapshot by applying any changes in tracked paths to the current branch.
 The current branch's head is updated to the new snapshot.
-Produces a delta by looking at the tracked paths and applies that delta to the contents of the active volume.
-This produces a new commit.
-The new commit is written to the active volume, replacing what was there.
 
 ### `got fork <name>`
 1. Creates a new branch called name, or errors if it exists.
@@ -72,6 +69,11 @@ Prints the head of the branch at name to standard output.
 
 ### `got sync <src> <dst>`
 Sync the contents of branch `<src>` to branch `<dst>`.
+
+## IAM
+
+### `got iam`
+Prints the access control policy from `.got/policy`.
 
 ## Misc
 

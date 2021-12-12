@@ -70,7 +70,7 @@ func (o *Operator) CreateFile(ctx context.Context, ms, ds Store, x Root, p strin
 	if err != nil {
 		return nil, err
 	}
-	return o.Graft(ctx, ms, x, p, *fileRoot)
+	return o.Graft(ctx, ms, ds, x, p, *fileRoot)
 }
 
 // SizeOfFile returns the size of the file at p in bytes.

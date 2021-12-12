@@ -7,17 +7,12 @@ Got uses [INET256](https://github.com/inet256/inet256) to easily and securely co
 
 ## Features
 - Snapshot based version control.
-- Good support for large files
-- Data is end to end encrypted.
+- Good support for large files.
+- End-to-End Encryption.
 - Multi-Backend, using [Cells](./pkg/cells) and [Stores](./pkg/stores)
 
 ## Getting Started
-Installs to `$GOPATH/bin` with make.
-If that isn't on your path, just copy the executable from there to whereever you want.
-
-```shell
-$ make install
-```
+Either download a prebuilt binary or build one from source.
 
 Then initialize a repository in the current working directory.
 Make sure you `cd` to where you want the repository.
@@ -29,6 +24,13 @@ $ got init
 To run the tests:
 ```shell
 $ make test
+```
+
+Installs to `$GOPATH/bin` with make.
+If that isn't on your path, just copy the executable from there to whereever you want.
+
+```shell
+$ make install
 ```
 
 ## More

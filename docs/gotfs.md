@@ -39,10 +39,10 @@ For example: The file "test.txt" with 10B of data in it would produce the follow
 
 A directory is stored as a metadata object.
 ```
-/                                        -> Metadata (dir)
-/mydir/                                  -> Metadata (dir)
-/mydir/myfile.txt                        -> Metadata (file)
-/mydir/myfile.txt<NULL><64 bit offset>   -> Part
+/                                         -> Metadata (dir)
+/mydir/                                   -> Metadata (dir)
+/mydir/myfile.txt/                        -> Metadata (file)
+/mydir/myfile.txt/<NULL><64 bit offset>   -> Part
 ```
 
 It is possible for a file to be at the root

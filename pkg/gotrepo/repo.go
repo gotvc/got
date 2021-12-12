@@ -217,7 +217,7 @@ func (r *Repo) getVCOp(b *branches.Branch) *gotvc.Operator {
 	var seed [32]byte
 	gdat.DeriveKey(seed[:], saltFromBytes(b.Salt), []byte("gotvc"))
 	vcop := gotvc.NewOperator(
-		gotvc.WithSeed(&seed),
+		gotvc.WithSalt(&seed),
 	)
 	return &vcop
 }

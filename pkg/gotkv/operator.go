@@ -143,8 +143,8 @@ func (o *Operator) MaxKey(ctx context.Context, s cadata.Store, x Root, under []b
 	return ptree.MaxKey(ctx, s, x, under)
 }
 
-func (o *Operator) AddPrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
-	return ptree.AddPrefix(ctx, s, x, prefix)
+func (o *Operator) AddPrefix(x Root, prefix []byte) Root {
+	return ptree.AddPrefix(x, prefix)
 }
 
 func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {

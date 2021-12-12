@@ -73,7 +73,7 @@ func TestLargeFiles(t *testing.T) {
 	root, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	for i := range fileRoots {
-		root, err = op.Graft(ctx, s, *root, strconv.Itoa(i), fileRoots[i])
+		root, err = op.Graft(ctx, s, s, *root, strconv.Itoa(i), fileRoots[i])
 		require.NoError(t, err)
 	}
 

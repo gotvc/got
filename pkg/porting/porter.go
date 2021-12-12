@@ -64,12 +64,9 @@ func (pr *Porter) ImportPath(ctx context.Context, ms, ds cadata.Store, p string)
 		if err != nil {
 			return nil, err
 		}
-		pathRoot, err = pr.gotfs.AddPrefix(ctx, ms, dirent.Name, *pathRoot)
-		if err != nil {
-			return nil, err
-		}
+		shiftedRoot := pr.gotfs.AddPrefix(*pathRoot, dirent.Name)
 		changes = append(changes, gotfs.Segment{
-			Root: *pathRoot,
+			Root: shiftedRoot,
 			Span: gotfs.SpanForPath(dirent.Name),
 		})
 	}

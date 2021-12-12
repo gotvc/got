@@ -168,36 +168,37 @@ func (o *Operator) ForEachFile(ctx context.Context, s cadata.Store, root Root, p
 
 // Graft places branch at p in root.
 // If p == "" then branch is returned unaltered.
-func (o *Operator) Graft(ctx context.Context, s cadata.Store, root Root, p string, branch Root) (*Root, error) {
+func (o *Operator) Graft(ctx context.Context, ms, ds cadata.Store, root Root, p string, branch Root) (*Root, error) {
 	p = cleanPath(p)
 	if p == "" {
 		return &branch, nil
 	}
-	root2, err := o.MkdirAll(ctx, s, root, parentPath(p))
+	root2, err := o.MkdirAll(ctx, ms, root, parentPath(p))
 	if err != nil {
 		return nil, err
 	}
-	b := o.gotkv.NewBuilder(s)
 	k := makeMetadataKey(p)
-	beforeIt := o.gotkv.NewIterator(s, *root2, gotkv.Span{Start: nil, End: k})
-	branch2, err := o.gotkv.AddPrefix(ctx, s, branch, k[:len(k)-1])
-	if err != nil {
-		return nil, err
-	}
-	branchIt := o.gotkv.NewIterator(s, *branch2, gotkv.Span{})
-	afterIt := o.gotkv.NewIterator(s, root, gotkv.Span{Start: gotkv.PrefixEnd(k), End: nil})
-	for _, it := range []gotkv.Iterator{beforeIt, branchIt, afterIt} {
-		if err := gotkv.CopyAll(ctx, b, it); err != nil {
-			return nil, err
-		}
-	}
-	return b.Finish(ctx)
+	branch2 := o.gotkv.AddPrefix(branch, k[:len(k)-1])
+	return o.Splice(ctx, ms, ds, []Segment{
+		{
+			Span: gotkv.Span{Start: nil, End: k},
+			Root: *root2,
+		},
+		{
+			Span: gotkv.TotalSpan(),
+			Root: branch2,
+		},
+		{
+			Span: gotkv.Span{Start: gotkv.PrefixEnd(k), End: nil},
+			Root: *root2,
+		},
+	})
 }
 
-func (o *Operator) AddPrefix(ctx context.Context, s Store, p string, x Root) (*Root, error) {
+func (o *Operator) AddPrefix(root Root, p string) Root {
 	p = cleanPath(p)
 	k := makeMetadataKey(p)
-	return o.gotkv.AddPrefix(ctx, s, x, k[:len(k)-1])
+	return o.gotkv.AddPrefix(root, k[:len(k)-1])
 }
 
 func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func(ref gdat.Ref) error) error {
