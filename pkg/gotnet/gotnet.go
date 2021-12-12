@@ -41,7 +41,7 @@ type PeerID = inet256.Addr
 type OpenFunc = func(PeerID) branches.Space
 
 type Params struct {
-	Mux    p2pmux.StringSecureAskMux
+	Swarm  p2p.SecureAskSwarm
 	Open   OpenFunc
 	Logger *logrus.Logger
 }
@@ -56,13 +56,14 @@ type Service struct {
 }
 
 func New(params Params) *Service {
+	mux := p2pmux.NewStringSecureAskMux(params.Swarm)
 	srv := &Service{
-		mux: params.Mux,
+		mux: mux,
 	}
-	srv.blobPullSrv = newBlobPullSrv(params.Open, newTempStore(), params.Mux.Open(channelBlobPull))
-	srv.blobMainSrv = newBlobMainSrv(params.Open, srv.blobPullSrv, params.Mux.Open(channelBlobMain))
-	srv.cellSrv = newCellSrv(params.Open, params.Mux.Open(channelCell))
-	srv.spaceSrv = newSpaceSrv(params.Open, params.Mux.Open(channelSpace))
+	srv.blobPullSrv = newBlobPullSrv(params.Open, newTempStore(), mux.Open(channelBlobPull))
+	srv.blobMainSrv = newBlobMainSrv(params.Open, srv.blobPullSrv, mux.Open(channelBlobMain))
+	srv.cellSrv = newCellSrv(params.Open, mux.Open(channelCell))
+	srv.spaceSrv = newSpaceSrv(params.Open, mux.Open(channelSpace))
 	return srv
 }
 

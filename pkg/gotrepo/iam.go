@@ -43,9 +43,12 @@ func MarshalIAMPolicy(p gotiam.Policy) []byte {
 }
 
 func ParseRule(data []byte) (*gotiam.Rule, error) {
-	parts := bytes.SplitN(data, []byte(" "), 4)
+	parts := bytes.Fields(data)
 	if len(parts) < 4 {
 		return nil, errors.Errorf("too few fields")
+	}
+	if len(parts) > 4 {
+		return nil, errors.Errorf("too many fields")
 	}
 	r := gotiam.Rule{}
 	// Allow/Deny
@@ -87,7 +90,7 @@ func MarshalIAMRule(r gotiam.Rule) []byte {
 		action = "DENY"
 	}
 	parts := []string{action, r.Subject.String(), r.Verb, r.Object.String()}
-	s := strings.Join(parts, " ")
+	s := strings.Join(parts, "\t")
 	return []byte(s)
 }
 
@@ -123,7 +126,7 @@ func (e *iamEngine) loadPolicy() (*gotiam.Policy, error) {
 
 func (e *iamEngine) savePolicy(x gotiam.Policy) error {
 	p := filepath.FromSlash(policyPath)
-	data := MarshalIAMPolicy(e.policy)
+	data := MarshalIAMPolicy(x)
 	return posixfs.PutFile(context.TODO(), e.repoFS, p, 0644, bytes.NewReader(data))
 }
 

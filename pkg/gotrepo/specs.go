@@ -176,7 +176,11 @@ type SpaceSpec struct {
 func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 	switch {
 	case spec.Peer != nil:
-		return r.gotNet.GetSpace(*spec.Peer), nil
+		gn, err := r.getGotNet()
+		if err != nil {
+			return nil, err
+		}
+		return gn.GetSpace(*spec.Peer), nil
 	default:
 		return nil, errors.Errorf("empty SpaceSpec")
 	}

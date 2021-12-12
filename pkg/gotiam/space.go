@@ -85,7 +85,7 @@ type ErrNotAllowed struct {
 }
 
 func (e ErrNotAllowed) Error() string {
-	return fmt.Sprintf("%v cannot perform %s on %s", e.Subject, e.Object, e.Verb)
+	return fmt.Sprintf("%v cannot perform %s on %s", e.Subject, e.Verb, e.Object)
 }
 
 func checkACL(pol Policy, peer PeerID, name string, write bool, verb string) error {
@@ -101,11 +101,11 @@ func checkACL(pol Policy, peer PeerID, name string, write bool, verb string) err
 		}
 	} else {
 		if name != "" {
-			if pol.CanLook(peer, name) {
+			if pol.CanLook(peer, name) || pol.CanTouch(peer, name) {
 				return nil
 			}
 		} else {
-			if pol.CanLookAny(peer) {
+			if pol.CanLookAny(peer) || pol.CanTouchAny(peer) {
 				return nil
 			}
 		}

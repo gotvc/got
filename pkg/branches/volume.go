@@ -36,6 +36,9 @@ func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
 		if err != nil {
 			return nil, err
 		}
+		if goal == nil {
+			return goal, nil
+		}
 		if x != nil {
 			hasAncestor, err := gotvc.IsDescendentOf(ctx, src.VCStore, *goal, *x)
 			if err != nil {
