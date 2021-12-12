@@ -29,8 +29,8 @@ func TestMultiRepoSync(t *testing.T) {
 	p1, p2, pOrigin := initRepo(t), initRepo(t), initRepo(t)
 	origin := openRepo(t, pOrigin)
 	for _, p := range []string{p1, p2} {
-		originID := origin.GetID()
 		err := got.ConfigureRepo(p, func(x got.RepoConfig) got.RepoConfig {
+			originID := origin.GetID()
 			x.Spaces = []gotrepo.SpaceLayerSpec{
 				{Prefix: "origin/", Target: gotrepo.SpaceSpec{Peer: &originID}},
 			}
