@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"io/ioutil"
@@ -53,13 +54,15 @@ func TestMultiRepoSync(t *testing.T) {
 	require.Contains(t, listBranches(t, r2), "origin/master")
 	require.Contains(t, listBranches(t, r2), "origin/mybranch")
 
-	createFile(t, p1, "myfile.txt", []byte("hello world\n"))
+	testData := []byte("hello world\n")
+	createFile(t, p1, "myfile.txt", testData)
 	add(t, r1, "myfile.txt")
 	commit(t, r1)
 	sync(t, r1, "origin/master", "master")
 
 	sync(t, r2, "master", "origin/master")
 	require.Contains(t, ls(t, r2, ""), "myfile.txt")
+	require.Equal(t, testData, cat(t, r2, "myfile.txt"))
 }
 
 func initRepo(t testing.TB) string {
@@ -107,6 +110,13 @@ func ls(t testing.TB, r *got.Repo, p string) (ret []string) {
 	})
 	require.NoError(t, err)
 	return ret
+}
+
+func cat(t testing.TB, r *got.Repo, p string) []byte {
+	buf := bytes.Buffer{}
+	err := r.Cat(context.TODO(), p, &buf)
+	require.NoError(t, err)
+	return buf.Bytes()
 }
 
 func listBranches(t testing.TB, r *got.Repo) (ret []string) {
