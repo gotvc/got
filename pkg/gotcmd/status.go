@@ -26,20 +26,33 @@ var statusCmd = &cobra.Command{
 			return err
 		}
 		bufw := bufio.NewWriter(cmd.OutOrStdout())
-		fmt.Fprintf(bufw, "ACTIVE: %s\n", name)
-		fmt.Fprintf(bufw, "STAGING:\n")
+		if _, err := fmt.Fprintf(bufw, "BRANCH: %s\n", name); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(bufw, "STAGED:\n"); err != nil {
+			return err
+		}
 		if err := repo.ForEachStaging(ctx, func(p string, op gotrepo.FileOperation) error {
 			var desc = "UNKNOWN"
 			switch {
 			case op.Delete:
 				desc = color.RedString("DELETE")
 			case op.Create != nil:
-				desc = color.GreenString("CREATE")
+				desc = color.BlueString("CREATE")
 			case op.Modify != nil:
-				desc = color.YellowString("MODIFY")
+				desc = color.GreenString("MODIFY")
 			}
-			fmt.Fprintf(bufw, "\t%7s %s\n", desc, p)
-			return nil
+			_, err := fmt.Fprintf(bufw, "\t%7s %s\n", desc, p)
+			return err
+		}); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(bufw, "UNTRACKED:\n"); err != nil {
+			return err
+		}
+		if err := repo.ForEachUntracked(ctx, func(p string) error {
+			_, err := fmt.Fprintf(bufw, "\t%s\n", color.YellowString(p))
+			return err
 		}); err != nil {
 			return err
 		}

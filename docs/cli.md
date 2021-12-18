@@ -3,14 +3,11 @@
 ## General
 
 ### `got status`
-Prints information about the active branch, and tracked paths.
+Prints information about the active branch, staging area, and untracked paths.
 
 ### `got commit [-m <message>]`
 Creates a new snapshot by applying any changes in tracked paths to the current branch.
 The current branch's head is updated to the new snapshot.
-Produces a delta by looking at the tracked paths and applies that delta to the contents of the active volume.
-This produces a new commit.
-The new commit is written to the active volume, replacing what was there.
 
 ### `got fork <name>`
 1. Creates a new branch called name, or errors if it exists.
@@ -73,6 +70,11 @@ Prints the head of the branch at name to standard output.
 ### `got sync <src> <dst>`
 Sync the contents of branch `<src>` to branch `<dst>`.
 
+## IAM
+
+### `got iam`
+Prints the access control policy from `.got/policy`.
+
 ## Misc
 
 ### `got slurp <path>`
@@ -82,7 +84,7 @@ It does not write to any branches.
 It exists primarily to give an idea of how fast Got can import a file or directory.
 
 ### `got clobber <path>`
-Overwrites the data in the working tree at path with whatever is in the active volume.
+Overwrites the data in the working tree at path with whatever is in the active branch
 
 ### `got scrub`
 Runs validation checks on the snapshots in the current history and their filesystems.

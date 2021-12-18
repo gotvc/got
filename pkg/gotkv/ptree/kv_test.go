@@ -7,6 +7,7 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,13 +28,11 @@ func TestAddPrefix(t *testing.T) {
 	require.NotNil(t, root)
 
 	prefix := []byte("abc")
-	root, err = AddPrefix(ctx, s, *root, prefix)
-	require.NoError(t, err)
-	require.NotNil(t, root)
+	root2 := AddPrefix(*root, prefix)
 
 	t.Logf("produced %d blobs", s.Len())
 
-	it := NewIterator(s, &op, *root, Span{})
+	it := NewIterator(s, &op, root2, kvstreams.TotalSpan())
 	var ent Entry
 	for i := 0; i < N; i++ {
 		err := it.Next(ctx, &ent)

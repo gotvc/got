@@ -53,7 +53,7 @@ func maxEntry(ctx context.Context, sr *StreamReader, under []byte) (ret *Entry, 
 }
 
 // AddPrefix returns a new version of root with the prefix prepended to all the keys
-func AddPrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
+func AddPrefix(x Root, prefix []byte) Root {
 	var first []byte
 	first = append(first, prefix...)
 	first = append(first, x.First...)
@@ -62,7 +62,7 @@ func AddPrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Roo
 		Ref:   x.Ref,
 		Depth: x.Depth,
 	}
-	return &y, nil
+	return y
 }
 
 // RemovePrefix returns a new version of root with the prefix removed from all the keys

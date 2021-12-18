@@ -1,11 +1,9 @@
 package gotfs
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
@@ -168,36 +166,37 @@ func (o *Operator) ForEachFile(ctx context.Context, s cadata.Store, root Root, p
 
 // Graft places branch at p in root.
 // If p == "" then branch is returned unaltered.
-func (o *Operator) Graft(ctx context.Context, s cadata.Store, root Root, p string, branch Root) (*Root, error) {
+func (o *Operator) Graft(ctx context.Context, ms, ds cadata.Store, root Root, p string, branch Root) (*Root, error) {
 	p = cleanPath(p)
 	if p == "" {
 		return &branch, nil
 	}
-	root2, err := o.MkdirAll(ctx, s, root, parentPath(p))
+	root2, err := o.MkdirAll(ctx, ms, root, parentPath(p))
 	if err != nil {
 		return nil, err
 	}
-	b := o.gotkv.NewBuilder(s)
 	k := makeMetadataKey(p)
-	beforeIt := o.gotkv.NewIterator(s, *root2, gotkv.Span{Start: nil, End: k})
-	branch2, err := o.gotkv.AddPrefix(ctx, s, branch, k[:len(k)-1])
-	if err != nil {
-		return nil, err
-	}
-	branchIt := o.gotkv.NewIterator(s, *branch2, gotkv.Span{})
-	afterIt := o.gotkv.NewIterator(s, root, gotkv.Span{Start: gotkv.PrefixEnd(k), End: nil})
-	for _, it := range []gotkv.Iterator{beforeIt, branchIt, afterIt} {
-		if err := gotkv.CopyAll(ctx, b, it); err != nil {
-			return nil, err
-		}
-	}
-	return b.Finish(ctx)
+	branch2 := o.gotkv.AddPrefix(branch, k[:len(k)-1])
+	return o.Splice(ctx, ms, ds, []Segment{
+		{
+			Span: gotkv.Span{Start: nil, End: k},
+			Root: *root2,
+		},
+		{
+			Span: gotkv.TotalSpan(),
+			Root: branch2,
+		},
+		{
+			Span: gotkv.Span{Start: gotkv.PrefixEnd(k), End: nil},
+			Root: *root2,
+		},
+	})
 }
 
-func (o *Operator) AddPrefix(ctx context.Context, s Store, p string, x Root) (*Root, error) {
+func (o *Operator) AddPrefix(root Root, p string) Root {
 	p = cleanPath(p)
 	k := makeMetadataKey(p)
-	return o.gotkv.AddPrefix(ctx, s, x, k[:len(k)-1])
+	return o.gotkv.AddPrefix(root, k[:len(k)-1])
 }
 
 func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func(ref gdat.Ref) error) error {
@@ -268,49 +267,11 @@ func (s Segment) String() string {
 }
 
 func (o *Operator) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*Root, error) {
-	b := o.newBuilder(ctx, ms, ds)
+	b := o.NewBuilder(ctx, ms, ds)
 	for _, seg := range segs {
-		if err := b.CopyFrom(ctx, seg.Root, seg.Span); err != nil {
+		if err := b.copyFrom(ctx, seg.Root, seg.Span); err != nil {
 			return nil, err
 		}
 	}
 	return b.Finish()
-}
-
-func IsEmpty(root Root) bool {
-	return len(root.First) == 0
-}
-
-func Dump(ctx context.Context, s Store, root Root, w io.Writer) error {
-	bw := bufio.NewWriter(w)
-	op := NewOperator()
-	it := op.gotkv.NewIterator(s, root, gotkv.TotalSpan())
-	var ent gotkv.Entry
-	for err := it.Next(ctx, &ent); err != gotkv.EOS; err = it.Next(ctx, &ent) {
-		if err != nil {
-			return err
-		}
-		switch {
-		case isExtentKey(ent.Key):
-			ext, err := parseExtent(ent.Value)
-			if err != nil {
-				fmt.Fprintf(bw, "EXTENT (INVALID):\t%q\t%q\n", ent.Key, ent.Value)
-				continue
-			}
-			ref, err := gdat.ParseRef(ext.Ref)
-			var refString string
-			if err == nil {
-				refString = ref.String()
-			}
-			fmt.Fprintf(bw, "EXTENT\t%q\toffset=%d,length=%d,ref=%s\n", ent.Key, ext.Offset, ext.Length, refString)
-		default:
-			md, err := parseMetadata(ent.Value)
-			if err != nil {
-				fmt.Fprintf(bw, "METADATA (INVALID):\t%q\t%q\n", ent.Key, ent.Value)
-				continue
-			}
-			fmt.Fprintf(bw, "METADATA\t%q\tmode=%o,labels=%v\n", ent.Key, md.Mode, md.Labels)
-		}
-	}
-	return bw.Flush()
 }

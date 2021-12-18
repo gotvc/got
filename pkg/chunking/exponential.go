@@ -2,8 +2,6 @@ package chunking
 
 import (
 	"bytes"
-
-	"github.com/pkg/errors"
 )
 
 type Exponential struct {
@@ -43,10 +41,6 @@ func (e *Exponential) Write(data []byte) (int, error) {
 		}
 	}
 	return n, nil
-}
-
-func (e *Exponential) WriteNoSplit(p []byte) (int, error) {
-	return 0, errors.Errorf("Exponential does not support WriteNoSplit")
 }
 
 func (e *Exponential) Buffered() int {

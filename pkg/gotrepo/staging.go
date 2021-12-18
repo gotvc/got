@@ -2,6 +2,7 @@ package gotrepo
 
 import (
 	"context"
+	"os"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
@@ -27,7 +28,7 @@ func (r *Repo) Add(ctx context.Context, paths ...string) error {
 	storeTriple := r.stagingTriple()
 	ms := storeTriple.FS
 	ds := storeTriple.Raw
-	porter := porting.NewPorter(r.getFSOp(branch), r.workingDir, nil)
+	porter := porting.NewPorter(r.getFSOp(branch), r.workingDir, r.getPorterCache(*branch))
 	stage := r.getStage()
 	for _, target := range paths {
 		if err := posixfs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ posixfs.DirEnt) error {
@@ -57,7 +58,7 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 	storeTriple := r.stagingTriple()
 	ms := storeTriple.FS
 	ds := storeTriple.Raw
-	porter := porting.NewPorter(r.getFSOp(branch), r.workingDir, nil)
+	porter := porting.NewPorter(r.getFSOp(branch), r.workingDir, r.getPorterCache(*branch))
 	stage := r.stage
 	for _, p := range paths {
 		if err := stage.CheckConflict(ctx, p); err != nil {
@@ -212,6 +213,38 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 	return r.getStage().Reset()
 }
 
+// ForEachUntracked lists all the files which are not in either:
+// 	1) the staging area
+//  2) the active branch head
+func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) error {
+	_, b, err := r.GetActiveBranch(ctx)
+	if err != nil {
+		return err
+	}
+	snap, err := branches.GetHead(ctx, *b)
+	if err != nil {
+		return err
+	}
+	fsop := r.getFSOp(b)
+	return posixfs.WalkLeaves(ctx, r.workingDir, "", func(p string, ent posixfs.DirEnt) error {
+		// filter staging
+		if op, err := r.stage.Get(ctx, p); err != nil {
+			return err
+		} else if op != nil {
+			return nil
+		}
+		// filter branch head
+		if snap != nil {
+			if _, err := fsop.GetMetadata(ctx, b.Volume.FSStore, snap.Root, p); err != nil && !os.IsNotExist(err) {
+				return err
+			} else if err == nil {
+				return nil
+			}
+		}
+		return fn(p)
+	})
+}
+
 func (r *Repo) stagingStore() cadata.Store {
 	return r.storeManager.GetStore(0)
 }
@@ -231,4 +264,8 @@ func (r *Repo) StagingStore() cadata.Store {
 func (r *Repo) getStage() *staging.Stage {
 	storage := staging.NewBoltStorage(r.db, bucketStaging)
 	return staging.New(storage)
+}
+
+func (r *Repo) getPorterCache(b branches.Branch) porting.Cache {
+	return nil
 }

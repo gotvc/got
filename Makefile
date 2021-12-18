@@ -13,16 +13,22 @@ install: protobuf
 protobuf:
 	cd ./pkg/gotfs && ./build_protobuf.sh
 
+build: protobuf
+	rm -r ./build/*
+	GOOS=darwin GOARCH=amd64 ./etc/build_go_binary.sh build/got_darwin-amd64_$(TAG) ./cmd/got
+	GOOS=linux GOARCH=amd64 ./etc/build_go_binary.sh build/got_linux-amd64_$(TAG) ./cmd/got
+	GOOS=windows GOARCH=amd64 ./etc/build_go_binary.sh build/got_windows-amd64_$(TAG) ./cmd/got
+
 add-replace:
 	go mod edit -replace=github.com/brendoncarroll/go-state=../../brendoncarroll/go-state
-	go mod edit -replace=github.com/inet256/inet256=../../inet256/inet256
 	go mod edit -replace=github.com/brendoncarroll/go-p2p=../../brendoncarroll/go-p2p
+	go mod edit -replace=github.com/inet256/inet256=../../inet256/inet256
 
 drop-replace:
-	go mod edit -dropreplace=github.com/brendoncarroll/go-p2p
 	go mod edit -dropreplace=github.com/brendoncarroll/go-state
+	go mod edit -dropreplace=github.com/brendoncarroll/go-p2p
 	go mod edit -dropreplace=github.com/inet256/inet256
 
 precommit: drop-replace test
 	go mod tidy
-	
+
