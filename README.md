@@ -10,7 +10,7 @@ Got uses [INET256](https://github.com/inet256/inet256) to easily and securely co
 [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ## Features/Roadmap
-- [x] E2E encryption. Branch names, directory names, file names, and file sizes are hidden.
+- [x] E2E encryption. Branch names, directory names, file names, and file sizes can all be hidden from remote repositories.
 - [x] Stage changes with `add`, `rm`, `put`, and `discard` commands.
 - [x] Inspect branch state with `cat` and `ls`.
 - [x] Print and change the active branch with `active` command.
@@ -20,8 +20,7 @@ Got uses [INET256](https://github.com/inet256/inet256) to easily and securely co
 - [x] Share repositories over INET256 using `serve` command.
 - [x] Branch level access control using ACL defined in a `.got/policy` file.
 - [ ] Checkout the head of a branch to the working directory.
-- [ ] Pack small files together in storage format.
-- [ ] Diffs, 3-way merge.
+- [ ] Merge 2 branches.
 
 ## Getting Started
 Either download a prebuilt binary or build one from source.

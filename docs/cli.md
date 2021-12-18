@@ -3,7 +3,7 @@
 ## General
 
 ### `got status`
-Prints information about the active branch, and tracked paths.
+Prints information about the active branch, staging area, an untracked paths.
 
 ### `got commit [-m <message>]`
 Creates a new snapshot by applying any changes in tracked paths to the current branch.
@@ -84,7 +84,7 @@ It does not write to any branches.
 It exists primarily to give an idea of how fast Got can import a file or directory.
 
 ### `got clobber <path>`
-Overwrites the data in the working tree at path with whatever is in the active volume.
+Overwrites the data in the working tree at path with whatever is in the active branch
 
 ### `got scrub`
 Runs validation checks on the snapshots in the current history and their filesystems.
