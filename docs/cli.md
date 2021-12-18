@@ -3,7 +3,7 @@
 ## General
 
 ### `got status`
-Prints information about the active branch, staging area, an untracked paths.
+Prints information about the active branch, staging area, and untracked paths.
 
 ### `got commit [-m <message>]`
 Creates a new snapshot by applying any changes in tracked paths to the current branch.
