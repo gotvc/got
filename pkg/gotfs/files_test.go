@@ -2,7 +2,6 @@ package gotfs
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"io"
 	"os"
@@ -10,16 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestCreateFileFrom(t *testing.T) {
-	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultHash, DefaultMaxBlobSize)
-	op := NewOperator()
+	ctx, op, s := setup(t)
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	require.NotNil(t, x)
@@ -34,9 +30,7 @@ func TestCreateFileFrom(t *testing.T) {
 }
 
 func TestFileMetadata(t *testing.T) {
-	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultHash, DefaultMaxBlobSize)
-	op := NewOperator()
+	ctx, op, s := setup(t)
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	require.NotNil(t, x)
@@ -49,10 +43,7 @@ func TestFileMetadata(t *testing.T) {
 }
 
 func TestLargeFiles(t *testing.T) {
-	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultHash, DefaultMaxBlobSize)
-	op := NewOperator()
-
+	ctx, op, s := setup(t)
 	const N = 5
 	const size = 1e8
 	fileRoots := make([]Root, N)

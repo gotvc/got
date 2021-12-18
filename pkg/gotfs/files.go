@@ -11,13 +11,8 @@ import (
 
 // CreateFileRoot creates a new filesystem with the contents read from r at the root
 func (o *Operator) CreateFileRoot(ctx context.Context, ms, ds Store, r io.Reader) (*Root, error) {
-	b := o.newBuilder(ctx, ms, ds)
-	defer b.Finish()
-	// metadata entry
-	md := Metadata{
-		Mode: 0o644,
-	}
-	if err := b.PutMetadata("", &md); err != nil {
+	b := o.NewBuilder(ctx, ms, ds)
+	if err := b.BeginFile("", 0o644); err != nil {
 		return nil, err
 	}
 	if _, err := io.Copy(b, r); err != nil {
@@ -43,14 +38,12 @@ func (o *Operator) CreateExtents(ctx context.Context, ds Store, r io.Reader) ([]
 }
 
 func (o *Operator) CreateFileRootFromExtents(ctx context.Context, ms, ds Store, exts []*Extent) (*Root, error) {
-	b := o.newBuilder(ctx, ms, ds)
-	if err := b.PutMetadata("", &Metadata{
-		Mode: 0o644,
-	}); err != nil {
+	b := o.NewBuilder(ctx, ms, ds)
+	if err := b.BeginFile("", 0o644); err != nil {
 		return nil, err
 	}
 	for _, ext := range exts {
-		if err := b.CopyExtent(ctx, ext); err != nil {
+		if err := b.WriteExtent(ctx, ext); err != nil {
 			return nil, err
 		}
 	}
@@ -145,12 +138,4 @@ func (o *Operator) readFromIterator(ctx context.Context, it gotkv.Iterator, ds c
 		return 0, err
 	}
 	return n, err
-}
-
-func (o *Operator) WriteFileAt(ctx context.Context, s Store, x Root, p string, start uint64, data []byte) (*Ref, error) {
-	md, err := o.GetFileMetadata(ctx, s, x, p)
-	if err != nil {
-		return nil, err
-	}
-	panic(md)
 }

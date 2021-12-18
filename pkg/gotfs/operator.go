@@ -1,11 +1,9 @@
 package gotfs
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"strings"
 
@@ -269,49 +267,11 @@ func (s Segment) String() string {
 }
 
 func (o *Operator) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*Root, error) {
-	b := o.newBuilder(ctx, ms, ds)
+	b := o.NewBuilder(ctx, ms, ds)
 	for _, seg := range segs {
-		if err := b.CopyFrom(ctx, seg.Root, seg.Span); err != nil {
+		if err := b.copyFrom(ctx, seg.Root, seg.Span); err != nil {
 			return nil, err
 		}
 	}
 	return b.Finish()
-}
-
-func IsEmpty(root Root) bool {
-	return len(root.First) == 0
-}
-
-func Dump(ctx context.Context, s Store, root Root, w io.Writer) error {
-	bw := bufio.NewWriter(w)
-	op := NewOperator()
-	it := op.gotkv.NewIterator(s, root, gotkv.TotalSpan())
-	var ent gotkv.Entry
-	for err := it.Next(ctx, &ent); err != gotkv.EOS; err = it.Next(ctx, &ent) {
-		if err != nil {
-			return err
-		}
-		switch {
-		case isExtentKey(ent.Key):
-			ext, err := parseExtent(ent.Value)
-			if err != nil {
-				fmt.Fprintf(bw, "EXTENT (INVALID):\t%q\t%q\n", ent.Key, ent.Value)
-				continue
-			}
-			ref, err := gdat.ParseRef(ext.Ref)
-			var refString string
-			if err == nil {
-				refString = ref.String()
-			}
-			fmt.Fprintf(bw, "EXTENT\t%q\toffset=%d,length=%d,ref=%s\n", ent.Key, ext.Offset, ext.Length, refString)
-		default:
-			md, err := parseMetadata(ent.Value)
-			if err != nil {
-				fmt.Fprintf(bw, "METADATA (INVALID):\t%q\t%q\n", ent.Key, ent.Value)
-				continue
-			}
-			fmt.Fprintf(bw, "METADATA\t%q\tmode=%o,labels=%v\n", ent.Key, md.Mode, md.Labels)
-		}
-	}
-	return bw.Flush()
 }

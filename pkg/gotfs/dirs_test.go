@@ -6,14 +6,11 @@ import (
 	"path"
 	"testing"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/stretchr/testify/require"
 )
 
 func TestReadDir(t *testing.T) {
-	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultHash, DefaultMaxBlobSize)
-	op := NewOperator()
+	ctx, op, s := setup(t)
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	x, err = op.Mkdir(ctx, s, *x, "dir0")
@@ -46,9 +43,7 @@ func TestReadDir(t *testing.T) {
 }
 
 func TestMkdirAll(t *testing.T) {
-	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultHash, DefaultMaxBlobSize)
-	op := NewOperator()
+	ctx, op, s := setup(t)
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	x, err = op.MkdirAll(ctx, s, *x, "path/to/the/dir")
