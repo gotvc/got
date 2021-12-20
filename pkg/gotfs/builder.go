@@ -44,6 +44,7 @@ func (o *Operator) NewBuilder(ctx context.Context, ms, ds Store) *Builder {
 // to the content of that file.
 func (b *Builder) BeginFile(p string, mode os.FileMode) error {
 	p = cleanPath(p)
+	mode &= ^os.ModeDir
 	if b.IsFinished() {
 		return errBuilderIsFinished()
 	}
@@ -109,14 +110,28 @@ func (b *Builder) Write(data []byte) (int, error) {
 	return b.w.Write(data)
 }
 
-func (b *Builder) WriteExtent(ctx context.Context, ext *Extent) error {
+// WriteExtents adds extents to the current file.
+// Rechunking is avoided, but the last Extent could be short, so it must be rechunked regardless.
+// WriteExtents is useful for efficiently joining Extents from disjoint regions of a file.
+// See also: Operator.CreateExtents
+func (b *Builder) WriteExtents(ctx context.Context, exts []*Extent) error {
 	if b.IsFinished() {
 		return errBuilderIsFinished()
 	}
 	if !b.inFile {
 		return errors.Errorf("WriteExtent called without call to BeginFile")
 	}
-	if b.w.Buffered() == 0 {
+	for i, ext := range exts {
+		isShort := i == len(exts)-1
+		if err := b.writeExtent(ctx, ext, isShort); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *Builder) writeExtent(ctx context.Context, ext *Extent, isShort bool) error {
+	if b.w.Buffered() == 0 && !isShort {
 		p := *b.path
 		offset := b.offset
 		b.offset += uint64(ext.Length)
@@ -146,7 +161,9 @@ func (b *Builder) handleExtent(ext *Extent) error {
 	return b.putExtent(p, offset, ext)
 }
 
-// Finish closes
+// Finish closes the builder and returns the Root to the filesystem.
+// Finish is idempotent, and is safe to call multiple times.
+// Not calling finish is not an error, the builder does not allocate resources other than memory.
 func (b *Builder) Finish() (*Root, error) {
 	b.finishOnce.Do(func() {
 		b.root, b.err = b.finish()

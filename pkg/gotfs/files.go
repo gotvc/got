@@ -42,10 +42,8 @@ func (o *Operator) CreateFileRootFromExtents(ctx context.Context, ms, ds Store, 
 	if err := b.BeginFile("", 0o644); err != nil {
 		return nil, err
 	}
-	for _, ext := range exts {
-		if err := b.WriteExtent(ctx, ext); err != nil {
-			return nil, err
-		}
+	if err := b.WriteExtents(ctx, exts); err != nil {
+		return nil, err
 	}
 	return b.Finish()
 }

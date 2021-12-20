@@ -134,11 +134,16 @@ func importFileConcurrent(ctx context.Context, fsop *gotfs.Operator, ms, ds cada
 	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
-	var extents []*gotfs.Extent
-	for i := range extSlices {
-		extents = append(extents, extSlices[i]...)
+	b := fsop.NewBuilder(ctx, ms, ds)
+	if err := b.BeginFile("", 0o644); err != nil {
+		return nil, err
 	}
-	return fsop.CreateFileRootFromExtents(ctx, ms, ds, extents)
+	for _, extSlice := range extSlices {
+		if err := b.WriteExtents(ctx, extSlice); err != nil {
+			return nil, err
+		}
+	}
+	return b.Finish()
 }
 
 func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
