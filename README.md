@@ -38,7 +38,7 @@ $ make test
 ```
 
 Installs to `$GOPATH/bin` with make.
-If that isn't on your path, just copy the executable from there to whereever you want.
+If that isn't on your path, just copy the executable from there to wherever you want.
 
 ```shell
 $ make install
