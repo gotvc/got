@@ -16,21 +16,27 @@ type (
 	Entry = kvstreams.Entry
 )
 
-func MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, error) {
+func MaxEntry(ctx context.Context, s cadata.Store, x Root, span Span) (*Entry, error) {
 	op := gdat.NewOperator()
 	sr := NewStreamReader(s, &op, []Index{rootToIndex(x)})
-	ent, err := maxEntry(ctx, sr, under)
+	ent, err := maxEntry(ctx, sr, span.End)
 	if err != nil {
 		return nil, err
 	}
+	if ent == nil {
+		return nil, nil
+	}
 	if x.Depth == 0 {
-		return ent.Key, nil
+		if span.GreaterThan(ent.Key) {
+			return nil, nil
+		}
+		return ent, nil
 	}
 	idx, err := entryToIndex(*ent)
 	if err != nil {
 		return nil, err
 	}
-	return MaxKey(ctx, s, indexToRoot(idx, x.Depth-1), under)
+	return MaxEntry(ctx, s, indexToRoot(idx, x.Depth-1), span)
 }
 
 func maxEntry(ctx context.Context, sr *StreamReader, under []byte) (ret *Entry, _ error) {
@@ -45,9 +51,6 @@ func maxEntry(ctx context.Context, sr *StreamReader, under []byte) (ret *Entry, 
 		}
 		ent2 := ent.Clone()
 		ret = &ent2
-	}
-	if ret == nil {
-		return nil, kvstreams.EOS
 	}
 	return ret, nil
 }
@@ -85,11 +88,11 @@ func HasPrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (bool
 	if !bytes.HasPrefix(x.First, prefix) {
 		return false, nil
 	}
-	lastKey, err := MaxKey(ctx, s, x, nil)
+	maxEnt, err := MaxEntry(ctx, s, x, kvstreams.TotalSpan())
 	if err != nil {
 		return false, err
 	}
-	if !bytes.HasPrefix(lastKey, prefix) {
+	if !bytes.HasPrefix(maxEnt.Key, prefix) {
 		return false, nil
 	}
 	return true, nil

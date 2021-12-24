@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math/rand"
 	"path"
 	"strconv"
 	"strings"
@@ -13,9 +12,8 @@ import (
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/blake2b"
-	"golang.org/x/sync/errgroup"
 )
 
 func TestRepoInit(t *testing.T) {
@@ -42,7 +40,7 @@ func TestCommit(t *testing.T) {
 	p := "test.txt"
 	p2 := "test2.txt"
 	fileContents := "file contents\n"
-	err := posixfs.PutFile(ctx, fs, p, 00644, strings.NewReader(fileContents))
+	err := posixfs.PutFile(ctx, fs, p, 0o644, strings.NewReader(fileContents))
 	require.NoError(t, err)
 	err = repo.Put(ctx, p)
 	require.NoError(t, err)
@@ -74,17 +72,12 @@ func TestCommitLargeFile(t *testing.T) {
 	fs := repo.WorkingDir()
 
 	p := "largefile"
-	const size = 500e6
-	newReader := func() io.Reader {
-		rng := rand.New(rand.NewSource(0))
-		rand.New(rand.NewSource(0))
-		return io.LimitReader(rng, size)
-	}
-	require.NoError(t, posixfs.PutFile(ctx, fs, p, 0o644, newReader()))
+	const size = 125e6
+	require.NoError(t, posixfs.PutFile(ctx, fs, p, 0o644, testutil.RandomStream(0, size)))
 	require.NoError(t, repo.Put(ctx, p))
 	require.NoError(t, repo.Commit(ctx, gotvc.SnapInfo{}))
 	checkExists(t, repo, p)
-	checkFileContent(t, repo, p, newReader())
+	checkFileContent(t, repo, p, testutil.RandomStream(0, size))
 }
 
 func TestCommitDir(t *testing.T) {
@@ -151,32 +144,16 @@ func newTestRepo(t testing.TB) *Repo {
 
 func checkFileContent(t testing.TB, repo *Repo, p string, r io.Reader) {
 	ctx := context.Background()
-	var expected, actual [32]byte
-	eg := errgroup.Group{}
-	eg.Go(func() error {
-		h, err := blake2b.New256(nil)
+	pr, pw := io.Pipe()
+	go func() {
+		err := repo.Cat(ctx, p, pw)
 		if err != nil {
-			panic(err)
+			pw.CloseWithError(err)
+		} else {
+			pw.Close()
 		}
-		if _, err := io.Copy(h, r); err != nil {
-			return err
-		}
-		h.Sum(expected[:0])
-		return nil
-	})
-	eg.Go(func() error {
-		h, err := blake2b.New256(nil)
-		if err != nil {
-			panic(err)
-		}
-		if err := repo.Cat(ctx, p, h); err != nil {
-			return err
-		}
-		h.Sum(actual[:0])
-		return nil
-	})
-	require.NoError(t, eg.Wait())
-	require.Equal(t, expected, actual, "file %q content did not match", p)
+	}()
+	testutil.StreamsEqual(t, r, pr)
 }
 
 func exists(t testing.TB, repo *Repo, p string) bool {

@@ -2,6 +2,7 @@ package gotfs
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
 
@@ -21,7 +22,32 @@ func TestBuilderMkdir(t *testing.T) {
 	}
 }
 
-func setup(t testing.TB) (context.Context, Operator, cadata.Store) {
+func TestBuilderSmallFiles(t *testing.T) {
+	ctx, op, s := setup(t)
+	b := op.NewBuilder(ctx, s, s)
+	require.NoError(t, b.Mkdir("", 0o755))
+	const N = 1e5
+	for i := 0; i < N; i++ {
+		name := fmt.Sprintf("%012d", i)
+		err := b.BeginFile(name, 0o644)
+		require.NoError(t, err)
+		_, err = b.Write([]byte("test data"))
+		require.NoError(t, err)
+	}
+	root, err := b.Finish()
+	require.NoError(t, err)
+	var count int
+	err = op.ForEachFile(ctx, s, *root, "", func(p string, md *Metadata) error {
+		count++
+		return nil
+	})
+	require.NoError(t, err)
+	require.Equal(t, count, int(N))
+	t.Logf("%d files produced %d chunks", int(N), s.Len())
+	require.LessOrEqual(t, s.Len(), int(N))
+}
+
+func setup(t testing.TB) (context.Context, Operator, *cadata.MemStore) {
 	op := NewOperator()
 	s := cadata.NewMem(cadata.DefaultHash, DefaultMaxBlobSize)
 	return context.Background(), op, s

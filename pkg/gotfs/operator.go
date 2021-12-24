@@ -275,3 +275,7 @@ func (o *Operator) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*R
 	}
 	return b.Finish()
 }
+
+func (o *Operator) newChunker(onChunk chunking.ChunkHandler) *chunking.ContentDefined {
+	return chunking.NewContentDefined(o.minSizeData, o.averageSizeData, o.maxBlobSize, o.poly, onChunk)
+}

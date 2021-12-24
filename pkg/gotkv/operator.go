@@ -10,10 +10,7 @@ import (
 	"github.com/gotvc/got/pkg/gotkv/ptree"
 )
 
-type Builder interface {
-	Put(ctx context.Context, key, value []byte) error
-	Finish(ctx context.Context) (*Root, error)
-}
+type Builder = ptree.Builder
 
 type Iterator = kvstreams.Iterator
 
@@ -77,10 +74,19 @@ func NewOperator(opts ...Option) Operator {
 }
 
 func (o *Operator) Put(ctx context.Context, s cadata.Store, x Root, key, value []byte) (*Root, error) {
-	return ptree.Mutate(ctx, o.makeBuilder(s), x, ptree.Mutation{
-		Span: kvstreams.SingleItemSpan(key),
-		Fn:   func(*Entry) []Entry { return []Entry{{Key: key, Value: value}} },
-	})
+	b := o.makeBuilder(s)
+	beforeIter := o.NewIterator(s, x, Span{End: key})
+	afterIter := o.NewIterator(s, x, Span{Start: KeyAfter(key)})
+	if err := CopyAll(ctx, b, beforeIter); err != nil {
+		return nil, err
+	}
+	if err := b.Put(ctx, key, value); err != nil {
+		return nil, err
+	}
+	if err := CopyAll(ctx, b, afterIter); err != nil {
+		return nil, err
+	}
+	return b.Finish(ctx)
 }
 
 func (o *Operator) GetF(ctx context.Context, s cadata.Store, x Root, key []byte, fn func([]byte) error) error {
@@ -113,25 +119,30 @@ func (o *Operator) Delete(ctx context.Context, s cadata.Store, x Root, key []byt
 }
 
 func (o *Operator) DeleteSpan(ctx context.Context, s cadata.Store, x Root, span Span) (*Root, error) {
-	return ptree.Mutate(ctx, o.makeBuilder(s), x, ptree.Mutation{
-		Span: span,
-		Fn:   func(*Entry) []Entry { return nil },
-	})
+	b := o.makeBuilder(s)
+	beforeIter := o.NewIterator(s, x, Span{End: span.Start})
+	afterIter := o.NewIterator(s, x, Span{Start: span.End})
+	if err := CopyAll(ctx, b, beforeIter); err != nil {
+		return nil, err
+	}
+	if err := CopyAll(ctx, b, afterIter); err != nil {
+		return nil, err
+	}
+	return b.Finish(ctx)
 }
 
 func (o *Operator) Filter(ctx context.Context, s cadata.Store, root Root, span Span, fn func(Entry) bool) (*Root, error) {
-	return ptree.Mutate(ctx, o.makeBuilder(s), root, ptree.Mutation{
-		Span: span,
-		Fn: func(e *Entry) []Entry {
-			if e == nil {
-				return nil
-			}
-			if !fn(*e) {
-				return nil
-			}
-			return []Entry{*e}
-		},
-	})
+	b := o.makeBuilder(s)
+	it := o.NewIterator(s, root, span)
+	if err := kvstreams.ForEach(ctx, it, func(ent Entry) error {
+		if fn(ent) {
+			return b.Put(ctx, ent.Key, ent.Value)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return b.Finish(ctx)
 }
 
 func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) {
@@ -139,8 +150,8 @@ func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) 
 	return b.Finish(ctx)
 }
 
-func (o *Operator) MaxKey(ctx context.Context, s cadata.Store, x Root, under []byte) ([]byte, error) {
-	return ptree.MaxKey(ctx, s, x, under)
+func (o *Operator) MaxEntry(ctx context.Context, s cadata.Store, x Root, span Span) (*Entry, error) {
+	return ptree.MaxEntry(ctx, s, x, span)
 }
 
 func (o *Operator) AddPrefix(x Root, prefix []byte) Root {
@@ -151,7 +162,7 @@ func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Store, x Root, pre
 	return ptree.RemovePrefix(ctx, s, x, prefix)
 }
 
-func (o *Operator) NewBuilder(s Store) Builder {
+func (o *Operator) NewBuilder(s Store) *Builder {
 	return o.makeBuilder(s)
 }
 

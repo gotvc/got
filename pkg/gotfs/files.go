@@ -24,28 +24,21 @@ func (o *Operator) CreateFileRoot(ctx context.Context, ms, ds Store, r io.Reader
 // CreateExtents returns a list of extents created from r
 func (o *Operator) CreateExtents(ctx context.Context, ds Store, r io.Reader) ([]*Extent, error) {
 	var exts []*Extent
-	w := o.newWriter(ctx, ds, func(ext *Extent) error {
+	chunker := o.newChunker(func(data []byte) error {
+		ext, err := o.postExtent(ctx, ds, data)
+		if err != nil {
+			return err
+		}
 		exts = append(exts, ext)
 		return nil
 	})
-	if _, err := io.Copy(w, r); err != nil {
+	if _, err := io.Copy(chunker, r); err != nil {
 		return nil, err
 	}
-	if err := w.Flush(); err != nil {
+	if err := chunker.Flush(); err != nil {
 		return nil, err
 	}
 	return exts, nil
-}
-
-func (o *Operator) CreateFileRootFromExtents(ctx context.Context, ms, ds Store, exts []*Extent) (*Root, error) {
-	b := o.NewBuilder(ctx, ms, ds)
-	if err := b.BeginFile("", 0o644); err != nil {
-		return nil, err
-	}
-	if err := b.WriteExtents(ctx, exts); err != nil {
-		return nil, err
-	}
-	return b.Finish()
 }
 
 // CreateFile creates a file at p with data from r
@@ -68,12 +61,15 @@ func (o *Operator) CreateFile(ctx context.Context, ms, ds Store, x Root, p strin
 func (o *Operator) SizeOfFile(ctx context.Context, s Store, x Root, p string) (uint64, error) {
 	p = cleanPath(p)
 	k := makeMetadataKey(p)
-	under := append(k, 0x01)
-	key, err := o.gotkv.MaxKey(ctx, s, x, under)
+	span := gotkv.Span{End: append(k, 0x01)}
+	ent, err := o.gotkv.MaxEntry(ctx, s, x, span)
 	if err != nil {
 		return 0, err
 	}
-	_, offset, err := splitExtentKey(key)
+	if !isExtentKey(ent.Key) {
+		return 0, nil
+	}
+	_, offset, err := splitExtentKey(ent.Key)
 	return offset, err
 }
 
