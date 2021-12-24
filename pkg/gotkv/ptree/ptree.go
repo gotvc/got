@@ -164,27 +164,6 @@ func (b *Builder) SyncedBelow(depth int) bool {
 	return true
 }
 
-// CopyTree allows writing indexes to the > 0 levels.
-// An index is stored at the level above what it points to.
-// Index of level 0 has depth=1
-// So depth = 1 is stored in level 1.
-// In order to write an index everything below the level must be synced.
-// SyncedBelow(depth) MUST be true
-func (b *Builder) copyTree(ctx context.Context, idx Index, depth int) error {
-	if b.isDone {
-		panic("builder is closed")
-	}
-	if depth == 0 {
-		panic("CopyTree with depth=0")
-	}
-	if !b.SyncedBelow(depth) {
-		panic("cannot copy tree; lower levels unsynced")
-	}
-	w := b.levels[depth]
-	ent := indexToEntry(idx)
-	return w.Append(ctx, ent)
-}
-
 type Iterator struct {
 	s    cadata.Store
 	op   *gdat.Operator
@@ -333,8 +312,9 @@ func readIndexes(ctx context.Context, it kvstreams.Iterator) ([]Index, error) {
 	return idxs, nil
 }
 
-// CopyAll copies all the entries from it to b.
-func CopyAll(ctx context.Context, b *Builder, it *Iterator) error {
+// Copy copies all the entries from it to b.
+func Copy(ctx context.Context, b *Builder, it *Iterator) error {
+	// TODO: take advantage of index copying
 	var ent Entry
 	for err := it.Next(ctx, &ent); err != kvstreams.EOS; err = it.Next(ctx, &ent) {
 		if err != nil {
@@ -345,6 +325,32 @@ func CopyAll(ctx context.Context, b *Builder, it *Iterator) error {
 		}
 	}
 	return nil
+}
+
+func entryToIndex(ent Entry) (Index, error) {
+	ref, err := gdat.ParseRef(ent.Value)
+	if err != nil {
+		return Index{}, err
+	}
+	return Index{
+		First: append([]byte{}, ent.Key...),
+		Ref:   *ref,
+	}, nil
+}
+
+func indexToRoot(idx Index, depth uint8) Root {
+	return Root{
+		Ref:   idx.Ref,
+		First: idx.First,
+		Depth: depth,
+	}
+}
+
+func rootToIndex(r Root) Index {
+	return Index{
+		Ref:   r.Ref,
+		First: r.First,
+	}
 }
 
 // ListChildren returns the immediate children of root if any.

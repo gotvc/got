@@ -77,3 +77,16 @@ func (o *Operator) getExtentF(ctx context.Context, s Store, ext *Extent, fn func
 		return fn(data)
 	})
 }
+
+func (o *Operator) postExtent(ctx context.Context, s Store, data []byte) (*Extent, error) {
+	ref, err := o.rawOp.Post(ctx, s, data)
+	if err != nil {
+		return nil, err
+	}
+	ext := &Extent{
+		Offset: 0,
+		Length: uint32(len(data)),
+		Ref:    gdat.MarshalRef(*ref),
+	}
+	return ext, nil
+}

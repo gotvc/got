@@ -78,13 +78,12 @@ func Sync(ctx context.Context, dst, src Store, x Root, entryFn func(Entry) error
 }
 
 // CopyAll copies all the entries from iterator to builder.
-func CopyAll(ctx context.Context, b Builder, it Iterator) error {
-	ptb, ok1 := b.(*ptree.Builder)
-	pti, ok2 := it.(*ptree.Iterator)
-	if !ok1 || !ok2 {
-		return errors.Errorf("CopyAll not supported on b=%T it=%T", b, it)
+func CopyAll(ctx context.Context, b *Builder, it Iterator) error {
+	pti, ok := it.(*ptree.Iterator)
+	if !ok {
+		return errors.Errorf("CopyAll not supported on it=%T", it)
 	}
-	return ptree.CopyAll(ctx, ptb, pti)
+	return ptree.Copy(ctx, b, pti)
 }
 
 // Populate adds all blobs reachable from x to set.
