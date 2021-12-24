@@ -312,8 +312,8 @@ func readIndexes(ctx context.Context, it kvstreams.Iterator) ([]Index, error) {
 	return idxs, nil
 }
 
-// CopyAll copies all the entries from it to b.
-func CopyAll(ctx context.Context, b *Builder, it *Iterator) error {
+// Copy copies all the entries from it to b.
+func Copy(ctx context.Context, b *Builder, it *Iterator) error {
 	// TODO: take advantage of index copying
 	var ent Entry
 	for err := it.Next(ctx, &ent); err != kvstreams.EOS; err = it.Next(ctx, &ent) {

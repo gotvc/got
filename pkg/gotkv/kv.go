@@ -83,7 +83,7 @@ func CopyAll(ctx context.Context, b *Builder, it Iterator) error {
 	if !ok {
 		return errors.Errorf("CopyAll not supported on it=%T", it)
 	}
-	return ptree.CopyAll(ctx, b, pti)
+	return ptree.Copy(ctx, b, pti)
 }
 
 // Populate adds all blobs reachable from x to set.
