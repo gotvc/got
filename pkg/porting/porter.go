@@ -135,7 +135,7 @@ func importFileConcurrent(ctx context.Context, fsop *gotfs.Operator, ms, ds cada
 		return nil, err
 	}
 	b := fsop.NewBuilder(ctx, ms, ds)
-	if err := b.BeginFile("", 0o644); err != nil {
+	if err := b.BeginFile("", stat.Mode()); err != nil {
 		return nil, err
 	}
 	for _, extSlice := range extSlices {

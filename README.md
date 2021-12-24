@@ -1,7 +1,8 @@
 # Got
 Like Git, but with an 'o'
 
-Got is version control, with a model similar to Git's, extending ideas from [WebFS](https://github.com/brendoncarroll/webfs).
+Got is version control, with a model similar to Git's.
+It provides end-to-end encryption and uses an improved data structure with good support for large files and directories.
 
 Got uses [INET256](https://github.com/inet256/inet256) to easily and securely connect repositories.
 
@@ -10,7 +11,9 @@ Got uses [INET256](https://github.com/inet256/inet256) to easily and securely co
 [ARCHITECTURE.md](./ARCHITECTURE.md)
 
 ## Features/Roadmap
+- [x] Content-Defined chunking of large files into blobs with a maximum size.
 - [x] E2E encryption. Branch names, directory names, file names, and file sizes can all be hidden from remote repositories.
+- [x] Efficiently add/remove large files and directories to/from existing filesystems.
 - [x] Stage changes with `add`, `rm`, `put`, and `discard` commands.
 - [x] Inspect branch state with `cat` and `ls`.
 - [x] Print and change the active branch with `active` command.
@@ -21,6 +24,8 @@ Got uses [INET256](https://github.com/inet256/inet256) to easily and securely co
 - [x] Branch level access control using ACL defined in a `.got/policy` file.
 - [ ] Checkout the head of a branch to the working directory.
 - [ ] Merge 2 branches.
+- [ ] Efficiently pack many small files into fewer blobs.
+
 
 ## Getting Started
 Either download a prebuilt binary or build one from source.
