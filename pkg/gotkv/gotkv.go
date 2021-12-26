@@ -17,20 +17,25 @@ type (
 	ID    = cadata.ID
 	Ref   = gdat.Ref
 
-	Entry = ptree.Entry
-	Root  = ptree.Root
-	Span  = ptree.Span
+	Entry = kvstreams.Entry
+	Span  = kvstreams.Span
+
+	Root = ptree.Root
 )
 
-var ErrKeyNotFound = errors.Errorf("key not found")
-var EOS = kvstreams.EOS
+var (
+	ErrKeyNotFound = errors.Errorf("key not found")
+	EOS            = kvstreams.EOS
+)
 
 var defaultReadOnlyOperator = &Operator{dop: gdat.NewOperator()}
 
+// Get is a convenience function for performing Get without creating an Operator.
 func Get(ctx context.Context, s Store, x Root, key []byte) ([]byte, error) {
 	return defaultReadOnlyOperator.Get(ctx, s, x, key)
 }
 
+// GetF is a convenience function for performing GetF without creating an Operator
 func GetF(ctx context.Context, s Store, x Root, key []byte, fn func([]byte) error) error {
 	return defaultReadOnlyOperator.GetF(ctx, s, x, key, fn)
 }
@@ -79,11 +84,12 @@ func Sync(ctx context.Context, dst, src Store, x Root, entryFn func(Entry) error
 
 // CopyAll copies all the entries from iterator to builder.
 func CopyAll(ctx context.Context, b *Builder, it Iterator) error {
-	pti, ok := it.(*ptree.Iterator)
-	if !ok {
-		return errors.Errorf("CopyAll not supported on it=%T", it)
+	if pti, ok := it.(*ptree.Iterator); ok {
+		return ptree.Copy(ctx, b, pti)
 	}
-	return ptree.Copy(ctx, b, pti)
+	return kvstreams.ForEach(ctx, it, func(ent Entry) error {
+		return b.Put(ctx, ent.Key, ent.Value)
+	})
 }
 
 // Populate adds all blobs reachable from x to set.

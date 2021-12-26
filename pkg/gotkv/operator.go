@@ -1,6 +1,7 @@
 package gotkv
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
+	"github.com/pkg/errors"
 )
 
 type Builder = ptree.Builder
@@ -73,22 +75,6 @@ func NewOperator(opts ...Option) Operator {
 	return op
 }
 
-func (o *Operator) Put(ctx context.Context, s cadata.Store, x Root, key, value []byte) (*Root, error) {
-	b := o.makeBuilder(s)
-	beforeIter := o.NewIterator(s, x, Span{End: key})
-	afterIter := o.NewIterator(s, x, Span{Start: KeyAfter(key)})
-	if err := CopyAll(ctx, b, beforeIter); err != nil {
-		return nil, err
-	}
-	if err := b.Put(ctx, key, value); err != nil {
-		return nil, err
-	}
-	if err := CopyAll(ctx, b, afterIter); err != nil {
-		return nil, err
-	}
-	return b.Finish(ctx)
-}
-
 func (o *Operator) GetF(ctx context.Context, s cadata.Store, x Root, key []byte, fn func([]byte) error) error {
 	it := o.NewIterator(s, x, kvstreams.SingleItemSpan(key))
 	var ent Entry
@@ -113,36 +99,21 @@ func (o *Operator) Get(ctx context.Context, s cadata.Store, x Root, key []byte) 
 	return ret, nil
 }
 
+func (o *Operator) Put(ctx context.Context, s cadata.Store, x Root, key, value []byte) (*Root, error) {
+	return o.Mutate(ctx, s, x, Mutation{
+		Span:    SingleKeySpan(key),
+		Entries: []Entry{{Key: key, Value: value}},
+	})
+}
+
 func (o *Operator) Delete(ctx context.Context, s cadata.Store, x Root, key []byte) (*Root, error) {
-	span := kvstreams.SingleItemSpan(key)
-	return o.DeleteSpan(ctx, s, x, span)
+	return o.DeleteSpan(ctx, s, x, kvstreams.SingleItemSpan(key))
 }
 
 func (o *Operator) DeleteSpan(ctx context.Context, s cadata.Store, x Root, span Span) (*Root, error) {
-	b := o.makeBuilder(s)
-	beforeIter := o.NewIterator(s, x, Span{End: span.Start})
-	afterIter := o.NewIterator(s, x, Span{Start: span.End})
-	if err := CopyAll(ctx, b, beforeIter); err != nil {
-		return nil, err
-	}
-	if err := CopyAll(ctx, b, afterIter); err != nil {
-		return nil, err
-	}
-	return b.Finish(ctx)
-}
-
-func (o *Operator) Filter(ctx context.Context, s cadata.Store, root Root, span Span, fn func(Entry) bool) (*Root, error) {
-	b := o.makeBuilder(s)
-	it := o.NewIterator(s, root, span)
-	if err := kvstreams.ForEach(ctx, it, func(ent Entry) error {
-		if fn(ent) {
-			return b.Put(ctx, ent.Key, ent.Value)
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return b.Finish(ctx)
+	return o.Mutate(ctx, s, x, Mutation{
+		Span: span,
+	})
 }
 
 func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) {
@@ -193,4 +164,60 @@ func (o *Operator) ForEach(ctx context.Context, s Store, root Root, span Span, f
 func (o *Operator) Diff(ctx context.Context, s cadata.Store, left, right Root, span Span, fn kvstreams.DiffFn) error {
 	leftIt, rightIt := o.NewIterator(s, left, span), o.NewIterator(s, right, span)
 	return kvstreams.Diff(ctx, s, leftIt, rightIt, span, fn)
+}
+
+// Mutation represents a declarative change to a Span of entries.
+// The result of applying mutation is that
+type Mutation struct {
+	Span    Span
+	Entries []Entry
+}
+
+// Mutate applies a batch of mutations to the tree x.
+func (o *Operator) Mutate(ctx context.Context, s cadata.Store, x Root, mutations ...Mutation) (*Root, error) {
+	iters := make([]kvstreams.Iterator, 2*len(mutations)+1)
+	var start []byte
+	for i, mut := range mutations {
+		if err := checkMutation(mut); err != nil {
+			return nil, err
+		}
+		if i > 0 {
+			if bytes.Compare(mut.Span.Start, mutations[i-1].Span.End) < 0 {
+				return nil, errors.Errorf("spans out of order %d start: %q < %d end: %q", i, mut.Span.Start, i-1, mut.Span.End)
+			}
+		}
+		beforeIter := o.NewIterator(s, x, Span{
+			Start: start,
+			End:   append([]byte{}, mut.Span.Start...), // ensure this isn't nil, there must be an upper bound.
+		})
+		iters[2*i] = beforeIter
+		iters[2*i+1] = kvstreams.NewLiteral(mut.Entries)
+		start = mut.Span.End
+	}
+	iters[len(iters)-1] = o.NewIterator(s, x, Span{
+		Start: start,
+		End:   nil,
+	})
+	return o.Concat(ctx, s, iters...)
+}
+
+func checkMutation(mut Mutation) error {
+	for _, ent := range mut.Entries {
+		if !mut.Span.Contains(ent.Key) {
+			return errors.Errorf("mutation span %v does not contain entry key %q", mut.Span, ent.Key)
+		}
+	}
+	return nil
+}
+
+// Concat copies data from the iterators in order.
+// If the iterators produce out of order keys concat errors.
+func (o *Operator) Concat(ctx context.Context, s cadata.Store, iters ...kvstreams.Iterator) (*Root, error) {
+	b := o.NewBuilder(s)
+	for _, iter := range iters {
+		if err := CopyAll(ctx, b, iter); err != nil {
+			return nil, err
+		}
+	}
+	return b.Finish(ctx)
 }
