@@ -113,6 +113,7 @@ func (s Span) Clone() Span {
 }
 
 // KeyAfter returns the key immediately after x.
+// There will be no key less than the result and greater than x
 func KeyAfter(x []byte) []byte {
 	y := append([]byte{}, x...)
 	return append(y, 0x00)
