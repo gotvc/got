@@ -22,10 +22,9 @@ Got uses [INET256](https://github.com/inet256/inet256) to easily and securely co
 - [x] Copy one branch state to another with `sync`.
 - [x] Share repositories over INET256 using `serve` command.
 - [x] Branch level access control using ACL defined in a `.got/policy` file.
+- [x] Efficiently pack many small files into fewer blobs.
 - [ ] Checkout the head of a branch to the working directory.
 - [ ] Merge 2 branches.
-- [ ] Efficiently pack many small files into fewer blobs.
-
 
 ## Getting Started
 Either download a prebuilt binary or build one from source.
