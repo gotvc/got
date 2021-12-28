@@ -128,10 +128,11 @@ func (it *Iterator) syncLevel() int {
 	// top is maximum index where the level has more than 1 entry
 	// top is required because indexes at the right most side of the tree cannot be copied
 	// since they could point to incomplete nodes.
+	// the iterator's span causes us to consider some otherwise complete nodes incomplete.
 	var top int
 	for i := len(it.levels) - 1; i >= 0; i-- {
 		top = i
-		if len(it.levels[i]) > 1 && bytes.Compare(it.levels[i][1].Key, it.span.End) < 0 {
+		if len(it.levels[i]) > 1 && (it.span.End == nil || bytes.Compare(it.levels[i][1].Key, it.span.End) < 0) {
 			break
 		}
 	}
