@@ -7,7 +7,6 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 const maxTreeDepth = 255
@@ -29,15 +28,6 @@ func Copy(ctx context.Context, b *Builder, it *Iterator) error {
 				return nil
 			}
 			return err
-		}
-		// TODO: remove this check
-		if level > 0 {
-			idx, err := entryToIndex(ent)
-			if err != nil {
-				logrus.Info(ent)
-				panic(err)
-			}
-			logrus.Infof("copying index: level=%d first=%q", level, idx.First)
 		}
 		if err := b.put(ctx, level, ent.Key, ent.Value); err != nil {
 			return err
