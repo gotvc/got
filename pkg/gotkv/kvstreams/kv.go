@@ -62,6 +62,17 @@ func ForEach(ctx context.Context, it Iterator, fn func(ent Entry) error) error {
 	return nil
 }
 
+func Collect(ctx context.Context, it Iterator) ([]Entry, error) {
+	var ents []Entry
+	if err := ForEach(ctx, it, func(ent Entry) error {
+		ents = append(ents, ent.Clone())
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return ents, nil
+}
+
 // A span of keys [Start, End)
 // If you want to include a specific end key, use the KeyAfter function.
 // nil is interpretted as no bound, not as a 0 length key.  This behaviour is only releveant for End.

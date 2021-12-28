@@ -71,18 +71,8 @@ func ListChildren(ctx context.Context, s cadata.Store, op *gdat.Operator, root R
 
 // ListEntries
 func ListEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Index) ([]Entry, error) {
-	var ents []Entry
 	sr := NewStreamReader(s, op, []Index{idx})
-	for {
-		var ent Entry
-		if err := sr.Next(ctx, &ent); err != nil {
-			if err == kvstreams.EOS {
-				return ents, nil
-			}
-			return nil, err
-		}
-		ents = append(ents, ent)
-	}
+	return kvstreams.Collect(ctx, sr)
 }
 
 func PointsToEntries(root Root) bool {
@@ -102,6 +92,10 @@ func entryToIndex(ent Entry) (Index, error) {
 		First: append([]byte{}, ent.Key...),
 		Ref:   *ref,
 	}, nil
+}
+
+func indexToEntry(idx Index) Entry {
+	return Entry{Key: idx.First, Value: gdat.MarshalRef(idx.Ref)}
 }
 
 func indexToRoot(idx Index, depth uint8) Root {
