@@ -32,16 +32,32 @@ func NewIterator(s cadata.Store, op *gdat.Operator, root Root, span Span) *Itera
 }
 
 func (it *Iterator) Next(ctx context.Context, ent *Entry) error {
+	return it.next(ctx, 0, ent)
+}
+
+func (it *Iterator) next(ctx context.Context, level int, ent *Entry) error {
 	if err := it.initRoot(ctx); err != nil {
 		return err
 	}
-	if err := it.withReader(ctx, 0, func(sr *StreamReader) error {
+	if it.syncLevel() < level {
+		return errors.Errorf("cannot read from level %d, only synced to %d", level, it.syncLevel())
+	}
+	if err := it.withReader(ctx, level, func(sr *StreamReader) error {
 		return sr.Next(ctx, ent)
 	}); err != nil {
 		return err
 	}
 	it.setPosAfter(ent.Key)
 	return it.checkAfterSpan(ent)
+}
+
+func (it *Iterator) syncLevel() int {
+	for i := range it.srs {
+		if it.srs[i] != nil {
+			return i
+		}
+	}
+	return len(it.srs) - 1
 }
 
 func (it *Iterator) Peek(ctx context.Context, ent *Entry) error {
@@ -107,6 +123,7 @@ func (it *Iterator) getReader(ctx context.Context, i int) (*StreamReader, error)
 	return it.srs[i], nil
 }
 
+// checkAfterSpan returns EOS if the entry is outside the iterators span.
 func (it *Iterator) checkAfterSpan(ent *Entry) error {
 	if it.span.LessThan(ent.Key) {
 		return kvstreams.EOS
@@ -130,12 +147,18 @@ func (it *Iterator) initRoot(ctx context.Context) error {
 	}
 	it.srs[i] = NewStreamReader(it.s, it.op, []Index{rootToIndex(it.root)})
 	if i == 0 {
-		return it.srs[i].Seek(ctx, it.pos)
+		if err := it.srs[i].Seek(ctx, it.pos); err != nil {
+			return err
+		}
 	} else {
-		return it.srs[i].SeekIndexes(ctx, it.pos)
+		if err := it.srs[i].SeekIndexes(ctx, it.pos); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
+// readIndexes
 func readIndexes(ctx context.Context, it kvstreams.Iterator) ([]Index, error) {
 	var idxs []Index
 	if err := kvstreams.ForEach(ctx, it, func(ent Entry) error {

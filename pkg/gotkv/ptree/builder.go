@@ -37,34 +37,43 @@ func NewBuilder(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed *[
 
 func (b *Builder) makeWriter(i int) *StreamWriter {
 	return NewStreamWriter(b.s, b.op, b.avgSize, b.maxSize, b.seed, func(idx Index) error {
-		switch {
-		case b.isDone && i == len(b.levels)-1:
+		if b.isDone && i == len(b.levels)-1 {
 			b.root = &Root{
 				Ref:   idx.Ref,
 				First: append([]byte{}, idx.First...),
 				Depth: uint8(i),
 			}
 			return nil
-		case i == len(b.levels)-1:
-			b.levels = append(b.levels, b.makeWriter(i+1))
-			fallthrough
-		default:
-			return b.levels[i+1].Append(b.ctx, Entry{
-				Key:   idx.First,
-				Value: gdat.MarshalRef(idx.Ref),
-			})
 		}
+		return b.getWriter(i+1).Append(b.ctx, Entry{
+			Key:   idx.First,
+			Value: gdat.MarshalRef(idx.Ref),
+		})
 	})
 }
 
+func (b *Builder) getWriter(level int) *StreamWriter {
+	for len(b.levels) <= level {
+		i := len(b.levels)
+		b.levels = append(b.levels, b.makeWriter(i))
+	}
+	return b.levels[level]
+}
+
 func (b *Builder) Put(ctx context.Context, key, value []byte) error {
+	return b.put(ctx, 0, key, value)
+}
+
+func (b *Builder) put(ctx context.Context, level int, key, value []byte) error {
 	b.ctx = ctx
 	defer func() { b.ctx = nil }()
-
 	if b.isDone {
 		return errors.Errorf("builder is closed")
 	}
-	err := b.levels[0].Append(ctx, Entry{
+	if b.syncLevel() < level {
+		return errors.Errorf("cannot put at level %d", level)
+	}
+	err := b.getWriter(level).Append(ctx, Entry{
 		Key:   key,
 		Value: value,
 	})
@@ -98,14 +107,11 @@ func (b *Builder) Finish(ctx context.Context) (*Root, error) {
 	return b.root, nil
 }
 
-func (b *Builder) SyncedBelow(depth int) bool {
-	if len(b.levels) <= depth {
-		return false
-	}
-	for i := range b.levels[:depth] {
+func (b *Builder) syncLevel() int {
+	for i := range b.levels {
 		if b.levels[i].Buffered() > 0 {
-			return false
+			return i
 		}
 	}
-	return true
+	return maxTreeDepth - 1 // allow copying at any depth
 }
