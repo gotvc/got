@@ -52,12 +52,26 @@ func (it *Iterator) next(ctx context.Context, level int, ent *Entry) error {
 }
 
 func (it *Iterator) syncLevel() int {
+	// TODO: can't copy indexes for artificially short entries
+	// tests occasionally fail because of duplicate keys
+	var bot int
 	for i := range it.srs {
+		bot = i
 		if it.srs[i] != nil {
-			return i
+			break
 		}
 	}
-	return len(it.srs) - 1
+	var top int
+	for i := len(it.srs) - 1; i > 0; i-- {
+		top = i
+		if it.srs[i] != nil {
+			sr := it.srs[i]
+			if sr.nextIndex < len(sr.idxs) {
+				break
+			}
+		}
+	}
+	return min(bot, top)
 }
 
 func (it *Iterator) Peek(ctx context.Context, ent *Entry) error {
