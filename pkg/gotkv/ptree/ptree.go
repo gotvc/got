@@ -20,42 +20,18 @@ type Root struct {
 
 // Copy copies all the entries from it to b.
 func Copy(ctx context.Context, b *Builder, it *Iterator) error {
-	// TODO: take advantage of index copying
 	var ent Entry
-	for err := it.Next(ctx, &ent); err != kvstreams.EOS; err = it.Next(ctx, &ent) {
-		if err != nil {
+	for {
+		level := min(b.syncLevel(), it.syncLevel())
+		if err := it.next(ctx, level, &ent); err != nil {
+			if err == kvstreams.EOS {
+				return nil
+			}
 			return err
 		}
-		if err := b.Put(ctx, ent.Key, ent.Value); err != nil {
+		if err := b.put(ctx, level, ent.Key, ent.Value); err != nil {
 			return err
 		}
-	}
-	return nil
-}
-
-func entryToIndex(ent Entry) (Index, error) {
-	ref, err := gdat.ParseRef(ent.Value)
-	if err != nil {
-		return Index{}, err
-	}
-	return Index{
-		First: append([]byte{}, ent.Key...),
-		Ref:   *ref,
-	}, nil
-}
-
-func indexToRoot(idx Index, depth uint8) Root {
-	return Root{
-		Ref:   idx.Ref,
-		First: idx.First,
-		Depth: depth,
-	}
-}
-
-func rootToIndex(r Root) Index {
-	return Index{
-		Ref:   r.Ref,
-		First: r.First,
 	}
 }
 
@@ -85,18 +61,8 @@ func ListChildren(ctx context.Context, s cadata.Store, op *gdat.Operator, root R
 
 // ListEntries
 func ListEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Index) ([]Entry, error) {
-	var ents []Entry
 	sr := NewStreamReader(s, op, []Index{idx})
-	for {
-		var ent Entry
-		if err := sr.Next(ctx, &ent); err != nil {
-			if err == kvstreams.EOS {
-				return ents, nil
-			}
-			return nil, err
-		}
-		ents = append(ents, ent)
-	}
+	return kvstreams.Collect(ctx, sr)
 }
 
 func PointsToEntries(root Root) bool {
@@ -105,4 +71,34 @@ func PointsToEntries(root Root) bool {
 
 func PointsToIndexes(root Root) bool {
 	return root.Depth > 0
+}
+
+func entryToIndex(ent Entry) (Index, error) {
+	ref, err := gdat.ParseRef(ent.Value)
+	if err != nil {
+		return Index{}, err
+	}
+	return Index{
+		First: append([]byte{}, ent.Key...),
+		Ref:   *ref,
+	}, nil
+}
+
+func indexToEntry(idx Index) Entry {
+	return Entry{Key: idx.First, Value: gdat.MarshalRef(idx.Ref)}
+}
+
+func indexToRoot(idx Index, depth uint8) Root {
+	return Root{
+		Ref:   idx.Ref,
+		First: idx.First,
+		Depth: depth,
+	}
+}
+
+func rootToIndex(r Root) Index {
+	return Index{
+		Ref:   r.Ref,
+		First: r.First,
+	}
 }

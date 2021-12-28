@@ -52,3 +52,29 @@ func TestBuildIterate(t *testing.T) {
 		require.Contains(t, string(ent.Key), strconv.Itoa(i))
 	}
 }
+
+func TestCopy(t *testing.T) {
+	averageSize := 1 << 12
+	maxSize := 1 << 16
+	t.Parallel()
+	ctx := context.Background()
+	s := cadata.NewMem(cadata.DefaultHash, maxSize)
+	op := gdat.NewOperator()
+	b := NewBuilder(s, &op, averageSize, maxSize, nil)
+	const N = 1e6
+	generateEntries(N, func(ent Entry) {
+		err := b.Put(ctx, ent.Key, ent.Value)
+		require.NoError(t, err)
+	})
+	root, err := b.Finish(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, root)
+
+	t.Log("being copying")
+	it := NewIterator(s, &op, *root, Span{})
+	b2 := NewBuilder(s, &op, averageSize, maxSize, nil)
+	require.NoError(t, Copy(ctx, b2, it))
+	root2, err := b2.Finish(ctx)
+	require.NoError(t, err)
+	require.Equal(t, root, root2)
+}
