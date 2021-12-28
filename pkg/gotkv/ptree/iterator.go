@@ -3,7 +3,6 @@ package ptree
 import (
 	"bytes"
 	"context"
-	"log"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
@@ -29,7 +28,6 @@ func NewIterator(s cadata.Store, op *gdat.Operator, root Root, span Span) *Itera
 		span:   span.Clone(),
 		levels: make([][]Entry, root.Depth+2),
 	}
-	log.Println("NewIterator span:", it.span)
 	it.levels[root.Depth+1] = []Entry{indexToEntry(rootToIndex(root))}
 	it.setPos(span.Start)
 	return it
@@ -112,7 +110,6 @@ func (it *Iterator) getEntries(ctx context.Context, level int) ([]Entry, error) 
 			ents = filterIndexes(ents, it.getSpan())
 		}
 		if len(ents) > 0 {
-			log.Println("filling level", level, len(ents))
 			it.levels[level] = ents
 			return it.levels[level], nil
 		}
@@ -132,7 +129,7 @@ func (it *Iterator) syncLevel() int {
 	// top is required because indexes at the right most side of the tree cannot be copied
 	// since they could point to incomplete nodes.
 	var top int
-	for i := len(it.levels) - 1; i > 0; i-- {
+	for i := len(it.levels) - 1; i >= 0; i-- {
 		top = i
 		if len(it.levels[i]) > 1 && bytes.Compare(it.levels[i][1].Key, it.span.End) < 0 {
 			break
@@ -185,7 +182,7 @@ func filterIndexes(xs []Entry, span Span) []Entry {
 		if span.LessThan(xs[i].Key) {
 			continue
 		}
-		if i+1 < len(xs) && span.GreaterThan(xs[i+1].Key) {
+		if i+1 < len(xs) && bytes.Compare(span.Start, xs[i+1].Key) >= 0 {
 			continue
 		}
 		ret = append(ret, xs[i])
