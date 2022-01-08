@@ -11,6 +11,7 @@ import (
 	"github.com/brendoncarroll/go-state/cells/cryptocell"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 
@@ -22,12 +23,14 @@ const (
 type CryptoSpace struct {
 	inner  Space
 	secret *[32]byte
+	log    *logrus.Logger
 }
 
 func NewCryptoSpace(inner Space, secret *[32]byte) Space {
 	return &CryptoSpace{
 		secret: secret,
 		inner:  inner,
+		log:    logrus.StandardLogger(),
 	}
 }
 
@@ -62,7 +65,8 @@ func (r *CryptoSpace) ForEach(ctx context.Context, fn func(string) error) error 
 	return r.inner.ForEach(ctx, func(x string) error {
 		y, err := r.decryptName(x)
 		if err != nil {
-			return err
+			r.handleDecryptFailure(x, err)
+			return nil
 		}
 		return fn(y)
 	})
@@ -98,10 +102,11 @@ func (r *CryptoSpace) decryptName(x string) (string, error) {
 		return "", err
 	}
 	ctext := make([]byte, enc.DecodedLen(len(parts[1])))
-	_, err := enc.Decode(ctext, parts[1])
+	n, err := enc.Decode(ctext, parts[1])
 	if err != nil {
 		return "", err
 	}
+	ctext = ctext[:n]
 	var secret [32]byte
 	deriveKey(secret[:], r.secret, purposeBranchNames)
 	ptext, err := r.getAEAD(secret[:]).Open(nil, nonce[:], ctext, nil)
@@ -134,7 +139,7 @@ func (r *CryptoSpace) decryptSalt(x []byte) ([]byte, error) {
 	var secret [32]byte
 	deriveKey(secret[:], r.secret, "got/space/branch-params")
 	if len(x) < 24 {
-		return nil, errors.Errorf("salt ctext not long enough to contain nonce")
+		return nil, errors.Errorf("salt ctext not long enough to contain nonce len=%d", len(x))
 	}
 	nonce := x[:24]
 	ctext := x[24:]
@@ -151,6 +156,11 @@ func (r *CryptoSpace) wrapVolume(name string, x Volume) Volume {
 		VCStore:  x.VCStore,
 		RawStore: x.RawStore,
 	}
+}
+
+func (r *CryptoSpace) handleDecryptFailure(x string, err error) {
+	// TODO: maybe log here
+	r.log.Printf("decrypt failure %v: %v", x, err)
 }
 
 func deriveKey(out []byte, secret *[32]byte, purpose string) {

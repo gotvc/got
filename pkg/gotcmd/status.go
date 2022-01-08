@@ -10,13 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	rootCmd.AddCommand(statusCmd)
-	rootCmd.AddCommand(lsCmd)
-	rootCmd.AddCommand(catCmd)
-	rootCmd.AddCommand(scrubCmd)
-}
-
 var statusCmd = &cobra.Command{
 	Use:     "status",
 	PreRunE: loadRepo,

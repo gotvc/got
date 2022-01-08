@@ -5,11 +5,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	rootCmd.AddCommand(debugCmd)
-	rootCmd.AddCommand(derefCmd)
-}
-
 var debugCmd = &cobra.Command{
 	Use:     "debug",
 	PreRunE: loadRepo,

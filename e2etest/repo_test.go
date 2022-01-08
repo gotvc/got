@@ -27,13 +27,22 @@ import (
 func TestMultiRepoSync(t *testing.T) {
 	ctx, cf := context.WithCancel(context.Background())
 	t.Cleanup(cf)
+	secretKey := [32]byte{}
 	p1, p2, pOrigin := initRepo(t), initRepo(t), initRepo(t)
 	origin := openRepo(t, pOrigin)
 	for _, p := range []string{p1, p2} {
 		err := got.ConfigureRepo(p, func(x got.RepoConfig) got.RepoConfig {
 			originID := origin.GetID()
 			x.Spaces = []gotrepo.SpaceLayerSpec{
-				{Prefix: "origin/", Target: gotrepo.SpaceSpec{Peer: &originID}},
+				{
+					Prefix: "origin/",
+					Target: gotrepo.SpaceSpec{
+						Encrypt: &gotrepo.EncryptedSpaceSpec{
+							Inner:  gotrepo.SpaceSpec{Peer: &originID},
+							Secret: secretKey,
+						},
+					},
+				},
 			}
 			return x
 		})
@@ -50,6 +59,7 @@ func TestMultiRepoSync(t *testing.T) {
 	})
 	require.NoError(t, err)
 	go origin.Serve(ctx)
+	createBranch(t, r1, "origin/master")
 	createBranch(t, r1, "origin/mybranch")
 	require.Contains(t, listBranches(t, r2), "origin/master")
 	require.Contains(t, listBranches(t, r2), "origin/mybranch")

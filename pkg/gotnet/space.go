@@ -8,6 +8,7 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-tai64"
 	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -39,7 +40,7 @@ func (srv *spaceSrv) Serve(ctx context.Context) error {
 	return serveAsks(ctx, srv.swarm, srv.handleAsk)
 }
 
-func (s *spaceSrv) Create(ctx context.Context, bid BranchID, params branches.Params) error {
+func (s *spaceSrv) Create(ctx context.Context, bid BranchID, params branches.Params) (*BranchInfo, error) {
 	req := SpaceReq{
 		Op:     opCreate,
 		Name:   bid.Name,
@@ -47,12 +48,15 @@ func (s *spaceSrv) Create(ctx context.Context, bid BranchID, params branches.Par
 	}
 	var resp SpaceRes
 	if err := askJson(ctx, s.swarm, bid.Peer, &resp, &req); err != nil {
-		return err
+		return nil, err
 	}
 	if resp.Error != nil {
-		return errors.New(*resp.Error)
+		return nil, parseWireError(*resp.Error)
 	}
-	return nil
+	if resp.Info == nil {
+		return nil, errors.New("empty branch info with nil error")
+	}
+	return resp.Info, nil
 }
 
 func (s *spaceSrv) Delete(ctx context.Context, bid BranchID) error {
@@ -65,9 +69,27 @@ func (s *spaceSrv) Delete(ctx context.Context, bid BranchID) error {
 		return err
 	}
 	if resp.Error != nil {
-		return errors.New(*resp.Error)
+		return parseWireError(*resp.Error)
 	}
 	return nil
+}
+
+func (s *spaceSrv) Get(ctx context.Context, bid BranchID) (*BranchInfo, error) {
+	req := SpaceReq{
+		Op:   opGet,
+		Name: bid.Name,
+	}
+	var resp SpaceRes
+	if err := askJson(ctx, s.swarm, bid.Peer, &resp, &req); err != nil {
+		return nil, err
+	}
+	if resp.Error != nil {
+		return nil, parseWireError(*resp.Error)
+	}
+	if resp.Info == nil {
+		return nil, errors.New("empty branch info with nil error")
+	}
+	return resp.Info, nil
 }
 
 func (s *spaceSrv) Exists(ctx context.Context, bid BranchID) (bool, error) {
@@ -80,7 +102,7 @@ func (s *spaceSrv) Exists(ctx context.Context, bid BranchID) (bool, error) {
 		return false, err
 	}
 	if resp.Error != nil {
-		return false, errors.New(*resp.Error)
+		return false, parseWireError(*resp.Error)
 	}
 	if resp.Exists == nil {
 		return false, errors.Errorf("empty response")
@@ -99,7 +121,7 @@ func (s *spaceSrv) List(ctx context.Context, peer PeerID, first string, limit in
 		return nil, err
 	}
 	if resp.Error != nil {
-		return nil, errors.New(*resp.Error)
+		return nil, parseWireError(*resp.Error)
 	}
 	if !sort.StringsAreSorted(resp.Names) {
 		return nil, errors.Errorf("branch names are unsorted")
@@ -125,6 +147,8 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 			return s.handleCreate(ctx, peer, req.Name, req.Params)
 		case opDelete:
 			return s.handleDelete(ctx, peer, req.Name)
+		case opGet:
+			return s.handleGet(ctx, peer, req.Name)
 		case opExists:
 			return s.handleExists(ctx, peer, req.Name)
 		case opList:
@@ -135,9 +159,8 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 	}()
 	if err != nil {
 		logrus.Error(err)
-		errMsg := err.Error()
 		res = &SpaceRes{
-			Error: &errMsg,
+			Error: makeWireError(err),
 		}
 	}
 	data, _ := json.Marshal(res)
@@ -146,10 +169,13 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 
 func (s *spaceSrv) handleCreate(ctx context.Context, peer PeerID, name string, params branches.Params) (*SpaceRes, error) {
 	space := s.open(peer)
-	if _, err := space.Create(ctx, name, params); err != nil {
+	b, err := space.Create(ctx, name, params)
+	if err != nil {
 		return nil, err
 	}
-	return &SpaceRes{}, nil
+	return &SpaceRes{
+		Info: infoFromBranch(*b),
+	}, nil
 }
 
 func (s *spaceSrv) handleDelete(ctx context.Context, peer PeerID, name string) (*SpaceRes, error) {
@@ -158,6 +184,17 @@ func (s *spaceSrv) handleDelete(ctx context.Context, peer PeerID, name string) (
 		return nil, err
 	}
 	return &SpaceRes{}, nil
+}
+
+func (s *spaceSrv) handleGet(ctx context.Context, peer PeerID, name string) (*SpaceRes, error) {
+	space := s.open(peer)
+	b, err := space.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return &SpaceRes{
+		Info: infoFromBranch(*b),
+	}, nil
 }
 
 func (s *spaceSrv) handleExists(ctx context.Context, peer PeerID, name string) (*SpaceRes, error) {
@@ -199,9 +236,16 @@ type SpaceReq struct {
 }
 
 type SpaceRes struct {
-	Error  *string  `json:"error,omitempty"`
-	Exists *bool    `json:"exists,omitempty"`
-	Names  []string `json:"list,omitempty"`
+	Error  *WireError  `json:"error,omitempty"`
+	Exists *bool       `json:"exists,omitempty"`
+	Names  []string    `json:"list,omitempty"`
+	Info   *BranchInfo `json:"info,omitempty"`
+}
+
+type BranchInfo struct {
+	Salt        []byte               `json:"salt"`
+	Annotations branches.Annotations `json:"annotations"`
+	CreatedAt   tai64.TAI64          `json:"created_at"`
 }
 
 var _ branches.Space = &space{}
@@ -223,24 +267,24 @@ func newSpace(srv *spaceSrv, peer PeerID, newCell func(CellID) cells.Cell, newSt
 }
 
 func (r *space) Create(ctx context.Context, name string, params branches.Params) (*branches.Branch, error) {
-	if err := r.srv.Create(ctx, BranchID{Peer: r.peer, Name: name}, params); err != nil {
+	info, err := r.srv.Create(ctx, BranchID{Peer: r.peer, Name: name}, params)
+	if err != nil {
 		return nil, err
 	}
-	b := r.makeBranch(name)
+	b := r.makeBranch(name, *info)
 	return &b, nil
 }
 
 func (r *space) Get(ctx context.Context, name string) (*branches.Branch, error) {
-	if yes, err := r.srv.Exists(ctx, BranchID{Peer: r.peer, Name: name}); err != nil {
+	info, err := r.srv.Get(ctx, BranchID{Peer: r.peer, Name: name})
+	if err != nil {
 		return nil, err
-	} else if !yes {
-		return nil, branches.ErrNotExist
 	}
-	b := r.makeBranch(name)
+	b := r.makeBranch(name, *info)
 	return &b, nil
 }
 
-func (r *space) makeBranch(name string) branches.Branch {
+func (r *space) makeBranch(name string, info BranchInfo) branches.Branch {
 	return branches.Branch{
 		Volume: branches.Volume{
 			Cell:     r.newCell(CellID{Peer: r.peer, Name: name}),
@@ -248,6 +292,9 @@ func (r *space) makeBranch(name string) branches.Branch {
 			FSStore:  r.newStore(StoreID{Peer: r.peer, Branch: name, Type: Type_FS}),
 			RawStore: r.newStore(StoreID{Peer: r.peer, Branch: name, Type: Type_RAW}),
 		},
+		Salt:        info.Salt,
+		Annotations: info.Annotations,
+		CreatedAt:   info.CreatedAt,
 	}
 }
 
@@ -276,4 +323,12 @@ func (r *space) ForEach(ctx context.Context, fn func(string) error) error {
 		first = names[len(names)-1]
 	}
 	return nil
+}
+
+func infoFromBranch(b branches.Branch) *BranchInfo {
+	return &BranchInfo{
+		Annotations: b.Annotations,
+		CreatedAt:   b.CreatedAt,
+		Salt:        b.Salt,
+	}
 }

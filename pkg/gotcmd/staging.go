@@ -5,14 +5,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	rootCmd.AddCommand(addCmd)
-	rootCmd.AddCommand(rmCmd)
-	rootCmd.AddCommand(putCmd)
-	rootCmd.AddCommand(discardCmd)
-	rootCmd.AddCommand(clearCmd)
-}
-
 var addCmd = &cobra.Command{
 	Use:     "add",
 	Short:   "adds paths to the staging area",

@@ -12,11 +12,6 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func init() {
-	rootCmd.AddCommand(commitCmd)
-	rootCmd.AddCommand(historyCmd)
-}
-
 var commitCmd = &cobra.Command{
 	Use:      "commit",
 	Short:    "commits the contents of staging applied to the contents of the active volume",
