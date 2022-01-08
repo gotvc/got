@@ -61,7 +61,9 @@ func (r *Repo) getQUICGotNet(spec QUICSpaceSpec) (*gotnet.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	return r.makeGotNet(sw), nil
+	gn := r.makeGotNet(sw)
+	go gn.Serve()
+	return gn, nil
 }
 
 func (r *Repo) makeGotNet(swarm p2p.SecureAskSwarm) *gotnet.Service {

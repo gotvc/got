@@ -49,6 +49,9 @@ func Listen(privateKey inet256.PrivateKey, addr string) (p2p.SecureAskSwarm, err
 	}, nil
 }
 
+var _ p2p.SecureAskSwarm = &QUICHub{}
+
+// QUICHub provides a p2p.SecureAskSwarm[inet256.Addr] using QUIC.
 type QUICHub struct {
 	sw       *quicswarm.Swarm
 	isClient bool
