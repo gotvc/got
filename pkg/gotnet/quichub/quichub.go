@@ -96,8 +96,7 @@ func (qh *QUICHub) MTU(ctx context.Context, target p2p.Addr) int {
 }
 
 func (qh *QUICHub) LocalAddrs() []p2p.Addr {
-	// TODO: extract IDs?
-	return qh.sw.LocalAddrs()
+	return []p2p.Addr{inet256.NewAddr(qh.sw.PublicKey())}
 }
 
 func (qh *QUICHub) LookupPublicKey(ctx context.Context, target p2p.Addr) (p2p.PublicKey, error) {
@@ -135,10 +134,13 @@ func (qh *QUICHub) pickAddr(target inet256.Addr) (*quicswarm.Addr, error) {
 
 func (qh *QUICHub) upwardMessage(m p2p.Message) p2p.Message {
 	src := m.Src.(quicswarm.Addr)
-	qh.directory[inet256.ID(src.ID)] = src.Addr.(udpswarm.Addr)
+	dst := m.Dst.(quicswarm.Addr)
+	srcID := inet256.ID(src.ID)
+	dstID := inet256.ID(dst.ID)
+	qh.directory[srcID] = src.Addr.(udpswarm.Addr)
 	return p2p.Message{
-		Src:     src.ID,
-		Dst:     m.Dst.(quicswarm.Addr).ID,
+		Src:     srcID,
+		Dst:     dstID,
 		Payload: m.Payload,
 	}
 }

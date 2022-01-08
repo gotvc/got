@@ -1,6 +1,7 @@
 package gotrepo
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/brendoncarroll/go-p2p"
@@ -204,13 +205,11 @@ func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 func (r *Repo) spaceFromSpecs(specs []SpaceLayerSpec) (branches.Space, error) {
 	var layers []branches.Layer
 	for _, spec := range specs {
-		space, err := r.MakeSpace(spec.Target)
-		if err != nil {
-			return nil, err
-		}
 		layer := branches.Layer{
 			Prefix: spec.Prefix,
-			Target: space,
+			Target: newLazySpace(func(ctx context.Context) (branches.Space, error) {
+				return r.MakeSpace(spec.Target)
+			}),
 		}
 		layers = append(layers, layer)
 	}

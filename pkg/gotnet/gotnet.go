@@ -12,6 +12,7 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
+	"github.com/gotvc/got/pkg/gotiam"
 	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
@@ -151,6 +152,9 @@ func parseWireError(err WireError) error {
 		return branches.ErrNotExist
 	case err.Code == codes.AlreadyExists && strings.Contains(err.Message, "branch"):
 		return branches.ErrExists
+	case err.Code == codes.PermissionDenied:
+		// TODO: parse the error string
+		return gotiam.ErrNotAllowed{}
 	default:
 		return err
 	}
@@ -166,6 +170,11 @@ func makeWireError(err error) *WireError {
 	case errors.Is(err, branches.ErrExists):
 		return &WireError{
 			Code:    codes.AlreadyExists,
+			Message: err.Error(),
+		}
+	case errors.As(err, &gotiam.ErrNotAllowed{}):
+		return &WireError{
+			Code:    codes.PermissionDenied,
 			Message: err.Error(),
 		}
 	default:
