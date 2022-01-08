@@ -159,8 +159,7 @@ func (r *CryptoSpace) wrapVolume(name string, x Volume) Volume {
 }
 
 func (r *CryptoSpace) handleDecryptFailure(x string, err error) {
-	// TODO: maybe log here
-	r.log.Printf("decrypt failure %v: %v", x, err)
+	r.log.Debugf("decrypt failure %v: %v", x, err)
 }
 
 func deriveKey(out []byte, secret *[32]byte, purpose string) {

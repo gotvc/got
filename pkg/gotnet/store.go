@@ -31,6 +31,7 @@ type blobPullSrv struct {
 	store *tempStore
 	swarm p2p.AskSwarm
 	open  OpenFunc
+	log   *logrus.Logger
 }
 
 func newBlobPullSrv(open OpenFunc, ts *tempStore, x p2p.AskSwarm) *blobPullSrv {
@@ -38,6 +39,7 @@ func newBlobPullSrv(open OpenFunc, ts *tempStore, x p2p.AskSwarm) *blobPullSrv {
 		store: ts,
 		swarm: x,
 		open:  open,
+		log:   logrus.StandardLogger(),
 	}
 	return srv
 }
@@ -79,7 +81,7 @@ func (s *blobPullSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Messag
 		}
 		return nil
 	}(); err != nil {
-		logrus.Warn(err)
+		s.log.Warn(err)
 		return -1
 	}
 	return n
@@ -99,6 +101,7 @@ type blobMainSrv struct {
 	swarm       p2p.AskSwarm
 	blobPullSrv *blobPullSrv
 	open        OpenFunc
+	log         *logrus.Logger
 }
 
 func newBlobMainSrv(open OpenFunc, blobGet *blobPullSrv, swarm p2p.AskSwarm) *blobMainSrv {
@@ -106,6 +109,7 @@ func newBlobMainSrv(open OpenFunc, blobGet *blobPullSrv, swarm p2p.AskSwarm) *bl
 		blobPullSrv: blobGet,
 		swarm:       swarm,
 		open:        open,
+		log:         logrus.StandardLogger(),
 	}
 	return srv
 }
@@ -231,7 +235,7 @@ func (s *blobMainSrv) handleAsk(ctx context.Context, respBuf []byte, msg p2p.Mes
 		n = copy(respBuf, data)
 		return nil
 	}(); err != nil {
-		logrus.Error(err)
+		s.log.Error(err)
 		return -1
 	}
 	return n

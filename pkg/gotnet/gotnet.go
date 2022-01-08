@@ -156,6 +156,8 @@ func parseWireError(err WireError) error {
 	case err.Code == codes.PermissionDenied:
 		// TODO: parse the error string
 		return gotiam.ErrNotAllowed{}
+	case err.Code == codes.InvalidArgument && strings.Contains(err.Message, cadata.ErrTooLarge.Error()):
+		return cadata.ErrTooLarge
 	default:
 		return err
 	}
@@ -176,6 +178,11 @@ func makeWireError(err error) *WireError {
 	case errors.As(err, &gotiam.ErrNotAllowed{}):
 		return &WireError{
 			Code:    codes.PermissionDenied,
+			Message: err.Error(),
+		}
+	case errors.Is(err, cadata.ErrTooLarge):
+		return &WireError{
+			Code:    codes.InvalidArgument,
 			Message: err.Error(),
 		}
 	default:

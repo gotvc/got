@@ -2,11 +2,11 @@ package gotnet
 
 import (
 	"context"
-	"crypto/ed25519"
 	"testing"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/mbapp"
+	"github.com/brendoncarroll/go-p2p/p2ptest"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cadata/storetest"
 	"github.com/brendoncarroll/go-state/cells/celltest"
@@ -77,8 +77,8 @@ type side struct {
 
 func newTestPair(t testing.TB) (s1, s2 *side) {
 	srv := inet256client.NewTestService(t)
-	_, key1, _ := ed25519.GenerateKey(nil)
-	_, key2, _ := ed25519.GenerateKey(nil)
+	key1 := p2ptest.NewTestKey(t, 0)
+	key2 := p2ptest.NewTestKey(t, 1)
 	s1 = newTestSide(t, srv, key1)
 	s2 = newTestSide(t, srv, key2)
 	return s1, s2
@@ -91,7 +91,7 @@ func newTestSide(t testing.TB, inetSrv inet256.Service, privKey p2p.PrivateKey) 
 		require.NoError(t, node.Close())
 	})
 	swarm := mbapp.New(inet256client.NewSwarm(node), MaxMessageSize)
-	newStore := func() cadata.Store { return cadata.NewMem(cadata.DefaultHash, 1<<20) }
+	newStore := func() cadata.Store { return cadata.NewMem(cadata.DefaultHash, MaxMessageSize) }
 	space := branches.NewMem(newStore, cells.NewMem)
 	srv := New(Params{
 		Open:  func(PeerID) branches.Space { return space },
