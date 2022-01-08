@@ -1,11 +1,13 @@
 package gotrepo
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cells/httpcell"
 	"github.com/brendoncarroll/go-tai64"
+
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/inet256/inet256/pkg/inet256"
@@ -13,25 +15,13 @@ import (
 )
 
 type StoreSpec struct {
-	Local     *LocalStoreSpec     `json:"local,omitempty"`
-	Blobcache *BlobcacheStoreSpec `json:"blobcache,omitempty"`
+	Local *LocalStoreSpec `json:"local,omitempty"`
+	// Blobcache *BlobcacheStoreSpec `json:"blobcache,omitempty"`
 }
 
 type LocalStoreSpec = StoreID
 
-type BlobcacheStoreSpec struct {
-	Addr string `json:"addr"`
-	// TODO: add back once blobcache is working
-	// PinSetID blobcache.PinSetID `json:"pinset_id"`
-}
-
-func DefaultBlobcacheSpec() StoreSpec {
-	return StoreSpec{
-		Blobcache: &BlobcacheStoreSpec{
-			Addr: "127.0.0.1:6025",
-		},
-	}
-}
+// type BlobcacheStoreSpec = blobcache.PinSetHandle
 
 func (r *Repo) MakeStore(spec StoreSpec) (Store, error) {
 	switch {
@@ -169,18 +159,44 @@ type SpaceLayerSpec struct {
 	Target SpaceSpec `json:"target"`
 }
 
+type QUICSpaceSpec struct {
+	ID   inet256.ID `json:"id"`
+	Addr string     `json:"addr"`
+}
+
+type EncryptedSpaceSpec struct {
+	Inner  SpaceSpec
+	Secret [32]byte
+}
+
 type SpaceSpec struct {
-	Peer *inet256.ID `json:"peer,omitempty"`
+	Peer    *inet256.ID         `json:"peer,omitempty"`
+	QUIC    *QUICSpaceSpec      `json:"quic,omitempty"`
+	Encrypt *EncryptedSpaceSpec `json:"encrypt,omitempty`
 }
 
 func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 	switch {
+	case spec.Encrypt != nil:
+		secret := spec.Encrypt.Secret
+		innerSpec := spec.Encrypt.Inner
+		inner, err := r.MakeSpace(innerSpec)
+		if err != nil {
+			return nil, err
+		}
+		return branches.NewCryptoSpace(inner, &secret), nil
 	case spec.Peer != nil:
 		gn, err := r.getGotNet()
 		if err != nil {
 			return nil, err
 		}
 		return gn.GetSpace(*spec.Peer), nil
+	case spec.QUIC != nil:
+		gn, err := r.getQUICGotNet(*spec.QUIC)
+		if err != nil {
+			return nil, err
+		}
+		return gn.GetSpace(spec.QUIC.ID), nil
 	default:
 		return nil, errors.Errorf("empty SpaceSpec")
 	}
@@ -189,13 +205,11 @@ func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 func (r *Repo) spaceFromSpecs(specs []SpaceLayerSpec) (branches.Space, error) {
 	var layers []branches.Layer
 	for _, spec := range specs {
-		space, err := r.MakeSpace(spec.Target)
-		if err != nil {
-			return nil, err
-		}
 		layer := branches.Layer{
 			Prefix: spec.Prefix,
-			Target: space,
+			Target: newLazySpace(func(ctx context.Context) (branches.Space, error) {
+				return r.MakeSpace(spec.Target)
+			}),
 		}
 		layers = append(layers, layer)
 	}

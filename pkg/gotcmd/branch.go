@@ -15,10 +15,6 @@ var (
 )
 
 func init() {
-	rootCmd.AddCommand(branchCmd)
-	rootCmd.AddCommand(activeCmd)
-	rootCmd.AddCommand(forkCmd)
-
 	branchCmd.AddCommand(createBranchCmd)
 	branchCmd.AddCommand(listBranchCmd)
 	branchCmd.AddCommand(deleteBranchCmd)

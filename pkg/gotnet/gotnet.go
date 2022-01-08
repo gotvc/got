@@ -3,15 +3,21 @@ package gotnet
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/p2pmux"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
+	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/gotiam"
 	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
+	"google.golang.org/grpc/codes"
 )
 
 const (
@@ -31,7 +37,7 @@ const (
 )
 
 const (
-	MaxMessageSize = maxBlobSize
+	MaxMessageSize = gotfs.DefaultMaxBlobSize
 )
 
 type PeerID = inet256.Addr
@@ -130,4 +136,59 @@ func marshal(x interface{}) []byte {
 
 func unmarshal(buf []byte, x interface{}) error {
 	return json.Unmarshal(buf, x)
+}
+
+type WireError struct {
+	Code    codes.Code
+	Message string
+}
+
+func (e WireError) Error() string {
+	return fmt.Sprintf("{%v: %v}", e.Code, e.Message)
+}
+
+func parseWireError(err WireError) error {
+	switch {
+	case err.Code == codes.NotFound && strings.Contains(err.Message, "branch"):
+		return branches.ErrNotExist
+	case err.Code == codes.AlreadyExists && strings.Contains(err.Message, "branch"):
+		return branches.ErrExists
+	case err.Code == codes.PermissionDenied:
+		// TODO: parse the error string
+		return gotiam.ErrNotAllowed{}
+	case err.Code == codes.InvalidArgument && strings.Contains(err.Message, cadata.ErrTooLarge.Error()):
+		return cadata.ErrTooLarge
+	default:
+		return err
+	}
+}
+
+func makeWireError(err error) *WireError {
+	switch {
+	case errors.Is(err, branches.ErrNotExist):
+		return &WireError{
+			Code:    codes.NotFound,
+			Message: err.Error(),
+		}
+	case errors.Is(err, branches.ErrExists):
+		return &WireError{
+			Code:    codes.AlreadyExists,
+			Message: err.Error(),
+		}
+	case errors.As(err, &gotiam.ErrNotAllowed{}):
+		return &WireError{
+			Code:    codes.PermissionDenied,
+			Message: err.Error(),
+		}
+	case errors.Is(err, cadata.ErrTooLarge):
+		return &WireError{
+			Code:    codes.InvalidArgument,
+			Message: err.Error(),
+		}
+	default:
+		return &WireError{
+			Code:    codes.Unknown,
+			Message: err.Error(),
+		}
+	}
 }

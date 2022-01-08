@@ -9,10 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	rootCmd.AddCommand(slurpCmd)
-}
-
 var slurpCmd = &cobra.Command{
 	Use:      "slurp",
 	Short:    "imports a file or directory and returns a ref",

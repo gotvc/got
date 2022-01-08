@@ -6,10 +6,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	rootCmd.AddCommand(localIDCmd)
-}
-
 var localIDCmd = &cobra.Command{
 	Use:     "local-id",
 	Short:   "prints the local ID",

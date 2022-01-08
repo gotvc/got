@@ -7,10 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func init() {
-	rootCmd.AddCommand(iamCmd)
-}
-
 var iamCmd = &cobra.Command{
 	Use:     "iam",
 	Short:   "Perform Identity and Access Management operations on a repo",

@@ -2,10 +2,6 @@ package gotcmd
 
 import "github.com/spf13/cobra"
 
-func init() {
-	rootCmd.AddCommand(cleanupCmd)
-}
-
 var cleanupCmd = &cobra.Command{
 	Use:      "cleanup",
 	Short:    "cleanup cleans up unreferenced data associated with branches",

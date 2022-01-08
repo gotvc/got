@@ -10,10 +10,40 @@ func Execute() error {
 	return rootCmd.Execute()
 }
 
+func init() {
+	rootCmd.AddCommand(initCmd)
+
+	rootCmd.AddCommand(commitCmd)
+	rootCmd.AddCommand(historyCmd)
+	rootCmd.AddCommand(addCmd)
+	rootCmd.AddCommand(rmCmd)
+	rootCmd.AddCommand(putCmd)
+	rootCmd.AddCommand(discardCmd)
+	rootCmd.AddCommand(clearCmd)
+
+	rootCmd.AddCommand(statusCmd)
+	rootCmd.AddCommand(lsCmd)
+	rootCmd.AddCommand(catCmd)
+
+	rootCmd.AddCommand(branchCmd)
+	rootCmd.AddCommand(activeCmd)
+	rootCmd.AddCommand(forkCmd)
+
+	rootCmd.AddCommand(iamCmd)
+	rootCmd.AddCommand(localIDCmd)
+	rootCmd.AddCommand(serveCmd)
+	rootCmd.AddCommand(serveQUICCmd)
+
+	rootCmd.AddCommand(slurpCmd)
+	rootCmd.AddCommand(cleanupCmd)
+	rootCmd.AddCommand(debugCmd)
+	rootCmd.AddCommand(derefCmd)
+	rootCmd.AddCommand(scrubCmd)
+}
+
 var rootCmd = &cobra.Command{
-	Use:     "got",
-	Short:   "got is like git, but with an 'o'",
-	Version: "0.0.0",
+	Use:   "got",
+	Short: "got is like git, but with an 'o'",
 }
 
 var (
