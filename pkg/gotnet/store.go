@@ -13,8 +13,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const maxBlobSize = 1 << 20
-
 type StoreID struct {
 	Peer   PeerID
 	Branch string
@@ -239,7 +237,7 @@ func (s *blobMainSrv) handleAsk(ctx context.Context, respBuf []byte, msg p2p.Mes
 	return n
 }
 
-func (s *blobMainSrv) handleGet(ctx context.Context, peer PeerID, req BlobReq, buf []byte) (int, error) {
+func (s *blobMainSrv) handleGet(ctx context.Context, peer PeerID, req BlobReq, buf []byte) (ret int, retErr error) {
 	space := s.open(peer)
 	if len(req.IDs) != 1 {
 		return 0, errors.Errorf("must request exactly one blob at a time")
@@ -268,7 +266,7 @@ func (s *blobMainSrv) handlePost(ctx context.Context, peer PeerID, req BlobReq) 
 		return nil, err
 	}
 	affected := make([]bool, len(req.IDs))
-	buf := make([]byte, maxBlobSize)
+	buf := make([]byte, MaxMessageSize)
 	for i, id := range req.IDs {
 		if exists, err := store.Exists(ctx, id); err != nil {
 			return nil, err
@@ -408,7 +406,7 @@ func newTempStore() *tempStore {
 		peerHandles: make(map[uint64]PeerID),
 		blobRCs:     make(map[cadata.ID]uint64),
 		peerRCs:     make(map[PeerID]uint64),
-		store:       cadata.NewMem(cadata.DefaultHash, maxBlobSize),
+		store:       cadata.NewMem(cadata.DefaultHash, MaxMessageSize),
 	}
 }
 
@@ -518,5 +516,5 @@ func (s *store) Hash(x []byte) cadata.ID {
 }
 
 func (s *store) MaxSize() int {
-	return maxBlobSize
+	return MaxMessageSize
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
+	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotiam"
 	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/sirupsen/logrus"
@@ -36,7 +37,7 @@ const (
 )
 
 const (
-	MaxMessageSize = maxBlobSize
+	MaxMessageSize = gotfs.DefaultMaxBlobSize
 )
 
 type PeerID = inet256.Addr

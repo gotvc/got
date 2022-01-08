@@ -203,7 +203,7 @@ func (s virtualStore) Add(ctx context.Context, id cadata.ID) error {
 }
 
 // Read implements cadata.Reader
-func (s virtualStore) Get(ctx context.Context, id cadata.ID, buf []byte) (int, error) {
+func (s virtualStore) Get(ctx context.Context, id cadata.ID, buf []byte) (ret int, retErr error) {
 	exists, err := s.Exists(ctx, id)
 	if err != nil {
 		return 0, err

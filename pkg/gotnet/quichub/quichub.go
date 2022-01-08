@@ -8,6 +8,7 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/s/quicswarm"
 	"github.com/brendoncarroll/go-p2p/s/udpswarm"
+	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/inet256/inet256/pkg/inet256"
 )
 
@@ -15,6 +16,7 @@ var quicOpts = []quicswarm.Option{
 	quicswarm.WithFingerprinter(func(pubKey p2p.PublicKey) p2p.PeerID {
 		return p2p.PeerID(inet256.NewAddr(pubKey))
 	}),
+	quicswarm.WithMTU(gotfs.DefaultMaxBlobSize),
 }
 
 func Dial(privateKey inet256.PrivateKey, id inet256.ID, addr string) (p2p.SecureAskSwarm, error) {

@@ -44,16 +44,18 @@ func (r *Repo) SetActiveBranch(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	current, err := r.GetBranch(ctx, "")
-	if err != nil {
-		return err
-	}
 	isEmpty, err := r.stage.IsEmpty(ctx)
 	if err != nil {
 		return err
 	}
-	if !(isEmpty || bytes.Equal(branch.Salt, current.Salt)) {
-		return errors.Errorf("staging must be empty to change to a branch with a different salt")
+	if !isEmpty {
+		current, err := r.GetBranch(ctx, "")
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(branch.Salt, current.Salt) {
+			return errors.Errorf("staging must be empty to change to a branch with a different salt")
+		}
 	}
 	return setActiveBranch(r.db, name)
 }
