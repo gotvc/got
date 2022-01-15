@@ -60,7 +60,7 @@ func (o *Operator) CreateFile(ctx context.Context, ms, ds Store, x Root, p strin
 // SizeOfFile returns the size of the file at p in bytes.
 func (o *Operator) SizeOfFile(ctx context.Context, s Store, x Root, p string) (uint64, error) {
 	p = cleanPath(p)
-	k := makeMetadataKey(p)
+	k := makeInfoKey(p)
 	span := gotkv.Span{End: append(k, 0x01)}
 	ent, err := o.gotkv.MaxEntry(ctx, s, x, span)
 	if err != nil {
@@ -76,7 +76,7 @@ func (o *Operator) SizeOfFile(ctx context.Context, s Store, x Root, p string) (u
 // ReadFileAt fills `buf` with data in the file at `p` starting at offset `start`
 func (o *Operator) ReadFileAt(ctx context.Context, ms, ds Store, x Root, p string, start uint64, buf []byte) (int, error) {
 	p = cleanPath(p)
-	_, err := o.GetFileMetadata(ctx, ms, x, p)
+	_, err := o.GetFileInfo(ctx, ms, x, p)
 	if err != nil {
 		return 0, err
 	}

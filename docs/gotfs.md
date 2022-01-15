@@ -20,45 +20,45 @@ A part of a file.  It includes a Ref, an offset, and a length.  It is basically 
 
 This enables packing small files into the same blob.
 
-### Metadata
-information about a file or directory.
+### Info
+Information about a file or directory.
 Most importantly the permissions and type of file.
 
 ## Key Layout 
-All objects are represented by a metadata entry at a specific key, and content stored under keys
+All objects are represented by an Info entry at a specific key, and content stored under keys
 prefixed with the metadata key.
 
 File data is stored in a content-addressed store, and references to the data are stored in GotKV.
 
 For example: The file "test.txt" with 10B of data in it would produce the following key value pairs.
 ```
-/                                -> Metadata (dir)
-/test.txt/                       -> Metadata (file)
+/                                -> Info (dir)
+/test.txt/                       -> Info (file)
 /test.txt/<NULL>< 64 bit: 10 >   -> Extent
 ```
 
 A directory is stored as a metadata object.
 ```
-/                                         -> Metadata (dir)
-/mydir/                                   -> Metadata (dir)
-/mydir/myfile.txt/                        -> Metadata (file)
+/                                         -> Info (dir)
+/mydir/                                   -> Info (dir)
+/mydir/myfile.txt/                        -> Info (file)
 /mydir/myfile.txt/<NULL><64 bit offset>   -> Part
 ```
 
 It is possible for a file to be at the root
 ```
-/                            -> Metadata (file)
+/                            -> Info (file)
 /<NULL><64 bits      >       -> Extent
 /<NULL>< next offset >       -> Extent
 ```
 
-All metadata keys end in a trailing `/`, including regular files.
-Keys for metadata objects contain no NULL characters.
+All Info keys end in a trailing `/`, including regular files.
+Keys for Info objects contain no NULL characters.
 Keys for extents contain exactly 1 NULL character 9 bytes from the end of key, separating the path from the offset.
-Extent keys are always prefixed by the metadata key for the file they are part of.
+Extent keys are always prefixed by the Info key for the file they are part of.
 
 ## Reading A File
-To read from a file in GotFS you first lookup the metadata entry for the path of the file.
+To read from a file in GotFS you first lookup the Info entry for the path of the file.
 If there is not an entry at the path or the entry is not for a regular file, then return an error.
 
 Then convert the offset to read from to a key.

@@ -58,7 +58,7 @@ func (b *Builder) BeginFile(p string, mode os.FileMode) error {
 	if !mode.IsRegular() {
 		return errors.Errorf("mode must be for regular file")
 	}
-	return b.writeMetadata(p, &Metadata{Mode: uint32(mode)})
+	return b.writeInfo(p, &Info{Mode: uint32(mode)})
 }
 
 // Mkdir creates a directory for p.
@@ -67,10 +67,10 @@ func (b *Builder) Mkdir(p string, mode os.FileMode) error {
 	if b.IsFinished() {
 		return errBuilderIsFinished()
 	}
-	return b.writeMetadata(p, &Metadata{Mode: uint32(mode)})
+	return b.writeInfo(p, &Info{Mode: uint32(mode)})
 }
 
-func (b *Builder) writeMetadata(p string, md *Metadata) error {
+func (b *Builder) writeInfo(p string, md *Info) error {
 	p = cleanPath(p)
 	if err := checkPath(p); err != nil {
 		return err
@@ -83,22 +83,22 @@ func (b *Builder) writeMetadata(p string, md *Metadata) error {
 	}
 	b.queue = append(b.queue, pathOp{
 		path:     p,
-		metadata: proto.Clone(md).(*Metadata),
+		metadata: proto.Clone(md).(*Info),
 		isFile:   os.FileMode(md.Mode).IsRegular(),
 	})
 	if os.FileMode(md.Mode).IsDir() {
 		b.dirStack = strings.Split(p, string(Sep))
 	}
-	return b.flushMetadata()
+	return b.flushInfo()
 }
 
-// flushMetadata attempts to flush the queue to the metadata stream.
+// flushInfo attempts to flush the queue to the metadata stream.
 // it can't flush any metadata until all the extents before it have been flushed.
-func (b *Builder) flushMetadata() error {
+func (b *Builder) flushInfo() error {
 	var remove int
 	for i, op := range b.queue {
 		if op.metadata != nil {
-			if err := b.putMetadata(op.path, op.metadata); err != nil {
+			if err := b.putInfo(op.path, op.metadata); err != nil {
 				return err
 			}
 			b.queue[i].metadata = nil
@@ -161,7 +161,7 @@ func (b *Builder) writeExtent(ext *Extent, isShort bool) error {
 	if b.chunker.Buffered() == 0 && !isShort {
 		for i, op := range b.queue {
 			if op.metadata != nil {
-				if err := b.putMetadata(op.path, op.metadata); err != nil {
+				if err := b.putInfo(op.path, op.metadata); err != nil {
 					return err
 				}
 				b.queue[i].metadata = nil
@@ -193,7 +193,7 @@ func (b *Builder) handleExtent(ext *Extent) error {
 	for i, op := range b.queue {
 		// write a metadata entry
 		if op.metadata != nil {
-			if err := b.putMetadata(op.path, op.metadata); err != nil {
+			if err := b.putInfo(op.path, op.metadata); err != nil {
 				return err
 			}
 			b.queue[i].metadata = nil
@@ -228,8 +228,8 @@ func (b *Builder) putExtent(p string, start uint64, ext *Extent) error {
 	return b.mBuilder.Put(b.ctx, k, ext.marshal())
 }
 
-func (b *Builder) putMetadata(p string, md *Metadata) error {
-	k := makeMetadataKey(p)
+func (b *Builder) putInfo(p string, md *Info) error {
+	k := makeInfoKey(p)
 	return b.mBuilder.Put(b.ctx, k, md.marshal())
 }
 
@@ -244,7 +244,7 @@ func (b *Builder) copyFrom(ctx context.Context, root Root, span gotkv.Span) erro
 	span.End = maxEnt.Key
 	it := b.o.gotkv.NewIterator(b.ms, root, span)
 	// copy one by one until we can fast copy
-	for b.chunker.Buffered() > 0 || b.haveEnqueuedMetadata() {
+	for b.chunker.Buffered() > 0 || b.haveEnqueuedInfo() {
 		var ent kvstreams.Entry
 		if err := it.Next(ctx, &ent); err != nil {
 			if err == kvstreams.EOS {
@@ -280,11 +280,11 @@ func (b *Builder) copyFrom(ctx context.Context, root Root, span gotkv.Span) erro
 			b.dirStack = strings.Split(parentPath(p), string(Sep))
 		}
 	} else {
-		p, err := parseMetadataKey(maxEnt.Key)
+		p, err := parseInfoKey(maxEnt.Key)
 		if err != nil {
 			return err
 		}
-		md, err := parseMetadata(maxEnt.Value)
+		md, err := parseInfo(maxEnt.Value)
 		if err != nil {
 			return err
 		}
@@ -307,15 +307,15 @@ func (b *Builder) copyEntry(ent kvstreams.Entry) error {
 		}
 		return b.writeExtent(ext, true)
 	} else {
-		p, err := parseMetadataKey(ent.Key)
+		p, err := parseInfoKey(ent.Key)
 		if err != nil {
 			return err
 		}
-		md, err := parseMetadata(ent.Value)
+		md, err := parseInfo(ent.Value)
 		if err != nil {
 			return err
 		}
-		return b.writeMetadata(p, md)
+		return b.writeInfo(p, md)
 	}
 }
 
@@ -344,7 +344,7 @@ func (b *Builder) finish() (*Root, error) {
 	}
 	for i, op := range b.queue {
 		if op.metadata != nil {
-			if err := b.putMetadata(op.path, op.metadata); err != nil {
+			if err := b.putInfo(op.path, op.metadata); err != nil {
 				return nil, err
 			}
 			b.queue[i].metadata = nil
@@ -373,7 +373,7 @@ func (b *Builder) currentPath() *string {
 	return &b.queue[len(b.queue)-1].path
 }
 
-func (b *Builder) haveEnqueuedMetadata() bool {
+func (b *Builder) haveEnqueuedInfo() bool {
 	for _, op := range b.queue {
 		if op.metadata != nil {
 			return true
@@ -413,7 +413,7 @@ func errBuilderIsFinished() error {
 // pathOp is an operation on a path
 type pathOp struct {
 	path     string
-	metadata *Metadata
+	metadata *Info
 	isFile   bool
 	size     uint64
 	written  uint64

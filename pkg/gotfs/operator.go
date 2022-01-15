@@ -23,10 +23,10 @@ type (
 )
 
 const (
-	DefaultMaxBlobSize             = 1 << 21
-	DefaultMinBlobSizeData         = 1 << 12
-	DefaultAverageBlobSizeData     = 1 << 20
-	DefaultAverageBlobSizeMetadata = 1 << 13
+	DefaultMaxBlobSize         = 1 << 21
+	DefaultMinBlobSizeData     = 1 << 12
+	DefaultAverageBlobSizeData = 1 << 20
+	DefaultAverageBlobSizeInfo = 1 << 13
 )
 
 type Option func(o *Operator)
@@ -52,10 +52,10 @@ func WithContentCacheSize(n int) Option {
 }
 
 type Operator struct {
-	maxBlobSize                                       int
-	minSizeData, averageSizeData, averageSizeMetadata int
-	seed                                              *[32]byte
-	rawCacheSize, metaCacheSize                       int
+	maxBlobSize                                   int
+	minSizeData, averageSizeData, averageSizeInfo int
+	seed                                          *[32]byte
+	rawCacheSize, metaCacheSize                   int
 
 	rawOp gdat.Operator
 	gotkv gotkv.Operator
@@ -64,13 +64,13 @@ type Operator struct {
 
 func NewOperator(opts ...Option) Operator {
 	o := Operator{
-		maxBlobSize:         DefaultMaxBlobSize,
-		minSizeData:         DefaultMinBlobSizeData,
-		averageSizeData:     DefaultAverageBlobSizeData,
-		averageSizeMetadata: DefaultAverageBlobSizeMetadata,
-		seed:                &[32]byte{},
-		rawCacheSize:        8,
-		metaCacheSize:       16,
+		maxBlobSize:     DefaultMaxBlobSize,
+		minSizeData:     DefaultMinBlobSizeData,
+		averageSizeData: DefaultAverageBlobSizeData,
+		averageSizeInfo: DefaultAverageBlobSizeInfo,
+		seed:            &[32]byte{},
+		rawCacheSize:    8,
+		metaCacheSize:   16,
 	}
 	for _, opt := range opts {
 		opt(&o)
@@ -93,7 +93,7 @@ func NewOperator(opts ...Option) Operator {
 		gdat.WithCacheSize(o.metaCacheSize),
 	)
 	o.gotkv = gotkv.NewOperator(
-		o.averageSizeMetadata,
+		o.averageSizeInfo,
 		o.maxBlobSize,
 		gotkv.WithDataOperator(metaOp),
 		gotkv.WithSeed(&metaSeed),
@@ -104,12 +104,12 @@ func NewOperator(opts ...Option) Operator {
 // Select returns a new root containing everything under p, shifted to the root.
 func (o *Operator) Select(ctx context.Context, s cadata.Store, root Root, p string) (*Root, error) {
 	p = cleanPath(p)
-	_, err := o.GetMetadata(ctx, s, root, p)
+	_, err := o.GetInfo(ctx, s, root, p)
 	if err != nil {
 		return nil, err
 	}
 	x := &root
-	k := makeMetadataKey(p)
+	k := makeInfoKey(p)
 	if x, err = o.deleteOutside(ctx, s, *x, gotkv.PrefixSpan(k)); err != nil {
 		return nil, err
 	}
@@ -135,15 +135,15 @@ func (o *Operator) deleteOutside(ctx context.Context, s cadata.Store, root Root,
 	return x, err
 }
 
-func (o *Operator) ForEach(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Metadata) error) error {
+func (o *Operator) ForEach(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Info) error) error {
 	p = cleanPath(p)
 	fn2 := func(ent gotkv.Entry) error {
 		if !isExtentKey(ent.Key) {
-			md, err := parseMetadata(ent.Value)
+			md, err := parseInfo(ent.Value)
 			if err != nil {
 				return err
 			}
-			p, err := parseMetadataKey(ent.Key)
+			p, err := parseInfoKey(ent.Key)
 			if err != nil {
 				return err
 			}
@@ -151,12 +151,12 @@ func (o *Operator) ForEach(ctx context.Context, s cadata.Store, root Root, p str
 		}
 		return nil
 	}
-	k := makeMetadataKey(p)
+	k := makeInfoKey(p)
 	return o.gotkv.ForEach(ctx, s, root, gotkv.PrefixSpan(k), fn2)
 }
 
-func (o *Operator) ForEachFile(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Metadata) error) error {
-	return o.ForEach(ctx, s, root, p, func(p string, md *Metadata) error {
+func (o *Operator) ForEachFile(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Info) error) error {
+	return o.ForEach(ctx, s, root, p, func(p string, md *Info) error {
 		if os.FileMode(md.Mode).IsDir() {
 			return nil
 		}
@@ -175,7 +175,7 @@ func (o *Operator) Graft(ctx context.Context, ms, ds cadata.Store, root Root, p 
 	if err != nil {
 		return nil, err
 	}
-	k := makeMetadataKey(p)
+	k := makeInfoKey(p)
 	branch2 := o.gotkv.AddPrefix(branch, k[:len(k)-1])
 	return o.Splice(ctx, ms, ds, []Segment{
 		{
@@ -195,7 +195,7 @@ func (o *Operator) Graft(ctx context.Context, ms, ds cadata.Store, root Root, p 
 
 func (o *Operator) AddPrefix(root Root, p string) Root {
 	p = cleanPath(p)
-	k := makeMetadataKey(p)
+	k := makeInfoKey(p)
 	return o.gotkv.AddPrefix(root, k[:len(k)-1])
 }
 
@@ -213,11 +213,11 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 			p := ""
 			lastPath = &p
 		case !isExtentKey(ent.Key):
-			p, err := parseMetadataKey(ent.Key)
+			p, err := parseInfoKey(ent.Key)
 			if err != nil {
 				return err
 			}
-			_, err = parseMetadata(ent.Value)
+			_, err = parseInfo(ent.Value)
 			if err != nil {
 				return err
 			}

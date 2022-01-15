@@ -2,7 +2,7 @@ syntax = "proto3";
 
 option go_package = "github.com/gotvc/got/pkg/gotfs";
 
-message Metadata {
+message Info {
    uint32 mode = 1;
    map<string, string> labels = 2;
 };

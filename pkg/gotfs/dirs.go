@@ -29,10 +29,10 @@ func (o *Operator) Mkdir(ctx context.Context, s Store, x Root, p string) (*Root,
 	if err := o.checkNoEntry(ctx, s, x, p); err != nil {
 		return nil, err
 	}
-	md := &Metadata{
+	md := &Info{
 		Mode: uint32(0o755 | os.ModeDir),
 	}
-	return o.PutMetadata(ctx, s, x, p, md)
+	return o.PutInfo(ctx, s, x, p, md)
 }
 
 // MkdirAll creates the directory p and any of p's ancestors if necessary.
@@ -57,7 +57,7 @@ func (o *Operator) MkdirAll(ctx context.Context, s Store, x Root, p string) (*Ro
 
 func (o *Operator) ensureDir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
 	y := &x
-	_, err := o.GetDirMetadata(ctx, s, x, p)
+	_, err := o.GetDirInfo(ctx, s, x, p)
 	if posixfs.IsErrNotExist(err) {
 		y, err = o.Mkdir(ctx, s, x, p)
 		if err != nil {
@@ -93,14 +93,14 @@ func (o *Operator) ReadDir(ctx context.Context, s Store, x Root, p string, fn fu
 
 func (o *Operator) RemoveAll(ctx context.Context, s Store, x Root, p string) (*Root, error) {
 	p = cleanPath(p)
-	_, err := o.GetMetadata(ctx, s, x, p)
+	_, err := o.GetInfo(ctx, s, x, p)
 	if os.IsNotExist(err) {
 		return &x, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	k := makeMetadataKey(p)
+	k := makeInfoKey(p)
 	span := gotkv.PrefixSpan(k)
 	return o.gotkv.DeleteSpan(ctx, s, x, span)
 }
@@ -119,13 +119,13 @@ func cleanName(p string) string {
 
 func dirSpan(p string) gotkv.Span {
 	p = cleanPath(p)
-	k := makeMetadataKey(p)
+	k := makeInfoKey(p)
 	return gotkv.PrefixSpan(k)
 }
 
 func SpanForPath(p string) gotkv.Span {
 	p = cleanPath(p)
-	k := makeMetadataKey(p)
+	k := makeInfoKey(p)
 	return gotkv.PrefixSpan(k)
 }
 
@@ -137,7 +137,7 @@ type dirIterator struct {
 }
 
 func (o *Operator) newDirIterator(ctx context.Context, s Store, x Root, p string) (*dirIterator, error) {
-	_, err := o.GetDirMetadata(ctx, s, x, p)
+	_, err := o.GetDirInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
 	if isExtentKey(ent.Key) {
 		return nil, errors.Errorf("got part key while iterating directory entries")
 	}
-	md, err := parseMetadata(ent.Value)
+	md, err := parseInfo(ent.Value)
 	if err != nil {
 		return nil, err
 	}
@@ -171,7 +171,7 @@ func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
 	if err := di.iter.Seek(ctx, end); err != nil {
 		return nil, err
 	}
-	p, err := parseMetadataKey(ent.Key)
+	p, err := parseInfoKey(ent.Key)
 	if err != nil {
 		return nil, err
 	}

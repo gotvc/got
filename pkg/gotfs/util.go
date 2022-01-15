@@ -65,7 +65,7 @@ func Dump(ctx context.Context, s Store, root Root, w io.Writer) error {
 			}
 			fmt.Fprintf(bw, "EXTENT\t%q\toffset=%d,length=%d,ref=%s\n", ent.Key, ext.Offset, ext.Length, refString)
 		default:
-			md, err := parseMetadata(ent.Value)
+			md, err := parseInfo(ent.Value)
 			if err != nil {
 				fmt.Fprintf(bw, "METADATA (INVALID):\t%q\t%q\n", ent.Key, ent.Value)
 				continue
