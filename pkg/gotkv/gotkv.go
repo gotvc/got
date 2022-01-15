@@ -69,7 +69,7 @@ func Populate(ctx context.Context, s Store, x Root, set cadata.Set, entryFn func
 	dop := gdat.NewOperator()
 	return do(ctx, s, &dop, x, doParams{
 		CanSkip: func(r Root) (bool, error) {
-			return s.Exists(ctx, r.Ref.CID)
+			return set.Exists(ctx, r.Ref.CID)
 		},
 		EntryFn: entryFn,
 		NodeFn: func(r Root) error {
