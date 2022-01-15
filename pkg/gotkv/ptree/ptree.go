@@ -59,16 +59,19 @@ func ListChildren(ctx context.Context, s cadata.Store, op *gdat.Operator, root R
 	return idxs, nil
 }
 
-// ListEntries
+// ListEntries returns a slice of all the entries pointed to by idx, directly.
+// If idx points to other indexes directly, then ListEntries returns the entries for those indexes.
 func ListEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Index) ([]Entry, error) {
 	sr := NewStreamReader(s, op, []Index{idx})
 	return kvstreams.Collect(ctx, sr)
 }
 
+// PointsToEntries returns true if root points to non-index Entries
 func PointsToEntries(root Root) bool {
 	return root.Depth == 0
 }
 
+// PointsToIndexes returns true if root points to indexes.
 func PointsToIndexes(root Root) bool {
 	return root.Depth > 0
 }

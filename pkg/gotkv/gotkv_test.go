@@ -65,5 +65,5 @@ func testSetup(t *testing.T) (context.Context, cadata.Store, *Root) {
 }
 
 func newTestOperator(t *testing.T) Operator {
-	return NewOperator(WithAverageSize(1<<13), WithMaxSize(1<<16))
+	return NewOperator(1<<13, 1<<16)
 }

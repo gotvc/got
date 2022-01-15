@@ -93,9 +93,9 @@ func NewOperator(opts ...Option) Operator {
 		gdat.WithCacheSize(o.metaCacheSize),
 	)
 	o.gotkv = gotkv.NewOperator(
+		o.averageSizeMetadata,
+		o.maxBlobSize,
 		gotkv.WithDataOperator(metaOp),
-		gotkv.WithAverageSize(o.averageSizeMetadata),
-		gotkv.WithMaxSize(o.maxBlobSize),
 		gotkv.WithSeed(&metaSeed),
 	)
 	return o

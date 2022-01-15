@@ -2,6 +2,7 @@ package gotfs
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -73,4 +74,9 @@ func Dump(ctx context.Context, s Store, root Root, w io.Writer) error {
 		}
 	}
 	return bw.Flush()
+}
+
+// Equal returns true if a and b contain equivalent data.
+func Equal(a, b Root) bool {
+	return gdat.Equal(a.Ref, b.Ref) && a.Depth == b.Depth && bytes.Equal(a.First, b.First)
 }
