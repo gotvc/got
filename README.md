@@ -26,6 +26,10 @@ Got uses [INET256](https://github.com/inet256/inet256) to easily and securely co
 - [ ] Checkout the head of a branch to the working directory.
 - [ ] Merge 2 branches.
 
+## Useful Components
+- [GotKV](./pkg/gotkv/README.md)
+- [GotFS](./pkg/gotfs/README.md)
+
 ## Getting Started
 Either download a prebuilt binary or build one from source.
 
