@@ -12,10 +12,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+// Builder is used to construct GotKV instances
+// by adding keys in lexicographical order.
 type Builder = ptree.Builder
 
+// Iterator is used to iterate through entries in GotKV instances.
 type Iterator = kvstreams.Iterator
 
+// Option is used to configure an Operator
 type Option func(op *Operator)
 
 func WithDataOperator(ro gdat.Operator) Option {
@@ -24,26 +28,8 @@ func WithDataOperator(ro gdat.Operator) Option {
 	}
 }
 
-// WithMaxSize sets the max size of blobs made by the operator
-func WithMaxSize(x int) Option {
-	if x < 1 {
-		panic(fmt.Sprint("invalid size:", x))
-	}
-	return func(o *Operator) {
-		o.maxSize = x
-	}
-}
-
-// WithAverageSize sets the average size of blobs made by the operator
-func WithAverageSize(x int) Option {
-	if x < 1 {
-		panic(fmt.Sprint("invalid size:", x))
-	}
-	return func(o *Operator) {
-		o.averageSize = x
-	}
-}
-
+// WithSeed returns an Option which sets the seed for an Operator.
+// Seed affects node boundaries.
 func WithSeed(seed *[32]byte) Option {
 	if seed == nil {
 		panic("seed cannot be nil")
@@ -62,19 +48,28 @@ type Operator struct {
 	seed                 *[32]byte
 }
 
-func NewOperator(opts ...Option) Operator {
+// NewOperator returns an operator which will create nodes with average size `avgSize`
+// and maximum size `maxSize`.
+func NewOperator(avgSize, maxSize int, opts ...Option) Operator {
 	op := Operator{
-		dop: gdat.NewOperator(),
+		dop:         gdat.NewOperator(),
+		averageSize: avgSize,
+		maxSize:     maxSize,
+	}
+	if op.averageSize <= 0 {
+		panic(fmt.Sprintf("gotkv.NewOperator: invalid average size %d", op.averageSize))
+	}
+	if op.maxSize <= 0 {
+		panic(fmt.Sprintf("gotkv.NewOperator: invalid max size %d", op.maxSize))
 	}
 	for _, opt := range opts {
 		opt(&op)
 	}
-	if op.maxSize == 0 || op.averageSize == 0 {
-		panic("gotkv: must set max and average size")
-	}
 	return op
 }
 
+// GetF calls fn with the value corresponding to key in the instance x.
+// The value must not be used outside the callback.
 func (o *Operator) GetF(ctx context.Context, s cadata.Store, x Root, key []byte, fn func([]byte) error) error {
 	it := o.NewIterator(s, x, kvstreams.SingleItemSpan(key))
 	var ent Entry
@@ -88,6 +83,7 @@ func (o *Operator) GetF(ctx context.Context, s cadata.Store, x Root, key []byte,
 	return fn(ent.Value)
 }
 
+// Get returns the value corresponding to key in the instance x.
 func (o *Operator) Get(ctx context.Context, s cadata.Store, x Root, key []byte) ([]byte, error) {
 	var ret []byte
 	if err := o.GetF(ctx, s, x, key, func(data []byte) error {
@@ -99,6 +95,8 @@ func (o *Operator) Get(ctx context.Context, s cadata.Store, x Root, key []byte) 
 	return ret, nil
 }
 
+// Put returns a new version of the instance x with the entry at key corresponding to value.
+// If an entry at key already exists it is overwritten, otherwise it will be created.
 func (o *Operator) Put(ctx context.Context, s cadata.Store, x Root, key, value []byte) (*Root, error) {
 	return o.Mutate(ctx, s, x, Mutation{
 		Span:    SingleKeySpan(key),
@@ -106,37 +104,51 @@ func (o *Operator) Put(ctx context.Context, s cadata.Store, x Root, key, value [
 	})
 }
 
+// Delete returns a new version of the instance x where there is no entry for key.
+// If key does not exist no error is returned.
 func (o *Operator) Delete(ctx context.Context, s cadata.Store, x Root, key []byte) (*Root, error) {
 	return o.DeleteSpan(ctx, s, x, kvstreams.SingleItemSpan(key))
 }
 
+// DeleteSpan returns a new version of the instance x where there are no entries contained in span.
 func (o *Operator) DeleteSpan(ctx context.Context, s cadata.Store, x Root, span Span) (*Root, error) {
 	return o.Mutate(ctx, s, x, Mutation{
 		Span: span,
 	})
 }
 
+// NewEmpty returns a new GotKV instance with no entries.
 func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) {
 	b := o.NewBuilder(s)
 	return b.Finish(ctx)
 }
 
+// MaxEntry returns the entry in the instance x, within span, with the greatest lexicographic value.
 func (o *Operator) MaxEntry(ctx context.Context, s cadata.Store, x Root, span Span) (*Entry, error) {
 	return ptree.MaxEntry(ctx, s, x, span)
 }
 
+// AddPrefix prepends prefix to all the keys in instance x.
+// This is a O(1) operation.
 func (o *Operator) AddPrefix(x Root, prefix []byte) Root {
 	return ptree.AddPrefix(x, prefix)
 }
 
+// RemovePrefix removes a prefix from all the keys in instance x.
+// RemotePrefix errors if all the entries in x do not share a common prefix.
+// This is a O(1) operation.
 func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
 	return ptree.RemovePrefix(ctx, s, x, prefix)
 }
 
+// NewBuilder returns a Builder for constructing a GotKV instance.
+// Data will be persisted to s.
 func (o *Operator) NewBuilder(s Store) *Builder {
 	return o.makeBuilder(s)
 }
 
+// NewIterator returns an iterator for the instance rooted at x, which
+// will emit all keys within span in the instance.
 func (o *Operator) NewIterator(s Store, root Root, span Span) Iterator {
 	return ptree.NewIterator(s, &o.dop, root, span)
 }
@@ -145,6 +157,8 @@ func (o *Operator) makeBuilder(s cadata.Store) *ptree.Builder {
 	return ptree.NewBuilder(s, &o.dop, o.averageSize, o.maxSize, o.seed)
 }
 
+// ForEach calls fn with every entry, in the GotKV instance rooted at root, contained in span, in lexicographical order.
+// If fn returns an error, ForEach immediately returns that error.
 func (o *Operator) ForEach(ctx context.Context, s Store, root Root, span Span, fn func(Entry) error) error {
 	it := o.NewIterator(s, root, span)
 	var ent Entry
@@ -159,11 +173,6 @@ func (o *Operator) ForEach(ctx context.Context, s Store, root Root, span Span, f
 			return err
 		}
 	}
-}
-
-func (o *Operator) Diff(ctx context.Context, s cadata.Store, left, right Root, span Span, fn kvstreams.DiffFn) error {
-	leftIt, rightIt := o.NewIterator(s, left, span), o.NewIterator(s, right, span)
-	return kvstreams.Diff(ctx, s, leftIt, rightIt, span, fn)
 }
 
 // Mutation represents a declarative change to a Span of entries.

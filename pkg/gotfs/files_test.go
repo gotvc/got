@@ -29,14 +29,14 @@ func TestCreateFileFrom(t *testing.T) {
 	require.Equal(t, fileData, string(buf[:n]))
 }
 
-func TestFileMetadata(t *testing.T) {
+func TestFileInfo(t *testing.T) {
 	ctx, op, s := setup(t)
 	x, err := op.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	require.NotNil(t, x)
 	x, err = op.CreateFile(ctx, s, s, *x, "file.txt", bytes.NewReader(nil))
 	require.NoError(t, err)
-	md, err := op.GetMetadata(ctx, s, *x, "file.txt")
+	md, err := op.GetInfo(ctx, s, *x, "file.txt")
 	require.NoError(t, err)
 	require.NotNil(t, md)
 	require.True(t, os.FileMode(md.Mode).IsRegular())

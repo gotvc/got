@@ -45,7 +45,7 @@ func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
 	return err
 }
 
-func (r *Repo) Stat(ctx context.Context, p string) (*gotfs.Metadata, error) {
+func (r *Repo) Stat(ctx context.Context, p string) (*gotfs.Info, error) {
 	_, branch, err := r.GetActiveBranch(ctx)
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func (r *Repo) Stat(ctx context.Context, p string) (*gotfs.Metadata, error) {
 		return nil, errors.Errorf("branch is empty")
 	}
 	fsop := r.getFSOp(branch)
-	return fsop.GetMetadata(ctx, branch.Volume.FSStore, snap.Root, p)
+	return fsop.GetInfo(ctx, branch.Volume.FSStore, snap.Root, p)
 }
 
 func (r *Repo) Check(ctx context.Context) error {

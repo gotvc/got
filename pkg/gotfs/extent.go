@@ -35,7 +35,7 @@ func splitExtentKey(k []byte) (p string, offset uint64, err error) {
 		return "", 0, errors.Errorf("not extent key, no NULL")
 	}
 	offset = binary.BigEndian.Uint64(k[len(k)-8:])
-	p, err = parseMetadataKey(k[:len(k)-9])
+	p, err = parseInfoKey(k[:len(k)-9])
 	if err != nil {
 		return "", 0, err
 	}
@@ -43,7 +43,7 @@ func splitExtentKey(k []byte) (p string, offset uint64, err error) {
 }
 
 func makeExtentKey(p string, offset uint64) []byte {
-	x := makeMetadataKey(p)
+	x := makeInfoKey(p)
 	x = append(x, 0x00)
 	x = appendUint64(x, offset)
 	return x
@@ -54,7 +54,7 @@ func isExtentKey(x []byte) bool {
 }
 
 func fileSpanEnd(p string) []byte {
-	mk := makeMetadataKey(p)
+	mk := makeInfoKey(p)
 	return gotkv.PrefixEnd(mk)
 }
 

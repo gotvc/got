@@ -98,7 +98,7 @@ func (r *Repo) Rm(ctx context.Context, paths ...string) error {
 		if snap == nil {
 			return errors.Errorf("path %q not found", target)
 		}
-		if err := fsop.ForEachFile(ctx, st.FS, snap.Root, target, func(p string, _ *gotfs.Metadata) error {
+		if err := fsop.ForEachFile(ctx, st.FS, snap.Root, target, func(p string, _ *gotfs.Info) error {
 			return stage.Delete(ctx, p)
 		}); err != nil {
 			return err
@@ -154,7 +154,7 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 		case sop.Delete:
 			op.Delete = true
 		case sop.Put != nil:
-			md, err := fsop.GetMetadata(ctx, branch.Volume.FSStore, root, p)
+			md, err := fsop.GetInfo(ctx, branch.Volume.FSStore, root, p)
 			if err != nil && !posixfs.IsErrNotExist(err) {
 				return err
 			}
@@ -235,7 +235,7 @@ func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) er
 		}
 		// filter branch head
 		if snap != nil {
-			if _, err := fsop.GetMetadata(ctx, b.Volume.FSStore, snap.Root, p); err != nil && !os.IsNotExist(err) {
+			if _, err := fsop.GetInfo(ctx, b.Volume.FSStore, snap.Root, p); err != nil && !os.IsNotExist(err) {
 				return err
 			} else if err == nil {
 				return nil

@@ -159,7 +159,7 @@ func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
 }
 
 func (pr *Porter) ExportFile(ctx context.Context, ms, ds cadata.Store, root gotfs.Root, p string) error {
-	md, err := pr.gotfs.GetMetadata(ctx, ms, root, p)
+	md, err := pr.gotfs.GetInfo(ctx, ms, root, p)
 	if err != nil {
 		return err
 	}

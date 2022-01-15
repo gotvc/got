@@ -2,6 +2,7 @@ package gotfs
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -64,7 +65,7 @@ func Dump(ctx context.Context, s Store, root Root, w io.Writer) error {
 			}
 			fmt.Fprintf(bw, "EXTENT\t%q\toffset=%d,length=%d,ref=%s\n", ent.Key, ext.Offset, ext.Length, refString)
 		default:
-			md, err := parseMetadata(ent.Value)
+			md, err := parseInfo(ent.Value)
 			if err != nil {
 				fmt.Fprintf(bw, "METADATA (INVALID):\t%q\t%q\n", ent.Key, ent.Value)
 				continue
@@ -73,4 +74,9 @@ func Dump(ctx context.Context, s Store, root Root, w io.Writer) error {
 		}
 	}
 	return bw.Flush()
+}
+
+// Equal returns true if a and b contain equivalent data.
+func Equal(a, b Root) bool {
+	return gdat.Equal(a.Ref, b.Ref) && a.Depth == b.Depth && bytes.Equal(a.First, b.First)
 }

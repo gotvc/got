@@ -12,7 +12,7 @@ import (
 
 const MaxPathLen = 4096
 
-func (m *Metadata) marshal() []byte {
+func (m *Info) marshal() []byte {
 	data, err := proto.Marshal(m)
 	if err != nil {
 		panic(err)
@@ -20,15 +20,15 @@ func (m *Metadata) marshal() []byte {
 	return data
 }
 
-func parseMetadata(data []byte) (*Metadata, error) {
-	md := &Metadata{}
+func parseInfo(data []byte) (*Info, error) {
+	md := &Info{}
 	if err := proto.Unmarshal(data, md); err != nil {
 		return nil, err
 	}
 	return md, nil
 }
 
-func makeMetadataKey(p string) []byte {
+func makeInfoKey(p string) []byte {
 	p = cleanPath(p)
 	if p == "" {
 		return []byte("/")
@@ -36,7 +36,7 @@ func makeMetadataKey(p string) []byte {
 	return []byte("/" + p + "/")
 }
 
-func parseMetadataKey(k []byte) (string, error) {
+func parseInfoKey(k []byte) (string, error) {
 	switch len(k) {
 	case 0:
 		return "", errors.Errorf("not a valid metadata key: %q", k)
@@ -54,23 +54,23 @@ func parseMetadataKey(k []byte) (string, error) {
 	}
 }
 
-// PutMetadata assigns metadata to p
-func (o *Operator) PutMetadata(ctx context.Context, s Store, x Root, p string, md *Metadata) (*Root, error) {
+// PutInfo assigns metadata to p
+func (o *Operator) PutInfo(ctx context.Context, s Store, x Root, p string, md *Info) (*Root, error) {
 	p = cleanPath(p)
 	if err := checkPath(p); err != nil {
 		return nil, err
 	}
-	k := makeMetadataKey(p)
+	k := makeInfoKey(p)
 	return o.gotkv.Put(ctx, s, x, k, md.marshal())
 }
 
-// GetMetadata retrieves the metadata at p if it exists and errors otherwise
-func (o *Operator) GetMetadata(ctx context.Context, s Store, x Root, p string) (*Metadata, error) {
+// GetInfo retrieves the metadata at p if it exists and errors otherwise
+func (o *Operator) GetInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
 	p = cleanPath(p)
-	var md *Metadata
-	err := o.gotkv.GetF(ctx, s, x, makeMetadataKey(p), func(data []byte) error {
+	var md *Info
+	err := o.gotkv.GetF(ctx, s, x, makeInfoKey(p), func(data []byte) error {
 		var err error
-		md, err = parseMetadata(data)
+		md, err = parseInfo(data)
 		return err
 	})
 	if err != nil {
@@ -82,9 +82,9 @@ func (o *Operator) GetMetadata(ctx context.Context, s Store, x Root, p string) (
 	return md, nil
 }
 
-// GetDirMetadata returns directory metadata at p if it exists, and errors otherwise
-func (o *Operator) GetDirMetadata(ctx context.Context, s Store, x Root, p string) (*Metadata, error) {
-	md, err := o.GetMetadata(ctx, s, x, p)
+// GetDirInfo returns directory metadata at p if it exists, and errors otherwise
+func (o *Operator) GetDirInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
+	md, err := o.GetInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err
 	}
@@ -94,9 +94,9 @@ func (o *Operator) GetDirMetadata(ctx context.Context, s Store, x Root, p string
 	return md, nil
 }
 
-// GetFileMetadata returns the file metadata at p if it exists, and errors otherwise
-func (o *Operator) GetFileMetadata(ctx context.Context, s Store, x Root, p string) (*Metadata, error) {
-	md, err := o.GetMetadata(ctx, s, x, p)
+// GetFileInfo returns the file metadata at p if it exists, and errors otherwise
+func (o *Operator) GetFileInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
+	md, err := o.GetInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err
 	}
@@ -107,7 +107,7 @@ func (o *Operator) GetFileMetadata(ctx context.Context, s Store, x Root, p strin
 }
 
 func (o *Operator) checkNoEntry(ctx context.Context, s Store, x Root, p string) error {
-	_, err := o.GetMetadata(ctx, s, x, p)
+	_, err := o.GetInfo(ctx, s, x, p)
 	switch {
 	case err == os.ErrNotExist:
 		return nil
