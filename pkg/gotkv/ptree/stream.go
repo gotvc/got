@@ -278,7 +278,8 @@ func (w *StreamWriter) Append(ctx context.Context, ent Entry) error {
 	} else {
 		writeEntry(&w.buf, w.prevKey, ent)
 	}
-	if w.splitAfter(w.buf.Bytes()[offset:]) {
+	// split after writing the entry
+	if w.isSplitPoint(w.buf.Bytes()[offset:]) {
 		if err := w.Flush(ctx); err != nil {
 			return err
 		}
@@ -319,7 +320,7 @@ func (w *StreamWriter) setPrevKey(k []byte) {
 	w.prevKey = append(w.prevKey[:0], k...)
 }
 
-func (w *StreamWriter) splitAfter(data []byte) bool {
+func (w *StreamWriter) isSplitPoint(data []byte) bool {
 	r := highwayhash.Sum64(data, w.seed[:])
 	prob := math.MaxUint64 / uint64(w.avgSize) * uint64(len(data))
 	return r < prob
