@@ -19,10 +19,10 @@ type CellID struct {
 
 type cellSrv struct {
 	open  OpenFunc
-	swarm p2p.AskSwarm
+	swarm p2p.AskSwarm[PeerID]
 }
 
-func newCellSrv(open OpenFunc, swarm p2p.AskSwarm) *cellSrv {
+func newCellSrv(open OpenFunc, swarm p2p.AskSwarm[PeerID]) *cellSrv {
 	cs := &cellSrv{
 		open:  open,
 		swarm: swarm,
@@ -59,7 +59,7 @@ func (cs *cellSrv) Read(ctx context.Context, cid CellID, buf []byte) (int, error
 	return cs.swarm.Ask(ctx, buf, cid.Peer, p2p.IOVec{reqData})
 }
 
-func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) int {
+func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[PeerID]) int {
 	var req CellReq
 	var n int
 	if err := func() error {
@@ -69,13 +69,13 @@ func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) 
 		var err error
 		switch {
 		case req.Read != nil:
-			n, err = cs.handleRead(ctx, msg.Src.(PeerID), req.Read.Name, resp)
+			n, err = cs.handleRead(ctx, msg.Src, req.Read.Name, resp)
 			if err != nil {
 				return err
 			}
 
 		case req.CAS != nil:
-			n, err = cs.handleCAS(ctx, msg.Src.(PeerID), req.CAS.Name, resp, req.CAS.Prev[:], req.CAS.Next)
+			n, err = cs.handleCAS(ctx, msg.Src, req.CAS.Name, resp, req.CAS.Prev[:], req.CAS.Next)
 			if err != nil {
 				return err
 			}

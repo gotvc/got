@@ -22,7 +22,7 @@ func TestSpace(t *testing.T) {
 		s1, s2 := newTestPair(t)
 		go s1.srv.Serve()
 		go s2.srv.Serve()
-		peer2 := s2.swarm.LocalAddrs()[0].(PeerID)
+		peer2 := s2.swarm.LocalAddrs()[0]
 		return s1.srv.GetSpace(peer2)
 	})
 }
@@ -32,7 +32,7 @@ func TestStore(t *testing.T) {
 		s1, s2 := newTestPair(t)
 		go s1.srv.Serve()
 		go s2.srv.Serve()
-		peer2 := s2.swarm.LocalAddrs()[0].(PeerID)
+		peer2 := s2.swarm.LocalAddrs()[0]
 		space := s1.srv.GetSpace(peer2)
 		return createStore(t, space)
 	})
@@ -43,7 +43,7 @@ func TestCell(t *testing.T) {
 		s1, s2 := newTestPair(t)
 		go s1.srv.Serve()
 		go s2.srv.Serve()
-		peer2 := s2.swarm.LocalAddrs()[0].(PeerID)
+		peer2 := s2.swarm.LocalAddrs()[0]
 		space := s1.srv.GetSpace(peer2)
 		return createCell(t, space)
 	})
@@ -72,7 +72,7 @@ func createStore(t testing.TB, space branches.Space) cadata.Store {
 type side struct {
 	space branches.Space
 	srv   *Service
-	swarm p2p.SecureAskSwarm
+	swarm p2p.SecureAskSwarm[PeerID]
 }
 
 func newTestPair(t testing.TB) (s1, s2 *side) {

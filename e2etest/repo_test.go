@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/inet256/inet256/networks"
 	"github.com/inet256/inet256/networks/beaconnet"
 	"github.com/inet256/inet256/pkg/inet256d"
 	"github.com/inet256/inet256/pkg/inet256srv"
@@ -148,7 +147,7 @@ func TestMain(m *testing.M) {
 		d := inet256d.New(inet256d.Params{
 			APIAddr: inet256Endpoint,
 			MainNodeParams: inet256srv.Params{
-				Networks:   map[inet256srv.NetworkCode]networks.Factory{{}: beaconnet.Factory},
+				NewNetwork: beaconnet.Factory,
 				PrivateKey: privateKey,
 				Peers:      inet256srv.NewPeerStore(),
 			},
