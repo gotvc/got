@@ -9,7 +9,6 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-tai64"
-	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 
@@ -24,11 +23,11 @@ type BranchID struct {
 
 type spaceSrv struct {
 	open  OpenFunc
-	swarm p2p.AskSwarm
+	swarm p2p.AskSwarm[PeerID]
 	log   *logrus.Logger
 }
 
-func newSpaceSrv(open OpenFunc, swarm p2p.AskSwarm) *spaceSrv {
+func newSpaceSrv(open OpenFunc, swarm p2p.AskSwarm[PeerID]) *spaceSrv {
 	return &spaceSrv{
 		open:  open,
 		swarm: swarm,
@@ -132,11 +131,11 @@ func (s *spaceSrv) List(ctx context.Context, peer PeerID, first string, limit in
 	return resp.Names, nil
 }
 
-func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) int {
+func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[PeerID]) int {
 	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
 	defer cf()
 	res, err := func() (*SpaceRes, error) {
-		peer := msg.Src.(inet256.Addr)
+		peer := msg.Src
 		var req SpaceReq
 		if err := json.Unmarshal(msg.Payload, &req); err != nil {
 			return nil, err

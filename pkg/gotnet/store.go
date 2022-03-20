@@ -29,12 +29,12 @@ const (
 
 type blobPullSrv struct {
 	store *tempStore
-	swarm p2p.AskSwarm
+	swarm p2p.AskSwarm[PeerID]
 	open  OpenFunc
 	log   *logrus.Logger
 }
 
-func newBlobPullSrv(open OpenFunc, ts *tempStore, x p2p.AskSwarm) *blobPullSrv {
+func newBlobPullSrv(open OpenFunc, ts *tempStore, x p2p.AskSwarm[PeerID]) *blobPullSrv {
 	srv := &blobPullSrv{
 		store: ts,
 		swarm: x,
@@ -63,8 +63,8 @@ func (s *blobPullSrv) PullFrom(ctx context.Context, dst PeerID, id cadata.ID, bu
 	return n, nil
 }
 
-func (s *blobPullSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message) int {
-	peer := msg.Src.(PeerID)
+func (s *blobPullSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[PeerID]) int {
+	peer := msg.Src
 	var n int
 	if err := func() error {
 		if !s.store.IsAllowed(peer) {
@@ -98,13 +98,13 @@ func checkPullReply(id cadata.ID, peer PeerID, reply []byte) error {
 }
 
 type blobMainSrv struct {
-	swarm       p2p.AskSwarm
+	swarm       p2p.AskSwarm[PeerID]
 	blobPullSrv *blobPullSrv
 	open        OpenFunc
 	log         *logrus.Logger
 }
 
-func newBlobMainSrv(open OpenFunc, blobGet *blobPullSrv, swarm p2p.AskSwarm) *blobMainSrv {
+func newBlobMainSrv(open OpenFunc, blobGet *blobPullSrv, swarm p2p.AskSwarm[PeerID]) *blobMainSrv {
 	srv := &blobMainSrv{
 		blobPullSrv: blobGet,
 		swarm:       swarm,
@@ -201,14 +201,14 @@ func (s *blobMainSrv) doToIDs(ctx context.Context, sid StoreID, op string, ids [
 	return &resp, nil
 }
 
-func (s *blobMainSrv) handleAsk(ctx context.Context, respBuf []byte, msg p2p.Message) int {
+func (s *blobMainSrv) handleAsk(ctx context.Context, respBuf []byte, msg p2p.Message[PeerID]) int {
 	var n int
 	if err := func() error {
 		var req BlobReq
 		if err := unmarshal(msg.Payload, &req); err != nil {
 			return err
 		}
-		peer := msg.Src.(PeerID)
+		peer := msg.Src
 		if req.Op == opGet {
 			var err error
 			n, err = s.handleGet(ctx, peer, req, respBuf)

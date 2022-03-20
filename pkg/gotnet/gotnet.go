@@ -47,13 +47,13 @@ type PeerID = inet256.Addr
 type OpenFunc = func(PeerID) branches.Space
 
 type Params struct {
-	Swarm  p2p.SecureAskSwarm
+	Swarm  p2p.SecureAskSwarm[PeerID]
 	Open   OpenFunc
 	Logger *logrus.Logger
 }
 
 type Service struct {
-	mux p2pmux.StringSecureAskMux
+	mux p2pmux.SecureAskMux[PeerID, string]
 
 	blobPullSrv *blobPullSrv
 	blobMainSrv *blobMainSrv
@@ -101,7 +101,7 @@ func (s *Service) GetSpace(peer PeerID) branches.Space {
 	return newSpace(s.spaceSrv, peer, newCell, newStore)
 }
 
-func askJson(ctx context.Context, s p2p.Asker, dst PeerID, resp, req interface{}) error {
+func askJson(ctx context.Context, s p2p.Asker[PeerID], dst PeerID, resp, req interface{}) error {
 	reqData := marshal(req)
 	respData := make([]byte, MaxMessageSize)
 	n, err := s.Ask(ctx, respData, dst, p2p.IOVec{reqData})
@@ -111,10 +111,10 @@ func askJson(ctx context.Context, s p2p.Asker, dst PeerID, resp, req interface{}
 	return json.Unmarshal(respData[:n], resp)
 }
 
-func serveAsks(ctx context.Context, x p2p.AskSwarm, fn p2p.AskHandler) error {
+func serveAsks(ctx context.Context, x p2p.AskSwarm[PeerID], fn func(context.Context, []byte, p2p.Message[PeerID]) int) error {
 	eg := errgroup.Group{}
 	eg.Go(func() error {
-		return p2p.DiscardTells(ctx, x)
+		return p2p.DiscardTells[PeerID](ctx, x)
 	})
 	eg.Go(func() error {
 		for {

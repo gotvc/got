@@ -66,7 +66,7 @@ func (r *Repo) getQUICGotNet(spec QUICSpaceSpec) (*gotnet.Service, error) {
 	return gn, nil
 }
 
-func (r *Repo) makeGotNet(swarm p2p.SecureAskSwarm) *gotnet.Service {
+func (r *Repo) makeGotNet(swarm p2p.SecureAskSwarm[PeerID]) *gotnet.Service {
 	return gotnet.New(gotnet.Params{
 		Logger: logrus.StandardLogger(),
 		Open: func(peer PeerID) branches.Space {
