@@ -54,7 +54,7 @@ func Sync(ctx context.Context, dst, src Store, x Root, entryFn func(Entry) error
 	dop := gdat.NewOperator()
 	return do(ctx, src, &dop, x, doParams{
 		CanSkip: func(r Root) (bool, error) {
-			return dst.Exists(ctx, r.Ref.CID)
+			return cadata.Exists(ctx, dst, r.Ref.CID)
 		},
 		EntryFn: entryFn,
 		NodeFn: func(r Root) error {

@@ -30,14 +30,14 @@ func (wl writeLayer) Get(ctx context.Context, id cadata.ID, buf []byte) (int, er
 }
 
 func (wl writeLayer) Exists(ctx context.Context, id cadata.ID) (bool, error) {
-	exists, err := wl.writeTo.Exists(ctx, id)
+	exists, err := cadata.Exists(ctx, wl.writeTo, id)
 	if err != nil {
 		return false, err
 	}
 	if exists {
 		return true, nil
 	}
-	return wl.base.Exists(ctx, id)
+	return cadata.Exists(ctx, wl.base, id)
 }
 
 func (wl writeLayer) Delete(ctx context.Context, id cadata.ID) error {

@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/brendoncarroll/go-p2p v0.0.0-20220326223556-1a1c4fb9a306
-	github.com/brendoncarroll/go-state v0.0.0-20220108201027-1907c94138b0
+	github.com/brendoncarroll/go-state v0.0.0-20220328050547-c8b10602a6c0
 	github.com/brendoncarroll/go-tai64 v0.0.0-20211126175841-df086c7d155a
 	github.com/chmduquesne/rollinghash v0.0.0-20180912150627-a60f8e7142b5
 	github.com/fatih/color v1.13.0

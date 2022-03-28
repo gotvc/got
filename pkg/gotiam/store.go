@@ -42,7 +42,7 @@ func (s *Store) Exists(ctx context.Context, id cadata.ID) (bool, error) {
 	if err := s.check(false, "EXISTS"); err != nil {
 		return false, err
 	}
-	return s.inner.Exists(ctx, id)
+	return cadata.Exists(ctx, s.inner, id)
 }
 
 func (s *Store) List(ctx context.Context, prefix []byte, ids []cadata.ID) (int, error) {

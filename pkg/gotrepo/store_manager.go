@@ -71,7 +71,7 @@ func (sm *storeManager) GetStore(id StoreID) Store {
 }
 
 func (sm *storeManager) maybePost(ctx context.Context, id cadata.ID, data []byte) (cadata.ID, error) {
-	exists, err := sm.store.Exists(ctx, id)
+	exists, err := cadata.Exists(ctx, sm.store, id)
 	if err != nil {
 		return cadata.ID{}, err
 	}
@@ -185,7 +185,7 @@ func (s virtualStore) Add(ctx context.Context, id cadata.ID) error {
 			return cadata.ErrNotFound
 		}
 		// and that it's in the store
-		if exists, err := s.sm.store.Exists(ctx, id); err != nil {
+		if exists, err := cadata.Exists(ctx, s.sm.store, id); err != nil {
 			return err
 		} else if !exists {
 			return cadata.ErrNotFound
@@ -204,7 +204,7 @@ func (s virtualStore) Add(ctx context.Context, id cadata.ID) error {
 
 // Read implements cadata.Reader
 func (s virtualStore) Get(ctx context.Context, id cadata.ID, buf []byte) (int, error) {
-	exists, err := s.Exists(ctx, id)
+	exists, err := cadata.Exists(ctx, s, id)
 	if err != nil {
 		return 0, err
 	}
