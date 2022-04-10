@@ -168,7 +168,7 @@ func (s *blobMainSrv) Exists(ctx context.Context, sid StoreID, ids []cadata.ID) 
 	return exists, nil
 }
 
-func (s *blobMainSrv) List(ctx context.Context, sid StoreID, first []byte, ids []cadata.ID) (int, error) {
+func (s *blobMainSrv) List(ctx context.Context, sid StoreID, first cadata.ID, ids []cadata.ID) (int, error) {
 	var resp BlobResp
 	req := BlobReq{
 		Op:        opList,
@@ -349,14 +349,12 @@ func (s *blobMainSrv) handleList(ctx context.Context, peer PeerID, req BlobReq) 
 	}
 	ids := make([]cadata.ID, req.Limit)
 	n, err := store.List(ctx, req.First, ids)
-	if err != nil {
-		if cadata.IsEndOfList(err) {
-			return &BlobResp{EOL: true}, nil
-		}
+	if err != nil && !cadata.IsEndOfList(err) {
 		return nil, err
 	}
 	return &BlobResp{
 		IDs: ids[:n],
+		EOL: cadata.IsEndOfList(err),
 	}, nil
 }
 
@@ -382,7 +380,7 @@ type BlobReq struct {
 	StoreType StoreType `json:"store_type"`
 
 	IDs   []cadata.ID `json:"ids,omitempty"`
-	First []byte      `json:"prefix,omitempty"`
+	First cadata.ID   `json:"prefix,omitempty"`
 	Limit int         `json:"limit,omitempty"`
 }
 
@@ -511,8 +509,8 @@ func (s *store) Exists(ctx context.Context, id cadata.ID) (bool, error) {
 	return s.blobMainSrv.Exists(ctx, s.sid, []cadata.ID{id})
 }
 
-func (s *store) List(ctx context.Context, prefix []byte, ids []cadata.ID) (int, error) {
-	return s.blobMainSrv.List(ctx, s.sid, prefix, ids)
+func (s *store) List(ctx context.Context, first cadata.ID, ids []cadata.ID) (int, error) {
+	return s.blobMainSrv.List(ctx, s.sid, first, ids)
 }
 
 func (s *store) Hash(x []byte) cadata.ID {

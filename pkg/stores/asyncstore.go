@@ -93,8 +93,8 @@ func (s *AsyncStore) Exists(ctx context.Context, id ID) (bool, error) {
 	return cadata.Exists(ctx, s.target, id)
 }
 
-func (s *AsyncStore) List(ctx context.Context, prefix []byte, ids []ID) (int, error) {
-	return s.target.List(ctx, prefix, ids)
+func (s *AsyncStore) List(ctx context.Context, first cadata.ID, ids []ID) (int, error) {
+	return s.target.List(ctx, first, ids)
 }
 
 func (s *AsyncStore) Close() error {

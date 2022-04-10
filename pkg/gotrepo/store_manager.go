@@ -255,7 +255,7 @@ func (s virtualStore) Delete(ctx context.Context, id cadata.ID) error {
 }
 
 // List implements cadata.Set
-func (s virtualStore) List(ctx context.Context, first []byte, ids []cadata.ID) (int, error) {
+func (s virtualStore) List(ctx context.Context, first cadata.ID, ids []cadata.ID) (int, error) {
 	var n int
 	stopIter := errors.New("stop")
 	err := s.sm.db.View(func(tx *bolt.Tx) error {
@@ -263,7 +263,7 @@ func (s virtualStore) List(ctx context.Context, first []byte, ids []cadata.ID) (
 		if b == nil {
 			return nil
 		}
-		return forEachInSet(b, s.id, first, func(id cadata.ID) error {
+		return forEachInSet(b, s.id, first[:], func(id cadata.ID) error {
 			ids[n] = id
 			n++
 			if n == len(ids) {

@@ -44,7 +44,7 @@ func (wl writeLayer) Delete(ctx context.Context, id cadata.ID) error {
 	return wl.writeTo.Delete(ctx, id)
 }
 
-func (wl writeLayer) List(ctx context.Context, first []byte, ids []cadata.ID) (int, error) {
+func (wl writeLayer) List(ctx context.Context, first cadata.ID, ids []cadata.ID) (int, error) {
 	// TODO: maybe list both
 	return wl.base.List(ctx, first, ids)
 }

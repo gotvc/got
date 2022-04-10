@@ -38,10 +38,10 @@ func (ms MemSet) Count() int {
 	return len(ms)
 }
 
-func (ms MemSet) List(ctx context.Context, first []byte, ids []cadata.ID) (int, error) {
+func (ms MemSet) List(ctx context.Context, first cadata.ID, ids []cadata.ID) (int, error) {
 	var n int
 	for id := range ms {
-		if bytes.Compare(id[:], first) < 0 {
+		if bytes.Compare(id[:], first[:]) < 0 {
 			continue
 		}
 		ids[n] = id
