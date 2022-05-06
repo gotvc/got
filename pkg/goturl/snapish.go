@@ -5,3 +5,7 @@ type Snapish struct {
 	Branch string
 	Offset uint
 }
+
+func (s Snapish) String() string {
+	panic("not implemented")
+}

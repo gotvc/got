@@ -22,7 +22,7 @@ const (
 type URL struct {
 	Protocol string
 	Host     string
-	Snap     string
+	Snap     *Snapish
 	Path     string
 }
 
@@ -67,11 +67,11 @@ func (u URL) IsSpace() bool {
 }
 
 func (u URL) IsSnap() bool {
-	return u.Snap != ""
+	return u.Snap != nil
 }
 
 func (u URL) IsFile() bool {
-	return u.Path != "" && u.Snap != ""
+	return u.Path != "" && u.Snap != nil
 }
 
 func (u URL) String() string {
@@ -79,9 +79,9 @@ func (u URL) String() string {
 	sb.WriteString(u.Protocol)
 	sb.WriteString("://")
 	sb.WriteString(u.Host)
-	if u.Snap != "" {
+	if u.Snap != nil {
 		sb.WriteString("@")
-		sb.WriteString(u.Snap)
+		sb.WriteString(u.Snap.String())
 	}
 	if u.Path != "" {
 		sb.WriteString(":")
