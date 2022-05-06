@@ -171,6 +171,26 @@ func (pr *Porter) ExportFile(ctx context.Context, ms, ds cadata.Store, root gotf
 	return posixfs.PutFile(ctx, pr.posixfs, p, mode, r)
 }
 
+// IsKnown returns true if the file at p was placed there by the porter
+// or imported by the Porter, and not modified since.
+func (pr *Porter) IsKnown(ctx context.Context, p string) (bool, error) {
+	ent, err := pr.cache.Get(p)
+	if err != nil {
+		return false, err
+	}
+	if ent == nil {
+		return false, nil
+	}
+	fi, err := pr.posixfs.Stat(p)
+	if err != nil {
+		return false, err
+	}
+	if fi.ModTime().UnixNano() > ent.ModifiedAt {
+		return false, nil
+	}
+	return true, nil
+}
+
 func createEmptyDir(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store) (*gotfs.Root, error) {
 	empty, err := fsop.NewEmpty(ctx, ms)
 	if err != nil {
