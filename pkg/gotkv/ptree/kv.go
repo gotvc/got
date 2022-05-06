@@ -27,7 +27,7 @@ func MaxEntry(ctx context.Context, s cadata.Store, x Root, span Span) (*Entry, e
 		return nil, nil
 	}
 	if x.Depth == 0 {
-		if span.GreaterThan(ent.Key) {
+		if span.AllGt(ent.Key) {
 			return nil, nil
 		}
 		return ent, nil

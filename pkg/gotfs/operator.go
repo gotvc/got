@@ -126,10 +126,10 @@ func (o *Operator) Select(ctx context.Context, s cadata.Store, root Root, p stri
 func (o *Operator) deleteOutside(ctx context.Context, s cadata.Store, root Root, span gotkv.Span) (*Root, error) {
 	x := &root
 	var err error
-	if x, err = o.gotkv.DeleteSpan(ctx, s, *x, gotkv.Span{Start: nil, End: span.Start}); err != nil {
+	if x, err = o.gotkv.DeleteSpan(ctx, s, *x, gotkv.Span{Begin: nil, End: span.Begin}); err != nil {
 		return nil, err
 	}
-	if x, err = o.gotkv.DeleteSpan(ctx, s, *x, gotkv.Span{Start: span.End, End: nil}); err != nil {
+	if x, err = o.gotkv.DeleteSpan(ctx, s, *x, gotkv.Span{Begin: span.End, End: nil}); err != nil {
 		return nil, err
 	}
 	return x, err
@@ -179,7 +179,7 @@ func (o *Operator) Graft(ctx context.Context, ms, ds cadata.Store, root Root, p 
 	branch2 := o.gotkv.AddPrefix(branch, k[:len(k)-1])
 	return o.Splice(ctx, ms, ds, []Segment{
 		{
-			Span: gotkv.Span{Start: nil, End: k},
+			Span: gotkv.Span{Begin: nil, End: k},
 			Root: *root2,
 		},
 		{
@@ -187,7 +187,7 @@ func (o *Operator) Graft(ctx context.Context, ms, ds cadata.Store, root Root, p 
 			Root: branch2,
 		},
 		{
-			Span: gotkv.Span{Start: gotkv.PrefixEnd(k), End: nil},
+			Span: gotkv.Span{Begin: gotkv.PrefixEnd(k), End: nil},
 			Root: *root2,
 		},
 	})
