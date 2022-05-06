@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/brendoncarroll/go-p2p"
+	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/pkg/errors"
@@ -211,7 +212,7 @@ func (s *spaceSrv) handleExists(ctx context.Context, peer PeerID, name string) (
 func (s *spaceSrv) handleList(ctx context.Context, peer PeerID, first string, limit int) (*SpaceRes, error) {
 	space := s.open(peer)
 	var names []string
-	if err := space.ForEach(ctx, func(x string) error {
+	if err := space.ForEach(ctx, state.Span[string]{Begin: first}, func(x string) error {
 		if len(names) >= limit {
 			return nil
 		}
@@ -301,8 +302,8 @@ func (r *space) Delete(ctx context.Context, name string) error {
 	return r.srv.Delete(ctx, BranchID{Peer: r.peer, Name: name})
 }
 
-func (r *space) ForEach(ctx context.Context, fn func(string) error) error {
-	var first string
+func (r *space) ForEach(ctx context.Context, span state.Span[string], fn func(string) error) error {
+	first := span.Begin
 	for {
 		names, err := r.srv.List(ctx, r.peer, first, 100)
 		if err != nil {

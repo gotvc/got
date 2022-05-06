@@ -25,11 +25,11 @@ func NewIterator(s cadata.Store, op *gdat.Operator, root Root, span Span) *Itera
 		s:      s,
 		op:     op,
 		root:   root,
-		span:   span.Clone(),
+		span:   kvstreams.CloneSpan(span),
 		levels: make([][]Entry, root.Depth+2),
 	}
 	it.levels[root.Depth+1] = []Entry{indexToEntry(rootToIndex(root))}
-	it.setPos(span.Start)
+	it.setPos(span.Begin)
 	return it
 }
 
@@ -161,7 +161,7 @@ func (it *Iterator) setPos(x []byte) {
 
 func (it *Iterator) getSpan() Span {
 	return Span{
-		Start: it.pos,
+		Begin: it.pos,
 		End:   it.span.End,
 	}
 }
@@ -180,10 +180,10 @@ func filterEntries(xs []Entry, span Span) []Entry {
 func filterIndexes(xs []Entry, span Span) []Entry {
 	ret := xs[:0]
 	for i := range xs {
-		if span.LessThan(xs[i].Key) {
+		if span.AllLt(xs[i].Key) {
 			continue
 		}
-		if i+1 < len(xs) && bytes.Compare(span.Start, xs[i+1].Key) >= 0 {
+		if i+1 < len(xs) && bytes.Compare(span.Begin, xs[i+1].Key) >= 0 {
 			continue
 		}
 		ret = append(ret, xs[i])

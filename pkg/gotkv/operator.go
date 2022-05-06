@@ -185,26 +185,26 @@ type Mutation struct {
 // Mutate applies a batch of mutations to the tree x.
 func (o *Operator) Mutate(ctx context.Context, s cadata.Store, x Root, mutations ...Mutation) (*Root, error) {
 	iters := make([]kvstreams.Iterator, 2*len(mutations)+1)
-	var start []byte
+	var begin []byte
 	for i, mut := range mutations {
 		if err := checkMutation(mut); err != nil {
 			return nil, err
 		}
 		if i > 0 {
-			if bytes.Compare(mut.Span.Start, mutations[i-1].Span.End) < 0 {
-				return nil, errors.Errorf("spans out of order %d start: %q < %d end: %q", i, mut.Span.Start, i-1, mut.Span.End)
+			if bytes.Compare(mut.Span.Begin, mutations[i-1].Span.End) < 0 {
+				return nil, errors.Errorf("spans out of order %d start: %q < %d end: %q", i, mut.Span.Begin, i-1, mut.Span.End)
 			}
 		}
 		beforeIter := o.NewIterator(s, x, Span{
-			Start: start,
-			End:   append([]byte{}, mut.Span.Start...), // ensure this isn't nil, there must be an upper bound.
+			Begin: begin,
+			End:   append([]byte{}, mut.Span.Begin...), // ensure this isn't nil, there must be an upper bound.
 		})
 		iters[2*i] = beforeIter
 		iters[2*i+1] = kvstreams.NewLiteral(mut.Entries)
-		start = mut.Span.End
+		begin = mut.Span.End
 	}
 	iters[len(iters)-1] = o.NewIterator(s, x, Span{
-		Start: start,
+		Begin: begin,
 		End:   nil,
 	})
 	return o.Concat(ctx, s, iters...)

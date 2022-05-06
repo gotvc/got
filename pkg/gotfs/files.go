@@ -82,7 +82,7 @@ func (o *Operator) ReadFileAt(ctx context.Context, ms, ds Store, x Root, p strin
 	}
 	key := makeExtentKey(p, start)
 	span := gotkv.Span{
-		Start: key,
+		Begin: key,
 		End:   fileSpanEnd(p),
 	}
 	it := o.gotkv.NewIterator(ms, x, span)

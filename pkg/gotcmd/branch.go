@@ -44,9 +44,8 @@ var listBranchCmd = &cobra.Command{
 	PreRunE:  loadRepo,
 	PostRunE: closeRepo,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		r := repo.GetSpace()
 		w := cmd.OutOrStdout()
-		return r.ForEach(ctx, func(k string) error {
+		return repo.ForEachBranch(ctx, func(k string) error {
 			fmt.Fprintf(w, "%s\n", k)
 			return nil
 		})

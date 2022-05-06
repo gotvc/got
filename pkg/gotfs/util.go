@@ -18,9 +18,9 @@ func ChangesOnBase(base Root, changes []Segment) []Segment {
 		// create the span to reference the root, should be inbetween the two entries from segs
 		var baseSpan gotkv.Span
 		if i > 0 {
-			baseSpan.Start = segs[len(segs)-1].Span.End
+			baseSpan.Begin = segs[len(segs)-1].Span.End
 		}
-		baseSpan.End = changes[i].Span.Start
+		baseSpan.End = changes[i].Span.Begin
 		baseSeg := Segment{Root: base, Span: baseSpan}
 
 		segs = append(segs, baseSeg)
@@ -30,7 +30,7 @@ func ChangesOnBase(base Root, changes []Segment) []Segment {
 		segs = append(segs, Segment{
 			Root: base,
 			Span: gotkv.Span{
-				Start: segs[len(segs)-1].Span.End,
+				Begin: segs[len(segs)-1].Span.End,
 				End:   nil,
 			},
 		})
