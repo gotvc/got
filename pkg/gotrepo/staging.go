@@ -179,8 +179,8 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 	if err != nil {
 		return err
 	}
-	snapInfo.Creator = r.GetID()
-	snapInfo.Authors = append(snapInfo.Authors, r.GetID())
+	snapInfo.Creator = r.GetID().String()
+	snapInfo.Authors = append(snapInfo.Authors, r.GetID().String())
 	src := r.stagingTriple()
 	dst := branch.Volume.StoreTriple()
 	// writes go to src, but reads from src should fallback to dst
