@@ -1,5 +1,13 @@
 # CLI
 
+## Setup
+
+### `got init`
+Initializes a Got repo in the current working directory.
+
+### `got clone <dst> <url>`
+Initializes a new Got repo in the directory dst with branches under `origin/` mapping to the space at the URL.
+
 ## General
 
 ### `got status`
