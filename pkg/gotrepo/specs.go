@@ -172,7 +172,7 @@ type EncryptedSpaceSpec struct {
 type SpaceSpec struct {
 	Peer    *inet256.ID         `json:"peer,omitempty"`
 	QUIC    *QUICSpaceSpec      `json:"quic,omitempty"`
-	Encrypt *EncryptedSpaceSpec `json:"encrypt,omitempty`
+	Encrypt *EncryptedSpaceSpec `json:"encrypt,omitempty"`
 }
 
 func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
