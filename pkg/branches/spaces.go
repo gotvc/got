@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cells"
 	"github.com/brendoncarroll/go-tai64"
@@ -43,7 +44,7 @@ type Space interface {
 	Get(ctx context.Context, name string) (*Branch, error)
 	Create(ctx context.Context, name string, params Params) (*Branch, error)
 	Delete(ctx context.Context, name string) error
-	ForEach(ctx context.Context, fn func(string) error) error
+	ForEach(ctx context.Context, span state.Span[string], fn func(string) error) error
 }
 
 func CreateIfNotExists(ctx context.Context, r Space, k string, params Params) (*Branch, error) {
@@ -114,7 +115,7 @@ func (r *MemSpace) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
-func (r *MemSpace) ForEach(ctx context.Context, fn func(string) error) error {
+func (r *MemSpace) ForEach(ctx context.Context, span state.Span[string], fn func(string) error) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for name := range r.branches {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/gotvc/got/pkg/branches"
 )
 
@@ -48,11 +49,11 @@ func (s *Space) Get(ctx context.Context, k string) (*branches.Branch, error) {
 	return s.wrapBranch(b, k), nil
 }
 
-func (s *Space) ForEach(ctx context.Context, fn func(string) error) error {
+func (s *Space) ForEach(ctx context.Context, span state.Span[string], fn func(string) error) error {
 	if err := s.checkACL("FOR_EACH", false, ""); err != nil {
 		return err
 	}
-	return s.inner.ForEach(ctx, fn)
+	return s.inner.ForEach(ctx, span, fn)
 }
 
 func (s *Space) checkACL(verb string, write bool, name string) error {

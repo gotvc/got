@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cells/cryptocell"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/pkg/errors"
@@ -61,8 +62,8 @@ func (r *CryptoSpace) Delete(ctx context.Context, name string) error {
 	return r.inner.Delete(ctx, nameCtext)
 }
 
-func (r *CryptoSpace) ForEach(ctx context.Context, fn func(string) error) error {
-	return r.inner.ForEach(ctx, func(x string) error {
+func (r *CryptoSpace) ForEach(ctx context.Context, span state.Span[string], fn func(string) error) error {
+	return r.inner.ForEach(ctx, state.Span[string]{}, func(x string) error {
 		y, err := r.decryptName(x)
 		if err != nil {
 			r.handleDecryptFailure(x, err)

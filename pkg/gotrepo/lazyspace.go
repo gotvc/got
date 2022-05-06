@@ -4,6 +4,7 @@ import (
 	"context"
 	"sync"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/gotvc/got/pkg/branches"
 )
 
@@ -44,12 +45,12 @@ func (ls lazySpace) Delete(ctx context.Context, name string) error {
 	return space.Delete(ctx, name)
 }
 
-func (ls lazySpace) ForEach(ctx context.Context, fn func(string) error) error {
+func (ls lazySpace) ForEach(ctx context.Context, span state.Span[string], fn func(string) error) error {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return err
 	}
-	return space.ForEach(ctx, fn)
+	return space.ForEach(ctx, span, fn)
 }
 
 func (ls lazySpace) getSpace(ctx context.Context) (branches.Space, error) {
