@@ -9,6 +9,8 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gotfs"
 	"golang.org/x/crypto/blake2b"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var _ cadata.Store = &Store{}
@@ -43,7 +45,7 @@ func (s Store) Get(ctx context.Context, id cadata.ID, buf []byte) (int, error) {
 	})
 	// TODO: transform errors
 	if err != nil {
-		return 0, err
+		return 0, s.transformError(err)
 	}
 	if len(res.Data) > len(buf) {
 		return 0, io.ErrShortBuffer
@@ -86,7 +88,10 @@ func (s Store) List(ctx context.Context, first cadata.ID, ids []cadata.ID) (int,
 		}
 		ids[i] = cadata.IDFromBytes(res.Ids[i])
 	}
-	return n, nil
+	if res.IsEnd {
+		err = cadata.ErrEndOfList
+	}
+	return n, err
 }
 
 func (s Store) MaxSize() int {
@@ -95,4 +100,15 @@ func (s Store) MaxSize() int {
 
 func (s Store) Hash(x []byte) cadata.ID {
 	return cadata.ID(blake2b.Sum256(x))
+}
+
+func (s Store) transformError(x error) error {
+	switch {
+	case x == nil:
+		return nil
+	case status.Code(x) == codes.NotFound:
+		return cadata.ErrNotFound
+	default:
+		return x
+	}
 }

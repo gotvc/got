@@ -39,7 +39,6 @@ message DeleteBranchReq {
 }
 
 message DeleteBranchRes {
-
 }
 
 message PostBlobReq {
@@ -81,6 +80,7 @@ message ListBlobReq {
 
 message ListBlobRes {
     repeated bytes ids = 1;
+    bool is_end = 2;
 }
 
 message DeleteBlobReq {

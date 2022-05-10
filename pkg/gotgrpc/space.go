@@ -16,6 +16,10 @@ type Space struct {
 	c GotSpaceClient
 }
 
+func NewSpace(c GotSpaceClient) Space {
+	return Space{c}
+}
+
 func (s Space) Create(ctx context.Context, key string, p branches.Params) (*branches.Branch, error) {
 	res, err := s.c.CreateBranch(ctx, &CreateBranchReq{
 		Salt: p.Salt,

@@ -37,6 +37,9 @@ func (c *Cell) CAS(ctx context.Context, actual, prev, next []byte) (bool, int, e
 	if err != nil {
 		return false, 0, err
 	}
+	if len(actual) < len(res.Current) {
+		return false, 0, io.ErrShortBuffer
+	}
 	n := copy(actual, res.Current)
 	return res.Swapped, n, nil
 }
