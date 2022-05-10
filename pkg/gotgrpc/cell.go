@@ -1,0 +1,46 @@
+package gotgrpc
+
+import (
+	"context"
+	"io"
+
+	"github.com/gotvc/got/pkg/cells"
+	"golang.org/x/crypto/blake2b"
+)
+
+const MaxCellSize = 1 << 16
+
+var _ cells.Cell = &Cell{}
+
+type Cell struct {
+	c   GotSpaceClient
+	key string
+}
+
+func (c *Cell) Read(ctx context.Context, buf []byte) (int, error) {
+	res, err := c.c.ReadCell(ctx, &ReadCellReq{Key: c.key})
+	if err != nil {
+		return 0, err
+	}
+	if len(buf) < len(res.Data) {
+		return 0, io.ErrShortBuffer
+	}
+	return copy(buf, res.Data), nil
+}
+
+func (c *Cell) CAS(ctx context.Context, actual, prev, next []byte) (bool, int, error) {
+	prevHash := blake2b.Sum256(prev)
+	res, err := c.c.CASCell(ctx, &CASCellReq{
+		PrevHash: prevHash[:],
+		Next:     next,
+	})
+	if err != nil {
+		return false, 0, err
+	}
+	n := copy(actual, res.Current)
+	return res.Swapped, n, nil
+}
+
+func (c *Cell) MaxSize() int {
+	return MaxCellSize
+}

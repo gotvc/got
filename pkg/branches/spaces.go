@@ -39,12 +39,14 @@ func NewParams(public bool) Params {
 	}
 }
 
+type Span = state.Span[string]
+
 // A Space holds named branches.
 type Space interface {
 	Get(ctx context.Context, name string) (*Branch, error)
 	Create(ctx context.Context, name string, params Params) (*Branch, error)
 	Delete(ctx context.Context, name string) error
-	ForEach(ctx context.Context, span state.Span[string], fn func(string) error) error
+	ForEach(ctx context.Context, span Span, fn func(string) error) error
 }
 
 func CreateIfNotExists(ctx context.Context, r Space, k string, params Params) (*Branch, error) {
