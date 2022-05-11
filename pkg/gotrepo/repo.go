@@ -310,10 +310,9 @@ func bucketFromTx(tx *bolt.Tx, path []string) (*bolt.Bucket, error) {
 }
 
 func saltFromBytes(x []byte) *[32]byte {
-	var salt *[32]byte
+	var salt [32]byte
 	if len(x) > 0 {
-		salt = &[32]byte{}
 		copy(salt[:], x)
 	}
-	return salt
+	return &salt
 }

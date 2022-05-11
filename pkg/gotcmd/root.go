@@ -7,43 +7,47 @@ import (
 )
 
 func Execute() error {
-	return rootCmd.Execute()
+	return NewRootCmd().Execute()
 }
 
-func init() {
-	rootCmd.AddCommand(initCmd)
+func NewRootCmd() *cobra.Command {
+	rootCmd := &cobra.Command{
+		Use:   "got",
+		Short: "got is like git, but with an 'o'",
+	}
+	for _, cmd := range []*cobra.Command{
+		initCmd,
+		newCloneCmd(),
 
-	rootCmd.AddCommand(commitCmd)
-	rootCmd.AddCommand(historyCmd)
-	rootCmd.AddCommand(addCmd)
-	rootCmd.AddCommand(rmCmd)
-	rootCmd.AddCommand(putCmd)
-	rootCmd.AddCommand(discardCmd)
-	rootCmd.AddCommand(clearCmd)
+		commitCmd,
+		historyCmd,
+		addCmd,
+		rmCmd,
+		putCmd,
+		discardCmd,
+		clearCmd,
 
-	rootCmd.AddCommand(statusCmd)
-	rootCmd.AddCommand(lsCmd)
-	rootCmd.AddCommand(catCmd)
+		statusCmd,
+		lsCmd,
+		catCmd,
+		branchCmd,
+		activeCmd,
+		forkCmd,
 
-	rootCmd.AddCommand(branchCmd)
-	rootCmd.AddCommand(activeCmd)
-	rootCmd.AddCommand(forkCmd)
+		iamCmd,
+		localIDCmd,
+		serveCmd,
+		serveQUICCmd,
 
-	rootCmd.AddCommand(iamCmd)
-	rootCmd.AddCommand(localIDCmd)
-	rootCmd.AddCommand(serveCmd)
-	rootCmd.AddCommand(serveQUICCmd)
-
-	rootCmd.AddCommand(slurpCmd)
-	rootCmd.AddCommand(cleanupCmd)
-	rootCmd.AddCommand(debugCmd)
-	rootCmd.AddCommand(derefCmd)
-	rootCmd.AddCommand(scrubCmd)
-}
-
-var rootCmd = &cobra.Command{
-	Use:   "got",
-	Short: "got is like git, but with an 'o'",
+		slurpCmd,
+		cleanupCmd,
+		debugCmd,
+		derefCmd,
+		scrubCmd,
+	} {
+		rootCmd.AddCommand(cmd)
+	}
+	return rootCmd
 }
 
 var (
