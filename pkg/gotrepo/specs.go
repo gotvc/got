@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
+	"github.com/gotvc/got/pkg/gotgrpc"
 	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/pkg/errors"
 )
@@ -169,9 +170,14 @@ type EncryptedSpaceSpec struct {
 	Secret [32]byte
 }
 
+type GRPCSpaceSpec struct {
+	Endpoint string
+}
+
 type SpaceSpec struct {
 	Peer    *inet256.ID         `json:"peer,omitempty"`
 	QUIC    *QUICSpaceSpec      `json:"quic,omitempty"`
+	GRPC    *GRPCSpaceSpec      `json:"grpc,omitempty"`
 	Encrypt *EncryptedSpaceSpec `json:"encrypt,omitempty"`
 }
 
@@ -197,6 +203,12 @@ func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 			return nil, err
 		}
 		return gn.GetSpace(spec.QUIC.ID), nil
+	case spec.GRPC != nil:
+		c, err := r.getGRPCClient(spec.GRPC.Endpoint)
+		if err != nil {
+			return nil, err
+		}
+		return gotgrpc.NewSpace(c), nil
 	default:
 		return nil, errors.Errorf("empty SpaceSpec")
 	}

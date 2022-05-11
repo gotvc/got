@@ -14,7 +14,7 @@ const (
 	ProtocolNative = "got"
 	// ProtocolQUIC is the got protocol over QUIC
 	ProtocolQUIC = "quic"
-
+	// ProtocolGRPC is the gRPC based protocol in the gotgrpc package
 	ProtocolGRPC = "grpc"
 )
 
@@ -22,7 +22,7 @@ const (
 type URL struct {
 	Protocol string
 	Host     string
-	Snap     *Snapish
+	Snapshot *Snapish
 	Path     string
 }
 
@@ -67,11 +67,11 @@ func (u URL) IsSpace() bool {
 }
 
 func (u URL) IsSnap() bool {
-	return u.Snap != nil
+	return u.Snapshot != nil
 }
 
 func (u URL) IsFile() bool {
-	return u.Path != "" && u.Snap != nil
+	return u.Path != "" && u.Snapshot != nil
 }
 
 func (u URL) String() string {
@@ -79,9 +79,9 @@ func (u URL) String() string {
 	sb.WriteString(u.Protocol)
 	sb.WriteString("://")
 	sb.WriteString(u.Host)
-	if u.Snap != nil {
+	if u.Snapshot != nil {
 		sb.WriteString("@")
-		sb.WriteString(u.Snap.String())
+		sb.WriteString(u.Snapshot.String())
 	}
 	if u.Path != "" {
 		sb.WriteString(":")

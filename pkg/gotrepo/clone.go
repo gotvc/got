@@ -57,7 +57,11 @@ func spaceSpecFromURL(u goturl.URL) (*SpaceSpec, error) {
 			},
 		}, nil
 	case goturl.ProtocolGRPC:
-		panic("grpc not yet supported")
+		return &SpaceSpec{
+			GRPC: &GRPCSpaceSpec{
+				Endpoint: u.Host,
+			},
+		}, nil
 	default:
 		return nil, fmt.Errorf("unknown protocol %q", u.Protocol)
 	}
