@@ -9,6 +9,7 @@ import (
 	"github.com/gotvc/got/pkg/gotgrpc"
 	"github.com/gotvc/got/pkg/gotnet"
 	"github.com/gotvc/got/pkg/gotnet/quichub"
+	"github.com/gotvc/got/pkg/goturl"
 	"github.com/inet256/inet256/client/go_client/inet256client"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
@@ -20,7 +21,8 @@ func (r *Repo) Serve(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	logrus.Println("serving...")
+	u := goturl.NewNativeSpace(r.GetID())
+	logrus.Infof("serving at %s...", u.String())
 	return srv.Serve()
 }
 
@@ -30,6 +32,8 @@ func (r *Repo) ServeQUIC(ctx context.Context, laddr string) error {
 		return err
 	}
 	gn := r.makeGotNet(qh)
+	u := goturl.NewQUICSpace(quichub.Addr{ID: r.GetID(), Addr: laddr})
+	logrus.Infof("serving at %s ...", u.String())
 	return gn.Serve()
 }
 
