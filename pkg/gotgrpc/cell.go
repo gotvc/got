@@ -4,8 +4,9 @@ import (
 	"context"
 	"io"
 
-	"github.com/gotvc/got/pkg/cells"
 	"golang.org/x/crypto/blake2b"
+
+	"github.com/gotvc/got/pkg/cells"
 )
 
 const MaxCellSize = 1 << 16

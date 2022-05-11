@@ -7,10 +7,11 @@ import (
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/gotfs"
-	"golang.org/x/crypto/blake2b"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotfs"
 )
 
 var _ cadata.Store = &Store{}
@@ -99,7 +100,7 @@ func (s Store) MaxSize() int {
 }
 
 func (s Store) Hash(x []byte) cadata.ID {
-	return cadata.ID(blake2b.Sum256(x))
+	return gdat.Hash(x)
 }
 
 func (s Store) transformError(x error) error {

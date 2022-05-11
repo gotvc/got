@@ -6,6 +6,8 @@ import (
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-tai64"
+
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
 )
@@ -67,8 +69,10 @@ func (s Space) ForEach(ctx context.Context, span branches.Span, fn func(string) 
 }
 
 func (s Space) makeBranch(key string, bi *BranchInfo) *branches.Branch {
+	createdAt, _ := tai64.Parse(bi.CreatedAt)
 	return &branches.Branch{
 		Salt:        bi.Salt,
+		CreatedAt:   createdAt,
 		Annotations: bi.Annotations,
 		Volume:      s.makeVolume(key),
 	}
