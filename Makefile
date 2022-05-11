@@ -12,6 +12,7 @@ install: protobuf
 
 protobuf:
 	cd ./pkg/gotfs && ./build_protobuf.sh
+	cd ./pkg/gotgrpc && ./build_protobuf.sh
 
 build: protobuf
 	rm -r ./build/*

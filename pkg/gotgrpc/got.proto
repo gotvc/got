@@ -1,0 +1,130 @@
+syntax = "proto3";
+
+option go_package = "github.com/gotvc/got/pkg/gotgrpc";
+
+enum StoreType {
+    UNKNOWN = 0;
+    VC = 1;
+    FS = 2;
+    RAW = 3;
+}
+
+message BranchInfo {
+    bytes salt = 1;
+    bytes created_at = 2;
+    map<string, string> annotations = 3;
+}
+
+message CreateBranchReq {
+    string key = 1;
+
+    bytes salt = 2;
+}
+
+message GetBranchReq {
+    string key = 1;
+}
+
+message ListBranchReq {
+    string begin = 1;
+    string end = 2;
+}
+
+message ListBranchRes {
+    string key = 1;
+}
+
+message DeleteBranchReq {
+    string key = 1;
+}
+
+message DeleteBranchRes {
+}
+
+message PostBlobReq {
+    string key = 1;
+    StoreType store_type = 2;
+
+    bytes data = 3;
+}
+
+message PostBlobRes {
+    bytes id = 1;
+}
+
+message GetBlobReq {
+    string key = 1;
+    StoreType store_type = 2;
+    bytes id = 3;
+}
+
+message GetBlobRes {
+    bytes data = 1;
+}
+
+message AddBlobReq {
+    string key = 1;
+    StoreType store_type = 2;
+    bytes id = 3;
+}
+
+message AddBlobRes{}
+
+message ListBlobReq {
+    string key = 1;
+    StoreType store_type = 2;
+    bytes begin = 3;
+    bytes end = 4;
+    uint32 limit = 5;
+}
+
+message ListBlobRes {
+    repeated bytes ids = 1;
+    bool is_end = 2;
+}
+
+message DeleteBlobReq {
+    string key = 1;
+    StoreType store_type = 2;
+    bytes id = 3;
+}
+
+message DeleteBlobRes {
+    bool affected = 1;
+}
+
+message ReadCellReq {
+    string key = 1;
+}
+
+message ReadCellRes {
+    bytes data = 1;
+}
+
+message CASCellReq {
+    string key = 1;
+    bytes prev_hash = 2;
+    bytes next = 3;
+}
+
+message CASCellRes {
+    string key = 1;
+    bool swapped = 2;
+    bytes current = 3;
+}
+
+service GotSpace {
+    rpc CreateBranch(CreateBranchReq) returns (BranchInfo) {};
+    rpc GetBranch(GetBranchReq) returns (BranchInfo) {};
+    rpc DeleteBranch(DeleteBranchReq) returns (DeleteBranchRes) {};
+    rpc ListBranch(ListBranchReq) returns (stream ListBranchRes) {};
+
+    rpc PostBlob(PostBlobReq) returns (PostBlobRes) {};
+    rpc GetBlob(GetBlobReq) returns (GetBlobRes) {};
+    rpc DeleteBlob(DeleteBlobReq) returns (DeleteBlobRes) {};
+    rpc AddBlob(AddBlobReq) returns (AddBlobRes) {};
+    rpc ListBlob(ListBlobReq) returns (ListBlobRes) {};
+
+    rpc ReadCell(ReadCellReq) returns (ReadCellRes) {};
+    rpc CASCell(CASCellReq) returns (CASCellRes) {};
+}
