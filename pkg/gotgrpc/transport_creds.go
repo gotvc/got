@@ -11,6 +11,9 @@ import (
 	"google.golang.org/grpc/credentials"
 )
 
+// TransportCreds
+//
+// Useful reference: https://github.com/grpc/grpc-go/blob/v1.46.0/credentials/tls.go
 type TransportCreds struct {
 	privateKey   inet256.PrivateKey
 	serverConfig *tls.Config
@@ -18,6 +21,10 @@ type TransportCreds struct {
 
 func NewClientCreds(privateKey inet256.PrivateKey) credentials.TransportCredentials {
 	return TransportCreds{privateKey: privateKey}
+}
+
+func NewServerCreds(config *tls.Config) credentials.TransportCredentials {
+	return TransportCreds{serverConfig: config}
 }
 
 // ClientHandshake does the authentication handshake specified by the
@@ -41,8 +48,8 @@ func (tc TransportCreds) ClientHandshake(ctx context.Context, endpoint string, x
 	if err := tconn.HandshakeContext(ctx); err != nil {
 		return nil, nil, err
 	}
-	id := inet256.NewAddr(tconn.ConnectionState().PeerCertificates[0].PublicKey)
-	return tconn, AuthInfo{ID: id}, nil
+	pubKey := tconn.ConnectionState().PeerCertificates[0].PublicKey
+	return tconn, newAuthInfo(pubKey), nil
 }
 
 // ServerHandshake does the authentication handshake for servers. It returns
@@ -56,14 +63,17 @@ func (tc TransportCreds) ServerHandshake(x net.Conn) (net.Conn, credentials.Auth
 	if err := tconn.Handshake(); err != nil {
 		return nil, nil, err
 	}
-	id := inet256.NewAddr(tconn.ConnectionState().PeerCertificates[0].PublicKey)
-	authInfo := newAuthInfo(id)
+	pubKey := tconn.ConnectionState().PeerCertificates[0].PublicKey
+	authInfo := newAuthInfo(pubKey)
 	return tconn, authInfo, nil
 }
 
 // Info provides the ProtocolInfo of this TransportCredentials.
 func (tc TransportCreds) Info() credentials.ProtocolInfo {
-	return credentials.ProtocolInfo{}
+	return credentials.ProtocolInfo{
+		SecurityProtocol: "tls",
+		SecurityVersion:  "1.2",
+	}
 }
 
 // Clone makes a copy of this TransportCredentials.
@@ -79,14 +89,17 @@ func (tc TransportCreds) OverrideServerName(string) error {
 }
 
 type AuthInfo struct {
-	ID inet256.ID
+	ID        inet256.ID
+	PublicKey inet256.PublicKey
 
 	credentials.CommonAuthInfo
 }
 
-func newAuthInfo(id inet256.ID) AuthInfo {
+func newAuthInfo(pubKey inet256.PublicKey) AuthInfo {
 	return AuthInfo{
-		ID: id,
+		ID:        inet256.NewAddr(pubKey),
+		PublicKey: pubKey,
+
 		CommonAuthInfo: credentials.CommonAuthInfo{
 			SecurityLevel: credentials.PrivacyAndIntegrity,
 		},
