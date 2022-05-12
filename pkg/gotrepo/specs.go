@@ -165,32 +165,31 @@ type QUICSpaceSpec struct {
 	Addr string     `json:"addr"`
 }
 
-type EncryptedSpaceSpec struct {
-	Inner  SpaceSpec
-	Secret [32]byte
+type GRPCSpaceSpec struct {
+	Endpoint string `json:"endpoint"`
 }
 
-type GRPCSpaceSpec struct {
-	Endpoint string
+type EncryptedSpaceSpec struct {
+	Inner  SpaceSpec `json:"inner"`
+	Secret [32]byte  `json:"secret"`
+}
+
+type PrefixSpaceSpec struct {
+	Inner  SpaceSpec `json:"inner"`
+	Prefix string    `json:"prefix"`
 }
 
 type SpaceSpec struct {
-	Peer    *inet256.ID         `json:"peer,omitempty"`
-	QUIC    *QUICSpaceSpec      `json:"quic,omitempty"`
-	GRPC    *GRPCSpaceSpec      `json:"grpc,omitempty"`
+	Peer *inet256.ID    `json:"peer,omitempty"`
+	QUIC *QUICSpaceSpec `json:"quic,omitempty"`
+	GRPC *GRPCSpaceSpec `json:"grpc,omitempty"`
+
 	Encrypt *EncryptedSpaceSpec `json:"encrypt,omitempty"`
+	Prefix  *PrefixSpaceSpec    `json:"prefix,omitempty"`
 }
 
 func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 	switch {
-	case spec.Encrypt != nil:
-		secret := spec.Encrypt.Secret
-		innerSpec := spec.Encrypt.Inner
-		inner, err := r.MakeSpace(innerSpec)
-		if err != nil {
-			return nil, err
-		}
-		return branches.NewCryptoSpace(inner, &secret), nil
 	case spec.Peer != nil:
 		gn, err := r.getGotNet()
 		if err != nil {
@@ -209,6 +208,21 @@ func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 			return nil, err
 		}
 		return gotgrpc.NewSpace(c), nil
+
+	case spec.Encrypt != nil:
+		secret := spec.Encrypt.Secret
+		innerSpec := spec.Encrypt.Inner
+		inner, err := r.MakeSpace(innerSpec)
+		if err != nil {
+			return nil, err
+		}
+		return branches.NewCryptoSpace(inner, &secret), nil
+	case spec.Prefix != nil:
+		inner, err := r.MakeSpace(spec.Prefix.Inner)
+		if err != nil {
+			return nil, err
+		}
+		return branches.NewPrefixSpace(inner, spec.Prefix.Prefix), nil
 	default:
 		return nil, errors.Errorf("empty SpaceSpec")
 	}

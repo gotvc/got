@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/brendoncarroll/go-tai64"
@@ -33,7 +32,7 @@ func newBranchSpecDir(makeDefault func() VolumeSpec, cf cellFactory, sf storeFac
 	}
 }
 
-func (r *branchSpecDir) ForEach(ctx context.Context, span state.Span[string], fn func(string) error) error {
+func (r *branchSpecDir) ForEach(ctx context.Context, span branches.Span, fn func(string) error) error {
 	return posixfs.WalkLeaves(ctx, r.fs, "", func(p string, _ posixfs.DirEnt) error {
 		return fn(p)
 	})

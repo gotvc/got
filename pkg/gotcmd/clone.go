@@ -15,7 +15,7 @@ func newCloneCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			dst, u := args[0], args[1]
-			url, err := goturl.ParseURL(u)
+			url, err := goturl.ParseSpaceURL(u)
 			if err != nil {
 				return err
 			}

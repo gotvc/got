@@ -7,24 +7,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestParseURL(t *testing.T) {
-	urls := []URL{
+func TestSpaceURL(t *testing.T) {
+	urls := []SpaceURL{
 		{
-			Protocol: ProtocolNative,
-			Host:     inet256.Addr{}.String(),
+			Protocol:    ProtocolNative,
+			Host:        inet256.Addr{}.String(),
+			SpacePrefix: "space-prefix",
 		},
 		{
-			Protocol: ProtocolQUIC,
-			Host:     inet256.Addr{}.String() + "@" + "example.com:443",
+			Protocol:    ProtocolQUIC,
+			Host:        inet256.Addr{}.String() + "@" + "example.com:443",
+			SpacePrefix: "space-prefix",
 		},
 		{
-			Protocol: ProtocolGRPC,
-			Host:     "example.com:443",
+			Protocol:    ProtocolGRPC,
+			Host:        "example.com:443",
+			SpacePrefix: "space-prefix",
 		},
 	}
 	for _, x := range urls {
 		s := x.String()
-		y, err := ParseURL(s)
+		t.Log(s)
+		y, err := ParseSpaceURL(s)
 		require.NoError(t, err)
 		require.Equal(t, x, *y)
 	}

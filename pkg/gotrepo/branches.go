@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/brendoncarroll/go-state"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
@@ -36,7 +35,7 @@ func (r *Repo) GetBranch(ctx context.Context, name string) (*Branch, error) {
 
 // ForEachBranch calls fn once for each branch, or until an error is returned from fn
 func (r *Repo) ForEachBranch(ctx context.Context, fn func(string) error) error {
-	return r.space.ForEach(ctx, state.Span[string]{}, fn)
+	return r.space.ForEach(ctx, branches.TotalSpan(), fn)
 }
 
 // SetActiveBranch sets the active branch to name

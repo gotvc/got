@@ -39,7 +39,15 @@ func NewParams(public bool) Params {
 	}
 }
 
-type Span = state.Span[string]
+type Span state.Span[string]
+
+func TotalSpan() Span {
+	return Span{}
+}
+
+func (s Span) Contains(x string) bool {
+	return s.Begin <= x && (s.End == "" || s.End > x)
+}
 
 // A Space holds named branches.
 type Space interface {
@@ -117,7 +125,7 @@ func (r *MemSpace) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
-func (r *MemSpace) ForEach(ctx context.Context, span state.Span[string], fn func(string) error) error {
+func (r *MemSpace) ForEach(ctx context.Context, span Span, fn func(string) error) error {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for name := range r.branches {

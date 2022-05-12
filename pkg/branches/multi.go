@@ -4,7 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/brendoncarroll/go-state"
 	"github.com/pkg/errors"
 )
 
@@ -56,7 +55,7 @@ func (r layered) Get(ctx context.Context, k string) (*Branch, error) {
 	return nil, ErrNotExist
 }
 
-func (r layered) ForEach(ctx context.Context, span state.Span[string], fn func(string) error) error {
+func (r layered) ForEach(ctx context.Context, span Span, fn func(string) error) error {
 	for _, layer := range r {
 		if err := layer.Target.ForEach(ctx, span, func(x string) error {
 			return fn(layer.Prefix + x)
