@@ -2,6 +2,7 @@ package gotcmd
 
 import (
 	"github.com/gotvc/got"
+	"github.com/gotvc/got/pkg/branches"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 )
@@ -38,6 +39,7 @@ func NewRootCmd() *cobra.Command {
 		localIDCmd,
 		serveCmd,
 		serveQUICCmd,
+		newHTTPUICmd(getSpace),
 
 		slurpCmd,
 		cleanupCmd,
@@ -66,4 +68,8 @@ func loadRepo(cmd *cobra.Command, args []string) error {
 
 func closeRepo(cmd *cobra.Command, args []string) error {
 	return repo.Close()
+}
+
+func getSpace() branches.Space {
+	return repo.GetSpace()
 }
