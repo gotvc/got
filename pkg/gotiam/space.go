@@ -48,11 +48,11 @@ func (s *Space) Get(ctx context.Context, k string) (*branches.Branch, error) {
 	return s.wrapBranch(b, k), nil
 }
 
-func (s *Space) ForEach(ctx context.Context, span branches.Span, fn func(string) error) error {
-	if err := s.checkACL("FOR_EACH", false, ""); err != nil {
-		return err
+func (s *Space) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {
+	if err := s.checkACL("LIST", false, ""); err != nil {
+		return nil, err
 	}
-	return s.inner.ForEach(ctx, span, fn)
+	return s.inner.List(ctx, span, limit)
 }
 
 func (s *Space) checkACL(verb string, write bool, name string) error {

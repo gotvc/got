@@ -35,7 +35,7 @@ func (r *Repo) GetBranch(ctx context.Context, name string) (*Branch, error) {
 
 // ForEachBranch calls fn once for each branch, or until an error is returned from fn
 func (r *Repo) ForEachBranch(ctx context.Context, fn func(string) error) error {
-	return r.space.ForEach(ctx, branches.TotalSpan(), fn)
+	return branches.ForEach(ctx, r.space, branches.TotalSpan(), fn)
 }
 
 // SetActiveBranch sets the active branch to name

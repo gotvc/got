@@ -30,19 +30,27 @@ func (s PrefixSpace) Delete(ctx context.Context, k string) error {
 	return s.Target.Delete(ctx, s.downward(k))
 }
 
-func (s PrefixSpace) ForEach(ctx context.Context, span Span, fn func(string) error) error {
+func (s PrefixSpace) List(ctx context.Context, span Span, limit int) ([]string, error) {
 	span2 := Span{
 		Begin: s.downward(span.Begin),
 		End:   s.downward(span.End),
 	}
-	return s.Target.ForEach(ctx, span2, func(x string) error {
-		y, ok := s.upward(x)
+	names, err := s.Target.List(ctx, span2, limit)
+	if err != nil {
+		return nil, err
+	}
+	if limit > 0 && len(names) > limit {
+		names = names[:limit]
+	}
+	for i := range names {
+		y, ok := s.upward(names[i])
 		if !ok {
 			// TODO: this should not happen since it would be outside of span2. maybe log?
-			return nil
+			continue
 		}
-		return fn(y)
-	})
+		names[i] = y
+	}
+	return names, nil
 }
 
 func (s PrefixSpace) downward(x string) string {

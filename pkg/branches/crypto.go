@@ -13,6 +13,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/chacha20poly1305"
+	"golang.org/x/exp/slices"
 )
 
 const (
@@ -61,8 +62,8 @@ func (r *CryptoSpace) Delete(ctx context.Context, name string) error {
 	return r.inner.Delete(ctx, nameCtext)
 }
 
-func (r *CryptoSpace) ForEach(ctx context.Context, span Span, fn func(string) error) error {
-	return r.inner.ForEach(ctx, TotalSpan(), func(x string) error {
+func (r *CryptoSpace) List(ctx context.Context, span Span, limit int) (ret []string, _ error) {
+	err := ForEach(ctx, r.inner, TotalSpan(), func(x string) error {
 		y, err := r.decryptName(x)
 		if err != nil {
 			r.handleDecryptFailure(x, err)
@@ -71,8 +72,17 @@ func (r *CryptoSpace) ForEach(ctx context.Context, span Span, fn func(string) er
 		if !span.Contains(y) {
 			return nil
 		}
-		return fn(y)
+		ret = append(ret, y)
+		slices.Sort(ret)
+		if limit > 0 && len(ret) >= limit {
+			ret = ret[:limit]
+		}
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	return ret, nil
 }
 
 func (r *CryptoSpace) getAEAD(secret []byte) cipher.AEAD {

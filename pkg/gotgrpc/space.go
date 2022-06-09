@@ -2,8 +2,6 @@ package gotgrpc
 
 import (
 	"context"
-	"errors"
-	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-tai64"
@@ -45,27 +43,15 @@ func (s Space) Get(ctx context.Context, key string) (*branches.Branch, error) {
 	return s.makeBranch(key, res), nil
 }
 
-func (s Space) ForEach(ctx context.Context, span branches.Span, fn func(string) error) error {
-	client, err := s.c.ListBranch(ctx, &ListBranchReq{
+func (s Space) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {
+	res, err := s.c.ListBranch(ctx, &ListBranchReq{
 		Begin: span.Begin,
 		End:   span.End,
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	for {
-		res, err := client.Recv()
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return err
-		}
-		if err := fn(res.Key); err != nil {
-			return err
-		}
-	}
-	return nil
+	return res.Keys, nil	
 }
 
 func (s Space) makeBranch(key string, bi *BranchInfo) *branches.Branch {

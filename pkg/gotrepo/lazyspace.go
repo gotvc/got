@@ -44,12 +44,12 @@ func (ls lazySpace) Delete(ctx context.Context, name string) error {
 	return space.Delete(ctx, name)
 }
 
-func (ls lazySpace) ForEach(ctx context.Context, span branches.Span, fn func(string) error) error {
+func (ls lazySpace) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	return space.ForEach(ctx, span, fn)
+	return space.List(ctx, span, limit)
 }
 
 func (ls lazySpace) getSpace(ctx context.Context) (branches.Space, error) {
