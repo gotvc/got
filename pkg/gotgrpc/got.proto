@@ -32,7 +32,6 @@ message ListBranchReq {
 
 message ListBranchRes {
     repeated string keys = 1;
-    bool is_end = 2;
 }
 
 message DeleteBranchReq {

@@ -64,7 +64,7 @@ func (r layered) List(ctx context.Context, span Span, limit int) (ret []string, 
 				ret = append(ret, y)
 			}
 			slices.Sort(ret)
-			if limit > 0 {
+			if limit > 0 && len(ret) > limit {
 				ret = ret[:limit]
 			}
 			return nil

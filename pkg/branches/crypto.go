@@ -63,11 +63,7 @@ func (r *CryptoSpace) Delete(ctx context.Context, name string) error {
 }
 
 func (r *CryptoSpace) List(ctx context.Context, span Span, limit int) (ret []string, _ error) {
-	stopIter := errors.New("stop iter")
 	err := ForEach(ctx, r.inner, TotalSpan(), func(x string) error {
-		if limit > 0 && len(ret) >= limit {
-			return stopIter
-		}
 		y, err := r.decryptName(x)
 		if err != nil {
 			r.handleDecryptFailure(x, err)
@@ -77,12 +73,15 @@ func (r *CryptoSpace) List(ctx context.Context, span Span, limit int) (ret []str
 			return nil
 		}
 		ret = append(ret, y)
+		slices.Sort(ret)
+		if limit > 0 && len(ret) >= limit {
+			ret = ret[:limit]
+		}
 		return nil
 	})
-	if err != nil && !errors.Is(err, stopIter) {
+	if err != nil {
 		return nil, err
 	}
-	slices.Sort(ret)
 	return ret, nil
 }
 

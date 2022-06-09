@@ -3,8 +3,6 @@ package branches
 import (
 	"context"
 	"strings"
-
-	"github.com/pkg/errors"
 )
 
 // PrefixSpace is a Space mapped into a prefix under the Target
@@ -32,28 +30,27 @@ func (s PrefixSpace) Delete(ctx context.Context, k string) error {
 	return s.Target.Delete(ctx, s.downward(k))
 }
 
-func (s PrefixSpace) List(ctx context.Context, span Span, limit int) (ret []string, _ error) {
+func (s PrefixSpace) List(ctx context.Context, span Span, limit int) ([]string, error) {
 	span2 := Span{
 		Begin: s.downward(span.Begin),
 		End:   s.downward(span.End),
 	}
-	stopIter := errors.New("stop iter")
-	err := ForEach(ctx, s.Target, span2, func(x string) error {
-		if limit > 0 && len(ret) >= limit {
-			return stopIter
-		}
-		y, ok := s.upward(x)
-		if !ok {
-			// TODO: this should not happen since it would be outside of span2. maybe log?
-			return nil
-		}
-		ret = append(ret, y)
-		return nil
-	})
-	if err != nil && !errors.Is(err, stopIter) {
+	names, err := s.Target.List(ctx, span2, limit)
+	if err != nil {
 		return nil, err
 	}
-	return ret, nil
+	if limit > 0 && len(names) > limit {
+		names = names[:limit]
+	}
+	for i := range names {
+		y, ok := s.upward(names[i])
+		if !ok {
+			// TODO: this should not happen since it would be outside of span2. maybe log?
+			continue
+		}
+		names[i] = y
+	}
+	return names, nil
 }
 
 func (s PrefixSpace) downward(x string) string {
