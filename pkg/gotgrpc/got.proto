@@ -31,7 +31,8 @@ message ListBranchReq {
 }
 
 message ListBranchRes {
-    string key = 1;
+    repeated string keys = 1;
+    bool is_end = 2;
 }
 
 message DeleteBranchReq {
@@ -117,7 +118,7 @@ service GotSpace {
     rpc CreateBranch(CreateBranchReq) returns (BranchInfo) {};
     rpc GetBranch(GetBranchReq) returns (BranchInfo) {};
     rpc DeleteBranch(DeleteBranchReq) returns (DeleteBranchRes) {};
-    rpc ListBranch(ListBranchReq) returns (stream ListBranchRes) {};
+    rpc ListBranch(ListBranchReq) returns (ListBranchRes) {};
 
     rpc PostBlob(PostBlobReq) returns (PostBlobRes) {};
     rpc GetBlob(GetBlobReq) returns (GetBlobRes) {};

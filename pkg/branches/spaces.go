@@ -9,6 +9,8 @@ import (
 	"github.com/brendoncarroll/go-state/cells"
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/maps"
+	"golang.org/x/exp/slices"
 )
 
 var (
@@ -54,7 +56,7 @@ type Space interface {
 	Get(ctx context.Context, name string) (*Branch, error)
 	Create(ctx context.Context, name string, params Params) (*Branch, error)
 	Delete(ctx context.Context, name string) error
-	ForEach(ctx context.Context, span Span, fn func(string) error) error
+	List(ctx context.Context, span Span, limit int) ([]string, error)
 }
 
 func CreateIfNotExists(ctx context.Context, r Space, k string, params Params) (*Branch, error) {
@@ -66,6 +68,27 @@ func CreateIfNotExists(ctx context.Context, r Space, k string, params Params) (*
 		return nil, err
 	}
 	return branch, nil
+}
+
+// ForEach is a convenience function which uses Space.List to call fn with
+// all the branch names contained in span.
+func ForEach(ctx context.Context, s Space, span Span, fn func(string) error) error {
+	for {
+		names, err := s.List(ctx, span, 0)
+		if err != nil {
+			return err
+		}
+		if len(names) == 0 {
+			break
+		}
+		for _, name := range names {
+			if err := fn(name); err != nil {
+				return err
+			}
+		}
+		span.Begin = names[len(names)-1] + "\x00"
+	}
+	return nil
 }
 
 type MemSpace struct {
@@ -125,15 +148,20 @@ func (r *MemSpace) Delete(ctx context.Context, name string) error {
 	return nil
 }
 
-func (r *MemSpace) ForEach(ctx context.Context, span Span, fn func(string) error) error {
+func (r *MemSpace) List(ctx context.Context, span Span, limit int) (ret []string, _ error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	for name := range r.branches {
-		if err := fn(name); err != nil {
-			return err
+	keys := maps.Keys(r.branches)
+	slices.Sort(keys)
+	for _, name := range keys {
+		if limit > 0 && len(ret) >= limit {
+			break
+		}
+		if span.Contains(name) {
+			ret = append(ret, name)
 		}
 	}
-	return nil
+	return ret, nil
 }
 
 func copyAnotations(x map[string]string) map[string]string {

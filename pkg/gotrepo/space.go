@@ -9,6 +9,7 @@ import (
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/branches"
+	"golang.org/x/exp/slices"
 )
 
 var _ Space = &branchSpecDir{}
@@ -32,10 +33,18 @@ func newBranchSpecDir(makeDefault func() VolumeSpec, cf cellFactory, sf storeFac
 	}
 }
 
-func (r *branchSpecDir) ForEach(ctx context.Context, span branches.Span, fn func(string) error) error {
-	return posixfs.WalkLeaves(ctx, r.fs, "", func(p string, _ posixfs.DirEnt) error {
-		return fn(p)
+func (r *branchSpecDir) List(ctx context.Context, span branches.Span, limit int) (ret []string, _ error) {
+	err := posixfs.WalkLeaves(ctx, r.fs, "", func(p string, _ posixfs.DirEnt) error {
+		if span.Contains(p) {
+			ret = append(ret, p)
+		}
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	slices.Sort(ret)
+	return ret, nil
 }
 
 func (r *branchSpecDir) Create(ctx context.Context, name string, params branches.Params) (*Branch, error) {

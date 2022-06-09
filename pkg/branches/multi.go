@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/pkg/errors"
+	"golang.org/x/exp/slices"
 )
 
 type layered []Layer
@@ -55,13 +56,21 @@ func (r layered) Get(ctx context.Context, k string) (*Branch, error) {
 	return nil, ErrNotExist
 }
 
-func (r layered) ForEach(ctx context.Context, span Span, fn func(string) error) error {
+func (r layered) List(ctx context.Context, span Span, limit int) (ret []string, _ error) {
 	for _, layer := range r {
-		if err := layer.Target.ForEach(ctx, span, func(x string) error {
-			return fn(layer.Prefix + x)
+		if err := ForEach(ctx, layer.Target, span, func(x string) error {
+			y := layer.Prefix + x
+			if span.Contains(y) {
+				ret = append(ret, y)
+			}
+			slices.Sort(ret)
+			if limit > 0 {
+				ret = ret[:limit]
+			}
+			return nil
 		}); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return ret, nil
 }

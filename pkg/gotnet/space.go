@@ -210,17 +210,8 @@ func (s *spaceSrv) handleExists(ctx context.Context, peer PeerID, name string) (
 
 func (s *spaceSrv) handleList(ctx context.Context, peer PeerID, first string, limit int) (*SpaceRes, error) {
 	space := s.open(peer)
-	var names []string
-	if err := space.ForEach(ctx, branches.Span{Begin: first}, func(x string) error {
-		if len(names) >= limit {
-			return nil
-		}
-		if x < first {
-			return nil
-		}
-		names = append(names, x)
-		return nil
-	}); err != nil {
+	names, err := space.List(ctx, branches.Span{Begin: first}, limit)
+	if err != nil {
 		return nil, err
 	}
 	sort.Strings(names)
@@ -301,30 +292,18 @@ func (r *space) Delete(ctx context.Context, name string) error {
 	return r.srv.Delete(ctx, BranchID{Peer: r.peer, Name: name})
 }
 
-func (r *space) ForEach(ctx context.Context, span branches.Span, fn func(string) error) error {
-	first := span.Begin
-	for {
-		names, err := r.srv.List(ctx, r.peer, first, 100)
-		if err != nil {
-			return err
-		}
-		if len(names) == 0 || (len(names) == 1 && names[0] == first) {
+func (r *space) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {
+	names, err := r.srv.List(ctx, r.peer, span.Begin, limit)
+	if err != nil {
+		return nil, err
+	}
+	for i, name := range names {
+		if span.End != "" && name >= span.End {
+			names = names[:i]
 			break
 		}
-		for _, name := range names {
-			if name == first {
-				continue
-			}
-			if span.End != "" && name >= span.End {
-				break
-			}
-			if err := fn(name); err != nil {
-				return err
-			}
-		}
-		first = names[len(names)-1]
 	}
-	return nil
+	return names, nil
 }
 
 func infoFromBranch(b branches.Branch) *BranchInfo {
