@@ -11,7 +11,6 @@ import (
 	"github.com/brendoncarroll/go-state/cells/cryptocell"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/exp/slices"
 )
@@ -21,18 +20,32 @@ const (
 	paddingBlockSize   = 16
 )
 
-type CryptoSpace struct {
-	inner  Space
-	secret *[32]byte
-	log    *logrus.Logger
+// CryptoSpaceOptions configure a CryptoSpace
+type CryptoSpaceOption = func(*CryptoSpace)
+
+// WithDecryptFailureHandler sets fn to be called by the space when there is a decryption failure.
+func WithDecryptFailureHandler(fn func(string, error)) CryptoSpaceOption {
+	return func(cs *CryptoSpace) {
+		cs.onDecryptFail = fn
+	}
 }
 
-func NewCryptoSpace(inner Space, secret *[32]byte) Space {
-	return &CryptoSpace{
-		secret: secret,
-		inner:  inner,
-		log:    logrus.StandardLogger(),
+type CryptoSpace struct {
+	inner         Space
+	secret        *[32]byte
+	onDecryptFail func(string, error)
+}
+
+func NewCryptoSpace(inner Space, secret *[32]byte, opts ...CryptoSpaceOption) Space {
+	s := &CryptoSpace{
+		secret:        secret,
+		inner:         inner,
+		onDecryptFail: func(string, error) {},
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (r *CryptoSpace) Create(ctx context.Context, name string, params Params) (*Branch, error) {
@@ -66,7 +79,7 @@ func (r *CryptoSpace) List(ctx context.Context, span Span, limit int) (ret []str
 	err := ForEach(ctx, r.inner, TotalSpan(), func(x string) error {
 		y, err := r.decryptName(x)
 		if err != nil {
-			r.handleDecryptFailure(x, err)
+			r.onDecryptFail(x, err)
 			return nil
 		}
 		if !span.Contains(y) {
@@ -169,10 +182,6 @@ func (r *CryptoSpace) wrapVolume(name string, x Volume) Volume {
 		VCStore:  x.VCStore,
 		RawStore: x.RawStore,
 	}
-}
-
-func (r *CryptoSpace) handleDecryptFailure(x string, err error) {
-	r.log.Debugf("decrypt failure %v: %v", x, err)
 }
 
 func deriveKey(out []byte, secret *[32]byte, purpose string) {
