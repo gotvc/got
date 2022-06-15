@@ -3,7 +3,7 @@ package gotgrpc
 import (
 	"bytes"
 	"context"
-	"errors"
+	"fmt"
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
@@ -34,7 +34,7 @@ func (s Store) Post(ctx context.Context, data []byte) (cadata.ID, error) {
 		return cadata.ID{}, err
 	}
 	if !bytes.Equal(expected[:], res.Id) {
-		return cadata.ID{}, errors.New("bad ID from store")
+		return cadata.ID{}, fmt.Errorf("bad ID from store. HAVE: %v WANT %v", res.Id, expected)
 	}
 	return expected, nil
 }
@@ -47,7 +47,13 @@ func (s Store) Get(ctx context.Context, id cadata.ID, buf []byte) (int, error) {
 	})
 	// TODO: transform errors
 	if err != nil {
-		return 0, s.transformError(err)
+		switch status.Code(err) {
+		case codes.NotFound:
+			if errorMsgContains(err, "blob") {
+				return 0, cadata.ErrNotFound
+			}
+		}
+		return 0, err
 	}
 	if len(res.Data) > len(buf) {
 		return 0, io.ErrShortBuffer
@@ -70,6 +76,12 @@ func (s Store) Add(ctx context.Context, id cadata.ID) error {
 		StoreType: s.st,
 		Id:        id[:],
 	})
+	switch status.Code(err) {
+	case codes.NotFound:
+		if errorMsgContains(err, "blob") {
+			return cadata.ErrNotFound
+		}
+	}
 	return err
 }
 
@@ -104,15 +116,4 @@ func (s Store) MaxSize() int {
 
 func (s Store) Hash(x []byte) cadata.ID {
 	return gdat.Hash(x)
-}
-
-func (s Store) transformError(x error) error {
-	switch {
-	case x == nil:
-		return nil
-	case status.Code(x) == codes.NotFound:
-		return cadata.ErrNotFound
-	default:
-		return x
-	}
 }

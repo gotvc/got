@@ -34,4 +34,26 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 		require.NoError(t, err)
 		require.Len(t, names, N)
 	})
+	t.Run("Delete", func(t *testing.T) {
+		t.Parallel()
+		x := newSpace(t)
+		var err error
+		_, err = x.Create(ctx, "test1", Params{})
+		require.NoError(t, err)
+		_, err = x.Create(ctx, "test2", Params{})
+		require.NoError(t, err)
+
+		_, err = x.Get(ctx, "test1")
+		require.NoError(t, err)
+		_, err = x.Get(ctx, "test2")
+		require.NoError(t, err)
+
+		err = x.Delete(ctx, "test1")
+		require.NoError(t, err)
+
+		_, err = x.Get(ctx, "test1")
+		require.ErrorIs(t, err, ErrNotExist)
+		_, err = x.Get(ctx, "test2")
+		require.NoError(t, err)
+	})
 }

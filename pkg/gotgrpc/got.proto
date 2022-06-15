@@ -4,9 +4,9 @@ option go_package = "github.com/gotvc/got/pkg/gotgrpc";
 
 enum StoreType {
     UNKNOWN = 0;
-    VC = 1;
-    FS = 2;
-    RAW = 3;
+    RAW = 1;
+    FS = 2; 
+    VC = 3;
 }
 
 message BranchInfo {
@@ -108,9 +108,8 @@ message CASCellReq {
 }
 
 message CASCellRes {
-    string key = 1;
+    bytes current = 1;
     bool swapped = 2;
-    bytes current = 3;
 }
 
 service GotSpace {

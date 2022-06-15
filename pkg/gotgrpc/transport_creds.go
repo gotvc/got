@@ -17,10 +17,11 @@ import (
 type TransportCreds struct {
 	privateKey   inet256.PrivateKey
 	serverConfig *tls.Config
+	clientOpts   []func(*tls.Config)
 }
 
-func NewClientCreds(privateKey inet256.PrivateKey) credentials.TransportCredentials {
-	return TransportCreds{privateKey: privateKey}
+func NewClientCreds(privateKey inet256.PrivateKey, opts ...func(*tls.Config)) credentials.TransportCredentials {
+	return TransportCreds{privateKey: privateKey, clientOpts: opts}
 }
 
 func NewServerCreds(config *tls.Config) credentials.TransportCredentials {
@@ -44,6 +45,9 @@ func NewServerCreds(config *tls.Config) credentials.TransportCredentials {
 func (tc TransportCreds) ClientHandshake(ctx context.Context, endpoint string, x net.Conn) (net.Conn, credentials.AuthInfo, error) {
 	config := generateClientTLS(tc.privateKey)
 	config.ServerName = endpoint
+	for _, opt := range tc.clientOpts {
+		opt(config)
+	}
 	tconn := tls.Client(x, config)
 	if err := tconn.HandshakeContext(ctx); err != nil {
 		return nil, nil, err
@@ -88,6 +92,9 @@ func (tc TransportCreds) OverrideServerName(string) error {
 	return nil
 }
 
+var _ credentials.AuthInfo = AuthInfo{}
+
+// AuthInfo implements gRPC's credentials.AuthInfo
 type AuthInfo struct {
 	ID        inet256.ID
 	PublicKey inet256.PublicKey
