@@ -139,7 +139,7 @@ func CleanupVolume(ctx context.Context, vol Volume) error {
 
 func filterStore(ctx context.Context, s cadata.Store, set cadata.Set) (int, error) {
 	var count int
-	err := cadata.ForEach(ctx, s, func(id cadata.ID) error {
+	err := cadata.ForEach(ctx, s, cadata.Span{}, func(id cadata.ID) error {
 		exists, err := set.Exists(ctx, id)
 		if err != nil {
 			return err

@@ -38,21 +38,40 @@ func (ms MemSet) Count() int {
 	return len(ms)
 }
 
-func (ms MemSet) List(ctx context.Context, first cadata.ID, ids []cadata.ID) (int, error) {
+func (ms MemSet) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int, error) {
 	var n int
 	for id := range ms {
-		if bytes.Compare(id[:], first[:]) < 0 {
+		if n >= len(ids) {
+			break
+		}
+		c := span.Compare(id, func(a, b ID) int {
+			return bytes.Compare(a[:], b[:])
+		})
+		if c > 0 {
 			continue
+		} else if c < 0 {
+			break
 		}
 		ids[n] = id
 		n++
-		if n >= len(ids) {
-			return n, nil
-		}
 	}
-	return n, cadata.ErrEndOfList
+	return n, nil
 }
 
 func NewFSStore(x posixfs.FS, maxSize int) cadata.Store {
 	return fsstore.New(x, cadata.DefaultHash, maxSize)
+}
+
+func FirstFromSpan(span cadata.Span) cadata.ID {
+	first, ok := span.LowerBound()
+	if !ok {
+		return cadata.ID{}
+	}
+	if !span.IncludesLower() {
+		suc := first.Successor()
+		if !suc.IsZero() {
+			first = suc
+		}
+	}
+	return first
 }

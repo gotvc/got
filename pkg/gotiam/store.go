@@ -45,11 +45,11 @@ func (s *Store) Exists(ctx context.Context, id cadata.ID) (bool, error) {
 	return cadata.Exists(ctx, s.inner, id)
 }
 
-func (s *Store) List(ctx context.Context, prefix cadata.ID, ids []cadata.ID) (int, error) {
+func (s *Store) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int, error) {
 	if err := s.check(false, "LIST"); err != nil {
 		return -1, err
 	}
-	return s.inner.List(ctx, prefix, ids)
+	return s.inner.List(ctx, span, ids)
 }
 
 func (s *Store) Hash(x []byte) cadata.ID {

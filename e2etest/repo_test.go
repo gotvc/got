@@ -12,7 +12,7 @@ import (
 
 	"github.com/inet256/inet256/networks/beaconnet"
 	"github.com/inet256/inet256/pkg/inet256d"
-	"github.com/inet256/inet256/pkg/inet256srv"
+	"github.com/inet256/inet256/pkg/mesh256"
 	"github.com/stretchr/testify/require"
 
 	"github.com/gotvc/got"
@@ -146,10 +146,10 @@ func TestMain(m *testing.M) {
 		privateKey := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))
 		d := inet256d.New(inet256d.Params{
 			APIAddr: inet256Endpoint,
-			MainNodeParams: inet256srv.Params{
+			MainNodeParams: mesh256.Params{
 				NewNetwork: beaconnet.Factory,
 				PrivateKey: privateKey,
-				Peers:      inet256srv.NewPeerStore(),
+				Peers:      mesh256.NewPeerStore(),
 			},
 		})
 		go d.Run(ctx)

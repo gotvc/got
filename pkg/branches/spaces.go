@@ -4,7 +4,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cells"
 	"github.com/brendoncarroll/go-tai64"
@@ -41,7 +40,10 @@ func NewParams(public bool) Params {
 	}
 }
 
-type Span state.Span[string]
+type Span struct {
+	Begin string
+	End   string
+}
 
 func TotalSpan() Span {
 	return Span{}

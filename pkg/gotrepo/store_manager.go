@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -255,7 +256,7 @@ func (s virtualStore) Delete(ctx context.Context, id cadata.ID) error {
 }
 
 // List implements cadata.Set
-func (s virtualStore) List(ctx context.Context, first cadata.ID, ids []cadata.ID) (int, error) {
+func (s virtualStore) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int, error) {
 	var n int
 	stopIter := errors.New("stop")
 	err := s.sm.db.View(func(tx *bolt.Tx) error {
@@ -263,6 +264,7 @@ func (s virtualStore) List(ctx context.Context, first cadata.ID, ids []cadata.ID
 		if b == nil {
 			return nil
 		}
+		first := stores.FirstFromSpan(span)
 		return forEachInSet(b, s.id, first[:], func(id cadata.ID) error {
 			ids[n] = id
 			n++
@@ -278,7 +280,7 @@ func (s virtualStore) List(ctx context.Context, first cadata.ID, ids []cadata.ID
 	if err == stopIter {
 		return 0, nil
 	}
-	return n, cadata.ErrEndOfList
+	return n, nil
 }
 
 func (s virtualStore) Hash(x []byte) cadata.ID {

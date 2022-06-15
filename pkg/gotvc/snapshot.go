@@ -76,7 +76,7 @@ func (o *Operator) NewSnapshot(ctx context.Context, s cadata.Store, parents []Sn
 	}
 	sort.Slice(parentRefs, func(i, j int) bool {
 		a, b := parentRefs[i].CID, parentRefs[j].CID
-		return a.Cmp(b) < 0
+		return a.Compare(b) < 0
 	})
 	return &Snapshot{
 		N:       n,

@@ -182,9 +182,6 @@ func (s *blobMainSrv) List(ctx context.Context, sid StoreID, first cadata.ID, id
 		return 0, err
 	}
 	var err error
-	if resp.EOL {
-		err = cadata.ErrEndOfList
-	}
 	return copy(ids, resp.IDs), err
 }
 
@@ -349,13 +346,13 @@ func (s *blobMainSrv) handleList(ctx context.Context, peer PeerID, req BlobReq) 
 		return nil, err
 	}
 	ids := make([]cadata.ID, req.Limit)
-	n, err := store.List(ctx, req.First, ids)
-	if err != nil && !cadata.IsEndOfList(err) {
+	span := cadata.Span{}.WithLowerIncl(req.First)
+	n, err := store.List(ctx, span, ids)
+	if err != nil {
 		return nil, err
 	}
 	return &BlobResp{
 		IDs: ids[:n],
-		EOL: cadata.IsEndOfList(err),
 	}, nil
 }
 
@@ -388,7 +385,6 @@ type BlobReq struct {
 type BlobResp struct {
 	Affected []bool      `json:"affected,omitempty"`
 	IDs      []cadata.ID `json:"ids,omitempty"`
-	EOL      bool        `json:"eol,omitempty"`
 }
 
 // tempStore provides a holding area for blobs that are about to be pulled
@@ -510,8 +506,26 @@ func (s *store) Exists(ctx context.Context, id cadata.ID) (bool, error) {
 	return s.blobMainSrv.Exists(ctx, s.sid, []cadata.ID{id})
 }
 
-func (s *store) List(ctx context.Context, first cadata.ID, ids []cadata.ID) (int, error) {
-	return s.blobMainSrv.List(ctx, s.sid, first, ids)
+func (s *store) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int, error) {
+	first, ok := span.LowerBound()
+	if ok && !span.IncludesLower() {
+		first = first.Successor()
+	} else if !ok {
+		first = cadata.ID{}
+	}
+	n, err := s.blobMainSrv.List(ctx, s.sid, first, ids)
+	if err != nil {
+		return 0, err
+	}
+	if _, ok := span.UpperBound(); ok {
+		for i, id := range ids[:n] {
+			if span.Compare(id, func(a, b cadata.ID) int { return bytes.Compare(a[:], b[:]) }) < 0 {
+				n = i
+				break
+			}
+		}
+	}
+	return n, nil
 }
 
 func (s *store) Hash(x []byte) cadata.ID {

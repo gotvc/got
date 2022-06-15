@@ -44,9 +44,9 @@ func (wl writeLayer) Delete(ctx context.Context, id cadata.ID) error {
 	return wl.writeTo.Delete(ctx, id)
 }
 
-func (wl writeLayer) List(ctx context.Context, first cadata.ID, ids []cadata.ID) (int, error) {
+func (wl writeLayer) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int, error) {
 	// TODO: maybe list both
-	return wl.base.List(ctx, first, ids)
+	return wl.base.List(ctx, span, ids)
 }
 
 func (wl writeLayer) MaxSize() int {
