@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -264,7 +263,7 @@ func (s virtualStore) List(ctx context.Context, span cadata.Span, ids []cadata.I
 		if b == nil {
 			return nil
 		}
-		first := stores.FirstFromSpan(span)
+		first := cadata.BeginFromSpan(span)
 		return forEachInSet(b, s.id, first[:], func(id cadata.ID) error {
 			ids[n] = id
 			n++

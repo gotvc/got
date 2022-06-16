@@ -9,7 +9,6 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotiam"
-	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -508,7 +507,7 @@ func (s *store) Exists(ctx context.Context, id cadata.ID) (bool, error) {
 }
 
 func (s *store) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int, error) {
-	first := stores.FirstFromSpan(span)
+	first := cadata.BeginFromSpan(span)
 	n, err := s.blobMainSrv.List(ctx, s.sid, first, ids)
 	if err != nil {
 		return 0, err

@@ -12,7 +12,6 @@ import (
 
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/gotvc/got/pkg/stores"
 )
 
 var _ cadata.Store = &Store{}
@@ -86,7 +85,7 @@ func (s Store) Add(ctx context.Context, id cadata.ID) error {
 }
 
 func (s Store) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int, error) {
-	first := stores.FirstFromSpan(span)
+	first := cadata.BeginFromSpan(span)
 	res, err := s.c.ListBlob(ctx, &ListBlobReq{
 		Key:       s.key,
 		StoreType: s.st,

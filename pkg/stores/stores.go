@@ -61,17 +61,3 @@ func (ms MemSet) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (i
 func NewFSStore(x posixfs.FS, maxSize int) cadata.Store {
 	return fsstore.New(x, cadata.DefaultHash, maxSize)
 }
-
-func FirstFromSpan(span cadata.Span) cadata.ID {
-	first, ok := span.LowerBound()
-	if !ok {
-		return cadata.ID{}
-	}
-	if !span.IncludesLower() {
-		suc := first.Successor()
-		if !suc.IsZero() {
-			first = suc
-		}
-	}
-	return first
-}
