@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/gotvc/got/pkg/gdat"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -144,7 +145,7 @@ type virtualStore struct {
 
 // Post implements cadata.Poster
 func (s virtualStore) Post(ctx context.Context, data []byte) (cadata.ID, error) {
-	id := cadata.DefaultHash(data)
+	id := s.Hash(data)
 	s.sm.lock(id, false)
 	defer s.sm.unlock(id, false)
 	if err := s.sm.db.Batch(func(tx *bolt.Tx) error {
@@ -283,7 +284,7 @@ func (s virtualStore) List(ctx context.Context, span cadata.Span, ids []cadata.I
 }
 
 func (s virtualStore) Hash(x []byte) cadata.ID {
-	return cadata.DefaultHash(x)
+	return gdat.Hash(x)
 }
 
 func (s virtualStore) MaxSize() int {

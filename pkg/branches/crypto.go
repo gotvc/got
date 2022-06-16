@@ -15,6 +15,8 @@ import (
 	"golang.org/x/exp/slices"
 )
 
+const SecretSize = 32
+
 const (
 	purposeBranchNames = "got/space/names"
 	paddingBlockSize   = 16

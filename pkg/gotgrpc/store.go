@@ -7,11 +7,9 @@ import (
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/gotfs"
 )
 
 var _ cadata.Store = &Store{}
@@ -110,7 +108,8 @@ func (s Store) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int
 		}
 		id := cadata.IDFromBytes(res.Ids[i])
 		if !span.Contains(id, func(a, b cadata.ID) int { return a.Compare(b) }) {
-			return 0, fmt.Errorf("gotgrpc: store returned ID (%v) not in Span (%v)", ids[i], span)
+			logrus.Warnf("gotgrpc: store returned ID %v not in Span %v", id, span)
+			continue
 		}
 		ids[i] = id
 		n++
@@ -119,9 +118,9 @@ func (s Store) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int
 }
 
 func (s Store) MaxSize() int {
-	return gotfs.DefaultMaxBlobSize
+	return MaxBlobSize
 }
 
 func (s Store) Hash(x []byte) cadata.ID {
-	return gdat.Hash(x)
+	return Hash(x)
 }

@@ -11,10 +11,7 @@ import (
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
-	"github.com/gotvc/got/pkg/gotfs"
 )
-
-const MaxBlobSize = gotfs.DefaultMaxBlobSize
 
 var _ branches.Space = Space{}
 

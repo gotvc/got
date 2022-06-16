@@ -4,8 +4,6 @@ import (
 	"context"
 	"io"
 
-	"golang.org/x/crypto/blake2b"
-
 	"github.com/gotvc/got/pkg/cells"
 )
 
@@ -30,7 +28,7 @@ func (c *Cell) Read(ctx context.Context, buf []byte) (int, error) {
 }
 
 func (c *Cell) CAS(ctx context.Context, actual, prev, next []byte) (bool, int, error) {
-	prevHash := blake2b.Sum256(prev)
+	prevHash := Hash(prev)
 	res, err := c.c.CASCell(ctx, &CASCellReq{
 		Key:      c.key,
 		PrevHash: prevHash[:],

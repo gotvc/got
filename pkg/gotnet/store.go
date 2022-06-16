@@ -8,6 +8,7 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotiam"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -92,7 +93,7 @@ func checkPullReply(id cadata.ID, peer PeerID, reply []byte) error {
 	if bytes.Equal(reply, id[:]) {
 		return cadata.ErrNotFound
 	}
-	if err := cadata.Check(cadata.DefaultHash, id, reply); err != nil {
+	if err := cadata.Check(gdat.Hash, id, reply); err != nil {
 		return errors.Wrapf(err, "from peer %v", peer)
 	}
 	return nil
@@ -405,7 +406,7 @@ func newTempStore() *tempStore {
 		peerHandles: make(map[uint64]PeerID),
 		blobRCs:     make(map[cadata.ID]uint64),
 		peerRCs:     make(map[PeerID]uint64),
-		store:       cadata.NewMem(cadata.DefaultHash, MaxMessageSize),
+		store:       cadata.NewMem(gdat.Hash, MaxMessageSize),
 	}
 }
 
@@ -524,7 +525,7 @@ func (s *store) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (in
 }
 
 func (s *store) Hash(x []byte) cadata.ID {
-	return cadata.DefaultHash(x)
+	return gdat.Hash(x)
 }
 
 func (s *store) MaxSize() int {

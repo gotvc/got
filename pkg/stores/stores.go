@@ -7,6 +7,7 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cadata/fsstore"
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/gotvc/got/pkg/gdat"
 )
 
 type (
@@ -59,5 +60,5 @@ func (ms MemSet) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (i
 }
 
 func NewFSStore(x posixfs.FS, maxSize int) cadata.Store {
-	return fsstore.New(x, cadata.DefaultHash, maxSize)
+	return fsstore.New(x, gdat.Hash, maxSize)
 }

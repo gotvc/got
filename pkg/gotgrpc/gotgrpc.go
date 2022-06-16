@@ -3,10 +3,19 @@ package gotgrpc
 import (
 	"context"
 
+	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/inet256/inet256/pkg/inet256"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
+
+const MaxBlobSize = gotfs.DefaultMaxBlobSize
+
+func Hash(x []byte) cadata.ID {
+	return gdat.Hash(x)
+}
 
 // WithHeaders adds headers to all requests made by the dialer
 func WithHeaders(headers map[string]string) grpc.DialOption {
