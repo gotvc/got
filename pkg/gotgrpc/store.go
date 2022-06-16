@@ -23,6 +23,9 @@ type Store struct {
 }
 
 func (s Store) Post(ctx context.Context, data []byte) (cadata.ID, error) {
+	if len(data) > s.MaxSize() {
+		return cadata.ID{}, cadata.ErrTooLarge
+	}
 	res, err := s.c.PostBlob(ctx, &PostBlobReq{
 		Key:       s.key,
 		StoreType: s.st,
@@ -86,25 +89,31 @@ func (s Store) Add(ctx context.Context, id cadata.ID) error {
 
 func (s Store) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int, error) {
 	first := cadata.BeginFromSpan(span)
-	res, err := s.c.ListBlob(ctx, &ListBlobReq{
+	req := &ListBlobReq{
 		Key:       s.key,
 		StoreType: s.st,
 		Begin:     first[:],
 		Limit:     uint32(len(ids)),
-	})
+	}
+	end, ok := cadata.EndFromSpan(span)
+	if ok {
+		req.End = end[:]
+	}
+	res, err := s.c.ListBlob(ctx, req)
 	if err != nil {
 		return 0, err
 	}
 	var n int
 	for i := range res.Ids {
 		if n >= len(ids) {
-			return n, io.ErrShortBuffer
-		}
-		ids[i] = cadata.IDFromBytes(res.Ids[i])
-		if span.Compare(ids[i], func(a, b cadata.ID) int { return a.Compare(b) }) < 0 {
-			n = i
 			break
 		}
+		id := cadata.IDFromBytes(res.Ids[i])
+		if !span.Contains(id, func(a, b cadata.ID) int { return a.Compare(b) }) {
+			return 0, fmt.Errorf("gotgrpc: store returned ID (%v) not in Span (%v)", ids[i], span)
+		}
+		ids[i] = id
+		n++
 	}
 	return n, err
 }

@@ -32,6 +32,7 @@ func (c *Cell) Read(ctx context.Context, buf []byte) (int, error) {
 func (c *Cell) CAS(ctx context.Context, actual, prev, next []byte) (bool, int, error) {
 	prevHash := blake2b.Sum256(prev)
 	res, err := c.c.CASCell(ctx, &CASCellReq{
+		Key:      c.key,
 		PrevHash: prevHash[:],
 		Next:     next,
 	})

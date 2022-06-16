@@ -166,7 +166,8 @@ type QUICSpaceSpec struct {
 }
 
 type GRPCSpaceSpec struct {
-	Endpoint string `json:"endpoint"`
+	Endpoint string            `json:"endpoint"`
+	Headers  map[string]string `json:"headers,omitempty"`
 }
 
 type EncryptedSpaceSpec struct {
@@ -203,7 +204,7 @@ func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 		}
 		return gn.GetSpace(spec.QUIC.ID), nil
 	case spec.GRPC != nil:
-		c, err := r.getGRPCClient(spec.GRPC.Endpoint)
+		c, err := r.getGRPCClient(spec.GRPC.Endpoint, spec.GRPC.Headers, false)
 		if err != nil {
 			return nil, err
 		}

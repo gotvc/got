@@ -15,6 +15,7 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 
 	"github.com/gotvc/got/pkg/branches"
@@ -75,6 +76,7 @@ type Repo struct {
 	db         *bolt.DB
 	config     Config
 	privateKey p2p.PrivateKey
+	log        logrus.FieldLogger
 
 	workingDir FS // workingDir is repoFS with reserved paths filtered.
 	stage      *staging.Stage
@@ -147,6 +149,7 @@ func Open(p string) (*Repo, error) {
 		config:     *config,
 		privateKey: privateKey,
 		db:         db,
+		log:        logrus.StandardLogger(),
 		workingDir: posixfs.NewFiltered(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),

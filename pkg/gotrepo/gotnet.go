@@ -2,6 +2,7 @@ package gotrepo
 
 import (
 	"context"
+	"strings"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/mbapp"
@@ -82,10 +83,21 @@ func (r *Repo) makeGotNet(swarm p2p.SecureAskSwarm[PeerID]) *gotnet.Service {
 	})
 }
 
-func (r *Repo) getGRPCClient(endpoint string) (gotgrpc.GotSpaceClient, error) {
+func (r *Repo) getGRPCClient(endpoint string, headers map[string]string, clientAuth bool) (gotgrpc.GotSpaceClient, error) {
 	ctx := context.Background()
-	creds := gotgrpc.NewClientCreds(r.GetPrivateKey())
-	gc, err := grpc.DialContext(ctx, endpoint, grpc.WithTransportCredentials(creds))
+	opts := []grpc.DialOption{}
+	if strings.HasPrefix(endpoint, "http://") {
+		endpoint = strings.TrimPrefix(endpoint, "http://")
+		opts = append(opts, grpc.WithInsecure())
+		r.log.Warnf("insecure gRPC connection over http to %v", endpoint)
+	}
+	if len(headers) > 0 {
+		opts = append(opts, gotgrpc.WithHeaders(headers))
+	}
+	if clientAuth {
+		opts = append(opts, gotgrpc.WithClientCreds(r.privateKey))
+	}
+	gc, err := grpc.DialContext(ctx, endpoint, opts...)
 	if err != nil {
 		return nil, err
 	}
