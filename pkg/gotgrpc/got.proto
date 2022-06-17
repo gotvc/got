@@ -5,7 +5,7 @@ option go_package = "github.com/gotvc/got/pkg/gotgrpc";
 enum StoreType {
     UNKNOWN = 0;
     RAW = 1;
-    FS = 2; 
+    FS = 2;
     VC = 3;
 }
 

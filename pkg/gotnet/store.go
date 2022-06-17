@@ -24,9 +24,9 @@ type StoreType uint8
 
 const (
 	Type_UNKNOWN = StoreType(iota)
-	Type_VC
-	Type_FS
 	Type_RAW
+	Type_FS
+	Type_VC
 )
 
 type blobPullSrv struct {

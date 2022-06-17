@@ -18,8 +18,8 @@ type Snap = gotvc.Snap
 
 // Volume is a Cell and a set of stores
 type Volume struct {
-	cells.Cell
-	VCStore, FSStore, RawStore cadata.Store
+	RawStore, FSStore, VCStore cadata.Store
+	Cell                       cells.Cell
 }
 
 func (v Volume) StoreTriple() StoreTriple {
