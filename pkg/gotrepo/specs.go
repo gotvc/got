@@ -3,6 +3,7 @@ package gotrepo
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cells/httpcell"
@@ -166,12 +167,13 @@ type QUICSpaceSpec struct {
 }
 
 type GRPCSpaceSpec struct {
-	Endpoint string `json:"endpoint"`
+	Endpoint string            `json:"endpoint"`
+	Headers  map[string]string `json:"headers,omitempty"`
 }
 
-type EncryptedSpaceSpec struct {
+type CryptoSpaceSpec struct {
 	Inner  SpaceSpec `json:"inner"`
-	Secret [32]byte  `json:"secret"`
+	Secret []byte    `json:"secret"`
 }
 
 type PrefixSpaceSpec struct {
@@ -184,8 +186,8 @@ type SpaceSpec struct {
 	QUIC *QUICSpaceSpec `json:"quic,omitempty"`
 	GRPC *GRPCSpaceSpec `json:"grpc,omitempty"`
 
-	Encrypt *EncryptedSpaceSpec `json:"encrypt,omitempty"`
-	Prefix  *PrefixSpaceSpec    `json:"prefix,omitempty"`
+	Crypto *CryptoSpaceSpec `json:"crypto,omitempty"`
+	Prefix *PrefixSpaceSpec `json:"prefix,omitempty"`
 }
 
 func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
@@ -203,20 +205,22 @@ func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 		}
 		return gn.GetSpace(spec.QUIC.ID), nil
 	case spec.GRPC != nil:
-		c, err := r.getGRPCClient(spec.GRPC.Endpoint)
+		c, err := r.getGRPCClient(spec.GRPC.Endpoint, spec.GRPC.Headers, false)
 		if err != nil {
 			return nil, err
 		}
 		return gotgrpc.NewSpace(c), nil
-
-	case spec.Encrypt != nil:
-		secret := spec.Encrypt.Secret
-		innerSpec := spec.Encrypt.Inner
+	case spec.Crypto != nil:
+		secret := spec.Crypto.Secret
+		if len(secret) != branches.SecretSize {
+			return nil, fmt.Errorf("crypto secret key is wrong size. HAVE: %d WANT: %d", len(secret), branches.SecretSize)
+		}
+		innerSpec := spec.Crypto.Inner
 		inner, err := r.MakeSpace(innerSpec)
 		if err != nil {
 			return nil, err
 		}
-		return branches.NewCryptoSpace(inner, &secret), nil
+		return branches.NewCryptoSpace(inner, (*[32]byte)(secret)), nil
 	case spec.Prefix != nil:
 		inner, err := r.MakeSpace(spec.Prefix.Inner)
 		if err != nil {

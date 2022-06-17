@@ -22,7 +22,7 @@ func ParseAddr(x string) (*Addr, error) {
 	if len(parts) < 2 {
 		return nil, fmt.Errorf("missing ID")
 	}
-	id, err := inet256.ParseAddrB64([]byte(parts[0]))
+	id, err := inet256.ParseAddrBase64([]byte(parts[0]))
 	if err != nil {
 		return nil, err
 	}

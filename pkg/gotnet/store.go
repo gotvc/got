@@ -8,8 +8,8 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotiam"
-	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
@@ -24,9 +24,9 @@ type StoreType uint8
 
 const (
 	Type_UNKNOWN = StoreType(iota)
-	Type_VC
-	Type_FS
 	Type_RAW
+	Type_FS
+	Type_VC
 )
 
 type blobPullSrv struct {
@@ -93,7 +93,7 @@ func checkPullReply(id cadata.ID, peer PeerID, reply []byte) error {
 	if bytes.Equal(reply, id[:]) {
 		return cadata.ErrNotFound
 	}
-	if err := cadata.Check(cadata.DefaultHash, id, reply); err != nil {
+	if err := cadata.Check(gdat.Hash, id, reply); err != nil {
 		return errors.Wrapf(err, "from peer %v", peer)
 	}
 	return nil
@@ -379,7 +379,7 @@ type BlobReq struct {
 	StoreType StoreType `json:"store_type"`
 
 	IDs   []cadata.ID `json:"ids,omitempty"`
-	First cadata.ID   `json:"prefix,omitempty"`
+	First cadata.ID   `json:"first,omitempty"`
 	Limit int         `json:"limit,omitempty"`
 }
 
@@ -406,7 +406,7 @@ func newTempStore() *tempStore {
 		peerHandles: make(map[uint64]PeerID),
 		blobRCs:     make(map[cadata.ID]uint64),
 		peerRCs:     make(map[PeerID]uint64),
-		store:       cadata.NewMem(cadata.DefaultHash, MaxMessageSize),
+		store:       cadata.NewMem(gdat.Hash, MaxMessageSize),
 	}
 }
 
@@ -508,7 +508,7 @@ func (s *store) Exists(ctx context.Context, id cadata.ID) (bool, error) {
 }
 
 func (s *store) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int, error) {
-	first := stores.FirstFromSpan(span)
+	first := cadata.BeginFromSpan(span)
 	n, err := s.blobMainSrv.List(ctx, s.sid, first, ids)
 	if err != nil {
 		return 0, err
@@ -525,7 +525,7 @@ func (s *store) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (in
 }
 
 func (s *store) Hash(x []byte) cadata.ID {
-	return cadata.DefaultHash(x)
+	return gdat.Hash(x)
 }
 
 func (s *store) MaxSize() int {

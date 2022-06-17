@@ -6,6 +6,7 @@ import (
 	"math"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/chacha20"
 )
@@ -94,6 +95,7 @@ func getDecrypt(ctx context.Context, s cadata.Store, dek DEK, id cadata.ID, buf 
 	}
 	data := buf[:n]
 	if err := cadata.Check(s.Hash, id, data); err != nil {
+		logrus.Errorf("len(data)=%d HAVE: %v WANT: %v", len(data), id, s.Hash(data))
 		return 0, err
 	}
 	cryptoXOR(dek, data, data)

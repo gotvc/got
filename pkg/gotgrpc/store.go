@@ -3,16 +3,13 @@ package gotgrpc
 import (
 	"bytes"
 	"context"
-	"errors"
+	"fmt"
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-
-	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/gotvc/got/pkg/stores"
 )
 
 var _ cadata.Store = &Store{}
@@ -24,6 +21,9 @@ type Store struct {
 }
 
 func (s Store) Post(ctx context.Context, data []byte) (cadata.ID, error) {
+	if len(data) > s.MaxSize() {
+		return cadata.ID{}, cadata.ErrTooLarge
+	}
 	res, err := s.c.PostBlob(ctx, &PostBlobReq{
 		Key:       s.key,
 		StoreType: s.st,
@@ -34,7 +34,7 @@ func (s Store) Post(ctx context.Context, data []byte) (cadata.ID, error) {
 		return cadata.ID{}, err
 	}
 	if !bytes.Equal(expected[:], res.Id) {
-		return cadata.ID{}, errors.New("bad ID from store")
+		return cadata.ID{}, fmt.Errorf("bad ID from store. HAVE: %v WANT %v", res.Id, expected)
 	}
 	return expected, nil
 }
@@ -47,7 +47,13 @@ func (s Store) Get(ctx context.Context, id cadata.ID, buf []byte) (int, error) {
 	})
 	// TODO: transform errors
 	if err != nil {
-		return 0, s.transformError(err)
+		switch status.Code(err) {
+		case codes.NotFound:
+			if errorMsgContains(err, "blob") {
+				return 0, cadata.ErrNotFound
+			}
+		}
+		return 0, err
 	}
 	if len(res.Data) > len(buf) {
 		return 0, io.ErrShortBuffer
@@ -70,49 +76,51 @@ func (s Store) Add(ctx context.Context, id cadata.ID) error {
 		StoreType: s.st,
 		Id:        id[:],
 	})
+	switch status.Code(err) {
+	case codes.NotFound:
+		if errorMsgContains(err, "blob") {
+			return cadata.ErrNotFound
+		}
+	}
 	return err
 }
 
 func (s Store) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int, error) {
-	first := stores.FirstFromSpan(span)
-	res, err := s.c.ListBlob(ctx, &ListBlobReq{
+	first := cadata.BeginFromSpan(span)
+	req := &ListBlobReq{
 		Key:       s.key,
 		StoreType: s.st,
 		Begin:     first[:],
 		Limit:     uint32(len(ids)),
-	})
+	}
+	end, ok := cadata.EndFromSpan(span)
+	if ok {
+		req.End = end[:]
+	}
+	res, err := s.c.ListBlob(ctx, req)
 	if err != nil {
 		return 0, err
 	}
 	var n int
 	for i := range res.Ids {
 		if n >= len(ids) {
-			return n, io.ErrShortBuffer
-		}
-		ids[i] = cadata.IDFromBytes(res.Ids[i])
-		if span.Compare(ids[i], func(a, b cadata.ID) int { return a.Compare(b) }) < 0 {
-			n = i
 			break
 		}
+		id := cadata.IDFromBytes(res.Ids[i])
+		if !span.Contains(id, func(a, b cadata.ID) int { return a.Compare(b) }) {
+			logrus.Warnf("gotgrpc: store returned ID %v not in Span %v", id, span)
+			continue
+		}
+		ids[i] = id
+		n++
 	}
 	return n, err
 }
 
 func (s Store) MaxSize() int {
-	return gotfs.DefaultMaxBlobSize
+	return MaxBlobSize
 }
 
 func (s Store) Hash(x []byte) cadata.ID {
-	return gdat.Hash(x)
-}
-
-func (s Store) transformError(x error) error {
-	switch {
-	case x == nil:
-		return nil
-	case status.Code(x) == codes.NotFound:
-		return cadata.ErrNotFound
-	default:
-		return x
-	}
+	return Hash(x)
 }

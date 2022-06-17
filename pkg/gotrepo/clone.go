@@ -39,7 +39,7 @@ func spaceSpecFromURL(u goturl.SpaceURL) (*SpaceSpec, error) {
 	var spec *SpaceSpec
 	switch u.Protocol {
 	case goturl.ProtocolNative:
-		id, err := inet256.ParseAddrB64([]byte(u.Host))
+		id, err := inet256.ParseAddrBase64([]byte(u.Host))
 		if err != nil {
 			return nil, err
 		}
