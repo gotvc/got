@@ -117,7 +117,7 @@ func (qh *QUICHub) MaxIncomingSize() int {
 }
 
 func (qh *QUICHub) ParseAddr(x []byte) (inet256.Addr, error) {
-	return inet256.ParseAddrB64(x)
+	return inet256.ParseAddrBase64(x)
 }
 
 func (qh *QUICHub) PublicKey() p2p.PublicKey {
