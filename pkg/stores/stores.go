@@ -62,3 +62,7 @@ func (ms MemSet) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (i
 func NewFSStore(x posixfs.FS, maxSize int) cadata.Store {
 	return fsstore.New(x, gdat.Hash, maxSize)
 }
+
+func NewMem() cadata.Store {
+	return cadata.NewMem(gdat.Hash, 1<<22)
+}

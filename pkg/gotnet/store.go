@@ -379,7 +379,7 @@ type BlobReq struct {
 	StoreType StoreType `json:"store_type"`
 
 	IDs   []cadata.ID `json:"ids,omitempty"`
-	First cadata.ID   `json:"prefix,omitempty"`
+	First cadata.ID   `json:"first,omitempty"`
 	Limit int         `json:"limit,omitempty"`
 }
 

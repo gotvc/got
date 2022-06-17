@@ -36,9 +36,9 @@ func TestMultiRepoSync(t *testing.T) {
 				{
 					Prefix: "origin/",
 					Target: gotrepo.SpaceSpec{
-						Encrypt: &gotrepo.EncryptedSpaceSpec{
+						Crypto: &gotrepo.CryptoSpaceSpec{
 							Inner:  gotrepo.SpaceSpec{Peer: &originID},
-							Secret: secretKey,
+							Secret: secretKey[:],
 						},
 					},
 				},

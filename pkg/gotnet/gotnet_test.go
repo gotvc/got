@@ -10,11 +10,13 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cadata/storetest"
 	"github.com/brendoncarroll/go-state/cells/celltest"
-	"github.com/gotvc/got/pkg/branches"
-	"github.com/gotvc/got/pkg/cells"
 	"github.com/inet256/inet256/client/go_client/inet256client"
 	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/stretchr/testify/require"
+
+	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/cells"
+	"github.com/gotvc/got/pkg/stores"
 )
 
 func TestSpace(t *testing.T) {
@@ -91,7 +93,7 @@ func newTestSide(t testing.TB, inetSrv inet256.Service, privKey p2p.PrivateKey) 
 		require.NoError(t, node.Close())
 	})
 	swarm := mbapp.New(inet256client.NewSwarm(node), MaxMessageSize)
-	newStore := func() cadata.Store { return cadata.NewMem(cadata.DefaultHash, MaxMessageSize) }
+	newStore := func() cadata.Store { return stores.NewMem() }
 	space := branches.NewMem(newStore, cells.NewMem)
 	srv := New(Params{
 		Open:  func(PeerID) branches.Space { return space },

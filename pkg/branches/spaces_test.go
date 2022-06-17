@@ -4,8 +4,10 @@ import (
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/cells"
 	"github.com/stretchr/testify/require"
+
+	"github.com/gotvc/got/pkg/cells"
+	"github.com/gotvc/got/pkg/stores"
 )
 
 func TestMemSpace(t *testing.T) {
@@ -14,7 +16,7 @@ func TestMemSpace(t *testing.T) {
 
 func newTestSpace(t testing.TB) Space {
 	newStore := func() cadata.Store {
-		return cadata.NewMem(cadata.DefaultHash, 1<<20)
+		return stores.NewMem()
 	}
 	newCell := func() cells.Cell {
 		return cells.NewMem()
