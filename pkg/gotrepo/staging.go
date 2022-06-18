@@ -8,6 +8,7 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/porting"
@@ -254,18 +255,15 @@ func (r *Repo) stagingTriple() branches.StoreTriple {
 	}
 }
 
-func (r *Repo) StagingStore() cadata.Store {
-	return r.stagingStore()
-}
-
 func (r *Repo) getStage() *staging.Stage {
 	storage := newBoltKVStore(r.db, bucketStaging)
 	return staging.New(storage)
 }
 
 func (r *Repo) getImporter(b *branches.Branch) *porting.Importer {
+	salt := saltFromBytes(b.Salt)
 	fsop := r.getFSOp(b)
-	cache := portingCache{db: r.db}
+	cache := portingCache{db: r.db, saltHash: gdat.Hash(salt[:])}
 	return porting.NewImporter(fsop, cache, r.StagingStore(), r.StagingStore())
 }
 
@@ -275,8 +273,13 @@ func (r *Repo) getExporter(b *branches.Branch) *porting.Exporter {
 	return porting.NewExporter(fsop, cache, r.workingDir)
 }
 
+func (r *Repo) getStagingStore(ctx context.Context, saltHash [32]byte) cadata.Store {
+
+}
+
 type portingCache struct {
-	db *bolt.DB
+	db       *bolt.DB
+	saltHash [32]byte
 }
 
 func (c portingCache) Get(ctx context.Context, p string) (porting.Entry, error) {
