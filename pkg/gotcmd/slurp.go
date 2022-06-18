@@ -31,7 +31,7 @@ var slurpCmd = &cobra.Command{
 			return err
 		}
 		fsop := gotfs.NewOperator()
-		root, err := fsop.CreateFileRoot(ctx, st.Raw, st.FS, f)
+		root, err := fsop.CreateFileRoot(ctx, st.FS, st.Raw, f)
 		if err != nil {
 			return err
 		}
