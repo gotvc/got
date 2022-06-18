@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/branches"
@@ -14,6 +15,7 @@ import (
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	bolt "go.etcd.io/bbolt"
 )
 
 // Add adds paths from the working directory to the staging area.
@@ -25,17 +27,14 @@ func (r *Repo) Add(ctx context.Context, paths ...string) error {
 	if err != nil {
 		return err
 	}
-	storeTriple := r.stagingTriple()
-	ms := storeTriple.FS
-	ds := storeTriple.Raw
-	porter := porting.NewPorter(r.getFSOp(branch), r.workingDir, r.getPorterCache(*branch))
+	porter := r.getImporter(branch)
 	stage := r.getStage()
 	for _, target := range paths {
 		if err := posixfs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ posixfs.DirEnt) error {
 			if err := stage.CheckConflict(ctx, p); err != nil {
 				return err
 			}
-			fileRoot, err := porter.ImportFile(ctx, ms, ds, p)
+			fileRoot, err := porter.ImportFile(ctx, r.workingDir, p)
 			if err != nil {
 				return err
 			}
@@ -55,16 +54,13 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 	if err != nil {
 		return err
 	}
-	storeTriple := r.stagingTriple()
-	ms := storeTriple.FS
-	ds := storeTriple.Raw
-	porter := porting.NewPorter(r.getFSOp(branch), r.workingDir, r.getPorterCache(*branch))
+	porter := r.getImporter(branch)
 	stage := r.stage
 	for _, p := range paths {
 		if err := stage.CheckConflict(ctx, p); err != nil {
 			return err
 		}
-		root, err := porter.ImportPath(ctx, ms, ds, p)
+		root, err := porter.ImportPath(ctx, r.workingDir, p)
 		if err != nil && !posixfs.IsErrNotExist(err) {
 			return err
 		}
@@ -267,6 +263,34 @@ func (r *Repo) getStage() *staging.Stage {
 	return staging.New(storage)
 }
 
-func (r *Repo) getPorterCache(b branches.Branch) porting.Cache {
+func (r *Repo) getImporter(b *branches.Branch) *porting.Importer {
+	fsop := r.getFSOp(b)
+	cache := portingCache{db: r.db}
+	return porting.NewImporter(fsop, cache, r.StagingStore(), r.StagingStore())
+}
+
+func (r *Repo) getExporter(b *branches.Branch) *porting.Exporter {
+	fsop := r.getFSOp(b)
+	cache := portingCache{db: r.db}
+	return porting.NewExporter(fsop, cache, r.workingDir)
+}
+
+type portingCache struct {
+	db *bolt.DB
+}
+
+func (c portingCache) Get(ctx context.Context, p string) (porting.Entry, error) {
+	return porting.Entry{}, state.ErrNotFound
+}
+
+func (c portingCache) Put(ctx context.Context, p string, ent porting.Entry) error {
 	return nil
+}
+
+func (c portingCache) Delete(ctx context.Context, p string) error {
+	return nil
+}
+
+func (c portingCache) List(ctx context.Context, span state.Span[string], ks []string) (int, error) {
+	return 0, nil
 }
