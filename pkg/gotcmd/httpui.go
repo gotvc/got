@@ -17,7 +17,7 @@ func newHTTPUICmd(sf func() branches.Space) *cobra.Command {
 		Args:    cobra.MinimumNArgs(1),
 		PreRunE: loadRepo,
 	}
-	laddr := c.Flags().String("addr", "127.0.0.1:8000", "--addr 127.0.0.1:12345")
+	laddr := c.Flags().String("addr", "127.0.0.1:6006", "--addr 127.0.0.1:12345")
 	c.RunE = func(cmd *cobra.Command, args []string) error {
 		branchName := args[0]
 		space := getSpace()

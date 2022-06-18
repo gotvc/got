@@ -10,7 +10,7 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-func TestBoltCell(t *testing.T) {
+func TestCell(t *testing.T) {
 	celltest.CellTestSuite(t, func(t testing.TB) cells.Cell {
 		dbPath := filepath.Join(t.TempDir(), "bolt.db")
 		db, err := bolt.Open(dbPath, 0o644, &bolt.Options{})

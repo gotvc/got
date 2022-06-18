@@ -117,7 +117,8 @@ func (r *Repo) Discard(ctx context.Context, paths ...string) error {
 	return nil
 }
 
-func (r Repo) Clear(ctx context.Context) error {
+// Clear clears all entries from the staging area
+func (r *Repo) Clear(ctx context.Context) error {
 	return r.stage.Reset(ctx)
 }
 

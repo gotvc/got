@@ -5,11 +5,11 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/branches"
-	"golang.org/x/exp/slices"
 )
 
 var _ Space = &branchSpecDir{}
@@ -18,13 +18,13 @@ type cellFactory = func(spec CellSpec) (Cell, error)
 type storeFactory = func(spec StoreSpec) (Store, error)
 
 type branchSpecDir struct {
-	makeDefault func() VolumeSpec
+	makeDefault func(context.Context) (VolumeSpec, error)
 	cf          cellFactory
 	sf          storeFactory
 	fs          posixfs.FS
 }
 
-func newBranchSpecDir(makeDefault func() VolumeSpec, cf cellFactory, sf storeFactory, fs posixfs.FS) *branchSpecDir {
+func newBranchSpecDir(makeDefault func(ctx context.Context) (VolumeSpec, error), cf cellFactory, sf storeFactory, fs posixfs.FS) *branchSpecDir {
 	return &branchSpecDir{
 		makeDefault: makeDefault,
 		cf:          cf,
@@ -34,7 +34,7 @@ func newBranchSpecDir(makeDefault func() VolumeSpec, cf cellFactory, sf storeFac
 }
 
 func (r *branchSpecDir) List(ctx context.Context, span branches.Span, limit int) (ret []string, _ error) {
-	err := posixfs.WalkLeaves(ctx, r.fs, "", func(p string, _ posixfs.DirEnt) error {
+	err := posixfs.WalkLeavesSpan(ctx, r.fs, "", state.Span[string]{}, func(p string, _ posixfs.DirEnt) error {
 		if span.Contains(p) {
 			ret = append(ret, p)
 		}
@@ -43,13 +43,16 @@ func (r *branchSpecDir) List(ctx context.Context, span branches.Span, limit int)
 	if err != nil {
 		return nil, err
 	}
-	slices.Sort(ret)
 	return ret, nil
 }
 
 func (r *branchSpecDir) Create(ctx context.Context, name string, params branches.Params) (*Branch, error) {
+	vspec, err := r.makeDefault(ctx)
+	if err != nil {
+		return nil, err
+	}
 	return r.CreateWithSpec(name, BranchSpec{
-		Volume:    r.makeDefault(),
+		Volume:    vspec,
 		Salt:      params.Salt,
 		CreatedAt: tai64.Now().TAI64(),
 	})
