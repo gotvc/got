@@ -9,6 +9,10 @@ import (
 	"github.com/brendoncarroll/go-state/cells/cryptocell"
 )
 
+type (
+	ErrTooLarge = cells.ErrTooLarge
+)
+
 type Cell = cells.Cell
 
 func Apply(ctx context.Context, cell Cell, fn func([]byte) ([]byte, error)) error {

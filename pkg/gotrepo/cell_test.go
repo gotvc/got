@@ -1,4 +1,4 @@
-package cells
+package gotrepo
 
 import (
 	"path/filepath"
@@ -18,6 +18,6 @@ func TestBoltCell(t *testing.T) {
 		t.Cleanup(func() {
 			require.NoError(t, db.Close())
 		})
-		return NewBoltCell(db, []string{"test-cells"}, []byte("key1"))
+		return newBoltCell(db, []string{"test-cells"}, []byte("key1"))
 	})
 }

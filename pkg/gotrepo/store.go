@@ -45,26 +45,26 @@ func (sm *storeManager) CreateStore() StoreID {
 	return id
 }
 
-func (sm *storeManager) ExistsStore(id StoreID) (bool, error) {
-	var exists bool
-	if err := sm.db.View(func(tx *bolt.Tx) error {
-		b, err := sm.bucket(tx)
-		if err != nil {
-			return err
-		}
-		yes, err := isNonEmpty(b, id)
-		if err != nil {
-			return err
-		}
-		exists = yes
-		return nil
-	}); err != nil {
-		return false, err
-	}
-	return exists, nil
-}
+// func (sm *storeManager) ExistsStore(id StoreID) (bool, error) {
+// 	var exists bool
+// 	if err := sm.db.View(func(tx *bolt.Tx) error {
+// 		b, err := sm.bucket(tx)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		yes, err := isNonEmpty(b, id)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		exists = yes
+// 		return nil
+// 	}); err != nil {
+// 		return false, err
+// 	}
+// 	return exists, nil
+// }
 
-func (sm *storeManager) GetStore(id StoreID) Store {
+func (sm *storeManager) Open(id StoreID) Store {
 	return virtualStore{
 		sm: sm,
 		id: id,

@@ -153,7 +153,7 @@ func Open(p string) (*Repo, error) {
 		workingDir: posixfs.NewFiltered(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
-		stage: staging.New(staging.NewBoltStorage(db, bucketStaging)),
+		stage: staging.New(newBoltKVStore(db, bucketStaging)),
 	}
 	fsStore := stores.NewFSStore(r.getSubFS(storePath), MaxBlobSize)
 	r.storeManager = newStoreManager(fsStore, r.db, bucketStores)

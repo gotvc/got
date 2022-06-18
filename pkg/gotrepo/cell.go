@@ -1,12 +1,49 @@
-package cells
+package gotrepo
 
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 
-	"github.com/brendoncarroll/go-state/cells"
+	"github.com/gotvc/got/pkg/cells"
 	bolt "go.etcd.io/bbolt"
 )
+
+type CellID uint64
+
+type cellManager struct {
+	db         *bolt.DB
+	bucketPath []string
+}
+
+func newCellManager(db *bolt.DB, bucketPath []string) *cellManager {
+	return &cellManager{
+		db:         db,
+		bucketPath: bucketPath,
+	}
+}
+
+func (cm *cellManager) Open(id CellID) Cell {
+	key := cm.keyFromID(id)
+	return newBoltCell(cm.db, cm.bucketPath, key)
+}
+
+func (cm *cellManager) Drop(ctx context.Context, id CellID) error {
+	key := cm.keyFromID(id)
+	return cm.db.Update(func(tx *bolt.Tx) error {
+		b, err := bucketFromTx(tx, cm.bucketPath)
+		if err != nil {
+			return err
+		}
+		return b.Delete(key)
+	})
+}
+
+func (cm *cellManager) keyFromID(id CellID) []byte {
+	key := [8]byte{}
+	binary.BigEndian.PutUint64(key[:], uint64(id))
+	return key[:]
+}
 
 type boltCell struct {
 	db         *bolt.DB
@@ -14,7 +51,7 @@ type boltCell struct {
 	key        []byte
 }
 
-func NewBoltCell(db *bolt.DB, bucketPath []string, key []byte) Cell {
+func newBoltCell(db *bolt.DB, bucketPath []string, key []byte) Cell {
 	if len(bucketPath) < 1 {
 		panic("len(path) must be >= 1")
 	}

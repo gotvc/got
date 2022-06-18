@@ -118,7 +118,7 @@ func (r *Repo) Discard(ctx context.Context, paths ...string) error {
 }
 
 func (r Repo) Clear(ctx context.Context) error {
-	return r.stage.Reset()
+	return r.stage.Reset(ctx)
 }
 
 type FileOperation struct {
@@ -210,7 +210,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 	}); err != nil {
 		return err
 	}
-	return r.getStage().Reset()
+	return r.getStage().Reset(ctx)
 }
 
 // ForEachUntracked lists all the files which are not in either:
@@ -246,7 +246,7 @@ func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) er
 }
 
 func (r *Repo) stagingStore() cadata.Store {
-	return r.storeManager.GetStore(0)
+	return r.storeManager.Open(0)
 }
 
 func (r *Repo) stagingTriple() branches.StoreTriple {
@@ -262,7 +262,7 @@ func (r *Repo) StagingStore() cadata.Store {
 }
 
 func (r *Repo) getStage() *staging.Stage {
-	storage := staging.NewBoltStorage(r.db, bucketStaging)
+	storage := newBoltKVStore(r.db, bucketStaging)
 	return staging.New(storage)
 }
 

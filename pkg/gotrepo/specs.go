@@ -28,7 +28,7 @@ type LocalStoreSpec = StoreID
 func (r *Repo) MakeStore(spec StoreSpec) (Store, error) {
 	switch {
 	case spec.Local != nil:
-		return r.storeManager.GetStore(*spec.Local), nil
+		return r.storeManager.Open(*spec.Local), nil
 	default:
 		return nil, errors.Errorf("empty store spec")
 	}
@@ -118,7 +118,7 @@ func ParseCellSpec(data []byte) (*CellSpec, error) {
 func (r *Repo) MakeCell(spec CellSpec) (Cell, error) {
 	switch {
 	case spec.Local != nil:
-		return r.cellManager.Get(*spec.Local)
+		return r.cellManager.Open(*spec.Local), nil
 
 	case spec.HTTP != nil:
 		return httpcell.New(*spec.HTTP), nil

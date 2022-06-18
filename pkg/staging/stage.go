@@ -7,6 +7,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/pkg/errors"
@@ -14,11 +15,7 @@ import (
 )
 
 type Storage interface {
-	Put(k, v []byte) error
-	Get(k []byte) ([]byte, error)
-	Delete(k []byte) error
-	ForEach(fn func(k, v []byte) error) error
-	DeleteAll() error
+	state.KVStore[[]byte, []byte]
 }
 
 type Operation struct {
@@ -45,7 +42,7 @@ func (s *Stage) Put(ctx context.Context, p string, root gotfs.Root) error {
 	op := Operation{
 		Put: &root,
 	}
-	return s.storage.Put([]byte(p), jsonMarshal(op))
+	return s.storage.Put(ctx, []byte(p), jsonMarshal(op))
 }
 
 // Delete removes a file at p with root
@@ -57,19 +54,19 @@ func (s *Stage) Delete(ctx context.Context, p string) error {
 	fo := Operation{
 		Delete: true,
 	}
-	return s.storage.Put([]byte(p), jsonMarshal(fo))
+	return s.storage.Put(ctx, []byte(p), jsonMarshal(fo))
 }
 
 func (s *Stage) Discard(ctx context.Context, p string) error {
 	p = cleanPath(p)
-	return s.storage.Delete([]byte(p))
+	return s.storage.Delete(ctx, []byte(p))
 }
 
 // Get returns the operation, if any, staged for the path p
 // If there is no operation staged Get returns (nil, nil)
 func (s *Stage) Get(ctx context.Context, p string) (*Operation, error) {
 	p = cleanPath(p)
-	data, err := s.storage.Get([]byte(p))
+	data, err := s.storage.Get(ctx, []byte(p))
 	if err != nil {
 		return nil, err
 	}
@@ -84,12 +81,16 @@ func (s *Stage) Get(ctx context.Context, p string) (*Operation, error) {
 }
 
 func (s *Stage) ForEach(ctx context.Context, fn func(p string, op Operation) error) error {
-	return s.storage.ForEach(func(k, v []byte) error {
-		p := string(k)
+	return state.ForEach[[]byte](ctx, s.storage, state.TotalSpan[[]byte](), func(k []byte) error {
+		v, err := s.storage.Get(ctx, k)
+		if err != nil {
+			return err
+		}
 		var fo Operation
 		if err := json.Unmarshal(v, &fo); err != nil {
 			return err
 		}
+		p := string(k)
 		return fn(p, fo)
 	})
 }
@@ -103,8 +104,8 @@ func (s *Stage) CheckConflict(ctx context.Context, p string) error {
 	parts := strings.Split(p, "/")
 	for i := len(parts) - 1; i > 0; i-- {
 		conflictPath := strings.Join(parts[:i], "/")
-		data, err := s.storage.Get([]byte(cleanPath(conflictPath)))
-		if err != nil {
+		data, err := s.storage.Get(ctx, []byte(cleanPath(conflictPath)))
+		if err != nil && !errors.Is(err, state.ErrNotFound) {
 			return err
 		}
 		if len(data) > 0 {
@@ -112,7 +113,7 @@ func (s *Stage) CheckConflict(ctx context.Context, p string) error {
 		}
 	}
 	// check for descendents
-	if err := s.storage.ForEach(func(k, _ []byte) error {
+	if err := state.ForEach[[]byte](ctx, s.storage, state.TotalSpan[[]byte](), func(k []byte) error {
 		if bytes.HasPrefix(k, []byte(p+"/")) {
 			return newError(p, string(k))
 		}
@@ -123,17 +124,19 @@ func (s *Stage) CheckConflict(ctx context.Context, p string) error {
 	return nil
 }
 
-func (s *Stage) Reset() error {
-	return s.storage.DeleteAll()
+func (s *Stage) Reset(ctx context.Context) error {
+	return state.ForEach[[]byte](ctx, s.storage, state.TotalSpan[[]byte](), func(k []byte) error {
+		return s.storage.Delete(ctx, k)
+	})
 }
 
 func (s *Stage) IsEmpty(ctx context.Context) (bool, error) {
-	var count int
-	err := s.storage.ForEach(func(_, _ []byte) error {
-		count++
-		return nil
-	})
-	return count == 0, err
+	var keys [1][]byte
+	n, err := s.storage.List(ctx, state.TotalSpan[[]byte](), keys[:])
+	if err != nil {
+		return false, err
+	}
+	return n == 0, nil
 }
 
 func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, base *gotfs.Root) (*gotfs.Root, error) {
