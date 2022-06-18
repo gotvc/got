@@ -4,12 +4,10 @@ import (
 	"context"
 	"os"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
-	"github.com/gotvc/got/pkg/porting"
 	"github.com/gotvc/got/pkg/staging"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
@@ -25,17 +23,17 @@ func (r *Repo) Add(ctx context.Context, paths ...string) error {
 	if err != nil {
 		return err
 	}
-	storeTriple := r.stagingTriple()
-	ms := storeTriple.FS
-	ds := storeTriple.Raw
-	porter := porting.NewPorter(r.getFSOp(branch), r.workingDir, r.getPorterCache(*branch))
+	porter, err := r.getImporter(ctx, branch)
+	if err != nil {
+		return err
+	}
 	stage := r.getStage()
 	for _, target := range paths {
 		if err := posixfs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ posixfs.DirEnt) error {
 			if err := stage.CheckConflict(ctx, p); err != nil {
 				return err
 			}
-			fileRoot, err := porter.ImportFile(ctx, ms, ds, p)
+			fileRoot, err := porter.ImportFile(ctx, r.workingDir, p)
 			if err != nil {
 				return err
 			}
@@ -55,16 +53,16 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 	if err != nil {
 		return err
 	}
-	storeTriple := r.stagingTriple()
-	ms := storeTriple.FS
-	ds := storeTriple.Raw
-	porter := porting.NewPorter(r.getFSOp(branch), r.workingDir, r.getPorterCache(*branch))
+	porter, err := r.getImporter(ctx, branch)
+	if err != nil {
+		return err
+	}
 	stage := r.stage
 	for _, p := range paths {
 		if err := stage.CheckConflict(ctx, p); err != nil {
 			return err
 		}
-		root, err := porter.ImportPath(ctx, ms, ds, p)
+		root, err := porter.ImportPath(ctx, r.workingDir, p)
 		if err != nil && !posixfs.IsErrNotExist(err) {
 			return err
 		}
@@ -91,14 +89,13 @@ func (r *Repo) Rm(ctx context.Context, paths ...string) error {
 	if err != nil {
 		return err
 	}
-	st := r.stagingTriple()
 	fsop := r.getFSOp(branch)
 	stage := r.getStage()
 	for _, target := range paths {
 		if snap == nil {
 			return errors.Errorf("path %q not found", target)
 		}
-		if err := fsop.ForEachFile(ctx, st.FS, snap.Root, target, func(p string, _ *gotfs.Info) error {
+		if err := fsop.ForEachFile(ctx, branch.Volume.FSStore, snap.Root, target, func(p string, _ *gotfs.Info) error {
 			return stage.Delete(ctx, p)
 		}); err != nil {
 			return err
@@ -182,17 +179,20 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 	}
 	snapInfo.Creator = r.GetID().String()
 	snapInfo.Authors = append(snapInfo.Authors, r.GetID().String())
-	src := r.stagingTriple()
+	src, err := r.getImportTriple(ctx, branch)
+	if err != nil {
+		return err
+	}
 	dst := branch.Volume.StoreTriple()
 	// writes go to src, but reads from src should fallback to dst
-	src = branches.StoreTriple{
+	src = &branches.StoreTriple{
 		Raw: stores.AddWriteLayer(dst.Raw, src.Raw),
 		FS:  stores.AddWriteLayer(dst.FS, src.FS),
 		VC:  stores.AddWriteLayer(dst.VC, src.VC),
 	}
 	fsop := r.getFSOp(branch)
 	vcop := r.getVCOp(branch)
-	if err := branches.Apply(ctx, *branch, src, func(x *Snap) (*Snap, error) {
+	if err := branches.Apply(ctx, *branch, *src, func(x *Snap) (*Snap, error) {
 		var root *Root
 		if x != nil {
 			root = &x.Root
@@ -246,27 +246,7 @@ func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) er
 	})
 }
 
-func (r *Repo) stagingStore() cadata.Store {
-	return r.storeManager.Open(0)
-}
-
-func (r *Repo) stagingTriple() branches.StoreTriple {
-	return branches.StoreTriple{
-		VC:  r.stagingStore(),
-		FS:  r.stagingStore(),
-		Raw: r.stagingStore(),
-	}
-}
-
-func (r *Repo) StagingStore() cadata.Store {
-	return r.stagingStore()
-}
-
 func (r *Repo) getStage() *staging.Stage {
 	storage := newBoltKVStore(r.db, bucketStaging)
 	return staging.New(storage)
-}
-
-func (r *Repo) getPorterCache(b branches.Branch) porting.Cache {
-	return nil
 }

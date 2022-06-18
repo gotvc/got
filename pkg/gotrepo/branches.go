@@ -83,7 +83,11 @@ func (r *Repo) SetBranchHead(ctx context.Context, name string, snap Snap) error 
 	if err != nil {
 		return err
 	}
-	return branches.SetHead(ctx, *branch, r.stagingTriple(), snap)
+	st, err := r.getImportTriple(ctx, branch)
+	if err != nil {
+		return err
+	}
+	return branches.SetHead(ctx, *branch, *st, snap)
 }
 
 func (r *Repo) GetBranchHead(ctx context.Context, name string) (*Snap, error) {

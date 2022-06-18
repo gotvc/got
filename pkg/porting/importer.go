@@ -6,44 +6,49 @@ import (
 	"io"
 	"path"
 	"runtime"
-	"sort"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
+	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 )
 
-type Porter struct {
-	gotfs   *gotfs.Operator
-	posixfs posixfs.FS
-	cache   Cache
+type Importer struct {
+	gotfs *gotfs.Operator
+	cache state.KVStore[string, Entry]
+
+	ms, ds cadata.Store
 }
 
-func NewPorter(fsop *gotfs.Operator, pfs posixfs.FS, cache Cache) Porter {
-	return Porter{
-		cache:   cache,
-		gotfs:   fsop,
-		posixfs: pfs,
+func NewImporter(fsop *gotfs.Operator, cache state.KVStore[string, Entry], ms, ds cadata.Store) *Importer {
+	return &Importer{
+		gotfs: fsop,
+		cache: cache,
+
+		ms: ms,
+		ds: ds,
 	}
 }
 
 // ImportPath returns gotfs instance containing the content in fsx at p.
 // The content will be at the root of the filesystem.
-func (pr *Porter) ImportPath(ctx context.Context, ms, ds cadata.Store, p string) (*gotfs.Root, error) {
+func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
 	logrus.Infof("importing path %q", p)
-	stat, err := pr.posixfs.Stat(p)
+	stat, err := fsx.Stat(p)
 	if err != nil {
 		return nil, err
 	}
 	if !stat.Mode().IsDir() {
-		return pr.ImportFile(ctx, ms, ds, p)
+		return pr.ImportFile(ctx, fsx, p)
 	}
 	var changes []gotfs.Segment
-	emptyDir, err := createEmptyDir(ctx, pr.gotfs, ms, ds)
+	emptyDir, err := createEmptyDir(ctx, pr.gotfs, pr.ms, pr.ds)
 	if err != nil {
 		return nil, err
 	}
@@ -51,16 +56,16 @@ func (pr *Porter) ImportPath(ctx context.Context, ms, ds cadata.Store, p string)
 		Root: *emptyDir,
 		Span: gotkv.TotalSpan(),
 	})
-	dirents, err := posixfs.ReadDir(pr.posixfs, p)
+	dirents, err := posixfs.ReadDir(fsx, p)
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(dirents, func(i, j int) bool {
-		return dirents[i].Name < dirents[j].Name
+	slices.SortFunc(dirents, func(a, b posixfs.DirEnt) bool {
+		return a.Name < b.Name
 	})
 	for _, dirent := range dirents {
 		p2 := path.Join(p, dirent.Name)
-		pathRoot, err := pr.ImportPath(ctx, ms, ds, p2)
+		pathRoot, err := pr.ImportPath(ctx, fsx, p2)
 		if err != nil {
 			return nil, err
 		}
@@ -70,32 +75,50 @@ func (pr *Porter) ImportPath(ctx context.Context, ms, ds cadata.Store, p string)
 			Span: gotfs.SpanForPath(dirent.Name),
 		})
 	}
-	return pr.gotfs.Splice(ctx, ms, ds, changes)
+	return pr.gotfs.Splice(ctx, pr.ms, pr.ds, changes)
 }
 
 // ImportFile returns a gotfs.Root with the content from the file in fsx at p.
-func (pr *Porter) ImportFile(ctx context.Context, ms, ds cadata.Store, p string) (*gotfs.Root, error) {
-	stat, err := pr.posixfs.Stat(p)
+func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
+	finfo, err := fsx.Stat(p)
 	if err != nil {
 		return nil, err
 	}
-	if !stat.Mode().IsRegular() {
+	if !finfo.Mode().IsRegular() {
 		return nil, errors.Errorf("ImportFile called for non-regular file at path %q", p)
 	}
-	fileSize := stat.Size()
+	if ent, err := pr.cache.Get(ctx, p); err == nil && ent.ModifiedAt == tai64.FromGoTime(finfo.ModTime()) {
+		logrus.Infof("using cache entry for path %q. skipped import", p)
+		return &ent.Root, nil
+	}
+	fileSize := finfo.Size()
 	numWorkers := runtime.GOMAXPROCS(0)
 	sizeCutoff := 20 * gotfs.DefaultAverageBlobSizeData * numWorkers
 	// fast path for small files
+	var root *gotfs.Root
 	if fileSize < int64(sizeCutoff) {
-		f, err := pr.posixfs.OpenFile(p, posixfs.O_RDONLY, 0)
+		f, err := fsx.OpenFile(p, posixfs.O_RDONLY, 0)
 		if err != nil {
 			return nil, err
 		}
 		defer f.Close()
-		return pr.gotfs.CreateFileRoot(ctx, ms, ds, f)
+		root, err = pr.gotfs.CreateFileRoot(ctx, pr.ms, pr.ds, f)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		root, err = importFileConcurrent(ctx, pr.gotfs, pr.ms, pr.ds, fsx, p, numWorkers)
+		if err != nil {
+			return nil, err
+		}
 	}
-	// for large files use multiple workers
-	return importFileConcurrent(ctx, pr.gotfs, ms, ds, pr.posixfs, p, numWorkers)
+	if err := pr.cache.Put(ctx, p, Entry{
+		ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
+		Root:       *root,
+	}); err != nil {
+		return nil, err
+	}
+	return root, nil
 }
 
 func importFileConcurrent(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, fsx posixfs.FS, p string, numWorkers int) (*gotfs.Root, error) {
@@ -158,23 +181,21 @@ func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
 	return start, end
 }
 
-func (pr *Porter) ExportFile(ctx context.Context, ms, ds cadata.Store, root gotfs.Root, p string) error {
-	md, err := pr.gotfs.GetInfo(ctx, ms, root, p)
-	if err != nil {
-		return err
-	}
-	mode := posixfs.FileMode(md.Mode)
-	if !mode.IsRegular() {
-		return errors.Errorf("ExportFile called for non-regular file %q: %v", p, mode)
-	}
-	r := pr.gotfs.NewReader(ctx, ms, ds, root, p)
-	return posixfs.PutFile(ctx, pr.posixfs, p, mode, r)
-}
-
 func createEmptyDir(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store) (*gotfs.Root, error) {
 	empty, err := fsop.NewEmpty(ctx, ms)
 	if err != nil {
 		return nil, err
 	}
 	return fsop.Mkdir(ctx, ms, *empty, "")
+}
+
+func needsUpdate(ctx context.Context, cache Cache, p string, finfo posixfs.FileInfo) (bool, error) {
+	ent, err := cache.Get(ctx, p)
+	if errors.Is(err, state.ErrNotFound) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return ent.ModifiedAt != tai64.FromGoTime(finfo.ModTime()), nil
 }
