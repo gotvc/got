@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -117,6 +118,19 @@ func (r *Repo) History(ctx context.Context, name string, fn func(ref Ref, s Snap
 		return err
 	}
 	return branches.History(ctx, *branch, r.getVCOp(branch), fn)
+}
+
+func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
+	branch, err := r.GetBranch(ctx, name)
+	if err != nil {
+		return err
+	}
+	logrus.Println("begin cleanup on", name)
+	if err := branches.CleanupVolume(ctx, branch.Volume); err != nil {
+		return err
+	}
+	logrus.Println("done cleanup on", name)
+	return nil
 }
 
 func getActiveBranch(db *bolt.DB) (string, error) {

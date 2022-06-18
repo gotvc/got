@@ -88,7 +88,7 @@ func (s *Stage) ForEach(ctx context.Context, fn func(p string, op Operation) err
 		}
 		var fo Operation
 		if err := json.Unmarshal(v, &fo); err != nil {
-			return err
+			return errors.Wrapf(err, "parsing staging operation: %q", v)
 		}
 		p := string(k)
 		return fn(p, fo)

@@ -9,7 +9,7 @@ import (
 	bolt "go.etcd.io/bbolt"
 )
 
-type CellID uint64
+type CellID = uint64
 
 type cellManager struct {
 	db         *bolt.DB
@@ -21,6 +21,25 @@ func newCellManager(db *bolt.DB, bucketPath []string) *cellManager {
 		db:         db,
 		bucketPath: bucketPath,
 	}
+}
+
+func (cm *cellManager) Create(ctx context.Context) (ret CellID, _ error) {
+	err := cm.db.Update(func(tx *bolt.Tx) error {
+		b, err := bucketFromTx(tx, cm.bucketPath)
+		if err != nil {
+			return err
+		}
+		ret = 0
+		for ret == 0 {
+			var err error
+			ret, err = b.NextSequence()
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	return ret, err
 }
 
 func (cm *cellManager) Open(id CellID) Cell {
@@ -130,5 +149,5 @@ func (c *boltCell) Read(ctx context.Context, buf []byte) (int, error) {
 }
 
 func (c *boltCell) MaxSize() int {
-	return 1 << 16
+	return MaxCellSize
 }

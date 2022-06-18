@@ -43,6 +43,9 @@ func (s boltKVStore) Get(ctx context.Context, k []byte) ([]byte, error) {
 	}); err != nil {
 		return nil, err
 	}
+	if ret == nil {
+		return nil, state.ErrNotFound
+	}
 	return ret, nil
 }
 
@@ -52,7 +55,7 @@ func (s boltKVStore) List(ctx context.Context, span state.Span[[]byte], ks [][]b
 	}
 	var n int
 	appendKey := func(x []byte) {
-		ks[n] = append([]byte{}, x...)
+		ks[n] = append(ks[n][:0], x...)
 		n++
 	}
 	err := s.db.View(func(tx *bolt.Tx) error {
@@ -65,11 +68,15 @@ func (s boltKVStore) List(ctx context.Context, span state.Span[[]byte], ks [][]b
 		if lower, ok := span.LowerBound(); ok {
 			key, _ := c.Seek(lower)
 			if span.IncludesLower() || !bytes.Equal(key, lower) {
-				appendKey(key)
+				if key != nil {
+					appendKey(key)
+				}
 			}
 		} else {
 			key, _ := c.First()
-			appendKey(key)
+			if key != nil {
+				appendKey(key)
+			}
 		}
 		for key, _ := c.Next(); key != nil; key, _ = c.Next() {
 			if n >= len(ks) {

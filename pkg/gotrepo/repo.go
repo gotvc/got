@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
-	"encoding/binary"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -30,19 +29,19 @@ import (
 	"github.com/gotvc/got/pkg/stores"
 )
 
-// default bucket
 const (
-	bucketDefault = "default"
-	keyActive     = "ACTIVE"
-	nameMaster    = "master"
-	MaxBlobSize   = gotfs.DefaultMaxBlobSize
+	MaxBlobSize = gotfs.DefaultMaxBlobSize
+	MaxCellSize = 1 << 16
 )
 
 const (
+	bucketDefault  = "default"
 	bucketCellData = "cells"
-	bucketStores   = "stores"
 	bucketStaging  = "staging"
 	bucketPorter   = "porter"
+
+	keyActive  = "ACTIVE"
+	nameMaster = "master"
 )
 
 // fs paths
@@ -52,7 +51,9 @@ const (
 	privateKeyPath = ".got/private.pem"
 	specDirPath    = ".got/branches"
 	policyPath     = ".got/policy"
-	storePath      = ".got/blobs"
+	dbPath         = ".got/got.db"
+	blobsPath      = ".got/blobs"
+	storeDBPath    = ".got/stores.db"
 )
 
 type (
@@ -71,12 +72,12 @@ type (
 )
 
 type Repo struct {
-	rootPath   string
-	repoFS     FS // repoFS is the directory that the repo is in
-	db         *bolt.DB
-	config     Config
-	privateKey p2p.PrivateKey
-	log        logrus.FieldLogger
+	rootPath     string
+	repoFS       FS // repoFS is the directory that the repo is in
+	db, storesDB *bolt.DB
+	config       Config
+	privateKey   p2p.PrivateKey
+	log          logrus.FieldLogger
 
 	workingDir FS // workingDir is repoFS with reserved paths filtered.
 	stage      *staging.Stage
@@ -101,12 +102,11 @@ func Init(p string) error {
 	if err := repoDirFS.Mkdir(gotPrefix, 0o755); err != nil {
 		return err
 	}
+	// branches
 	if err := repoDirFS.Mkdir(specDirPath, 0o755); err != nil {
 		return err
 	}
-	if err := repoDirFS.Mkdir(storePath, 0o755); err != nil {
-		return err
-	}
+	// config
 	config := DefaultConfig()
 	if err := SaveConfig(repoDirFS, configPath, config); err != nil {
 		return err
@@ -115,7 +115,12 @@ func Init(p string) error {
 	if err := SavePrivateKey(repoDirFS, privateKeyPath, privKey); err != nil {
 		return err
 	}
+	// iam
 	if err := writeIfNotExists(repoDirFS, policyPath, 0o644, bytes.NewReader(nil)); err != nil {
+		return err
+	}
+	// stores
+	if err := repoDirFS.Mkdir(blobsPath, 0o755); err != nil {
 		return err
 	}
 	r, err := Open(p)
@@ -132,7 +137,13 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	db, err := bolt.Open(dbPath(p), 0o644, &bolt.Options{
+	db, err := bolt.Open(filepath.Join(p, dbPath), 0o644, &bolt.Options{
+		Timeout: time.Second,
+	})
+	if err != nil {
+		return nil, err
+	}
+	storesDB, err := bolt.Open(filepath.Join(p, storeDBPath), 0o644, &bolt.Options{
 		Timeout: time.Second,
 		NoSync:  true,
 	})
@@ -143,20 +154,22 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
+	fsStore := stores.NewFSStore(posixfs.NewDirFS(filepath.Join(p, blobsPath)), MaxBlobSize)
 	r := &Repo{
 		rootPath:   p,
 		repoFS:     repoFS,
 		config:     *config,
 		privateKey: privateKey,
 		db:         db,
+		storesDB:   storesDB,
 		log:        logrus.StandardLogger(),
+
 		workingDir: posixfs.NewFiltered(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
-		stage: staging.New(newBoltKVStore(db, bucketStaging)),
+		storeManager: newStoreManager(fsStore, storesDB),
+		stage:        staging.New(newBoltKVStore(db, bucketStaging)),
 	}
-	fsStore := stores.NewFSStore(r.getSubFS(storePath), MaxBlobSize)
-	r.storeManager = newStoreManager(fsStore, r.db, bucketStores)
 	r.cellManager = newCellManager(db, []string{bucketCellData})
 	if r.iamEngine, err = newIAMEngine(r.repoFS); err != nil {
 		return nil, err
@@ -176,6 +189,8 @@ func (r *Repo) Close() error {
 	for _, fn := range []func() error{
 		r.db.Sync,
 		r.db.Close,
+		r.storesDB.Sync,
+		r.storesDB.Close,
 	} {
 		if err := fn(); err != nil {
 			errs = append(errs, err)
@@ -203,10 +218,6 @@ func (r *Repo) GetIAMPolicy() gotiam.Policy {
 	return r.iamEngine.GetPolicy()
 }
 
-func (r *Repo) getSubFS(prefix string) posixfs.FS {
-	return posixfs.NewPrefixed(r.repoFS, prefix)
-}
-
 func (r *Repo) getFSOp(b *branches.Branch) *gotfs.Operator {
 	var seed [32]byte
 	gdat.DeriveKey(seed[:], saltFromBytes(b.Salt), []byte("gotfs"))
@@ -229,10 +240,6 @@ func (r *Repo) UnionStore() cadata.Store {
 	return stores.AssertReadOnly(r.storeManager.store)
 }
 
-func dbPath(x string) string {
-	return filepath.Join(x, gotPrefix, "local.db")
-}
-
 func dumpBucket(w io.Writer, b *bolt.Bucket) {
 	c := b.Cursor()
 	for k, v := c.First(); k != nil; k, v = c.Next() {
@@ -241,26 +248,33 @@ func dumpBucket(w io.Writer, b *bolt.Bucket) {
 	fmt.Fprintln(w)
 }
 
-func (r *Repo) makeDefaultVolume() VolumeSpec {
-	newRandom := func() *uint64 {
-		x := randomUint64()
-		return &x
+func (r *Repo) makeDefaultVolume(ctx context.Context) (VolumeSpec, error) {
+	cellID, err := r.cellManager.Create(ctx)
+	if err != nil {
+		return VolumeSpec{}, err
 	}
 	cellSpec := CellSpec{
-		Local: (*LocalCellSpec)(newRandom()),
-	}
-	cellSpec = CellSpec{
 		Encrypted: &EncryptedCellSpec{
-			Inner:  cellSpec,
+			Inner: CellSpec{
+				Local: (*LocalCellSpec)(&cellID),
+			},
 			Secret: generateSecret(32),
 		},
 	}
+	var storeIDs [3]uint64
+	for i := range storeIDs {
+		sid, err := r.storeManager.Create(ctx)
+		if err != nil {
+			return VolumeSpec{}, err
+		}
+		storeIDs[i] = sid
+	}
 	return VolumeSpec{
 		Cell:     cellSpec,
-		VCStore:  StoreSpec{Local: (*LocalStoreSpec)(newRandom())},
-		FSStore:  StoreSpec{Local: (*LocalStoreSpec)(newRandom())},
-		RawStore: StoreSpec{Local: (*LocalStoreSpec)(newRandom())},
-	}
+		RawStore: StoreSpec{Local: (*LocalStoreSpec)(&storeIDs[0])},
+		FSStore:  StoreSpec{Local: (*LocalStoreSpec)(&storeIDs[1])},
+		VCStore:  StoreSpec{Local: (*LocalStoreSpec)(&storeIDs[2])},
+	}, nil
 }
 
 func generateSecret(n int) []byte {
@@ -269,14 +283,6 @@ func generateSecret(n int) []byte {
 		panic(err)
 	}
 	return x
-}
-
-func randomUint64() uint64 {
-	buf := [8]byte{}
-	if _, err := rand.Read(buf[:]); err != nil {
-		panic(err)
-	}
-	return binary.BigEndian.Uint64(buf[:])
 }
 
 func bucketFromTx(tx *bolt.Tx, path []string) (*bolt.Bucket, error) {
@@ -314,8 +320,6 @@ func bucketFromTx(tx *bolt.Tx, path []string) (*bolt.Bucket, error) {
 
 func saltFromBytes(x []byte) *[32]byte {
 	var salt [32]byte
-	if len(x) > 0 {
-		copy(salt[:], x)
-	}
+	copy(salt[:], x)
 	return &salt
 }

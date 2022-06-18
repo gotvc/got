@@ -84,7 +84,7 @@ func (pr *Porter) ImportFile(ctx context.Context, ms, ds cadata.Store, p string)
 	}
 	fileSize := stat.Size()
 	numWorkers := runtime.GOMAXPROCS(0)
-	sizeCutoff := 2 * gotfs.DefaultAverageBlobSizeData * numWorkers
+	sizeCutoff := 20 * gotfs.DefaultAverageBlobSizeData * numWorkers
 	// fast path for small files
 	if fileSize < int64(sizeCutoff) {
 		f, err := pr.posixfs.OpenFile(p, posixfs.O_RDONLY, 0)
