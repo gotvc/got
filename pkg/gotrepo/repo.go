@@ -40,6 +40,7 @@ const (
 	bucketStaging      = "staging"
 	bucketPorter       = "porter"
 	bucketImportStores = "import_stores"
+	bucketImportCaches = "import_caches"
 
 	keyActive  = "ACTIVE"
 	nameMaster = "master"
