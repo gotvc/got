@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sort"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotfs"
@@ -18,12 +19,12 @@ import (
 )
 
 type Porter struct {
-	gotfs   *gotfs.Operator
-	posixfs posixfs.FS
-	cache   Cache
+	gotfs  *gotfs.Operator
+	ms, ds cadata.Store
+	cache  state.KVStore[string, Entry]
 }
 
-func NewPorter(fsop *gotfs.Operator, pfs posixfs.FS, cache Cache) Porter {
+func NewPorter(fsop *gotfs.Operator, ms, ds cadata.Store, pfs posixfs.FS, cache state.KVStore[string, Entry]) Porter {
 	return Porter{
 		cache:   cache,
 		gotfs:   fsop,
