@@ -1,6 +1,7 @@
 package gotcmd
 
 import (
+	"context"
 	"os"
 
 	"github.com/gotvc/got/pkg/gotfs"
@@ -25,9 +26,12 @@ var slurpCmd = &cobra.Command{
 		}
 		defer f.Close()
 
-		store := repo.StagingStore()
+		st, err := repo.GetImportStores(context.Background(), "")
+		if err != nil {
+			return err
+		}
 		fsop := gotfs.NewOperator()
-		root, err := fsop.CreateFileRoot(ctx, store, store, f)
+		root, err := fsop.CreateFileRoot(ctx, st.Raw, st.FS, f)
 		if err != nil {
 			return err
 		}

@@ -35,10 +35,11 @@ const (
 )
 
 const (
-	bucketDefault  = "default"
-	bucketCellData = "cells"
-	bucketStaging  = "staging"
-	bucketPorter   = "porter"
+	bucketDefault      = "default"
+	bucketCellData     = "cells"
+	bucketStaging      = "staging"
+	bucketPorter       = "porter"
+	bucketImportStores = "import_stores"
 
 	keyActive  = "ACTIVE"
 	nameMaster = "master"

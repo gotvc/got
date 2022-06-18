@@ -2,10 +2,11 @@ package gotrepo
 
 import (
 	"context"
+	"encoding/binary"
+	"encoding/json"
 	"os"
 
 	"github.com/brendoncarroll/go-state"
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gdat"
@@ -28,7 +29,10 @@ func (r *Repo) Add(ctx context.Context, paths ...string) error {
 	if err != nil {
 		return err
 	}
-	porter := r.getImporter(branch)
+	porter, err := r.getImporter(ctx, branch)
+	if err != nil {
+		return err
+	}
 	stage := r.getStage()
 	for _, target := range paths {
 		if err := posixfs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ posixfs.DirEnt) error {
@@ -55,7 +59,10 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 	if err != nil {
 		return err
 	}
-	porter := r.getImporter(branch)
+	porter, err := r.getImporter(ctx, branch)
+	if err != nil {
+		return err
+	}
 	stage := r.stage
 	for _, p := range paths {
 		if err := stage.CheckConflict(ctx, p); err != nil {
@@ -88,14 +95,13 @@ func (r *Repo) Rm(ctx context.Context, paths ...string) error {
 	if err != nil {
 		return err
 	}
-	st := r.stagingTriple()
 	fsop := r.getFSOp(branch)
 	stage := r.getStage()
 	for _, target := range paths {
 		if snap == nil {
 			return errors.Errorf("path %q not found", target)
 		}
-		if err := fsop.ForEachFile(ctx, st.FS, snap.Root, target, func(p string, _ *gotfs.Info) error {
+		if err := fsop.ForEachFile(ctx, branch.Volume.FSStore, snap.Root, target, func(p string, _ *gotfs.Info) error {
 			return stage.Delete(ctx, p)
 		}); err != nil {
 			return err
@@ -179,17 +185,20 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 	}
 	snapInfo.Creator = r.GetID().String()
 	snapInfo.Authors = append(snapInfo.Authors, r.GetID().String())
-	src := r.stagingTriple()
+	src, err := r.getImportTriple(ctx, branch)
+	if err != nil {
+		return err
+	}
 	dst := branch.Volume.StoreTriple()
 	// writes go to src, but reads from src should fallback to dst
-	src = branches.StoreTriple{
+	src = &branches.StoreTriple{
 		Raw: stores.AddWriteLayer(dst.Raw, src.Raw),
 		FS:  stores.AddWriteLayer(dst.FS, src.FS),
 		VC:  stores.AddWriteLayer(dst.VC, src.VC),
 	}
 	fsop := r.getFSOp(branch)
 	vcop := r.getVCOp(branch)
-	if err := branches.Apply(ctx, *branch, src, func(x *Snap) (*Snap, error) {
+	if err := branches.Apply(ctx, *branch, *src, func(x *Snap) (*Snap, error) {
 		var root *Root
 		if x != nil {
 			root = &x.Root
@@ -243,16 +252,12 @@ func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) er
 	})
 }
 
-func (r *Repo) stagingStore() cadata.Store {
-	return r.storeManager.Open(0)
-}
-
-func (r *Repo) stagingTriple() branches.StoreTriple {
-	return branches.StoreTriple{
-		VC:  r.stagingStore(),
-		FS:  r.stagingStore(),
-		Raw: r.stagingStore(),
+func (r *Repo) GetImportStores(ctx context.Context, branchName string) (*branches.StoreTriple, error) {
+	b, err := r.GetBranch(ctx, branchName)
+	if err != nil {
+		return nil, err
 	}
+	return r.getImportTriple(ctx, b)
 }
 
 func (r *Repo) getStage() *staging.Stage {
@@ -260,11 +265,16 @@ func (r *Repo) getStage() *staging.Stage {
 	return staging.New(storage)
 }
 
-func (r *Repo) getImporter(b *branches.Branch) *porting.Importer {
+func (r *Repo) getImporter(ctx context.Context, b *branches.Branch) (*porting.Importer, error) {
 	salt := saltFromBytes(b.Salt)
+	saltHash := gdat.Hash(salt[:])
+	st, err := r.getImportTriple(ctx, b)
+	if err != nil {
+		return nil, err
+	}
 	fsop := r.getFSOp(b)
-	cache := portingCache{db: r.db, saltHash: gdat.Hash(salt[:])}
-	return porting.NewImporter(fsop, cache, r.StagingStore(), r.StagingStore())
+	cache := portingCache{db: r.db, saltHash: saltHash}
+	return porting.NewImporter(fsop, cache, st.FS, st.Raw), nil
 }
 
 func (r *Repo) getExporter(b *branches.Branch) *porting.Exporter {
@@ -273,8 +283,47 @@ func (r *Repo) getExporter(b *branches.Branch) *porting.Exporter {
 	return porting.NewExporter(fsop, cache, r.workingDir)
 }
 
-func (r *Repo) getStagingStore(ctx context.Context, saltHash [32]byte) cadata.Store {
-
+func (r *Repo) getImportTriple(ctx context.Context, b *branches.Branch) (ret *branches.StoreTriple, _ error) {
+	salt := saltFromBytes(b.Salt)
+	saltHash := gdat.Hash(salt[:])
+	ids := [3]uint64{}
+	err := r.db.Update(func(tx *bolt.Tx) error {
+		ids = [3]uint64{}
+		b, err := tx.CreateBucketIfNotExists([]byte(bucketImportStores))
+		if err != nil {
+			return err
+		}
+		v := b.Get(saltHash[:])
+		if v == nil {
+			v = make([]byte, 8*3)
+			for i := 0; i < 3; i++ {
+				// TODO: maybe don't do this in a transaction
+				id, err := r.storeManager.Create(ctx)
+				if err != nil {
+					return err
+				}
+				binary.BigEndian.PutUint64(v[8*i:], id)
+			}
+			if err := b.Put(saltHash[:], v); err != nil {
+				return err
+			}
+		}
+		if len(v) != 8*3 {
+			return errors.New("bad length for staging store triple")
+		}
+		for i := 0; i < 3; i++ {
+			ids[i] = binary.BigEndian.Uint64(v[8*i:])
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &branches.StoreTriple{
+		Raw: r.storeManager.Open(ids[0]),
+		FS:  r.storeManager.Open(ids[1]),
+		VC:  r.storeManager.Open(ids[2]),
+	}, nil
 }
 
 type portingCache struct {
@@ -287,6 +336,10 @@ func (c portingCache) Get(ctx context.Context, p string) (porting.Entry, error) 
 }
 
 func (c portingCache) Put(ctx context.Context, p string, ent porting.Entry) error {
+	_, err := json.Marshal(ent)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
