@@ -2,7 +2,6 @@ package gotcmd
 
 import (
 	"github.com/gotvc/got"
-	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotrepo"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
@@ -17,63 +16,65 @@ func NewRootCmd() *cobra.Command {
 		Use:   "got",
 		Short: "got is like git, but with an 'o'",
 	}
-	openRepo := func() (*gotrepo.Repo, error) {
+	open := func() (*gotrepo.Repo, error) {
 		return got.OpenRepo(".")
 	}
 	for _, cmd := range []*cobra.Command{
-		initCmd,
+		newInitCmd(),
 		newCloneCmd(),
-
-		commitCmd,
-		historyCmd,
-		addCmd,
-		rmCmd,
-		putCmd,
-		discardCmd,
-		clearCmd,
-
-		statusCmd,
-		lsCmd,
-		catCmd,
-		branchCmd,
-		activeCmd,
-		forkCmd,
-
-		iamCmd,
-		localIDCmd,
-		serveCmd,
-		serveQUICCmd,
-		newHTTPUICmd(openRepo),
-
-		slurpCmd,
-		cleanupCmd,
-		debugCmd,
-		derefCmd,
-		scrubCmd,
 	} {
 		rootCmd.AddCommand(cmd)
+	}
+	for _, cmdf := range []func(func() (*gotrepo.Repo, error)) *cobra.Command{
+		newCommitCmd,
+		newHistoryCmd,
+		newAddCmd,
+		newRmCmd,
+		newPutCmd,
+		newDiscardCmd,
+		newClearCmd,
+
+		newStatusCmd,
+		newLsCmd,
+		newCatCmd,
+		newBranchCmd,
+		newActiveCmd,
+		newForkCmd,
+
+		newIAMCmd,
+		newLocalIDCmd,
+		newServeCmd,
+		newServeQUICCmd,
+		newHTTPUICmd,
+
+		newSlurpCmd,
+		newCleanupCmd,
+		newDebugCmd,
+		newDerefCmd,
+		newScrubCmd,
+	} {
+		rootCmd.AddCommand(cmdf(open))
 	}
 	return rootCmd
 }
 
 var (
-	repo *got.Repo
-	ctx  = context.Background()
+	ctx = context.Background()
 )
 
-func loadRepo(cmd *cobra.Command, args []string) error {
-	r, err := got.OpenRepo(".")
-	if err != nil {
+func loadRepo(repo **gotrepo.Repo, open func() (*gotrepo.Repo, error)) func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		var err error
+		*repo, err = open()
 		return err
 	}
-	repo = r
-	return nil
 }
 
-func closeRepo(cmd *cobra.Command, args []string) error {
-	return repo.Close()
-}
-
-func getSpace() branches.Space {
-	return repo.GetSpace()
+func closeRepo(repo *gotrepo.Repo) func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, args []string) error {
+		if repo == nil {
+			return nil
+		}
+		return repo.Close()
+	}
 }
