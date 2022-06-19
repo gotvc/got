@@ -68,14 +68,14 @@ func (s *Stage) Get(ctx context.Context, p string) (*Operation, error) {
 	p = cleanPath(p)
 	data, err := s.storage.Get(ctx, []byte(p))
 	if err != nil {
+		if errors.Is(err, state.ErrNotFound) {
+			return nil, nil
+		}
 		return nil, err
-	}
-	if len(data) < 1 {
-		return nil, nil
 	}
 	var op Operation
 	if err := json.Unmarshal(data, &op); err != nil {
-		return nil, err
+		return nil, errors.Wrapf(err, "parsing staging operation: %q", data)
 	}
 	return &op, nil
 }

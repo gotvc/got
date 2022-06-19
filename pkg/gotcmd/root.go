@@ -3,6 +3,7 @@ package gotcmd
 import (
 	"github.com/gotvc/got"
 	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/gotrepo"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 )
@@ -15,6 +16,9 @@ func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:   "got",
 		Short: "got is like git, but with an 'o'",
+	}
+	openRepo := func() (*gotrepo.Repo, error) {
+		return got.OpenRepo(".")
 	}
 	for _, cmd := range []*cobra.Command{
 		initCmd,
@@ -39,7 +43,7 @@ func NewRootCmd() *cobra.Command {
 		localIDCmd,
 		serveCmd,
 		serveQUICCmd,
-		newHTTPUICmd(getSpace),
+		newHTTPUICmd(openRepo),
 
 		slurpCmd,
 		cleanupCmd,

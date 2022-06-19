@@ -21,31 +21,26 @@ var _ iofs.FS = &FS{}
 
 // FS implements io/fs.FS
 type FS struct {
-	ctx        context.Context
-	log        logrus.FieldLogger
-	gotvc      gotvc.Operator
-	gotfs      gotfs.Operator
-	space      branches.Space
-	branchName string
+	ctx    context.Context
+	log    logrus.FieldLogger
+	gotvc  gotvc.Operator
+	gotfs  gotfs.Operator
+	branch *branches.Branch
 }
 
-func New(space branches.Space, branchName string) *FS {
+func New(b *branches.Branch) *FS {
 	return &FS{
-		ctx:        context.Background(),
-		log:        logrus.StandardLogger(),
-		gotvc:      gotvc.NewOperator(),
-		gotfs:      gotfs.NewOperator(gotfs.WithMetaCacheSize(128), gotfs.WithContentCacheSize(16)),
-		space:      space,
-		branchName: branchName,
+		ctx:    context.Background(),
+		log:    logrus.StandardLogger(),
+		gotvc:  gotvc.NewOperator(),
+		gotfs:  gotfs.NewOperator(gotfs.WithMetaCacheSize(128), gotfs.WithContentCacheSize(16)),
+		branch: b,
 	}
 }
 
 func (s *FS) Open(name string) (iofs.File, error) {
 	s.log.Infof("open %q", name)
-	b, err := s.space.Get(s.ctx, s.branchName)
-	if err != nil {
-		return nil, convertError(err)
-	}
+	b := s.branch
 	snap, err := branches.GetHead(s.ctx, *b)
 	if err != nil {
 		return nil, err

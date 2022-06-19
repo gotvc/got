@@ -11,6 +11,9 @@ type writeLayer struct {
 }
 
 func AddWriteLayer(base cadata.Store, writeTo cadata.Store) cadata.Store {
+	if base.Hash(nil) != writeTo.Hash(nil) {
+		panic("write layer has different hash function than base")
+	}
 	return writeLayer{base: AssertReadOnly(base), writeTo: writeTo}
 }
 

@@ -6,12 +6,14 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/inet256/inet256/pkg/inet256"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )
 
-const MaxBlobSize = gotfs.DefaultMaxBlobSize
+const (
+	MaxBlobSize = gotfs.DefaultMaxBlobSize
+	MaxCellSize = 1 << 16
+)
 
 func Hash(x []byte) cadata.ID {
 	return gdat.Hash(x)
@@ -25,9 +27,4 @@ func WithHeaders(headers map[string]string) grpc.DialOption {
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
 	return grpc.WithUnaryInterceptor(incp)
-}
-
-// WithClientCreds configures to the dialer to authenticate to the server using the private key
-func WithClientCreds(privateKey inet256.PrivateKey) grpc.DialOption {
-	return grpc.WithTransportCredentials(NewClientCreds(privateKey))
 }

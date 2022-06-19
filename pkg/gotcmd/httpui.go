@@ -4,24 +4,32 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotiofs"
+	"github.com/gotvc/got/pkg/gotrepo"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 )
 
-func newHTTPUICmd(sf func() branches.Space) *cobra.Command {
+func newHTTPUICmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 	c := &cobra.Command{
-		Use:     "httpui <branch>",
-		Short:   "serve a UI over HTTP",
-		Args:    cobra.MinimumNArgs(1),
-		PreRunE: loadRepo,
+		Use:   "httpui [branch]",
+		Short: "serve a UI over HTTP",
 	}
 	laddr := c.Flags().String("addr", "127.0.0.1:6006", "--addr 127.0.0.1:12345")
 	c.RunE = func(cmd *cobra.Command, args []string) error {
-		branchName := args[0]
-		space := getSpace()
-		fs := gotiofs.New(space, branchName)
+		var branchName string
+		if len(args) > 0 {
+			branchName = args[0]
+		}
+		repo, err := open()
+		if err != nil {
+			return err
+		}
+		b, err := repo.GetBranch(ctx, branchName)
+		if err != nil {
+			return err
+		}
+		fs := gotiofs.New(b)
 		h := http.FileServer(http.FS(fs))
 		l, err := net.Listen("tcp", *laddr)
 		if err != nil {

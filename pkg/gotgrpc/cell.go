@@ -7,8 +7,6 @@ import (
 	"github.com/gotvc/got/pkg/cells"
 )
 
-const MaxCellSize = 1 << 16
-
 var _ cells.Cell = &Cell{}
 
 type Cell struct {

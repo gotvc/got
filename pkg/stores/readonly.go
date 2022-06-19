@@ -10,6 +10,10 @@ func (ro readOnly) Post(ctx context.Context, data []byte) (ID, error) {
 	panic("Post called on read only Store")
 }
 
+func (ro readOnly) Add(ctx context.Context, id ID) error {
+	panic("Add called on read only Store")
+}
+
 func (ro readOnly) Delete(ctx context.Context, id ID) error {
 	panic("Delete called on read only Store")
 }

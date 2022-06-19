@@ -242,12 +242,13 @@ func (r *Repo) UnionStore() cadata.Store {
 	return stores.AssertReadOnly(r.storeManager.store)
 }
 
-func dumpBucket(w io.Writer, b *bolt.Bucket) {
+func dumpBucket(w io.Writer, b *bolt.Bucket) error {
 	c := b.Cursor()
 	for k, v := c.First(); k != nil; k, v = c.Next() {
 		fmt.Fprintf(w, "%q -> %q\n", k, v)
 	}
 	fmt.Fprintln(w)
+	return nil
 }
 
 func (r *Repo) makeDefaultVolume(ctx context.Context) (VolumeSpec, error) {

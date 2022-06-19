@@ -14,17 +14,10 @@ import (
 
 func (r *Repo) DebugDB(ctx context.Context, w io.Writer) error {
 	return r.db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(bucketDefault))
-		if b != nil {
-			fmt.Fprintf(w, "BUCKET: %s\n", bucketDefault)
-			dumpBucket(w, b)
-		}
-		b = tx.Bucket([]byte(bucketCellData))
-		if b != nil {
-			fmt.Fprintf(w, "BUCKET: %s\n", bucketCellData)
-			dumpBucket(w, b)
-		}
-		return nil
+		return tx.ForEach(func(name []byte, b *bolt.Bucket) error {
+			fmt.Fprintf(w, "BUCKET: %q\n", name)
+			return dumpBucket(w, b)
+		})
 	})
 }
 

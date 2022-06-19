@@ -205,7 +205,7 @@ func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 		}
 		return gn.GetSpace(spec.QUIC.ID), nil
 	case spec.GRPC != nil:
-		c, err := r.getGRPCClient(spec.GRPC.Endpoint, spec.GRPC.Headers, false)
+		c, err := r.getGRPCClient(spec.GRPC.Endpoint, spec.GRPC.Headers)
 		if err != nil {
 			return nil, err
 		}
