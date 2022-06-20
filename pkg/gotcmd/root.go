@@ -40,6 +40,7 @@ func NewRootCmd() *cobra.Command {
 		newBranchCmd,
 		newActiveCmd,
 		newForkCmd,
+		newSyncCmd,
 
 		newIAMCmd,
 		newLocalIDCmd,

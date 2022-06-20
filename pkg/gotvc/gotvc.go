@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/stores"
 )
@@ -96,7 +97,7 @@ func isDescendentOf(ctx context.Context, m map[Ref]struct{}, s Store, x, a Snaps
 }
 
 // Sync ensures dst has all of the data reachable from snap.
-func Sync(ctx context.Context, dst, src cadata.Store, snap Snapshot, syncRoot func(gotfs.Root) error) error {
+func Sync(ctx context.Context, src cadata.Store, dst cadata.Store, snap Snapshot, syncRoot func(gotfs.Root) error) error {
 	op := NewOperator()
 	op.readOnly = true
 	for _, parentRef := range snap.Parents {
@@ -108,10 +109,10 @@ func Sync(ctx context.Context, dst, src cadata.Store, snap Snapshot, syncRoot fu
 			if err != nil {
 				return err
 			}
-			if err := Sync(ctx, dst, src, *parent, syncRoot); err != nil {
+			if err := Sync(ctx, src, dst, *parent, syncRoot); err != nil {
 				return err
 			}
-			if err := cadata.Copy(ctx, dst, src, parentRef.CID); err != nil {
+			if err := gdat.Copy(ctx, src, dst, &parentRef); err != nil {
 				return err
 			}
 		}

@@ -6,7 +6,6 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cells"
-	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/stores"
@@ -30,16 +29,22 @@ func (v Volume) StoreTriple() StoreTriple {
 	}
 }
 
-func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
+func SyncVolumes(ctx context.Context, src, dst Volume, force bool) error {
 	return applySnapshot(ctx, dst.Cell, func(x *gotvc.Snapshot) (*gotvc.Snapshot, error) {
 		goal, err := getSnapshot(ctx, src.Cell)
 		if err != nil {
 			return nil, err
 		}
-		if goal == nil {
-			return goal, nil
-		}
-		if x != nil {
+		switch {
+		case goal == nil && x == nil:
+			return nil, nil
+		case goal == nil:
+			if !force {
+				return nil, errors.Errorf("cannot clear volume without force=true")
+			}
+		case x == nil:
+		case goal.Equals(*x):
+		default:
 			hasAncestor, err := gotvc.IsDescendentOf(ctx, src.VCStore, *goal, *x)
 			if err != nil {
 				return nil, err
@@ -48,7 +53,7 @@ func SyncVolumes(ctx context.Context, dst, src Volume, force bool) error {
 				return nil, errors.Errorf("cannot CAS, dst ref is not parent of src ref")
 			}
 		}
-		if err := syncStores(ctx, dst.StoreTriple(), src.StoreTriple(), *goal); err != nil {
+		if err := syncStores(ctx, src.StoreTriple(), dst.StoreTriple(), *goal); err != nil {
 			return nil, err
 		}
 		return goal, nil
@@ -98,13 +103,11 @@ type StoreTriple struct {
 	VC, FS, Raw cadata.Store
 }
 
-func syncStores(ctx context.Context, dst, src StoreTriple, snap gotvc.Snapshot) error {
+func syncStores(ctx context.Context, src, dst StoreTriple, snap gotvc.Snapshot) error {
 	logrus.Println("begin syncing stores")
 	defer logrus.Println("done syncing stores")
-	return gotvc.Sync(ctx, dst.VC, src.VC, snap, func(root gotfs.Root) error {
-		return gotfs.Sync(ctx, dst.FS, src.FS, root, func(ref gdat.Ref) error {
-			return cadata.Copy(ctx, dst.Raw, src.Raw, ref.CID)
-		})
+	return gotvc.Sync(ctx, src.VC, dst.VC, snap, func(root gotfs.Root) error {
+		return gotfs.Sync(ctx, src.FS, src.Raw, dst.FS, dst.Raw, root)
 	})
 }
 

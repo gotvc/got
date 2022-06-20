@@ -7,16 +7,17 @@ import (
 )
 
 // Sync synces 2 branches by name.
-func (r *Repo) Sync(ctx context.Context, dst, src string, force bool) error {
-	dstBranch, err := r.GetBranch(ctx, dst)
-	if err != nil {
-		return err
-	}
+func (r *Repo) Sync(ctx context.Context, src, dst string, force bool) error {
+	r.log.Infof("syncing %q to %q", src, dst)
 	srcBranch, err := r.GetBranch(ctx, src)
 	if err != nil {
 		return err
 	}
-	return branches.SyncVolumes(ctx, dstBranch.Volume, srcBranch.Volume, force)
+	dstBranch, err := r.GetBranch(ctx, dst)
+	if err != nil {
+		return err
+	}
+	return branches.SyncVolumes(ctx, srcBranch.Volume, dstBranch.Volume, force)
 }
 
 type syncTask struct {

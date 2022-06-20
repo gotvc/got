@@ -67,9 +67,9 @@ func TestMultiRepoSync(t *testing.T) {
 	createFile(t, p1, "myfile.txt", testData)
 	add(t, r1, "myfile.txt")
 	commit(t, r1)
-	sync(t, r1, "origin/master", "master")
+	sync(t, r1, "master", "origin/master")
 
-	sync(t, r2, "master", "origin/master")
+	sync(t, r2, "origin/master", "master")
 	require.Contains(t, ls(t, r2, ""), "myfile.txt")
 	require.Equal(t, testData, cat(t, r2, "myfile.txt"))
 }
@@ -102,8 +102,8 @@ func commit(t testing.TB, r *got.Repo) {
 	require.NoError(t, err)
 }
 
-func sync(t testing.TB, r *got.Repo, dst, src string) {
-	err := r.Sync(context.TODO(), dst, src, false)
+func sync(t testing.TB, r *got.Repo, src, dst string) {
+	err := r.Sync(context.TODO(), src, dst, false)
 	require.NoError(t, err)
 }
 

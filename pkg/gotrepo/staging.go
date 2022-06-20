@@ -11,7 +11,6 @@ import (
 	"github.com/gotvc/got/pkg/staging"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 // Add adds paths from the working directory to the staging area.
@@ -170,7 +169,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 	if yes, err := r.stage.IsEmpty(ctx); err != nil {
 		return err
 	} else if yes {
-		logrus.Warn("nothing to commit")
+		r.log.Warn("nothing to commit")
 		return nil
 	}
 	_, branch, err := r.GetActiveBranch(ctx)
@@ -197,12 +196,12 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 		if x != nil {
 			root = &x.Root
 		}
-		logrus.Println("begin applying staged changes")
+		r.log.Println("begin applying staged changes")
 		nextRoot, err := r.stage.Apply(ctx, fsop, src.FS, src.Raw, root)
 		if err != nil {
 			return nil, err
 		}
-		logrus.Println("done applying staged changes")
+		r.log.Println("done applying staged changes")
 		var parents []Snap
 		if x != nil {
 			parents = []Snap{*x}

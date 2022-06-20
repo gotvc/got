@@ -1,15 +1,21 @@
 package ptree
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
 
-func DebugTree(s cadata.Store, x Root) {
+func DebugTree(ctx context.Context, s cadata.Store, x Root, w io.Writer) error {
+	bw, ok := w.(*bufio.Writer)
+	if !ok {
+		bw = bufio.NewWriter(w)
+	}
 	max := x.Depth
 	op := gdat.NewOperator()
 	var debugTree func(Root)
@@ -20,7 +26,7 @@ func DebugTree(s cadata.Store, x Root) {
 		}
 		ctx := context.TODO()
 		sr := NewStreamReader(s, &op, []Index{{Ref: x.Ref, First: x.First}})
-		fmt.Printf("%sTREE NODE: %s %d\n", indent, x.Ref.CID.String(), x.Depth)
+		fmt.Fprintf(bw, "%sTREE NODE: %s %d\n", indent, x.Ref.CID.String(), x.Depth)
 		if x.Depth == 0 {
 			for {
 				var ent Entry
@@ -30,7 +36,7 @@ func DebugTree(s cadata.Store, x Root) {
 					}
 					panic(err)
 				}
-				fmt.Printf("%s ENTRY key=%q value=%q\n", indent, string(ent.Key), string(ent.Value))
+				fmt.Fprintf(w, "%s ENTRY key=%q value=%q\n", indent, string(ent.Key), string(ent.Value))
 			}
 		} else {
 			for {
@@ -45,10 +51,11 @@ func DebugTree(s cadata.Store, x Root) {
 				if err != nil {
 					panic(err)
 				}
-				fmt.Printf("%s INDEX first=%q -> ref=%s\n", indent, string(ent.Key), ref.CID.String())
+				fmt.Fprintf(bw, "%s INDEX first=%q -> ref=%s\n", indent, string(ent.Key), ref.CID.String())
 				debugTree(Root{Ref: *ref, First: ent.Key, Depth: x.Depth - 1})
 			}
 		}
 	}
 	debugTree(x)
+	return bw.Flush()
 }

@@ -35,8 +35,9 @@ func CheckName(name string) error {
 
 // SetHead forcibly sets the head of the branch.
 func SetHead(ctx context.Context, b Branch, src StoreTriple, snap Snap) error {
+	dst := b.Volume.StoreTriple()
 	return applySnapshot(ctx, b.Volume.Cell, func(s *Snap) (*Snap, error) {
-		if err := syncStores(ctx, b.Volume.StoreTriple(), src, snap); err != nil {
+		if err := syncStores(ctx, src, dst, snap); err != nil {
 			return nil, err
 		}
 		return &snap, nil
@@ -50,13 +51,14 @@ func GetHead(ctx context.Context, b Branch) (*Snap, error) {
 
 // Apply applies fn to branch, any missing data will be pulled from scratch
 func Apply(ctx context.Context, b Branch, src StoreTriple, fn func(*Snap) (*Snap, error)) error {
+	dst := b.Volume.StoreTriple()
 	return applySnapshot(ctx, b.Volume.Cell, func(x *Snap) (*Snap, error) {
 		y, err := fn(x)
 		if err != nil {
 			return nil, err
 		}
 		if y != nil {
-			if err := syncStores(ctx, b.Volume.StoreTriple(), src, *y); err != nil {
+			if err := syncStores(ctx, src, dst, *y); err != nil {
 				return nil, err
 			}
 		}

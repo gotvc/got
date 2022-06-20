@@ -50,7 +50,7 @@ func CopyAll(ctx context.Context, b *Builder, it Iterator) error {
 }
 
 // Sync ensures dst has all the data reachable from x.
-func Sync(ctx context.Context, dst, src Store, x Root, entryFn func(Entry) error) error {
+func Sync(ctx context.Context, src, dst Store, x Root, entryFn func(Entry) error) error {
 	dop := gdat.NewOperator()
 	return do(ctx, src, &dop, x, doParams{
 		CanSkip: func(r Root) (bool, error) {
@@ -58,7 +58,7 @@ func Sync(ctx context.Context, dst, src Store, x Root, entryFn func(Entry) error
 		},
 		EntryFn: entryFn,
 		NodeFn: func(r Root) error {
-			return cadata.Copy(ctx, dst, src, r.Ref.CID)
+			return gdat.Copy(ctx, src, dst, &r.Ref)
 		},
 	})
 }

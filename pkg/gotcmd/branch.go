@@ -117,6 +117,23 @@ func newForkCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 	}
 }
 
+func newSyncCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
+	var repo *gotrepo.Repo
+	c := &cobra.Command{
+		Use:      "sync <src> <dst>",
+		Short:    "syncs the contents of one branch to another",
+		PreRunE:  loadRepo(&repo, open),
+		PostRunE: closeRepo(repo),
+		Args:     cobra.ExactArgs(2),
+	}
+	force := c.Flags().Bool("force", false, "--force")
+	c.RunE = func(cmd *cobra.Command, args []string) error {
+		src, dst := args[0], args[1]
+		return repo.Sync(ctx, src, dst, *force)
+	}
+	return c
+}
+
 func prettyPrintJSON(w io.Writer, x interface{}) error {
 	data, err := json.MarshalIndent(x, "", "  ")
 	if err != nil {

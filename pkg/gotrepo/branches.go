@@ -6,7 +6,6 @@ import (
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -110,7 +109,7 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	if err != nil {
 		return err
 	}
-	if err := branches.SyncVolumes(ctx, nextBranch.Volume, baseBranch.Volume, false); err != nil {
+	if err := branches.SyncVolumes(ctx, baseBranch.Volume, nextBranch.Volume, false); err != nil {
 		return err
 	}
 	return r.SetActiveBranch(ctx, next)
@@ -129,11 +128,11 @@ func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	logrus.Println("begin cleanup on", name)
+	r.log.Infof("begin cleanup on %q", name)
 	if err := branches.CleanupVolume(ctx, branch.Volume); err != nil {
 		return err
 	}
-	logrus.Println("done cleanup on", name)
+	r.log.Infof("done cleanup on %q", name)
 	return nil
 }
 

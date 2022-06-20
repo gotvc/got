@@ -38,7 +38,6 @@ func (r *Repo) DebugFS(ctx context.Context, w io.Writer) error {
 }
 
 func (r *Repo) DebugKV(ctx context.Context, w io.Writer) error {
-	// TODO: actually use the writer
 	_, branch, err := r.GetActiveBranch(ctx)
 	if err != nil {
 		return err
@@ -51,6 +50,5 @@ func (r *Repo) DebugKV(ctx context.Context, w io.Writer) error {
 	if x == nil {
 		return errors.Errorf("no snapshot, no root")
 	}
-	ptree.DebugTree(vol.FSStore, x.Root)
-	return nil
+	return ptree.DebugTree(ctx, vol.FSStore, x.Root, w)
 }

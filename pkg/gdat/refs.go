@@ -2,6 +2,7 @@ package gdat
 
 import (
 	"bytes"
+	"context"
 	"crypto/hmac"
 	"encoding/base64"
 
@@ -99,4 +100,9 @@ func MarshalRef(x Ref) []byte {
 
 func Equal(a, b Ref) bool {
 	return bytes.Equal(a.CID[:], b.CID[:]) && hmac.Equal(a.DEK[:], b.DEK[:])
+}
+
+// Copy copies the data at ref from src to dst.
+func Copy(ctx context.Context, src, dst cadata.Store, ref *Ref) error {
+	return cadata.Copy(ctx, dst, src, ref.CID)
 }
