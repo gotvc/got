@@ -29,6 +29,7 @@ func (v Volume) StoreTriple() StoreTriple {
 	}
 }
 
+// SyncVolumes syncs the contents of src to dst.
 func SyncVolumes(ctx context.Context, src, dst Volume, force bool) error {
 	return applySnapshot(ctx, dst.Cell, func(x *gotvc.Snapshot) (*gotvc.Snapshot, error) {
 		goal, err := getSnapshot(ctx, src.Cell)
@@ -111,6 +112,7 @@ func syncStores(ctx context.Context, src, dst StoreTriple, snap gotvc.Snapshot) 
 	})
 }
 
+// Cleanup ensures that there are no unreachable blobs in volume.
 func CleanupVolume(ctx context.Context, vol Volume) error {
 	start, err := getSnapshot(ctx, vol.Cell)
 	if err != nil {

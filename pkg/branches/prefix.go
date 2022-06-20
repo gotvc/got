@@ -18,12 +18,16 @@ func NewPrefixSpace(inner Space, prefix string) PrefixSpace {
 	}
 }
 
-func (s PrefixSpace) Create(ctx context.Context, k string, p Params) (*Branch, error) {
-	return s.Target.Create(ctx, s.downward(k), p)
+func (s PrefixSpace) Create(ctx context.Context, k string, md Metadata) (*Branch, error) {
+	return s.Target.Create(ctx, s.downward(k), md)
 }
 
 func (s PrefixSpace) Get(ctx context.Context, k string) (*Branch, error) {
 	return s.Target.Get(ctx, s.downward(k))
+}
+
+func (s PrefixSpace) Set(ctx context.Context, k string, md Metadata) error {
+	return s.Target.Set(ctx, s.downward(k), md)
 }
 
 func (s PrefixSpace) Delete(ctx context.Context, k string) error {

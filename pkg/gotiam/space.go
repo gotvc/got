@@ -23,11 +23,11 @@ func NewSpace(x branches.Space, pol Policy, peerID PeerID) *Space {
 	}
 }
 
-func (s *Space) Create(ctx context.Context, k string, params branches.Params) (*branches.Branch, error) {
+func (s *Space) Create(ctx context.Context, k string, md branches.Metadata) (*branches.Branch, error) {
 	if err := s.checkACL("CREATE", true, k); err != nil {
 		return nil, err
 	}
-	return s.inner.Create(ctx, k, params)
+	return s.inner.Create(ctx, k, md)
 }
 
 func (s *Space) Delete(ctx context.Context, k string) error {
@@ -46,6 +46,13 @@ func (s *Space) Get(ctx context.Context, k string) (*branches.Branch, error) {
 		return nil, err
 	}
 	return s.wrapBranch(b, k), nil
+}
+
+func (s *Space) Set(ctx context.Context, k string, md branches.Metadata) error {
+	if err := s.checkACL("SET", true, k); err != nil {
+		return err
+	}
+	return s.inner.Set(ctx, k, md)
 }
 
 func (s *Space) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {

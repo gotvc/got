@@ -23,10 +23,10 @@ func NewSpace(c GotSpaceClient) Space {
 	return Space{c}
 }
 
-func (s Space) Create(ctx context.Context, key string, p branches.Params) (*branches.Branch, error) {
+func (s Space) Create(ctx context.Context, key string, md branches.Metadata) (*branches.Branch, error) {
 	res, err := s.c.CreateBranch(ctx, &CreateBranchReq{
 		Key:  key,
-		Salt: p.Salt,
+		Salt: md.Salt,
 	})
 	if err != nil {
 		switch status.Code(err) {
@@ -61,6 +61,19 @@ func (s Space) Get(ctx context.Context, key string) (*branches.Branch, error) {
 	return s.makeBranch(key, res), nil
 }
 
+func (s Space) Set(ctx context.Context, key string, md branches.Metadata) error {
+	_, err := s.c.SetBranch(ctx, &SetBranchReq{
+		Key: key,
+
+		Salt: md.Salt,
+		Mode: Mode(md.Mode),
+		Annotations: mapSlice(md.Annotations, func(x branches.Annotation) *Annotation {
+			return &Annotation{Key: x.Key, Value: x.Value}
+		}),
+	})
+	return err
+}
+
 func (s Space) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {
 	res, err := s.c.ListBranch(ctx, &ListBranchReq{
 		Begin: span.Begin,
@@ -75,10 +88,14 @@ func (s Space) List(ctx context.Context, span branches.Span, limit int) ([]strin
 func (s Space) makeBranch(key string, bi *BranchInfo) *branches.Branch {
 	createdAt, _ := tai64.Parse(bi.CreatedAt)
 	return &branches.Branch{
-		Salt:        bi.Salt,
-		CreatedAt:   createdAt,
-		Annotations: bi.Annotations,
-		Volume:      s.makeVolume(key),
+		Volume: s.makeVolume(key),
+		Metadata: branches.Metadata{
+			Salt: bi.Salt,
+			Annotations: mapSlice(bi.Annotations, func(x *Annotation) branches.Annotation {
+				return branches.Annotation{Key: x.Key, Value: x.Value}
+			}),
+		},
+		CreatedAt: createdAt,
 	}
 }
 
@@ -101,4 +118,12 @@ func (s Space) makeCell(key string) cells.Cell {
 
 func errorMsgContains(err error, sub string) bool {
 	return strings.Contains(strings.ToLower(err.Error()), sub)
+}
+
+func mapSlice[X, Y any, S ~[]X](xs S, fn func(X) Y) []Y {
+	ys := make([]Y, len(xs))
+	for i := range xs {
+		ys[i] = fn(xs[i])
+	}
+	return ys
 }

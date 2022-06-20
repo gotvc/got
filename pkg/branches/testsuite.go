@@ -16,7 +16,7 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 		b, err := x.Get(ctx, "test")
 		require.Equal(t, ErrNotExist, err)
 		require.Nil(t, b)
-		_, err = x.Create(ctx, "test", Params{})
+		_, err = x.Create(ctx, "test", Metadata{})
 		require.NoError(t, err)
 		b, err = x.Get(ctx, "test")
 		require.NoError(t, err)
@@ -27,7 +27,7 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 		x := newSpace(t)
 		const N = 100
 		for i := 0; i < N; i++ {
-			_, err := x.Create(ctx, "test"+strconv.Itoa(i), Params{})
+			_, err := x.Create(ctx, "test"+strconv.Itoa(i), Metadata{})
 			require.NoError(t, err)
 		}
 		names, err := x.List(ctx, TotalSpan(), 0)
@@ -38,9 +38,9 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 		t.Parallel()
 		x := newSpace(t)
 		var err error
-		_, err = x.Create(ctx, "test1", Params{})
+		_, err = x.Create(ctx, "test1", Metadata{})
 		require.NoError(t, err)
-		_, err = x.Create(ctx, "test2", Params{})
+		_, err = x.Create(ctx, "test2", Metadata{})
 		require.NoError(t, err)
 
 		_, err = x.Get(ctx, "test1")

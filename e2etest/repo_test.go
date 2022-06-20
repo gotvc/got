@@ -93,7 +93,7 @@ func createFile(t testing.TB, repoPath, p string, data []byte) {
 }
 
 func createBranch(t testing.TB, r *got.Repo, name string) {
-	_, err := r.CreateBranch(context.TODO(), name, branches.Params{})
+	_, err := r.CreateBranch(context.TODO(), name, branches.Metadata{})
 	require.NoError(t, err)
 }
 

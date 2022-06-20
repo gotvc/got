@@ -10,7 +10,7 @@ import (
 )
 
 // CreateBranch creates a branch using the default spec.
-func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Params) (*Branch, error) {
+func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Metadata) (*Branch, error) {
 	return r.space.Create(ctx, name, params)
 }
 
@@ -31,6 +31,18 @@ func (r *Repo) GetBranch(ctx context.Context, name string) (*Branch, error) {
 		return branch, err
 	}
 	return r.space.Get(ctx, name)
+}
+
+// SetBranch sets branch metadata
+func (r *Repo) SetBranch(ctx context.Context, name string, md branches.Metadata) error {
+	if name == "" {
+		name2, _, err := r.GetActiveBranch(ctx)
+		if err != nil {
+			return err
+		}
+		name = name2
+	}
+	return r.space.Set(ctx, name, md)
 }
 
 // ForEachBranch calls fn once for each branch, or until an error is returned from fn
@@ -103,7 +115,7 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	if err != nil {
 		return err
 	}
-	nextBranch, err := r.CreateBranch(ctx, next, branches.Params{
+	nextBranch, err := r.CreateBranch(ctx, next, branches.Metadata{
 		Salt: baseBranch.Salt,
 	})
 	if err != nil {

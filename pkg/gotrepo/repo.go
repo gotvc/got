@@ -180,7 +180,7 @@ func Open(p string) (*Repo, error) {
 	if r.space, err = r.spaceFromSpecs(r.config.Spaces); err != nil {
 		return nil, err
 	}
-	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster, branches.NewParams(false)); err != nil {
+	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster, branches.NewMetadata(false)); err != nil {
 		return nil, err
 	}
 	return r, nil

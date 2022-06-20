@@ -35,9 +35,10 @@ func (r *Repo) MakeStore(spec StoreSpec) (Store, error) {
 }
 
 type BranchSpec struct {
-	Volume    VolumeSpec  `json:"volume"`
-	Salt      []byte      `json:"salt"`
-	CreatedAt tai64.TAI64 `json:"created_at"`
+	Volume      VolumeSpec            `json:"volume"`
+	Salt        []byte                `json:"salt"`
+	Annotations []branches.Annotation `json:"annotations"`
+	CreatedAt   tai64.TAI64           `json:"created_at"`
 }
 
 type VolumeSpec struct {
