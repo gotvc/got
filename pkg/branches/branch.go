@@ -24,9 +24,10 @@ type Branch struct {
 
 // Metadata is non-volume, user-modifiable information associated with a branch.
 type Metadata struct {
-	Salt        []byte       `json:"salt"`
-	Annotations []Annotation `json:"annotations"`
 	Mode        Mode         `json:"mode"`
+	Salt        []byte       `json:"salt"`
+
+	Annotations []Annotation `json:"annotations"`
 }
 
 func NewMetadata(public bool) Metadata {
@@ -94,8 +95,35 @@ type Mode uint8
 const (
 	ModeFrozen = iota
 	ModeExpand
-	ModeContract
+	ModeShrink
 )
+
+func (m Mode) MarshalText() ([]byte, error) {
+	switch m {
+	case ModeFrozen:
+		return []byte("FROZEN"), nil
+	case ModeExpand:
+		return []byte("EXPAND"), nil
+	case ModeShrink:
+		return []byte("SHRINK"), nil
+	default:
+		return nil, fmt.Errorf("Mode(INVALID, %d)", m)
+	}
+}
+
+func (m *Mode) UnmarshalText(data []byte) error {
+	switch string(data) {
+	case "FROZEN":
+		*m = ModeFrozen
+	case "EXPAND":
+		*m = ModeExpand
+	case "SHRINK":
+		*m = ModeShrink
+	default:
+		return fmt.Errorf("invalid mode %q", data)
+	}
+	return nil
+}
 
 func (m Mode) String() string {
 	switch m {
@@ -103,7 +131,7 @@ func (m Mode) String() string {
 		return "FROZEN"
 	case ModeExpand:
 		return "EXPAND"
-	case ModeContract:
+	case ModeShrink:
 		return "SHRINK"
 	default:
 		return fmt.Sprintf("Mode(INVALID, %d)", m)

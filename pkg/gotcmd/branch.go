@@ -69,11 +69,49 @@ func newBranchCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 			return prettyPrintJSON(cmd.OutOrStdout(), branchHead)
 		},
 	}
+	var inspectCmd = &cobra.Command{
+		Use:      "inspect <branch_name>",
+		Short:    "prints branch metadata",
+		PreRunE:  loadRepo(&repo, open),
+		PostRunE: closeRepo(repo),
+		Args:     cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			name := args[0]
+			branch, err := repo.GetBranch(ctx, name)
+			if err != nil {
+				return err
+			}
+			return prettyPrintJSON(cmd.OutOrStdout(), branch.Metadata)
+		},
+	}
+	var cpSaltCmd = &cobra.Command{
+		Use:      "cp-salt",
+		Short:    "copies the salt from one branch to another",
+		PreRunE:  loadRepo(&repo, open),
+		PostRunE: closeRepo(repo),
+		Args:     cobra.ExactArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			src, dst := args[0], args[1]
+			srcb, err := repo.GetBranch(ctx, src)
+			if err != nil {
+				return err
+			}
+			dstb, err := repo.GetBranch(ctx, dst)
+			if err != nil {
+				return err
+			}
+			md := dstb.Metadata
+			md.Salt = srcb.Salt
+			return repo.SetBranch(ctx, dst, md)
+		},
+	}
 	for _, c := range []*cobra.Command{
 		createBranchCmd,
 		listBranchCmd,
 		deleteBranchCmd,
 		getBranchHeadCmd,
+		inspectCmd,
+		cpSaltCmd,
 	} {
 		bc.AddCommand(c)
 	}
@@ -139,6 +177,7 @@ func prettyPrintJSON(w io.Writer, x interface{}) error {
 	if err != nil {
 		return err
 	}
+	data = append(data, '\n')
 	_, err = w.Write(data)
 	return err
 }

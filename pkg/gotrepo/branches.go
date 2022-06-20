@@ -33,6 +33,18 @@ func (r *Repo) GetBranch(ctx context.Context, name string) (*Branch, error) {
 	return r.space.Get(ctx, name)
 }
 
+// SetBranch sets branch metadata
+func (r *Repo) SetBranch(ctx context.Context, name string, md branches.Metadata) error {
+	if name == "" {
+		name2, _, err := r.GetActiveBranch(ctx)
+		if err != nil {
+			return err
+		}
+		name = name2
+	}
+	return r.space.Set(ctx, name, md)
+}
+
 // ForEachBranch calls fn once for each branch, or until an error is returned from fn
 func (r *Repo) ForEachBranch(ctx context.Context, fn func(string) error) error {
 	return branches.ForEach(ctx, r.space, branches.TotalSpan(), fn)
