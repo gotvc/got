@@ -46,7 +46,7 @@ func (r *branchSpecDir) List(ctx context.Context, span branches.Span, limit int)
 	return ret, nil
 }
 
-func (r *branchSpecDir) Create(ctx context.Context, name string, params branches.Params) (*Branch, error) {
+func (r *branchSpecDir) Create(ctx context.Context, name string, params branches.Metadata) (*Branch, error) {
 	vspec, err := r.makeDefault(ctx)
 	if err != nil {
 		return nil, err
@@ -95,6 +95,27 @@ func (r *branchSpecDir) Get(ctx context.Context, k string) (*Branch, error) {
 	return r.makeBranch(k, spec)
 }
 
+func (r *branchSpecDir) Set(ctx context.Context, k string, md branches.Metadata) error {
+	data, err := posixfs.ReadFile(ctx, r.fs, k)
+	if err != nil {
+		if posixfs.IsErrNotExist(err) {
+			return branches.ErrNotExist
+		}
+		return err
+	}
+	spec := BranchSpec{}
+	if err := json.Unmarshal(data, &spec); err != nil {
+		return err
+	}
+	spec.Salt = md.Salt
+	spec.Annotations = md.Annotations
+	data, err = json.Marshal(spec)
+	if err != nil {
+		return err
+	}
+	return posixfs.PutFile(ctx, r.fs, k, 0o644, bytes.NewReader(data))
+}
+
 func (r *branchSpecDir) makeBranch(k string, spec BranchSpec) (*Branch, error) {
 	vol, err := r.makeVol(k, spec.Volume)
 	if err != nil {
@@ -102,7 +123,11 @@ func (r *branchSpecDir) makeBranch(k string, spec BranchSpec) (*Branch, error) {
 	}
 	return &Branch{
 		Volume: *vol,
-		Salt:   spec.Salt,
+		Metadata: branches.Metadata{
+			Salt:        spec.Salt,
+			Annotations: spec.Annotations,
+		},
+		CreatedAt: spec.CreatedAt,
 	}, nil
 }
 

@@ -2,6 +2,7 @@ package branches
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -26,34 +27,40 @@ func NewMultiSpace(layers []Layer) (Space, error) {
 	return layered(layers), nil
 }
 
-func (r layered) Create(ctx context.Context, k string, params Params) (*Branch, error) {
-	for _, layer := range r {
-		if strings.HasPrefix(k, layer.Prefix) {
-			l := len(layer.Prefix)
-			return layer.Target.Create(ctx, k[l:], params)
-		}
+func (r layered) Create(ctx context.Context, k string, md Metadata) (*Branch, error) {
+	layer, err := r.find(k)
+	if err != nil {
+		return nil, err
 	}
-	return nil, errors.Errorf("key not contained in MultiSpace %q", k)
+	l := len(layer.Prefix)
+	return layer.Target.Create(ctx, k[l:], md)
 }
 
 func (r layered) Delete(ctx context.Context, k string) error {
-	for _, layer := range r {
-		if strings.HasPrefix(k, layer.Prefix) {
-			l := len(layer.Prefix)
-			return layer.Target.Delete(ctx, k[l:])
-		}
+	layer, err := r.find(k)
+	if err != nil {
+		return err
 	}
-	return errors.Errorf("key not contained in MultiSpace %q", k)
+	l := len(layer.Prefix)
+	return layer.Target.Delete(ctx, k[l:])
+}
+
+func (r layered) Set(ctx context.Context, k string, md Metadata) error {
+	layer, err := r.find(k)
+	if err != nil {
+		return err
+	}
+	l := len(layer.Prefix)
+	return layer.Target.Set(ctx, k[l:], md)
 }
 
 func (r layered) Get(ctx context.Context, k string) (*Branch, error) {
-	for _, layer := range r {
-		if strings.HasPrefix(k, layer.Prefix) {
-			l := len(layer.Prefix)
-			return layer.Target.Get(ctx, k[l:])
-		}
+	layer, err := r.find(k)
+	if err != nil {
+		return nil, ErrNotExist
 	}
-	return nil, ErrNotExist
+	l := len(layer.Prefix)
+	return layer.Target.Get(ctx, k[l:])
 }
 
 func (r layered) List(ctx context.Context, span Span, limit int) (ret []string, _ error) {
@@ -73,4 +80,13 @@ func (r layered) List(ctx context.Context, span Span, limit int) (ret []string, 
 		}
 	}
 	return ret, nil
+}
+
+func (r layered) find(k string) (Layer, error) {
+	for _, layer := range r {
+		if strings.HasPrefix(k, layer.Prefix) {
+			return layer, nil
+		}
+	}
+	return Layer{}, fmt.Errorf("key not contained in MultiSpace %q", k)
 }

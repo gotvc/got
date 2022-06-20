@@ -2,22 +2,112 @@ package branches
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/pkg/errors"
+	"golang.org/x/exp/slices"
 )
-
-type Annotations = map[string]string
 
 // Branch is a Volume plus additional metadata
 type Branch struct {
-	Volume      Volume
-	Annotations Annotations
-	CreatedAt   tai64.TAI64
-	Salt        []byte
+	Volume Volume
+	Metadata
+
+	CreatedAt tai64.TAI64
+}
+
+// Metadata is non-volume, user-modifiable information associated with a branch.
+type Metadata struct {
+	Salt        []byte       `json:"salt"`
+	Annotations []Annotation `json:"annotations"`
+	Mode        Mode         `json:"mode"`
+}
+
+func NewMetadata(public bool) Metadata {
+	var salt []byte
+	if !public {
+		salt = make([]byte, 32)
+	}
+	readRandom(salt)
+	return Metadata{
+		Salt: salt,
+		Mode: ModeExpand,
+	}
+}
+
+// Clone returns a deep copy of md
+func (md Metadata) Clone() Metadata {
+	return Metadata{
+		Salt:        slices.Clone(md.Salt),
+		Annotations: slices.Clone(md.Annotations),
+		Mode:        md.Mode,
+	}
+}
+
+// Annotation annotates a branch
+type Annotation struct {
+	Key   string
+	Value string
+}
+
+func (a *Annotation) MarshalJSON() ([]byte, error) {
+	p := [2]string{a.Key, a.Value}
+	return json.Marshal(p)
+}
+
+func (a *Annotation) UnmarshalJSON(data []byte) error {
+	p := [2]string{}
+	if err := json.Unmarshal(data, &p); err != nil {
+		return err
+	}
+	a.Key, a.Value = p[0], p[1]
+	return nil
+}
+
+func SortAnnotations(s []Annotation) {
+	slices.SortFunc(s, func(a, b Annotation) bool {
+		if a.Key != b.Key {
+			return a.Key < b.Key
+		}
+		return a.Value < b.Value
+	})
+}
+
+func GetAnnotation(as []Annotation, key string) (ret []Annotation) {
+	key = strings.ToLower(key)
+	for _, a := range as {
+		if strings.ToLower(a.Key) == key {
+			ret = append(ret, a)
+		}
+	}
+	return ret
+}
+
+type Mode uint8
+
+const (
+	ModeFrozen = iota
+	ModeExpand
+	ModeContract
+)
+
+func (m Mode) String() string {
+	switch m {
+	case ModeFrozen:
+		return "FROZEN"
+	case ModeExpand:
+		return "EXPAND"
+	case ModeContract:
+		return "SHRINK"
+	default:
+		return fmt.Sprintf("Mode(INVALID, %d)", m)
+	}
 }
 
 var nameRegExp = regexp.MustCompile(`^[\w- =.]+$`)

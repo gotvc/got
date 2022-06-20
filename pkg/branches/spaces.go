@@ -18,26 +18,11 @@ var (
 )
 
 func IsNotExist(err error) bool {
-	return err == ErrNotExist
+	return errors.Is(err, ErrNotExist)
 }
 
 func IsExists(err error) bool {
-	return err == ErrExists
-}
-
-type Params struct {
-	Salt []byte
-}
-
-func NewParams(public bool) Params {
-	var salt []byte
-	if !public {
-		salt = make([]byte, 32)
-	}
-	readRandom(salt)
-	return Params{
-		Salt: salt,
-	}
+	return errors.Is(err, ErrNotExist)
 }
 
 type Span struct {
@@ -55,17 +40,18 @@ func (s Span) Contains(x string) bool {
 
 // A Space holds named branches.
 type Space interface {
+	Create(ctx context.Context, name string, md Metadata) (*Branch, error)
 	Get(ctx context.Context, name string) (*Branch, error)
-	Create(ctx context.Context, name string, params Params) (*Branch, error)
+	Set(ctx context.Context, name string, md Metadata) error
 	Delete(ctx context.Context, name string) error
 	List(ctx context.Context, span Span, limit int) ([]string, error)
 }
 
-func CreateIfNotExists(ctx context.Context, r Space, k string, params Params) (*Branch, error) {
+func CreateIfNotExists(ctx context.Context, r Space, k string, md Metadata) (*Branch, error) {
 	branch, err := r.Get(ctx, k)
 	if err != nil {
 		if IsNotExist(err) {
-			return r.Create(ctx, k, params)
+			return r.Create(ctx, k, md)
 		}
 		return nil, err
 	}
@@ -113,14 +99,14 @@ func (r *MemSpace) Get(ctx context.Context, name string) (*Branch, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	branch, exists := r.branches[name]
-	branch.Annotations = copyAnotations(branch.Annotations)
+	branch.Metadata = branch.Metadata.Clone()
 	if !exists {
 		return nil, ErrNotExist
 	}
 	return &branch, nil
 }
 
-func (r *MemSpace) Create(ctx context.Context, name string, params Params) (*Branch, error) {
+func (r *MemSpace) Create(ctx context.Context, name string, md Metadata) (*Branch, error) {
 	if err := CheckName(name); err != nil {
 		return nil, err
 	}
@@ -136,11 +122,23 @@ func (r *MemSpace) Create(ctx context.Context, name string, params Params) (*Bra
 			FSStore:  r.newStore(),
 			RawStore: r.newStore(),
 		},
-		Salt:      params.Salt,
+		Metadata:  md.Clone(),
 		CreatedAt: tai64.Now().TAI64(),
 	}
 	branch := r.branches[name]
 	return &branch, nil
+}
+
+func (r *MemSpace) Set(ctx context.Context, name string, md Metadata) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if _, exists := r.branches[name]; !exists {
+		return ErrNotExist
+	}
+	b := r.branches[name]
+	b.Metadata = md.Clone()
+	r.branches[name] = b
+	return nil
 }
 
 func (r *MemSpace) Delete(ctx context.Context, name string) error {
@@ -164,12 +162,4 @@ func (r *MemSpace) List(ctx context.Context, span Span, limit int) (ret []string
 		}
 	}
 	return ret, nil
-}
-
-func copyAnotations(x map[string]string) map[string]string {
-	y := make(map[string]string, len(x))
-	for k, v := range x {
-		y[k] = v
-	}
-	return y
 }

@@ -50,10 +50,16 @@ func NewCryptoSpace(inner Space, secret *[32]byte, opts ...CryptoSpaceOption) Sp
 	return s
 }
 
-func (r *CryptoSpace) Create(ctx context.Context, name string, params Params) (*Branch, error) {
+func (r *CryptoSpace) Create(ctx context.Context, name string, md Metadata) (*Branch, error) {
 	nameCtext := r.encryptName(name)
-	paramsCtext := r.encryptParams(params)
-	return r.inner.Create(ctx, nameCtext, paramsCtext)
+	mdCtext := r.encryptMetadata(md)
+	return r.inner.Create(ctx, nameCtext, mdCtext)
+}
+
+func (r *CryptoSpace) Set(ctx context.Context, name string, md Metadata) error {
+	nameCtext := r.encryptName(name)
+	mdCtext := r.encryptMetadata(md)
+	return r.inner.Set(ctx, nameCtext, mdCtext)
 }
 
 func (r *CryptoSpace) Get(ctx context.Context, name string) (*Branch, error) {
@@ -62,14 +68,13 @@ func (r *CryptoSpace) Get(ctx context.Context, name string) (*Branch, error) {
 	if err != nil {
 		return nil, err
 	}
-	salt, err := r.decryptSalt(branch.Salt)
+	md, err := r.decryptMetadata(branch.Metadata)
 	if err != nil {
 		return nil, err
 	}
-	return &Branch{
-		Volume: r.wrapVolume(name, branch.Volume),
-		Salt:   salt,
-	}, nil
+	branch.Volume = r.wrapVolume(name, branch.Volume)
+	branch.Metadata = md
+	return branch, nil
 }
 
 func (r *CryptoSpace) Delete(ctx context.Context, name string) error {
@@ -148,10 +153,24 @@ func (r *CryptoSpace) decryptName(x string) (string, error) {
 	return string(name), nil
 }
 
-func (r *CryptoSpace) encryptParams(x Params) Params {
-	return Params{
+func (r *CryptoSpace) encryptMetadata(x Metadata) Metadata {
+	md2 := Metadata{
 		Salt: r.encryptSalt(x.Salt),
+		Mode: x.Mode,
 	}
+	SortAnnotations(md2.Annotations)
+	return md2
+}
+
+func (r *CryptoSpace) decryptMetadata(x Metadata) (Metadata, error) {
+	salt, err := r.decryptSalt(x.Salt)
+	if err != nil {
+		return Metadata{}, err
+	}
+	return Metadata{
+		Salt: salt,
+		Mode: x.Mode,
+	}, nil
 }
 
 func (r *CryptoSpace) encryptSalt(x []byte) []byte {

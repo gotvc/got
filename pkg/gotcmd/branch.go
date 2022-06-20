@@ -23,7 +23,7 @@ func newBranchCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		Args:     cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			branchName := args[0]
-			_, err := repo.CreateBranch(ctx, branchName, branches.NewParams(false))
+			_, err := repo.CreateBranch(ctx, branchName, branches.NewMetadata(false))
 			return err
 		},
 	}

@@ -39,11 +39,11 @@ func (srv *spaceSrv) Serve(ctx context.Context) error {
 	return serveAsks(ctx, srv.swarm, srv.handleAsk)
 }
 
-func (s *spaceSrv) Create(ctx context.Context, bid BranchID, params branches.Params) (*BranchInfo, error) {
+func (s *spaceSrv) Create(ctx context.Context, bid BranchID, md branches.Metadata) (*BranchInfo, error) {
 	req := SpaceReq{
-		Op:     opCreate,
-		Name:   bid.Name,
-		Params: params,
+		Op:       opCreate,
+		Name:     bid.Name,
+		Metadata: md,
 	}
 	var resp SpaceRes
 	if err := askJson(ctx, s.swarm, bid.Peer, &resp, &req); err != nil {
@@ -71,6 +71,10 @@ func (s *spaceSrv) Delete(ctx context.Context, bid BranchID) error {
 		return parseWireError(*resp.Error)
 	}
 	return nil
+}
+
+func (s *spaceSrv) Set(ctx context.Context, bid BranchID, md branches.Metadata) error {
+	return errors.New("gotnet: setting branch metadata not yet supported ")
 }
 
 func (s *spaceSrv) Get(ctx context.Context, bid BranchID) (*BranchInfo, error) {
@@ -143,7 +147,7 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[P
 		s.log.Infof("%s from %v", req.Op, peer)
 		switch req.Op {
 		case opCreate:
-			return s.handleCreate(ctx, peer, req.Name, req.Params)
+			return s.handleCreate(ctx, peer, req.Name, req.Metadata)
 		case opDelete:
 			return s.handleDelete(ctx, peer, req.Name)
 		case opGet:
@@ -166,7 +170,7 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[P
 	return copy(resp, data)
 }
 
-func (s *spaceSrv) handleCreate(ctx context.Context, peer PeerID, name string, params branches.Params) (*SpaceRes, error) {
+func (s *spaceSrv) handleCreate(ctx context.Context, peer PeerID, name string, params branches.Metadata) (*SpaceRes, error) {
 	space := s.open(peer)
 	b, err := space.Create(ctx, name, params)
 	if err != nil {
@@ -219,10 +223,10 @@ func (s *spaceSrv) handleList(ctx context.Context, peer PeerID, first string, li
 }
 
 type SpaceReq struct {
-	Op     string          `json:"op"`
-	Name   string          `json:"name"`
-	Limit  int             `json:"limit,omitempty"`
-	Params branches.Params `json:"params,omitempty"`
+	Op       string            `json:"op"`
+	Name     string            `json:"name"`
+	Limit    int               `json:"limit,omitempty"`
+	Metadata branches.Metadata `json:"metadata,omitempty"`
 }
 
 type SpaceRes struct {
@@ -233,9 +237,9 @@ type SpaceRes struct {
 }
 
 type BranchInfo struct {
-	Salt        []byte               `json:"salt"`
-	Annotations branches.Annotations `json:"annotations"`
-	CreatedAt   tai64.TAI64          `json:"created_at"`
+	Salt        []byte                `json:"salt"`
+	Annotations []branches.Annotation `json:"annotations"`
+	CreatedAt   tai64.TAI64           `json:"created_at"`
 }
 
 var _ branches.Space = &space{}
@@ -256,7 +260,7 @@ func newSpace(srv *spaceSrv, peer PeerID, newCell func(CellID) cells.Cell, newSt
 	}
 }
 
-func (r *space) Create(ctx context.Context, name string, params branches.Params) (*branches.Branch, error) {
+func (r *space) Create(ctx context.Context, name string, params branches.Metadata) (*branches.Branch, error) {
 	info, err := r.srv.Create(ctx, BranchID{Peer: r.peer, Name: name}, params)
 	if err != nil {
 		return nil, err
@@ -274,6 +278,10 @@ func (r *space) Get(ctx context.Context, name string) (*branches.Branch, error) 
 	return &b, nil
 }
 
+func (r *space) Set(ctx context.Context, name string, md branches.Metadata) error {
+	return r.srv.Set(ctx, BranchID{Peer: r.peer, Name: name}, md)
+}
+
 func (r *space) makeBranch(name string, info BranchInfo) branches.Branch {
 	return branches.Branch{
 		Volume: branches.Volume{
@@ -282,9 +290,11 @@ func (r *space) makeBranch(name string, info BranchInfo) branches.Branch {
 			FSStore:  r.newStore(StoreID{Peer: r.peer, Branch: name, Type: Type_FS}),
 			RawStore: r.newStore(StoreID{Peer: r.peer, Branch: name, Type: Type_RAW}),
 		},
-		Salt:        info.Salt,
-		Annotations: info.Annotations,
-		CreatedAt:   info.CreatedAt,
+		Metadata: branches.Metadata{
+			Salt:        info.Salt,
+			Annotations: info.Annotations,
+		},
+		CreatedAt: info.CreatedAt,
 	}
 }
 

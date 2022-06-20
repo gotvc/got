@@ -10,7 +10,7 @@ import (
 )
 
 // CreateBranch creates a branch using the default spec.
-func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Params) (*Branch, error) {
+func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Metadata) (*Branch, error) {
 	return r.space.Create(ctx, name, params)
 }
 
@@ -103,7 +103,7 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	if err != nil {
 		return err
 	}
-	nextBranch, err := r.CreateBranch(ctx, next, branches.Params{
+	nextBranch, err := r.CreateBranch(ctx, next, branches.Metadata{
 		Salt: baseBranch.Salt,
 	})
 	if err != nil {

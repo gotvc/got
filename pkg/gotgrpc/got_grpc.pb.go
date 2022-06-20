@@ -26,6 +26,7 @@ type GotSpaceClient interface {
 	GetBranch(ctx context.Context, in *GetBranchReq, opts ...grpc.CallOption) (*BranchInfo, error)
 	DeleteBranch(ctx context.Context, in *DeleteBranchReq, opts ...grpc.CallOption) (*DeleteBranchRes, error)
 	ListBranch(ctx context.Context, in *ListBranchReq, opts ...grpc.CallOption) (*ListBranchRes, error)
+	SetBranch(ctx context.Context, in *SetBranchReq, opts ...grpc.CallOption) (*BranchInfo, error)
 	PostBlob(ctx context.Context, in *PostBlobReq, opts ...grpc.CallOption) (*PostBlobRes, error)
 	GetBlob(ctx context.Context, in *GetBlobReq, opts ...grpc.CallOption) (*GetBlobRes, error)
 	DeleteBlob(ctx context.Context, in *DeleteBlobReq, opts ...grpc.CallOption) (*DeleteBlobRes, error)
@@ -73,6 +74,15 @@ func (c *gotSpaceClient) DeleteBranch(ctx context.Context, in *DeleteBranchReq, 
 func (c *gotSpaceClient) ListBranch(ctx context.Context, in *ListBranchReq, opts ...grpc.CallOption) (*ListBranchRes, error) {
 	out := new(ListBranchRes)
 	err := c.cc.Invoke(ctx, "/GotSpace/ListBranch", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gotSpaceClient) SetBranch(ctx context.Context, in *SetBranchReq, opts ...grpc.CallOption) (*BranchInfo, error) {
+	out := new(BranchInfo)
+	err := c.cc.Invoke(ctx, "/GotSpace/SetBranch", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -150,6 +160,7 @@ type GotSpaceServer interface {
 	GetBranch(context.Context, *GetBranchReq) (*BranchInfo, error)
 	DeleteBranch(context.Context, *DeleteBranchReq) (*DeleteBranchRes, error)
 	ListBranch(context.Context, *ListBranchReq) (*ListBranchRes, error)
+	SetBranch(context.Context, *SetBranchReq) (*BranchInfo, error)
 	PostBlob(context.Context, *PostBlobReq) (*PostBlobRes, error)
 	GetBlob(context.Context, *GetBlobReq) (*GetBlobRes, error)
 	DeleteBlob(context.Context, *DeleteBlobReq) (*DeleteBlobRes, error)
@@ -175,6 +186,9 @@ func (UnimplementedGotSpaceServer) DeleteBranch(context.Context, *DeleteBranchRe
 }
 func (UnimplementedGotSpaceServer) ListBranch(context.Context, *ListBranchReq) (*ListBranchRes, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListBranch not implemented")
+}
+func (UnimplementedGotSpaceServer) SetBranch(context.Context, *SetBranchReq) (*BranchInfo, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SetBranch not implemented")
 }
 func (UnimplementedGotSpaceServer) PostBlob(context.Context, *PostBlobReq) (*PostBlobRes, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method PostBlob not implemented")
@@ -278,6 +292,24 @@ func _GotSpace_ListBranch_Handler(srv interface{}, ctx context.Context, dec func
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GotSpaceServer).ListBranch(ctx, req.(*ListBranchReq))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GotSpace_SetBranch_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetBranchReq)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GotSpaceServer).SetBranch(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/GotSpace/SetBranch",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GotSpaceServer).SetBranch(ctx, req.(*SetBranchReq))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -430,6 +462,10 @@ var GotSpace_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListBranch",
 			Handler:    _GotSpace_ListBranch_Handler,
+		},
+		{
+			MethodName: "SetBranch",
+			Handler:    _GotSpace_SetBranch_Handler,
 		},
 		{
 			MethodName: "PostBlob",
