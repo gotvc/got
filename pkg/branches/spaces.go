@@ -60,11 +60,11 @@ func CreateIfNotExists(ctx context.Context, r Space, k string, md Metadata) (*Br
 
 // ForEach is a convenience function which uses Space.List to call fn with
 // all the branch names contained in span.
-func ForEach(ctx context.Context, s Space, span Span, fn func(string) error) error {
+func ForEach(ctx context.Context, s Space, span Span, fn func(string) error) (retErr error) {
 	for {
 		names, err := s.List(ctx, span, 0)
 		if err != nil {
-			return err
+			retErr = err
 		}
 		if len(names) == 0 {
 			break
@@ -76,7 +76,7 @@ func ForEach(ctx context.Context, s Space, span Span, fn func(string) error) err
 		}
 		span.Begin = names[len(names)-1] + "\x00"
 	}
-	return nil
+	return retErr
 }
 
 type MemSpace struct {

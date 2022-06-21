@@ -64,7 +64,8 @@ func (r layered) Get(ctx context.Context, k string) (*Branch, error) {
 }
 
 func (r layered) List(ctx context.Context, span Span, limit int) (ret []string, _ error) {
-	for _, layer := range r {
+	errs := make([]error, len(r))
+	for i, layer := range r {
 		if err := ForEach(ctx, layer.Target, span, func(x string) error {
 			y := layer.Prefix + x
 			if span.Contains(y) {
@@ -76,10 +77,17 @@ func (r layered) List(ctx context.Context, span Span, limit int) (ret []string, 
 			}
 			return nil
 		}); err != nil {
-			return nil, err
+			errs[i] = err
 		}
 	}
-	return ret, nil
+	var err error
+	for i := range errs {
+		if errs[i] != nil {
+			err = errors.WithMessagef(errs[i], "from layer %d: %v", i, r[i])
+			break
+		}
+	}
+	return ret, err
 }
 
 func (r layered) find(k string) (Layer, error) {
