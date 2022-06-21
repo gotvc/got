@@ -104,9 +104,13 @@ type StoreTriple struct {
 	VC, FS, Raw cadata.Store
 }
 
-func syncStores(ctx context.Context, src, dst StoreTriple, snap gotvc.Snapshot) error {
+func syncStores(ctx context.Context, src, dst StoreTriple, snap gotvc.Snapshot) (err error) {
 	logrus.Println("begin syncing stores")
-	defer logrus.Println("done syncing stores")
+	defer func() {
+		if err == nil {
+			logrus.Println("done syncing stores")
+		}
+	}()
 	return gotvc.Sync(ctx, src.VC, dst.VC, snap, func(root gotfs.Root) error {
 		return gotfs.Sync(ctx, src.FS, src.Raw, dst.FS, dst.Raw, root)
 	})

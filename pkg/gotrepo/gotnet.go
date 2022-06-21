@@ -2,6 +2,7 @@ package gotrepo
 
 import (
 	"context"
+	"crypto/tls"
 	"strings"
 
 	"github.com/brendoncarroll/go-p2p"
@@ -14,6 +15,7 @@ import (
 	"github.com/inet256/inet256/client/go_client/inet256client"
 	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 )
 
 // Server serves cells, and blobs to the network.
@@ -90,6 +92,9 @@ func (r *Repo) getGRPCClient(endpoint string, headers map[string]string) (gotgrp
 		endpoint = strings.TrimPrefix(endpoint, "http://")
 		opts = append(opts, grpc.WithInsecure())
 		r.log.Warnf("insecure gRPC connection over http to %v", endpoint)
+	} else if strings.HasPrefix(endpoint, "https://") {
+		endpoint = strings.TrimPrefix(endpoint, "https://")
+		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
 	}
 	if len(headers) > 0 {
 		opts = append(opts, gotgrpc.WithHeaders(headers))

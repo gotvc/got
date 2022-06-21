@@ -86,15 +86,14 @@ func (s Store) Add(ctx context.Context, id cadata.ID) error {
 }
 
 func (s Store) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int, error) {
-	first := cadata.BeginFromSpan(span)
+	begin := cadata.BeginFromSpan(span)
 	req := &ListBlobReq{
 		Key:       s.key,
 		StoreType: s.st,
-		Begin:     first[:],
+		Begin:     begin[:],
 		Limit:     uint32(len(ids)),
 	}
-	end, ok := cadata.EndFromSpan(span)
-	if ok {
+	if end, ok := cadata.EndFromSpan(span); ok {
 		req.End = end[:]
 	}
 	res, err := s.c.ListBlob(ctx, req)
