@@ -12,7 +12,7 @@ type Builder struct {
 	s                cadata.Store
 	op               *gdat.Operator
 	avgSize, maxSize int
-	seed             *[32]byte
+	seed             *[16]byte
 
 	levels []*StreamWriter
 	isDone bool
@@ -21,7 +21,7 @@ type Builder struct {
 	ctx context.Context
 }
 
-func NewBuilder(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed *[32]byte) *Builder {
+func NewBuilder(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed *[16]byte) *Builder {
 	b := &Builder{
 		s:       s,
 		op:      op,

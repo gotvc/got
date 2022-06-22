@@ -97,7 +97,7 @@ func NewOperator(opts ...Option) Operator {
 		o.averageSizeInfo,
 		o.maxBlobSize,
 		gotkv.WithDataOperator(metaOp),
-		gotkv.WithSeed(&metaSeed),
+		gotkv.WithSeed((*[16]byte)(metaSeed[:])),
 	)
 	return o
 }

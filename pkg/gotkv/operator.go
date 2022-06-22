@@ -30,7 +30,7 @@ func WithDataOperator(ro gdat.Operator) Option {
 
 // WithSeed returns an Option which sets the seed for an Operator.
 // Seed affects node boundaries.
-func WithSeed(seed *[32]byte) Option {
+func WithSeed(seed *[16]byte) Option {
 	if seed == nil {
 		panic("seed cannot be nil")
 	}
@@ -45,7 +45,7 @@ func WithSeed(seed *[32]byte) Option {
 type Operator struct {
 	dop                  gdat.Operator
 	maxSize, averageSize int
-	seed                 *[32]byte
+	seed                 *[16]byte
 }
 
 // NewOperator returns an operator which will create nodes with average size `avgSize`

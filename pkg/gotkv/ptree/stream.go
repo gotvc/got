@@ -8,9 +8,9 @@ import (
 	"math"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/dchest/siphash"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
-	"github.com/minio/highwayhash"
 	"github.com/pkg/errors"
 )
 
@@ -222,7 +222,7 @@ type StreamWriter struct {
 	op      *gdat.Operator
 	onIndex IndexHandler
 
-	seed             *[32]byte
+	seed             *[16]byte
 	avgSize, maxSize int
 	buf              bytes.Buffer
 
@@ -231,9 +231,9 @@ type StreamWriter struct {
 	ctx      context.Context
 }
 
-func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed *[32]byte, onIndex IndexHandler) *StreamWriter {
+func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed *[16]byte, onIndex IndexHandler) *StreamWriter {
 	if seed == nil {
-		seed = &[32]byte{}
+		seed = new([16]byte)
 	}
 	w := &StreamWriter{
 		s:       s,
@@ -321,7 +321,7 @@ func (w *StreamWriter) setPrevKey(k []byte) {
 }
 
 func (w *StreamWriter) isSplitPoint(data []byte) bool {
-	r := highwayhash.Sum64(data, w.seed[:])
+	r := sum64(data, w.seed)
 	prob := math.MaxUint64 / uint64(w.avgSize) * uint64(len(data))
 	return r < prob
 }
@@ -465,4 +465,11 @@ func min(a, b int) int {
 		return b
 	}
 	return a
+}
+
+func sum64(data []byte, key *[16]byte) uint64 {
+	en := binary.LittleEndian
+	k1 := en.Uint64(key[:8])
+	k2 := en.Uint64(key[8:])
+	return siphash.Hash(k1, k2, data)
 }

@@ -6,9 +6,11 @@ It provides end-to-end encryption and uses an improved data structure with good 
 
 Got uses [INET256](https://github.com/inet256/inet256) to easily and securely connect repositories.
 
-[CLI Docs](./docs/cli.md)
+[CLI Docs](./doc/CLI.md)
 
 [ARCHITECTURE.md](./ARCHITECTURE.md)
+
+[Cryptography Overview](./doc/Cryptography.md)
 
 ## Features/Roadmap
 - [x] Content-Defined chunking of large files into blobs with a maximum size.
