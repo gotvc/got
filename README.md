@@ -62,5 +62,5 @@ Where `TAG` is an environment variable which should be set to the release versio
 The release binaries will be under the `build` directory.
 
 ## More
-Read more about the configuration objects in [docs/config.md](./docs/config.md).
+Read more about the configuration objects in [doc/Config.md](./doc/Config.md).
 
