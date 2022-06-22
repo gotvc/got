@@ -118,7 +118,7 @@ func BenchmarkStreamWriter(b *testing.B) {
 
 	ctx := context.Background()
 	op := gdat.NewOperator()
-	s := cadata.Void{}
+	s := cadata.NewVoid(gdat.Hash, defaultMaxSize)
 	sw := NewStreamWriter(s, &op, defaultAvgSize, defaultMaxSize, nil, func(idx Index) error {
 		return nil
 	})

@@ -7,6 +7,9 @@ test: protobuf
 testv: protobuf
 	go test -v -count=1 ./...
 
+bench:
+	go test -v -bench=. ./... -run Benchmark
+
 install: protobuf
 	go install ./cmd/got
 
