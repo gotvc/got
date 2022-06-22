@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/chmduquesne/rollinghash/rabinkarp64"
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
@@ -57,9 +56,9 @@ type Operator struct {
 	seed                                          *[32]byte
 	rawCacheSize, metaCacheSize                   int
 
-	rawOp gdat.Operator
-	gotkv gotkv.Operator
-	poly  rabinkarp64.Pol
+	rawOp        gdat.Operator
+	gotkv        gotkv.Operator
+	chunkingSeed *[32]byte
 }
 
 func NewOperator(opts ...Option) Operator {
@@ -83,7 +82,9 @@ func NewOperator(opts ...Option) Operator {
 		gdat.WithSalt(&rawSeed),
 		gdat.WithCacheSize(o.rawCacheSize),
 	)
-	o.poly = chunking.DerivePolynomial(gdat.DeriveStream(o.seed, []byte("chunking")))
+	var chunkingSeed [32]byte
+	gdat.DeriveKey(chunkingSeed[:], o.seed, []byte("chunking"))
+	o.chunkingSeed = &chunkingSeed
 
 	// metadata
 	var metaSeed [32]byte
@@ -277,5 +278,5 @@ func (o *Operator) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*R
 }
 
 func (o *Operator) newChunker(onChunk chunking.ChunkHandler) *chunking.ContentDefined {
-	return chunking.NewContentDefined(o.minSizeData, o.averageSizeData, o.maxBlobSize, o.poly, onChunk)
+	return chunking.NewContentDefined(o.minSizeData, o.averageSizeData, o.maxBlobSize, o.chunkingSeed, onChunk)
 }

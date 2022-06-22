@@ -1,128 +1,149 @@
 package chunking
 
 import (
-	"bytes"
+	"encoding/binary"
+	"errors"
 	"io"
 	"math"
 	"math/bits"
-	"math/rand"
 
-	"github.com/chmduquesne/rollinghash/rabinkarp64"
+	"golang.org/x/crypto/chacha20"
 )
 
 const windowSize = 64
 
-type rollingHash = rabinkarp64.RabinKarp64
-
 type ContentDefined struct {
-	avgBits          int
 	minSize, maxSize int
 	onChunk          func(data []byte) error
-	rh               *rollingHash
-	buf              bytes.Buffer
+	mask             uint64
+	table            [256]uint64
+
+	buf []byte
+	end int
+	rh  uint64
 }
 
-func NewContentDefined(minSize, avgSize, maxSize int, pol rabinkarp64.Pol, onChunk func(data []byte) error) *ContentDefined {
+// NewContentDefined creates a new content defined chunker.
+// key must not be nil.  Use new([32]byte) to give a key of all zeros.
+func NewContentDefined(minSize, avgSize, maxSize int, key *[32]byte, onChunk func(data []byte) error) *ContentDefined {
 	if bits.OnesCount(uint(avgSize)) != 1 {
 		panic("avgSize must be power of 2")
 	}
-	if pol == 0 {
-		panic("pol must be non-zero")
+	if key == nil {
+		panic("key must be non-nil")
 	}
 	if minSize < windowSize {
-		panic("minSize must be larger than 64")
+		panic("minSize must be >= than 64")
 	}
 	log2AvgSize := bits.TrailingZeros64(uint64(avgSize))
-	rh := rabinkarp64.NewFromPol(pol)
+
+	var nonce [12]byte
+	ciph, err := chacha20.NewUnauthenticatedCipher(key[:], nonce[:])
+	if err != nil {
+		panic(err)
+	}
+	var table [256]uint64
+	for i := 0; i < 256; i++ {
+		var keystream [8]byte
+		ciph.XORKeyStream(keystream[:], keystream[:])
+		table[i] = binary.BigEndian.Uint64(keystream[:])
+	}
 	c := &ContentDefined{
-		avgBits: log2AvgSize,
 		minSize: minSize,
 		maxSize: maxSize,
 		onChunk: onChunk,
-		rh:      rh,
+		mask:    lowBitsMask(log2AvgSize),
+		table:   table,
+
+		buf: make([]byte, maxSize),
 	}
 	c.Reset()
 	return c
 }
 
 func (c *ContentDefined) Write(data []byte) (int, error) {
-	for i := range data {
-		if err := c.WriteByte(data[i]); err != nil {
-			return i, err
+	var total int
+	for {
+		n, err := c.ingest(data[total:])
+		if err != nil {
+			return 0, err
 		}
-		if c.atChunkBoundary(c.rh, &c.buf) {
-			if err := c.emit(); err != nil {
-				return i, err
-			}
+		total += n
+		if total >= len(data) {
+			return total, nil
 		}
 	}
-	return len(data), nil
+}
+
+func (c *ContentDefined) ReadFrom(r io.Reader) (int64, error) {
+	var total int64
+	for {
+		n, err := r.Read(c.buf[c.end:])
+		if err != nil && !errors.Is(err, io.EOF) {
+			return 0, err
+		}
+		_, err2 := c.Write(c.buf[c.end : c.end+n])
+		if err2 != nil {
+			return total, err2
+		}
+		total += int64(n)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+	}
+	return total, nil
 }
 
 func (c *ContentDefined) WriteByte(b byte) error {
-	roll(c.rh, &c.buf, b)
-	return nil
-}
-
-func (c *ContentDefined) atChunkBoundary(rh *rollingHash, buf *bytes.Buffer) bool {
-	return buf.Len() >= c.minSize && (atChunkBoundary(rh.Sum64(), c.avgBits) || buf.Len() >= c.maxSize)
-}
-
-func (c *ContentDefined) emit() error {
-	defer func() {
-		c.Reset()
-	}()
-	if c.buf.Len() > 0 {
-		return c.onChunk(c.buf.Bytes())
-	}
-	return nil
+	_, err := c.ingest([]byte{b})
+	return err
 }
 
 func (c *ContentDefined) Buffered() int {
-	return c.buf.Len()
+	return c.end
 }
 
 func (c *ContentDefined) Reset() {
-	c.buf.Reset()
-	c.rh.Reset()
+	c.end = 0
+	c.rh = 0
 }
 
 func (c *ContentDefined) Flush() error {
 	return c.emit()
 }
 
-func roll(rh *rollingHash, buf *bytes.Buffer, b byte) {
-	if buf.Len() < windowSize {
-		if _, err := rh.Write([]byte{b}); err != nil {
-			panic(err)
+// ingest is like Write except returning n < len(data) is acceptable.
+func (c *ContentDefined) ingest(data []byte) (int, error) {
+	for i, b := range data {
+		c.rh = (c.rh << 1) + c.hash(b)
+		c.buf[c.end] = b
+		c.end++
+		if c.atChunkBoundary() {
+			return i + 1, c.emit()
 		}
-	} else {
-		rh.Roll(b)
 	}
-	if err := buf.WriteByte(b); err != nil {
-		panic(err)
-	}
+	return len(data), nil
 }
 
-func atChunkBoundary(sum uint64, nbits int) bool {
-	// this is to prevent runs of zeros from producing the minimum chunk size
-	const alternatingBits = uint64(0x55555555_55555555)
-
-	return (sum^alternatingBits)&lowBitsMask(nbits) == 0
+func (c *ContentDefined) hash(x byte) uint64 {
+	return c.table[x]
 }
 
-func DerivePolynomial(rng io.Reader) rabinkarp64.Pol {
-	if rng == nil {
-		rng = rand.New(rand.NewSource(0))
+func (c *ContentDefined) emit() error {
+	defer c.Reset()
+	if c.end > 0 {
+		return c.onChunk(c.buf[:c.end])
 	}
-	poly, err := rabinkarp64.DerivePolynomial(rng)
-	if err != nil {
-		panic(err)
-	}
-	return poly
+	return nil
 }
 
-// lowBitsMask return an integer with the low n bits set
+func (c *ContentDefined) atChunkBoundary() bool {
+	sum := c.rh
+	size := c.end
+	return size >= c.maxSize || (size >= c.minSize && (sum&c.mask == 0))
+}
+
+// lowBitsMask return a uint64 with the low n bits set
 func lowBitsMask(n int) uint64 {
 	return ^(math.MaxUint64 << n)
 }

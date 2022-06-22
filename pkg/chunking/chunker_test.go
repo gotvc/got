@@ -12,47 +12,90 @@ import (
 func TestContentDefined(t *testing.T) {
 	t.Parallel()
 	const (
-		N       = 1e7
-		avgSize = 1 << 13
+		N = 1e7
+
+		minSize = 64
+		avgSize = 1 << 14
 		maxSize = 1 << 20
 	)
 
 	t.Run("Random", func(t *testing.T) {
 		t.Parallel()
 		r := io.LimitReader(randReader{}, N)
-		count, size := testChunker(t, func(ch ChunkHandler) Chunker {
-			poly := DerivePolynomial(nil)
-			return NewContentDefined(64, avgSize, maxSize, poly, ch)
-		}, r, maxSize)
-		// average size should be close to what we expect
-		t.Log("size:", size, "count:", count, "avg:", size/count)
-		withinTolerance(t, size/count, avgSize, 0.05)
+		sizes := testChunker(t, r, minSize, maxSize, func(ch ChunkHandler) Chunker {
+			key := [32]byte{}
+			return NewContentDefined(minSize, avgSize, maxSize, &key, ch)
+		})
+		mu := mean(sizes)
+		sigma := stddev(sizes, mu)
+		total := sum(sizes)
+		count := len(sizes)
+		t.Log("mu:", mu, "sigma:", sigma, "sum", total, "count:", count)
+
 		// all the data should have been chunked
-		require.Equal(t, int(N), size)
+		require.Equal(t, int(N), total)
+		// average size should be close to what we expect
+		withinTolerance(t, mu, avgSize, 0.05)
 	})
 
 	t.Run("Zero", func(t *testing.T) {
 		t.Parallel()
 		r := io.LimitReader(zeroReader{}, N)
-		count, size := testChunker(t, func(ch ChunkHandler) Chunker {
-			poly := DerivePolynomial(nil)
-			return NewContentDefined(64, avgSize, maxSize, poly, ch)
-		}, r, maxSize)
-		// average size should be much bigger than min size
-		t.Log("size:", size, "count:", count, "avg:", size/count)
-		require.Greater(t, size/count, 64*100)
+		sizes := testChunker(t, r, minSize, maxSize, func(ch ChunkHandler) Chunker {
+			key := [32]byte{}
+			return NewContentDefined(64, avgSize, maxSize, &key, ch)
+		})
+		mu := mean(sizes)
+		sigma := stddev(sizes, mu)
+		total := sum(sizes)
+		count := len(sizes)
+		t.Log("mu:", mu, "sigma:", sigma, "sum", total, "count:", count)
 
 		// all the data should have been chunked
-		require.Equal(t, int(N), size)
-
+		require.Equal(t, int(N), total)
+		// average size should be much bigger than min size
+		require.Greater(t, mu, 64*100)
 	})
 }
 
-func testChunker(t *testing.T, newChunker func(func(data []byte) error) Chunker, r io.Reader, maxSize int) (count, size int) {
-	c := newChunker(func(data []byte) error {
+func BenchmarkContentDefined(b *testing.B) {
+	const N = 100e6
+	var totalSize int
+	var count int
+	c := NewContentDefined(64, 1<<13, 1<<20, new([32]byte), func(data []byte) error {
+		totalSize += len(data)
 		count++
-		size += len(data)
+		return nil
+	})
+	b.SetBytes(N)
+	b.ReportAllocs()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		totalSize = 0
+		count = 0
+		rng := mrand.New(mrand.NewSource(0))
+		n, err := io.CopyN(c, rng, N)
+		if err != nil {
+			b.Error(err)
+		}
+		if err := c.Flush(); err != nil {
+			b.Error(err)
+		}
+		if n != N {
+			b.Errorf("%d != %d", int(N), n)
+		}
+		if totalSize != N {
+			b.Errorf("%d != %d", int(N), totalSize)
+		}
+		b.ReportMetric(float64(count), "chunks")
+	}
+}
+
+func testChunker(t *testing.T, r io.Reader, minSize, maxSize int, newChunker func(func(data []byte) error) Chunker) (sizes []int) {
+	c := newChunker(func(data []byte) error {
 		require.LessOrEqual(t, len(data), maxSize)
+		require.GreaterOrEqual(t, len(data), minSize)
+		sizes = append(sizes, len(data))
 		return nil
 	})
 	// copy in some data
@@ -60,12 +103,12 @@ func testChunker(t *testing.T, newChunker func(func(data []byte) error) Chunker,
 	require.NoError(t, err)
 	// close
 	require.NoError(t, c.Flush())
-	return count, size
+	return sizes
 }
 
 func withinTolerance(t *testing.T, x int, target int, tol float64) {
 	ok := math.Abs(float64(x)-float64(target)) < float64(target)*tol
-	require.True(t, ok, "%d not within +/- %f of target %d", x, tol, target)
+	require.True(t, ok, "%d not in target (%d +/- %f) == (%f, %f)", x, target, tol, float64(target)*(1-tol), float64(target)*(1+tol))
 }
 
 type randReader struct{}
@@ -81,4 +124,29 @@ func (r zeroReader) Read(p []byte) (n int, err error) {
 		p[i] = r.c
 	}
 	return len(p), nil
+}
+
+func mean(xs []int) int {
+	var sum int
+	for _, x := range xs {
+		sum += x
+	}
+	return sum / len(xs)
+}
+
+func stddev(xs []int, mean int) float64 {
+	var variance float64
+	for _, x := range xs {
+		variance += math.Abs(float64(x) - float64(mean))
+	}
+	variance /= float64(len(xs))
+
+	return math.Sqrt(variance)
+}
+
+func sum(xs []int) (ret int) {
+	for _, x := range xs {
+		ret += x
+	}
+	return ret
 }
