@@ -2,6 +2,7 @@ package gdat
 
 import (
 	"context"
+	"sync"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	lru "github.com/hashicorp/golang-lru"
@@ -30,26 +31,30 @@ type Operator struct {
 	kf KeyFunc
 
 	cacheSize int
-	cache     *lru.ARCCache
+	cache     *lru.Cache
+	pool      sync.Pool
 }
 
 func NewOperator(opts ...Option) Operator {
 	o := Operator{
 		kf:        Convergent,
-		cacheSize: 16,
+		cacheSize: 32,
 	}
 	for _, opt := range opts {
 		opt(&o)
 	}
 	var err error
-	if o.cache, err = lru.NewARC(o.cacheSize); err != nil {
+	if o.cache, err = lru.NewWithEvict(o.cacheSize, o.onCacheEvict); err != nil {
 		panic(err)
+	}
+	o.pool.New = func() any {
+		return []byte{}
 	}
 	return o
 }
 
 func (o *Operator) Post(ctx context.Context, s Store, data []byte) (*Ref, error) {
-	id, dek, err := postEncrypt(ctx, s, o.kf, data)
+	id, dek, err := o.postEncrypt(ctx, s, o.kf, data)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +68,7 @@ func (o *Operator) GetF(ctx context.Context, s Store, ref Ref, fn func(data []by
 	if data := o.checkCache(ref); data != nil {
 		return fn(data)
 	}
-	buf := make([]byte, s.MaxSize())
+	buf := o.acquire(s.MaxSize())
 	n, err := o.Read(ctx, s, ref, buf)
 	if err != nil {
 		return err
@@ -87,4 +92,22 @@ func (o *Operator) checkCache(ref Ref) []byte {
 
 func (o *Operator) loadCache(ref Ref, data []byte) {
 	o.cache.Add(ref, append([]byte{}, data...))
+}
+
+func (o *Operator) onCacheEvict(key, value any) {
+	buf := value.([]byte)
+	o.release(buf)
+}
+
+func (o *Operator) acquire(n int) []byte {
+	buf := o.pool.Get().([]byte)
+	if len(buf) < n {
+		buf = make([]byte, n)
+	}
+	return buf
+}
+
+func (o *Operator) release(x []byte) {
+	x = append(x, make([]byte, cap(x)-len(x))...)
+	o.pool.Put(x)
 }
