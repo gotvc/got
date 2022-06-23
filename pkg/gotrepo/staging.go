@@ -3,15 +3,18 @@ package gotrepo
 import (
 	"context"
 	"os"
+	"strings"
 
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/pkg/errors"
+
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/logctx"
+	"github.com/gotvc/got/pkg/metrics"
 	"github.com/gotvc/got/pkg/staging"
 	"github.com/gotvc/got/pkg/stores"
-	"github.com/pkg/errors"
 )
 
 // Add adds paths from the working directory to the staging area.
@@ -28,6 +31,7 @@ func (r *Repo) Add(ctx context.Context, paths ...string) error {
 		return err
 	}
 	stage := r.getStage()
+	defer metrics.Track(ctx, strings.Join(paths, ", "))()
 	for _, target := range paths {
 		if err := posixfs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ posixfs.DirEnt) error {
 			if err := stage.CheckConflict(ctx, p); err != nil {
@@ -58,6 +62,7 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 		return err
 	}
 	stage := r.stage
+	defer metrics.Track(ctx, strings.Join(paths, ", "))()
 	for _, p := range paths {
 		if err := stage.CheckConflict(ctx, p); err != nil {
 			return err

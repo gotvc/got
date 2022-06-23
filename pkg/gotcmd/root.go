@@ -8,7 +8,7 @@ import (
 	"github.com/gotvc/got"
 	"github.com/gotvc/got/pkg/gotrepo"
 	"github.com/gotvc/got/pkg/logctx"
-	"github.com/gotvc/got/pkg/progress"
+	"github.com/gotvc/got/pkg/metrics"
 )
 
 func Execute() error {
@@ -64,10 +64,10 @@ func NewRootCmd() *cobra.Command {
 }
 
 var (
-	log      = logrus.StandardLogger()
-	reporter = progress.NewReporter()
+	log       = logrus.StandardLogger()
+	collector = metrics.NewCollector()
 
-	ctx = progress.WithReporter(logctx.WithLogger(context.Background(), log), reporter)
+	ctx = metrics.WithCollector(logctx.WithLogger(context.Background(), log), collector)
 )
 
 func loadRepo(repo **gotrepo.Repo, open func() (*gotrepo.Repo, error)) func(cmd *cobra.Command, args []string) error {

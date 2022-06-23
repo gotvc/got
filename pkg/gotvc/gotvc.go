@@ -7,6 +7,7 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/metrics"
 	"github.com/gotvc/got/pkg/stores"
 )
 
@@ -98,26 +99,36 @@ func isDescendentOf(ctx context.Context, m map[Ref]struct{}, s Store, x, a Snaps
 
 // Sync ensures dst has all of the data reachable from snap.
 func Sync(ctx context.Context, src cadata.Store, dst cadata.Store, snap Snapshot, syncRoot func(gotfs.Root) error) error {
+	defer metrics.Track(ctx, "syncing snapshots")()
 	op := NewOperator()
 	op.readOnly = true
-	for _, parentRef := range snap.Parents {
-		// Skip if the parent is already copieda.
-		if exists, err := cadata.Exists(ctx, dst, parentRef.CID); err != nil {
-			return err
-		} else if !exists {
-			parent, err := op.GetSnapshot(ctx, src, parentRef)
-			if err != nil {
+
+	var sync func(snap Snapshot) error
+	sync = func(snap Snapshot) error {
+		for _, parentRef := range snap.Parents {
+			// Skip if the parent is already copieda.
+			if exists, err := cadata.Exists(ctx, dst, parentRef.CID); err != nil {
 				return err
-			}
-			if err := Sync(ctx, src, dst, *parent, syncRoot); err != nil {
-				return err
-			}
-			if err := gdat.Copy(ctx, src, dst, &parentRef); err != nil {
-				return err
+			} else if !exists {
+				parent, err := op.GetSnapshot(ctx, src, parentRef)
+				if err != nil {
+					return err
+				}
+				if err := sync(*parent); err != nil {
+					return err
+				}
+				if err := gdat.Copy(ctx, src, dst, &parentRef); err != nil {
+					return err
+				}
 			}
 		}
+		if err := syncRoot(snap.Root); err != nil {
+			return err
+		}
+		metrics.AddInt(ctx, "snapshots", 1, "snapshots")
+		return nil
 	}
-	return syncRoot(snap.Root)
+	return sync(snap)
 }
 
 // Populate adds all the cadata.IDs reachable from start to set.

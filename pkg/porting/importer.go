@@ -14,7 +14,7 @@ import (
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotkv"
-	"github.com/gotvc/got/pkg/progress"
+	"github.com/gotvc/got/pkg/metrics"
 	"github.com/gotvc/got/pkg/units"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -42,12 +42,13 @@ func NewImporter(fsop *gotfs.Operator, cache state.KVStore[string, Entry], ms, d
 // ImportPath returns gotfs instance containing the content in fsx at p.
 // The content will be at the root of the filesystem.
 func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
+	defer metrics.Track(ctx, p)()
 	stat, err := fsx.Stat(p)
 	if err != nil {
 		return nil, err
 	}
 	if !stat.Mode().IsDir() {
-		return pr.ImportFile(ctx, fsx, p)
+		return pr.importFile(ctx, fsx, p)
 	}
 	var changes []gotfs.Segment
 	emptyDir, err := createEmptyDir(ctx, pr.gotfs, pr.ms, pr.ds)
@@ -65,12 +66,14 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 	slices.SortFunc(dirents, func(a, b posixfs.DirEnt) bool {
 		return a.Name < b.Name
 	})
+	metrics.SetDenom(ctx, "paths", len(dirents), "paths")
 	for _, dirent := range dirents {
 		p2 := path.Join(p, dirent.Name)
 		pathRoot, err := pr.ImportPath(ctx, fsx, p2)
 		if err != nil {
 			return nil, err
 		}
+		metrics.AddInt(ctx, "paths", 1, "paths")
 		shiftedRoot := pr.gotfs.AddPrefix(*pathRoot, dirent.Name)
 		changes = append(changes, gotfs.Segment{
 			Root: shiftedRoot,
@@ -80,10 +83,14 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 	return pr.gotfs.Splice(ctx, pr.ms, pr.ds, changes)
 }
 
-// ImportFile returns a gotfs.Root with the content from the file in fsx at p.
 func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
-	rep := progress.FromContext(ctx)
-	rep.Begin(p)
+	defer metrics.Track(ctx, "importing")()
+	defer metrics.AddInt(ctx, "paths", 1, "paths")
+	return pr.importFile(ctx, fsx, p)
+}
+
+// ImportFile returns a gotfs.Root with the content from the file in fsx at p.
+func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
 	finfo, err := fsx.Stat(p)
 	if err != nil {
 		return nil, err
@@ -96,7 +103,6 @@ func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) (*
 		return &ent.Root, nil
 	}
 	fileSize := finfo.Size()
-	rep.SetDenom(units.Bytes, fileSize)
 	numWorkers := runtime.GOMAXPROCS(0)
 	sizeCutoff := 20 * gotfs.DefaultAverageBlobSizeData * numWorkers
 	// fast path for small files
@@ -117,7 +123,7 @@ func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) (*
 			return nil, err
 		}
 	}
-	rep.SetNum(units.Bytes, fileSize)
+	metrics.AddInt(ctx, "data_in", int(fileSize), units.Bytes)
 	if err := pr.cache.Put(ctx, p, Entry{
 		ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
 		Root:       *root,
@@ -138,11 +144,10 @@ func importFileConcurrent(ctx context.Context, fsop *gotfs.Operator, ms, ds cada
 	for i := 0; i < numWorkers; i++ {
 		i := i
 		start, end := divide(fileSize, numWorkers, i)
-		ctx, rep := progress.Child(ctx, progress.FromContext(ctx))
+		ctx := metrics.Child(ctx)
 		eg.Go(func() error {
-			rep.Begin(fmt.Sprintf("%010d-%010d", start, end))
-			rep.SetDenom(units.Bytes, end-start)
-			defer progress.Close(ctx)
+			defer metrics.Track(ctx, fmt.Sprintf("%010d-%010d", start, end))()
+			defer metrics.Close(ctx)
 			f, err := fsx.OpenFile(p, posixfs.O_RDONLY, 0)
 			if err != nil {
 				return err
