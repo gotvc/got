@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -56,7 +54,7 @@ func (r *Renderer) maybePrint(lastPrint time.Time) time.Time {
 func (r *Renderer) clear() error {
 	buf := &bytes.Buffer{}
 	clearLinesUp(buf, r.newLines)
-	fmt.Fprintln(buf, r.s.GetPrevious())
+	RenderTree(buf, r.s, "")
 	_, err := r.out.Write(buf.Bytes())
 	return err
 }
@@ -64,45 +62,31 @@ func (r *Renderer) clear() error {
 func (r *Renderer) print(x *Collector, indent string) error {
 	buf := &bytes.Buffer{}
 	clearLinesUp(buf, r.newLines)
-	fmtReporter(buf, x, indent)
+	RenderTree(buf, x, indent)
 	_, err := r.out.Write(buf.Bytes())
 	r.newLines = bytes.Count(buf.Bytes(), []byte("\n"))
 	r.frame++
 	return err
 }
 
-func fmtReporter(buf *bytes.Buffer, x *Collector, indent string) error {
+// RenderTree renders the state of the collector to buf.
+func RenderTree(buf *bytes.Buffer, x *Collector, indent string) error {
 	buf.WriteString(indent)
-	if current := x.GetCurrent(); current != "" {
-		fmt.Fprintf(buf, "%s: ", current)
-	} else if sum := x.GetPrevious(); sum != nil {
-		fmt.Fprintf(buf, "%v", sum)
-		return nil
-	} else {
-		return nil
-	}
-	var i int
-	x.forEachCounter(func(name string, c *counter) {
+	fmt.Fprintf(buf, "[%v] %s: ", x.Duration().Round(time.Millisecond), x.name)
+	for i, k := range x.List() {
 		if i > 0 {
 			buf.WriteString(", ")
 		}
-		i++
-		fmtCounter(buf, name, c)
-	})
-	buf.WriteString("\n")
-
-	childIDs := maps.Keys(x.children)
-	slices.Sort(childIDs)
-	for _, cid := range childIDs {
-		child := x.children[cid]
-		fmtReporter(buf, child, indent+"  ")
+		fmt.Fprintf(buf, "%s=%v", k, x.GetCounter(k))
 	}
-	return nil
-}
-
-func fmtCounter(buf *bytes.Buffer, name string, c *counter) error {
-	_, err := fmt.Fprintf(buf, "%s=%v", name, c)
-	return err
+	buf.WriteString("\n")
+	for _, k := range x.ListChildren() {
+		x2 := x.GetChild(k)
+		if x2 == nil {
+			continue
+		}
+		RenderTree(buf, x2, indent+"  ")
+	}
 	return nil
 }
 
@@ -126,8 +110,9 @@ func clearLine(b *bytes.Buffer) error {
 
 func clearLinesUp(b *bytes.Buffer, n int) error {
 	for i := 0; i < n; i++ {
-		cursorUp(b, 1)
 		clearLine(b)
+		cursorUp(b, 1)
 	}
+	clearLine(b)
 	return nil
 }

@@ -3,7 +3,6 @@ package gotrepo
 import (
 	"context"
 	"os"
-	"strings"
 
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/pkg/errors"
@@ -31,12 +30,13 @@ func (r *Repo) Add(ctx context.Context, paths ...string) error {
 		return err
 	}
 	stage := r.getStage()
-	defer metrics.Track(ctx, strings.Join(paths, ", "))()
 	for _, target := range paths {
 		if err := posixfs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ posixfs.DirEnt) error {
 			if err := stage.CheckConflict(ctx, p); err != nil {
 				return err
 			}
+			ctx := metrics.Child(ctx, p)
+			defer metrics.Close(ctx)
 			fileRoot, err := porter.ImportFile(ctx, r.workingDir, p)
 			if err != nil {
 				return err
@@ -62,8 +62,9 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 		return err
 	}
 	stage := r.stage
-	defer metrics.Track(ctx, strings.Join(paths, ", "))()
 	for _, p := range paths {
+		ctx := metrics.Child(ctx, p)
+		defer metrics.Close(ctx)
 		if err := stage.CheckConflict(ctx, p); err != nil {
 			return err
 		}

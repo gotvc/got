@@ -6,15 +6,12 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
-	"github.com/gotvc/got/pkg/metrics"
 )
 
 // Sync ensures dst has all the data reachable from root
 // dst and src should both be metadata stores.
 // copyData will be called to sync metadata
 func Sync(ctx context.Context, srcMeta, srcData, dstMeta, dstData Store, root Root) error {
-	rep := metrics.FromContext(ctx)
-	defer rep.Begin("syncing gotfs")()
 	return gotkv.Sync(ctx, srcMeta, dstMeta, root, func(ent gotkv.Entry) error {
 		if isExtentKey(ent.Key) {
 			part, err := parseExtent(ent.Value)

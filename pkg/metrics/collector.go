@@ -1,10 +1,7 @@
 package metrics
 
 import (
-	"bytes"
 	"context"
-	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -30,12 +27,6 @@ func FromContext(ctx context.Context) *Collector {
 	return v.(*Collector)
 }
 
-// Track starts tracking metrics under a work item named x, if the context has a collector.
-func Track(ctx context.Context, x string) func() {
-	r := FromContext(ctx)
-	return r.Begin(x)
-}
-
 func AddInt(ctx context.Context, m string, n int, u units.Unit) int {
 	r := FromContext(ctx)
 	return r.AddInt(m, n, u)
@@ -46,9 +37,9 @@ func SetDenom(ctx context.Context, m string, n int, u units.Unit) {
 	r.SetDenom(m, int64(n), u)
 }
 
-func Child(ctx context.Context) context.Context {
+func Child(ctx context.Context, name string) context.Context {
 	r := FromContext(ctx)
-	return WithCollector(ctx, r.Child())
+	return WithCollector(ctx, r.Child(name))
 }
 
 func Close(ctx context.Context) {
@@ -56,217 +47,111 @@ func Close(ctx context.Context) {
 	r.Close()
 }
 
-type counter struct {
-	units      units.Unit
-	num, denom int64
-	deltaNum   int64
-	deltaDur   time.Duration
-	last       time.Time
-}
-
-func (c *counter) String() string {
-	buf := &bytes.Buffer{}
-	buf.WriteString("(")
-	buf.WriteString(units.FmtFloat64(float64(c.num), c.units))
-	if c.denom != 0 {
-		buf.WriteString("/")
-		buf.WriteString(units.FmtFloat64(float64(c.denom), c.units))
-	}
-	dx, dxp := units.SIPrefix(float64(c.deltaNum))
-	fmt.Fprintf(buf, " Δ=%.2f%s/s", dx, dxp+string(c.units))
-	buf.WriteString(")")
-	return buf.String()
-}
-
-type Value struct {
-	X     float64
-	Units units.Unit
-}
-
-// Summary is a summary of a completed task
-type Summary struct {
-	Name    string
-	StartAt time.Time
-	EndAt   time.Time
-	Metrics map[string]Value
-}
-
-func (s *Summary) String() string {
-	b := &bytes.Buffer{}
-	fmt.Fprintf(b, "%s: done in %v ", s.Name, s.Elapsed())
-	keys := maps.Keys(s.Metrics)
-	slices.Sort(keys)
-	for i, k := range keys {
-		if i > 0 {
-			b.WriteString(", ")
-		}
-		v := s.Metrics[k]
-		b.WriteString(units.FmtFloat64(v.X, v.Units))
-	}
-	return b.String()
-}
-
-func (s *Summary) Elapsed() time.Duration {
-	return s.EndAt.Sub(s.StartAt)
-}
-
-func (s *Summary) GetDelta(k string) float64 {
-	return s.Metrics[k].X / s.Elapsed().Seconds()
-}
-
-type layer struct {
-	name     string
-	counters map[string]counter
-	startAt  time.Time
-}
-
-func newLayer(x string) layer {
-	return layer{
-		name:     x,
-		counters: make(map[string]counter),
-		startAt:  time.Now(),
-	}
-}
-
 type Collector struct {
-	id     uint
-	parent *Collector
+	id      uint
+	parent  *Collector
+	name    string
+	startAt time.Time
 
 	mu       sync.RWMutex
 	n        uint
 	children map[uint]*Collector
-	stack    []layer
-	prev     *Summary
+	counters map[string]*Counter
+	endAt    time.Time
 }
 
 // NewCollector creates a new root collector
 func NewCollector() *Collector {
-	return &Collector{}
-}
-
-// Begin sets the name of the active work item
-func (r *Collector) Begin(x string) func() {
-	if r == nil {
-		return func() {}
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.stack = append(r.stack, newLayer(x))
-	return func() {
-		r.End(x)
+	return &Collector{
+		startAt:  time.Now(),
+		counters: make(map[string]*Counter),
 	}
 }
 
-func (r *Collector) End(x string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	now := time.Now()
-	l := len(r.stack)
-	if l == 0 {
-		panic(x)
-	}
-	if r.stack[l-1].name != x {
-		panic(fmt.Sprintf("tried to end %q, but %q is still on the stack", x, r.stack[l-1].name))
-	}
-	startAt := r.stack[l-1].startAt
-	counters := r.stack[l-1].counters
-	sum := &Summary{
-		Name:    x,
-		StartAt: startAt,
-		EndAt:   now,
-		Metrics: map[string]Value{},
-	}
-	for m, c := range counters {
-		sum.Metrics[m] = Value{X: float64(c.num), Units: c.units}
-	}
-	r.prev = sum
-	r.stack = r.stack[:l-1]
+func (r *Collector) AddInt(m string, delta int, u units.Unit) int {
+	return int(r.AddInt64(m, int64(delta), u))
 }
 
 // AddInt adds delta to the numerator of metric
-func (r *Collector) AddInt(m string, delta int, u units.Unit) (ret int) {
-	r.updateCounter(m, true, func(c *counter) {
-		c.units = u
-		c.num += int64(delta)
-		ret = int(c.num)
+func (r *Collector) AddInt64(m string, delta int64, u units.Unit) (ret int64) {
+	r.updateCounter(m, func(c *Counter) {
+		ret = c.Add(time.Now(), delta, u)
 	})
 	return ret
 }
 
-func (r *Collector) Set(m string, x int64) {
-	r.updateCounter(m, false, func(c *counter) {
-		c.num = x
+func (r *Collector) SetInt64(m string, x int64, u units.Unit) {
+	r.updateCounter(m, func(c *Counter) {
+		c.Set(time.Now(), x, u)
 	})
 }
 
 func (r *Collector) SetDenom(m string, x int64, u units.Unit) {
-	r.updateCounter(m, false, func(c *counter) {
-		c.denom = x
-		c.units = u
+	r.updateCounter(m, func(c *Counter) {
+		c.SetDenom(x, u)
 	})
 }
 
-func (r *Collector) forEachCounter(fn func(name string, c *counter)) {
+func (r *Collector) IsClosed() bool {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	if len(r.stack) < 1 {
-		return
-	}
-	counters := r.stack[0].counters
-	keys := maps.Keys(counters)
-	slices.Sort(keys)
-	for _, k := range keys {
-		c := counters[k]
-		fn(k, &c)
-	}
+	return !r.endAt.IsZero()
 }
 
-func (r *Collector) updateCounter(m string, all bool, fn func(c *counter)) {
+func (r *Collector) GetCounter(m string) *Counter {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.counters[m]
+}
+
+func (r *Collector) List() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ks := maps.Keys(r.counters)
+	slices.Sort(ks)
+	return ks
+}
+
+func (r *Collector) Duration() time.Duration {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.endAt.IsZero() {
+		return time.Since(r.startAt)
+	}
+	return r.endAt.Sub(r.startAt)
+}
+
+func (r *Collector) ListChildren() []uint {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ks := maps.Keys(r.children)
+	slices.Sort(ks)
+	return ks
+}
+
+func (r *Collector) GetChild(id uint) *Collector {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.children[id]
+}
+
+func (r *Collector) Name() string {
+	return r.name
+}
+
+func (r *Collector) updateCounter(m string, fn func(c *Counter)) {
 	if r == nil {
 		return
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if len(r.stack) < 1 {
-		panic("metrics: data before Begin")
+	if _, exists := r.counters[m]; !exists {
+		r.counters[m] = &Counter{}
 	}
-	layers := r.stack
-	if !all {
-		layers = r.stack[len(r.stack)-2:]
-	}
-	for _, lay := range layers {
-		counters := lay.counters
-		c := counters[m]
-		prevNum := c.num
-		prevLast := c.last
-		fn(&c)
-		c.last = time.Now()
-		c.deltaNum = c.num - prevNum
-		c.deltaDur = c.last.Sub(prevLast)
-		counters[m] = c
-	}
+	fn(r.counters[m])
 }
 
-func (r *Collector) GetCurrent() string {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	sb := strings.Builder{}
-	for i, l := range r.stack {
-		if i > 0 {
-			sb.WriteString(": ")
-		}
-		sb.WriteString(l.name)
-	}
-	return sb.String()
-}
-
-func (r *Collector) GetPrevious() *Summary {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.prev
-}
-
-func (r *Collector) Child() *Collector {
+func (r *Collector) Child(name string) *Collector {
 	if r == nil {
 		return nil
 	}
@@ -280,6 +165,7 @@ func (r *Collector) Child() *Collector {
 	r2 := NewCollector()
 	r2.parent = r
 	r2.id = id
+	r2.name = name
 	r.children[id] = r2
 	return r2
 }
@@ -288,9 +174,20 @@ func (r *Collector) Close() {
 	if r == nil {
 		return
 	}
-	if r.parent != nil {
-		r.parent.mu.Lock()
-		delete(r.parent.children, r.id)
-		r.parent.mu.Unlock()
+	if r.parent == nil {
+		return
+	}
+	r.parent.mu.Lock()
+	defer r.parent.mu.Unlock()
+	delete(r.parent.children, r.id)
+	for k, c1 := range r.counters {
+		c2 := r.parent.counters[k]
+		if c2 == nil {
+			c2 = &Counter{unit: c1.unit}
+			r.parent.counters[k] = c2
+		} else if c1.unit != c2.unit {
+			continue
+		}
+		c2.Add(time.Now(), c1.num, c1.unit)
 	}
 }

@@ -99,10 +99,8 @@ func isDescendentOf(ctx context.Context, m map[Ref]struct{}, s Store, x, a Snaps
 
 // Sync ensures dst has all of the data reachable from snap.
 func Sync(ctx context.Context, src cadata.Store, dst cadata.Store, snap Snapshot, syncRoot func(gotfs.Root) error) error {
-	defer metrics.Track(ctx, "syncing snapshots")()
 	op := NewOperator()
 	op.readOnly = true
-
 	var sync func(snap Snapshot) error
 	sync = func(snap Snapshot) error {
 		for _, parentRef := range snap.Parents {

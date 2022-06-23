@@ -9,13 +9,10 @@ import (
 
 	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/gotfs"
-<<<<<<< HEAD
-	"github.com/gotvc/got/pkg/logctx"
-=======
-	"github.com/gotvc/got/pkg/metrics"
->>>>>>> e6ef0c4 (wip)
 	"github.com/pkg/errors"
+
+	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/logctx"
 )
 
 type Storage interface {
@@ -182,20 +179,11 @@ func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.S
 	if err != nil {
 		return nil, err
 	}
-	defer metrics.Track(ctx, "splicing")()
 	segs = gotfs.ChangesOnBase(*base, segs)
-<<<<<<< HEAD
-	logctx.Infof(ctx, "splicing...")
-=======
->>>>>>> e6ef0c4 (wip)
 	root, err := fsop.Splice(ctx, ms, ds, segs)
 	if err != nil {
 		return nil, err
 	}
-<<<<<<< HEAD
-	logctx.Infof(ctx, "done splicing.")
-=======
->>>>>>> e6ef0c4 (wip)
 	return root, nil
 }
 

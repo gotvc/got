@@ -7,6 +7,7 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/metrics"
+	"github.com/gotvc/got/pkg/units"
 	"github.com/pkg/errors"
 )
 
@@ -16,7 +17,8 @@ func (o *Operator) CreateFileRoot(ctx context.Context, ms, ds Store, r io.Reader
 	if err := b.BeginFile("", 0o644); err != nil {
 		return nil, err
 	}
-	if _, err := io.Copy(b, r); err != nil {
+	_, err := io.Copy(b, r)
+	if err != nil {
 		return nil, err
 	}
 	return b.Finish()
@@ -26,12 +28,12 @@ func (o *Operator) CreateFileRoot(ctx context.Context, ms, ds Store, r io.Reader
 func (o *Operator) CreateExtents(ctx context.Context, ds Store, r io.Reader) ([]*Extent, error) {
 	var exts []*Extent
 	chunker := o.newChunker(func(data []byte) error {
-		metrics.AddInt(ctx, "data_in", len(data), "")
-		metrics.AddInt(ctx, "blobs", 1, "blobs")
 		ext, err := o.postExtent(ctx, ds, data)
 		if err != nil {
 			return err
 		}
+		metrics.AddInt(ctx, "data_in", len(data), units.Bytes)
+		metrics.AddInt(ctx, "blobs_in", 1, "blobs")
 		exts = append(exts, ext)
 		return nil
 	})

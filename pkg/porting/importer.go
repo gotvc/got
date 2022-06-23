@@ -42,7 +42,6 @@ func NewImporter(fsop *gotfs.Operator, cache state.KVStore[string, Entry], ms, d
 // ImportPath returns gotfs instance containing the content in fsx at p.
 // The content will be at the root of the filesystem.
 func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
-	defer metrics.Track(ctx, p)()
 	stat, err := fsx.Stat(p)
 	if err != nil {
 		return nil, err
@@ -68,6 +67,8 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 	})
 	metrics.SetDenom(ctx, "paths", len(dirents), "paths")
 	for _, dirent := range dirents {
+		ctx := metrics.Child(ctx, dirent.Name)
+		defer metrics.Close(ctx)
 		p2 := path.Join(p, dirent.Name)
 		pathRoot, err := pr.ImportPath(ctx, fsx, p2)
 		if err != nil {
@@ -84,8 +85,6 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 }
 
 func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
-	defer metrics.Track(ctx, "importing")()
-	defer metrics.AddInt(ctx, "paths", 1, "paths")
 	return pr.importFile(ctx, fsx, p)
 }
 
@@ -103,6 +102,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 		return &ent.Root, nil
 	}
 	fileSize := finfo.Size()
+	metrics.SetDenom(ctx, "data_in", int(fileSize), units.Bytes)
 	numWorkers := runtime.GOMAXPROCS(0)
 	sizeCutoff := 20 * gotfs.DefaultAverageBlobSizeData * numWorkers
 	// fast path for small files
@@ -117,13 +117,13 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 		if err != nil {
 			return nil, err
 		}
+		metrics.AddInt(ctx, "data_in", int(fileSize), units.Bytes)
 	} else {
 		root, err = importFileConcurrent(ctx, pr.gotfs, pr.ms, pr.ds, fsx, p, numWorkers)
 		if err != nil {
 			return nil, err
 		}
 	}
-	metrics.AddInt(ctx, "data_in", int(fileSize), units.Bytes)
 	if err := pr.cache.Put(ctx, p, Entry{
 		ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
 		Root:       *root,
@@ -144,9 +144,8 @@ func importFileConcurrent(ctx context.Context, fsop *gotfs.Operator, ms, ds cada
 	for i := 0; i < numWorkers; i++ {
 		i := i
 		start, end := divide(fileSize, numWorkers, i)
-		ctx := metrics.Child(ctx)
+		ctx := metrics.Child(ctx, fmt.Sprintf("worker-%d", i))
 		eg.Go(func() error {
-			defer metrics.Track(ctx, fmt.Sprintf("%010d-%010d", start, end))()
 			defer metrics.Close(ctx)
 			f, err := fsx.OpenFile(p, posixfs.O_RDONLY, 0)
 			if err != nil {

@@ -32,7 +32,6 @@ func (v Volume) StoreTriple() StoreTriple {
 
 // SyncVolumes syncs the contents of src to dst.
 func SyncVolumes(ctx context.Context, src, dst Volume, force bool) error {
-	defer metrics.Track(ctx, "syncing volumes")()
 	return applySnapshot(ctx, dst.Cell, func(x *gotvc.Snapshot) (*gotvc.Snapshot, error) {
 		goal, err := getSnapshot(ctx, src.Cell)
 		if err != nil {
@@ -107,7 +106,11 @@ type StoreTriple struct {
 }
 
 func syncStores(ctx context.Context, src, dst StoreTriple, snap gotvc.Snapshot) (err error) {
+	ctx = metrics.Child(ctx, "syncinc gotvc")
+	defer metrics.Close(ctx)
 	return gotvc.Sync(ctx, src.VC, dst.VC, snap, func(root gotfs.Root) error {
+		ctx := metrics.Child(ctx, "syncing gotfs")
+		defer metrics.Close(ctx)
 		return gotfs.Sync(ctx, src.FS, src.Raw, dst.FS, dst.Raw, root)
 	})
 }
