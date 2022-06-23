@@ -6,6 +6,7 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/progress"
 	"github.com/pkg/errors"
 )
 
@@ -25,6 +26,8 @@ func (o *Operator) CreateFileRoot(ctx context.Context, ms, ds Store, r io.Reader
 func (o *Operator) CreateExtents(ctx context.Context, ds Store, r io.Reader) ([]*Extent, error) {
 	var exts []*Extent
 	chunker := o.newChunker(func(data []byte) error {
+		progress.AddNum(ctx, "B", int64(len(data)))
+		progress.AddNum(ctx, "blobs", 1)
 		ext, err := o.postExtent(ctx, ds, data)
 		if err != nil {
 			return err

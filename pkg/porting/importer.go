@@ -3,6 +3,7 @@ package porting
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"path"
 	"runtime"
@@ -13,6 +14,8 @@ import (
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/progress"
+	"github.com/gotvc/got/pkg/units"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
@@ -39,7 +42,6 @@ func NewImporter(fsop *gotfs.Operator, cache state.KVStore[string, Entry], ms, d
 // ImportPath returns gotfs instance containing the content in fsx at p.
 // The content will be at the root of the filesystem.
 func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
-	logrus.Infof("importing path %q", p)
 	stat, err := fsx.Stat(p)
 	if err != nil {
 		return nil, err
@@ -80,6 +82,8 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 
 // ImportFile returns a gotfs.Root with the content from the file in fsx at p.
 func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
+	rep := progress.FromContext(ctx)
+	rep.Begin(p)
 	finfo, err := fsx.Stat(p)
 	if err != nil {
 		return nil, err
@@ -92,6 +96,7 @@ func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) (*
 		return &ent.Root, nil
 	}
 	fileSize := finfo.Size()
+	rep.SetDenom(units.Bytes, fileSize)
 	numWorkers := runtime.GOMAXPROCS(0)
 	sizeCutoff := 20 * gotfs.DefaultAverageBlobSizeData * numWorkers
 	// fast path for small files
@@ -112,6 +117,7 @@ func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) (*
 			return nil, err
 		}
 	}
+	rep.SetNum(units.Bytes, fileSize)
 	if err := pr.cache.Put(ctx, p, Entry{
 		ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
 		Root:       *root,
@@ -127,13 +133,16 @@ func importFileConcurrent(ctx context.Context, fsop *gotfs.Operator, ms, ds cada
 		return nil, err
 	}
 	fileSize := stat.Size()
-	logrus.WithFields(logrus.Fields{"path": p, "size": fileSize, "num_workers": numWorkers}).Info("importing file...")
 	eg := errgroup.Group{}
 	extSlices := make([][]*gotfs.Extent, numWorkers)
 	for i := 0; i < numWorkers; i++ {
 		i := i
 		start, end := divide(fileSize, numWorkers, i)
+		ctx, rep := progress.Child(ctx, progress.FromContext(ctx))
 		eg.Go(func() error {
+			rep.Begin(fmt.Sprintf("%010d-%010d", start, end))
+			rep.SetDenom(units.Bytes, end-start)
+			defer progress.Close(ctx)
 			f, err := fsx.OpenFile(p, posixfs.O_RDONLY, 0)
 			if err != nil {
 				return err
@@ -150,7 +159,6 @@ func importFileConcurrent(ctx context.Context, fsop *gotfs.Operator, ms, ds cada
 				return err
 			}
 			extSlices[i] = exts
-			logrus.WithFields(logrus.Fields{"worker": i, "ext_count": len(exts), "start": start, "end": end}).Info("worker done")
 			return nil
 		})
 	}

@@ -2,6 +2,7 @@ package gotcmd
 
 import (
 	"github.com/gotvc/got/pkg/gotrepo"
+	"github.com/gotvc/got/pkg/progress"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
@@ -17,6 +18,8 @@ func newAddCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 			if len(args) < 1 {
 				return errors.Errorf("path argument required")
 			}
+			r := progress.NewRenderer(reporter, cmd.OutOrStdout())
+			defer r.Close()
 			return repo.Add(ctx, args...)
 		},
 	}
@@ -33,6 +36,8 @@ func newRmCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 			if len(args) < 1 {
 				return errors.Errorf("path argument required")
 			}
+			r := progress.NewRenderer(reporter, cmd.OutOrStdout())
+			defer r.Close()
 			return repo.Rm(ctx, args...)
 		},
 	}
@@ -49,6 +54,8 @@ func newPutCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 			if len(args) < 1 {
 				return errors.Errorf("path argument required")
 			}
+			r := progress.NewRenderer(reporter, cmd.OutOrStdout())
+			defer r.Close()
 			return repo.Put(ctx, args...)
 		},
 	}

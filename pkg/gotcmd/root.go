@@ -1,12 +1,14 @@
 package gotcmd
 
 import (
-	"github.com/gotvc/got"
-	"github.com/gotvc/got/pkg/gotrepo"
-	"github.com/gotvc/got/pkg/logctx"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
+
+	"github.com/gotvc/got"
+	"github.com/gotvc/got/pkg/gotrepo"
+	"github.com/gotvc/got/pkg/logctx"
+	"github.com/gotvc/got/pkg/progress"
 )
 
 func Execute() error {
@@ -62,8 +64,10 @@ func NewRootCmd() *cobra.Command {
 }
 
 var (
-	log = logrus.StandardLogger()
-	ctx = logctx.WithLogger(context.Background(), log)
+	log      = logrus.StandardLogger()
+	reporter = progress.NewReporter()
+
+	ctx = progress.WithReporter(logctx.WithLogger(context.Background(), log), reporter)
 )
 
 func loadRepo(repo **gotrepo.Repo, open func() (*gotrepo.Repo, error)) func(cmd *cobra.Command, args []string) error {
