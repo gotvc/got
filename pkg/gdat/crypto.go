@@ -77,11 +77,12 @@ func (*DEK) String() string {
 	return "{ 32 byte DEK }"
 }
 
-func postEncrypt(ctx context.Context, s cadata.Poster, keyFunc KeyFunc, data []byte) (cadata.ID, *DEK, error) {
+func (o *Operator) postEncrypt(ctx context.Context, s cadata.Poster, keyFunc KeyFunc, data []byte) (cadata.ID, *DEK, error) {
 	dek := keyFunc(Hash(data))
-	ctext := make([]byte, len(data))
-	cryptoXOR(dek, ctext, data)
-	id, err := s.Post(ctx, ctext)
+	ctext := o.acquire(s.MaxSize())
+	defer o.release(ctext)
+	n := cryptoXOR(dek, ctext, data)
+	id, err := s.Post(ctx, ctext[:n])
 	if err != nil {
 		return cadata.ID{}, nil, err
 	}
@@ -102,13 +103,14 @@ func getDecrypt(ctx context.Context, s cadata.Store, dek DEK, id cadata.ID, buf 
 	return n, nil
 }
 
-func cryptoXOR(key DEK, dst, src []byte) {
+func cryptoXOR(key DEK, dst, src []byte) int {
 	nonce := [chacha20.NonceSize]byte{}
 	cipher, err := chacha20.NewUnauthenticatedCipher(key[:], nonce[:])
 	if err != nil {
 		panic(err)
 	}
 	cipher.XORKeyStream(dst, src)
+	return len(src)
 }
 
 func cloneSalt(x *[32]byte) *[32]byte {

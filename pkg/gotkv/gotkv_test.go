@@ -73,20 +73,18 @@ func BenchmarkPut(b *testing.B) {
 	ctx := context.Background()
 	s := cadata.NewVoid(cadata.DefaultHash, cadata.DefaultMaxSize)
 	op := newTestOperator(b)
-	const count = 1e7
+	const M = 100
 
+	bu := op.NewBuilder(s)
 	b.ReportAllocs()
 	b.ResetTimer()
-	b.SetBytes(count * (8 + 64))
-	bu := op.NewBuilder(s)
-	for i := 0; i < b.N; i++ {
-		for j := 0; j < count; j++ {
-			var key [8]byte
-			binary.BigEndian.PutUint64(key[:], uint64(j))
-			var value [64]byte
-			if err := bu.Put(ctx, key[:], value[:]); err != nil {
-				b.Fatal(err)
-			}
+	b.SetBytes(M * (8 + 64))
+	var key [8]byte
+	var value [64]byte
+	for i := 0; i < M*b.N; i++ {
+		binary.BigEndian.PutUint64(key[:], uint64(i))
+		if err := bu.Put(ctx, key[:], value[:]); err != nil {
+			b.Fatal(err)
 		}
 	}
 	_, err := bu.Finish(ctx)
