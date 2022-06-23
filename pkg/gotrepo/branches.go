@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/gotvc/got/pkg/branches"
-	"github.com/gotvc/got/pkg/logctx"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
+
+	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/logctx"
+	"github.com/gotvc/got/pkg/metrics"
 )
 
 // CreateBranch creates a branch using the default spec.
@@ -122,7 +124,9 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	if err != nil {
 		return err
 	}
-	if err := branches.SyncVolumes(ctx, baseBranch.Volume, nextBranch.Volume, false); err != nil {
+	ctx2 := metrics.Child(ctx, "syncing")
+	defer metrics.Close(ctx2)
+	if err := branches.SyncVolumes(ctx2, baseBranch.Volume, nextBranch.Volume, false); err != nil {
 		return err
 	}
 	return r.SetActiveBranch(ctx, next)

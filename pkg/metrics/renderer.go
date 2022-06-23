@@ -72,7 +72,7 @@ func (r *Renderer) print(x *Collector, indent string) error {
 // RenderTree renders the state of the collector to buf.
 func RenderTree(buf *bytes.Buffer, x *Collector, indent string) error {
 	buf.WriteString(indent)
-	fmt.Fprintf(buf, "[%v] %s: ", x.Duration().Round(time.Millisecond), x.name)
+	fmt.Fprintf(buf, "[%v] %s ", x.Duration().Round(time.Millisecond), x.name)
 	for i, k := range x.List() {
 		if i > 0 {
 			buf.WriteString(", ")

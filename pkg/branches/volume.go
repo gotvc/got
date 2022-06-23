@@ -106,7 +106,7 @@ type StoreTriple struct {
 }
 
 func syncStores(ctx context.Context, src, dst StoreTriple, snap gotvc.Snapshot) (err error) {
-	ctx = metrics.Child(ctx, "syncinc gotvc")
+	ctx = metrics.Child(ctx, "syncing gotvc")
 	defer metrics.Close(ctx)
 	return gotvc.Sync(ctx, src.VC, dst.VC, snap, func(root gotfs.Root) error {
 		ctx := metrics.Child(ctx, "syncing gotfs")

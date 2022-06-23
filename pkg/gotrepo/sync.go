@@ -4,12 +4,11 @@ import (
 	"context"
 
 	"github.com/gotvc/got/pkg/branches"
-	"github.com/gotvc/got/pkg/logctx"
+	"github.com/gotvc/got/pkg/metrics"
 )
 
 // Sync synces 2 branches by name.
 func (r *Repo) Sync(ctx context.Context, src, dst string, force bool) error {
-	logctx.Infof(ctx, "syncing %q to %q", src, dst)
 	srcBranch, err := r.GetBranch(ctx, src)
 	if err != nil {
 		return err
@@ -18,6 +17,8 @@ func (r *Repo) Sync(ctx context.Context, src, dst string, force bool) error {
 	if err != nil {
 		return err
 	}
+	ctx = metrics.Child(ctx, "syncing volumes")
+	defer metrics.Close(ctx)
 	return branches.SyncVolumes(ctx, srcBranch.Volume, dstBranch.Volume, force)
 }
 
