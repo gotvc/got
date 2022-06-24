@@ -25,6 +25,7 @@ import (
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotnet"
 	"github.com/gotvc/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/logctx"
 	"github.com/gotvc/got/pkg/staging"
 	"github.com/gotvc/got/pkg/stores"
 )
@@ -79,7 +80,8 @@ type Repo struct {
 	db, storesDB *bolt.DB
 	config       Config
 	privateKey   p2p.PrivateKey
-	log          logrus.FieldLogger
+	// ctx is used as the background context for serving the repo
+	ctx          context.Context 
 
 	workingDir FS // workingDir is repoFS with reserved paths filtered.
 	stage      *staging.Stage
@@ -133,7 +135,8 @@ func Init(p string) error {
 }
 
 func Open(p string) (*Repo, error) {
-	ctx := context.TODO()
+	ctx := context.Background()
+	ctx = logctx.WithLogger(ctx, logrus.StandardLogger())
 	repoFS := posixfs.NewDirFS(p)
 	config, err := LoadConfig(repoFS, configPath)
 	if err != nil {
@@ -164,7 +167,7 @@ func Open(p string) (*Repo, error) {
 		privateKey: privateKey,
 		db:         db,
 		storesDB:   storesDB,
-		log:        logrus.StandardLogger(),
+		ctx:        ctx,
 
 		workingDir: posixfs.NewFiltered(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)

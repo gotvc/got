@@ -10,10 +10,10 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
+	"github.com/gotvc/got/pkg/logctx"
 )
 
 type BranchID struct {
@@ -24,14 +24,12 @@ type BranchID struct {
 type spaceSrv struct {
 	open  OpenFunc
 	swarm p2p.AskSwarm[PeerID]
-	log   *logrus.Logger
 }
 
 func newSpaceSrv(open OpenFunc, swarm p2p.AskSwarm[PeerID]) *spaceSrv {
 	return &spaceSrv{
 		open:  open,
 		swarm: swarm,
-		log:   logrus.StandardLogger(),
 	}
 }
 
@@ -144,7 +142,7 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[P
 		if err := json.Unmarshal(msg.Payload, &req); err != nil {
 			return nil, err
 		}
-		s.log.Infof("%s from %v", req.Op, peer)
+		logctx.Infof(ctx, "%s from %v", req.Op, peer)
 		switch req.Op {
 		case opCreate:
 			return s.handleCreate(ctx, peer, req.Name, req.Metadata)
@@ -161,7 +159,7 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[P
 		}
 	}()
 	if err != nil {
-		logrus.Error(err)
+		logctx.Errorf(ctx, "%v", err)
 		res = &SpaceRes{
 			Error: makeWireError(err),
 		}

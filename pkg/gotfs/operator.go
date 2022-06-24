@@ -11,8 +11,8 @@ import (
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/logctx"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type (
@@ -206,9 +206,9 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 	return o.gotkv.ForEach(ctx, s, root, gotkv.Span{}, func(ent gotkv.Entry) error {
 		switch {
 		case lastPath == nil:
-			logrus.Printf("checking root")
+			logctx.Infof(ctx, "checking root")
 			if !bytes.Equal(ent.Key, []byte{Sep}) {
-				logrus.Printf("first key: %q", ent.Key)
+				logctx.Infof(ctx, "first key: %q", ent.Key)
 				return errors.Errorf("filesystem is missing root")
 			}
 			p := ""
@@ -222,7 +222,7 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 			if err != nil {
 				return err
 			}
-			logrus.Printf("checking %q", p)
+			logctx.Infof(ctx, "checking %q", p)
 			if !strings.HasPrefix(*lastPath, parentPath(p)) {
 				return errors.Errorf("path %s did not have parent", p)
 			}

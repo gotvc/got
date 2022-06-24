@@ -7,7 +7,7 @@ import (
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/sirupsen/logrus"
+	"github.com/gotvc/got/pkg/logctx"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -107,7 +107,7 @@ func (s Store) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int
 		}
 		id := cadata.IDFromBytes(res.Ids[i])
 		if !span.Contains(id, func(a, b cadata.ID) int { return a.Compare(b) }) {
-			logrus.Warnf("gotgrpc: store returned ID %v not in Span %v", id, span)
+			logctx.Warnf(ctx, "gotgrpc: store returned ID %v not in Span %v", id, span)
 			continue
 		}
 		ids[i] = id

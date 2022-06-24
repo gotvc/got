@@ -3,6 +3,8 @@ package gotcmd
 import (
 	"github.com/gotvc/got"
 	"github.com/gotvc/got/pkg/gotrepo"
+	"github.com/gotvc/got/pkg/logctx"
+	"github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 )
@@ -60,7 +62,8 @@ func NewRootCmd() *cobra.Command {
 }
 
 var (
-	ctx = context.Background()
+	log = logrus.StandardLogger()
+	ctx = logctx.WithLogger(context.Background(), log)
 )
 
 func loadRepo(repo **gotrepo.Repo, open func() (*gotrepo.Repo, error)) func(cmd *cobra.Command, args []string) error {

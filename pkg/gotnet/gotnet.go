@@ -15,7 +15,6 @@ import (
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotiam"
 	"github.com/inet256/inet256/pkg/inet256"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 )
@@ -47,13 +46,13 @@ type PeerID = inet256.Addr
 type OpenFunc = func(PeerID) branches.Space
 
 type Params struct {
-	Swarm  p2p.SecureAskSwarm[PeerID]
-	Open   OpenFunc
-	Logger *logrus.Logger
+	Swarm p2p.SecureAskSwarm[PeerID]
+	Open  OpenFunc
 }
 
 type Service struct {
 	mux p2pmux.SecureAskMux[PeerID, string]
+	ctx context.Context
 
 	blobPullSrv *blobPullSrv
 	blobMainSrv *blobMainSrv
@@ -73,8 +72,7 @@ func New(params Params) *Service {
 	return srv
 }
 
-func (s *Service) Serve() error {
-	ctx := context.Background()
+func (s *Service) Serve(ctx context.Context) error {
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error {
 		return s.blobPullSrv.Serve(ctx)

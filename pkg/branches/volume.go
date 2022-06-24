@@ -8,6 +8,7 @@ import (
 	"github.com/brendoncarroll/go-state/cells"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/logctx"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -136,11 +137,11 @@ func CleanupVolume(ctx context.Context, vol Volume) error {
 		}
 	}
 	for i := range keep {
-		logrus.Printf("keeping %d blobs", keep[i].Count())
+		logctx.Infof(ctx, "keeping %d blobs", keep[i].Count())
 		if count, err := filterStore(ctx, ss[i], keep[i]); err != nil {
 			return err
 		} else {
-			logrus.Printf("deleted %d blobs", count)
+			logctx.Infof(ctx, "deleted %d blobs", count)
 		}
 	}
 	return nil

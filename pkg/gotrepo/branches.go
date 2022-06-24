@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/logctx"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -140,11 +141,11 @@ func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	r.log.Infof("begin cleanup on %q", name)
+	logctx.Infof(ctx, "begin cleanup on %q", name)
 	if err := branches.CleanupVolume(ctx, branch.Volume); err != nil {
 		return err
 	}
-	r.log.Infof("done cleanup on %q", name)
+	logctx.Infof(ctx, "done cleanup on %q", name)
 	return nil
 }
 

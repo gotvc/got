@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/logctx"
 )
 
 // Sync synces 2 branches by name.
 func (r *Repo) Sync(ctx context.Context, src, dst string, force bool) error {
-	r.log.Infof("syncing %q to %q", src, dst)
+	logctx.Infof(ctx, "syncing %q to %q", src, dst)
 	srcBranch, err := r.GetBranch(ctx, src)
 	if err != nil {
 		return err

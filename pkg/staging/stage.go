@@ -10,8 +10,8 @@ import (
 	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/logctx"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type Storage interface {
@@ -165,7 +165,7 @@ func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.S
 		case fileOp.Delete:
 			pathRoot = *emptyRoot
 		default:
-			logrus.Warnf("empty op for path %q", p)
+			logctx.Warnf(ctx, "empty op for path %q", p)
 			return nil
 		}
 		segRoot := fsop.AddPrefix(pathRoot, p)
@@ -179,12 +179,12 @@ func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.S
 		return nil, err
 	}
 	segs = gotfs.ChangesOnBase(*base, segs)
-	logrus.Println("splicing...")
+	logctx.Infof(ctx, "splicing...")
 	root, err := fsop.Splice(ctx, ms, ds, segs)
 	if err != nil {
 		return nil, err
 	}
-	logrus.Println("done splicing.")
+	logctx.Infof(ctx, "done splicing.")
 	return root, nil
 }
 
