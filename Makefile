@@ -18,10 +18,10 @@ protobuf:
 	cd ./pkg/gotgrpc && ./build_protobuf.sh
 
 build: protobuf
-	rm -r ./build/*
-	GOOS=darwin GOARCH=amd64 ./etc/build_go_binary.sh build/got_darwin-amd64_$(TAG) ./cmd/got
-	GOOS=linux GOARCH=amd64 ./etc/build_go_binary.sh build/got_linux-amd64_$(TAG) ./cmd/got
-	GOOS=windows GOARCH=amd64 ./etc/build_go_binary.sh build/got_windows-amd64_$(TAG) ./cmd/got
+	rm -r ./out/*
+	GOOS=darwin GOARCH=amd64 ./etc/build_go_binary.sh out/got_darwin-amd64_$(TAG) ./cmd/got
+	GOOS=linux GOARCH=amd64 ./etc/build_go_binary.sh out/got_linux-amd64_$(TAG) ./cmd/got
+	GOOS=windows GOARCH=amd64 ./etc/build_go_binary.sh out/got_windows-amd64_$(TAG) ./cmd/got
 
 add-replace:
 	go mod edit -replace=github.com/brendoncarroll/go-state=../../brendoncarroll/go-state

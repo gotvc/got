@@ -4,13 +4,12 @@ Like Git, but with an 'o'
 Got is version control, with a model similar to Git's.
 It provides end-to-end encryption and uses an improved data structure with good support for large files and directories.
 
-Got uses [INET256](https://github.com/inet256/inet256) to easily and securely connect repositories.
-
-[CLI Docs](./doc/CLI.md)
-
-[ARCHITECTURE.md](./ARCHITECTURE.md)
-
-[Cryptography Overview](./doc/Cryptography.md)
+## Quick Links
+- [ARCHITECTURE.md](./ARCHITECTURE.md)
+- [CLI Docs](./doc/CLI.md)
+- [Cryptography Overview](./doc/Cryptography.md)
+- [GotFS](./pkg/gotfs/README.md)
+- [GotKV](./pkg/gotkv/README.md)
 
 ## Features/Roadmap
 - [x] Content-Defined chunking of large files into blobs with a maximum size.
@@ -25,12 +24,10 @@ Got uses [INET256](https://github.com/inet256/inet256) to easily and securely co
 - [x] Share repositories over INET256 using `serve` command.
 - [x] Branch level access control using ACL defined in a `.got/policy` file.
 - [x] Efficiently pack many small files into fewer blobs.
+- [x] Connect repositories over [INET256](https://github.com/inet256/inet256)
+- [x] Connect repositories using QUIC.
 - [ ] Checkout the head of a branch to the working directory.
 - [ ] Merge 2 branches.
-
-## Useful Components
-- [GotKV](./pkg/gotkv/README.md)
-- [GotFS](./pkg/gotfs/README.md)
 
 ## Getting Started
 Either download a prebuilt binary or build one from source.
@@ -59,8 +56,7 @@ To build release binaries
 TAG=v0.0.x make build
 ```
 Where `TAG` is an environment variable which should be set to the release version, or the Git hash of the source used for the build.
-The release binaries will be under the `build` directory.
+The release binaries will be under the `out` directory.
 
 ## More
 Read more about the configuration objects in [doc/Config.md](./doc/Config.md).
-
