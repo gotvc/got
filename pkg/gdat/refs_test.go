@@ -25,6 +25,6 @@ func TestMarshalUnmarshal(t *testing.T) {
 func TestRefString(t *testing.T) {
 	x := Ref{}
 	actual := fmt.Sprintf("%v", x)
-	expected := "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA#AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+	expected := "-------------------------------------------#-------------------------------------------"
 	require.Equal(t, expected, actual)
 }

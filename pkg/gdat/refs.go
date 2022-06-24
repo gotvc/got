@@ -10,7 +10,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-const MaxRefBinaryLen = cadata.IDSize + DEKSize
+const (
+	MaxRefBinaryLen = cadata.IDSize + DEKSize
+	Base64Alphabet  = cadata.Base64Alphabet
+)
+
+var codec = base64.NewEncoding(Base64Alphabet).WithPadding(base64.NoPadding)
 
 type Ref struct {
 	CID cadata.ID
@@ -18,7 +23,6 @@ type Ref struct {
 }
 
 func (r Ref) MarshalText() ([]byte, error) {
-	codec := base64.RawURLEncoding
 	buf := [128]byte{}
 	var n int
 	codec.Encode(buf[:], r.CID[:])
@@ -31,7 +35,6 @@ func (r Ref) MarshalText() ([]byte, error) {
 }
 
 func (r *Ref) UnmarshalText(data []byte) error {
-	codec := base64.RawURLEncoding
 	parts := bytes.SplitN(data, []byte("#"), 2)
 	if len(parts) != 2 {
 		return errors.Errorf("invalid ref")

@@ -22,6 +22,8 @@ const (
 	paddingBlockSize   = 16
 )
 
+var codec = base64.NewEncoding(gdat.Base64Alphabet)
+
 // CryptoSpaceOptions configure a CryptoSpace
 type CryptoSpaceOption = func(*CryptoSpace)
 
@@ -122,7 +124,7 @@ func (r *CryptoSpace) encryptName(x string) string {
 	deriveKey(nonce[:], r.secret, "got/space/name-nonces/"+x)
 	ptext := padBytes([]byte(x), paddingBlockSize)
 	ctext := r.getAEAD(secret[:]).Seal(nil, nonce[:], ptext, nil)
-	return fmt.Sprintf("%s.%s", enc.EncodeToString(nonce[:]), enc.EncodeToString(ctext[:]))
+	return fmt.Sprintf("%s.%s", codec.EncodeToString(nonce[:]), codec.EncodeToString(ctext[:]))
 }
 
 func (r *CryptoSpace) decryptName(x string) (string, error) {
@@ -131,11 +133,11 @@ func (r *CryptoSpace) decryptName(x string) (string, error) {
 		return "", errors.Errorf("missing nonce")
 	}
 	var nonce [24]byte
-	if _, err := enc.Decode(nonce[:], parts[0]); err != nil {
+	if _, err := codec.Decode(nonce[:], parts[0]); err != nil {
 		return "", err
 	}
-	ctext := make([]byte, enc.DecodedLen(len(parts[1])))
-	n, err := enc.Decode(ctext, parts[1])
+	ctext := make([]byte, codec.DecodedLen(len(parts[1])))
+	n, err := codec.Decode(ctext, parts[1])
 	if err != nil {
 		return "", err
 	}
@@ -214,8 +216,6 @@ func readRandom(out []byte) {
 		panic(err)
 	}
 }
-
-var enc = base64.URLEncoding
 
 func padBytes(x []byte, blockSize int) []byte {
 	if blockSize > 255 {
