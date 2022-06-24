@@ -6,8 +6,8 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cells"
+	"github.com/gotvc/got/pkg/logctx"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 const cellSize = 1 << 16
@@ -85,7 +85,7 @@ func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[P
 		}
 		return nil
 	}(); err != nil {
-		logrus.Errorf("while handling cell request: %v", err)
+		logctx.Errorf(ctx, "while handling cell request: %v", err)
 		return -1
 	}
 	return n

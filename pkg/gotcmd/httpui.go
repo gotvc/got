@@ -6,7 +6,7 @@ import (
 
 	"github.com/gotvc/got/pkg/gotiofs"
 	"github.com/gotvc/got/pkg/gotrepo"
-	"github.com/sirupsen/logrus"
+	"github.com/gotvc/got/pkg/logctx"
 	"github.com/spf13/cobra"
 )
 
@@ -36,7 +36,7 @@ func newHTTPUICmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 			return err
 		}
 		defer l.Close()
-		logrus.Infof("serving on http://%v", l.Addr())
+		logctx.Infof(ctx, "serving on http://%v", l.Addr())
 		return http.Serve(l, h)
 	}
 	return c

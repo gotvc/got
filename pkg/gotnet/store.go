@@ -10,8 +10,8 @@ import (
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotiam"
+	"github.com/gotvc/got/pkg/logctx"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type StoreID struct {
@@ -33,7 +33,6 @@ type blobPullSrv struct {
 	store *tempStore
 	swarm p2p.AskSwarm[PeerID]
 	open  OpenFunc
-	log   *logrus.Logger
 }
 
 func newBlobPullSrv(open OpenFunc, ts *tempStore, x p2p.AskSwarm[PeerID]) *blobPullSrv {
@@ -41,7 +40,6 @@ func newBlobPullSrv(open OpenFunc, ts *tempStore, x p2p.AskSwarm[PeerID]) *blobP
 		store: ts,
 		swarm: x,
 		open:  open,
-		log:   logrus.StandardLogger(),
 	}
 	return srv
 }
@@ -83,7 +81,7 @@ func (s *blobPullSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Messag
 		}
 		return nil
 	}(); err != nil {
-		s.log.Warn(err)
+		logctx.Warnf(ctx, "%v", err)
 		return -1
 	}
 	return n
@@ -103,7 +101,6 @@ type blobMainSrv struct {
 	swarm       p2p.AskSwarm[PeerID]
 	blobPullSrv *blobPullSrv
 	open        OpenFunc
-	log         *logrus.Logger
 }
 
 func newBlobMainSrv(open OpenFunc, blobGet *blobPullSrv, swarm p2p.AskSwarm[PeerID]) *blobMainSrv {
@@ -111,7 +108,6 @@ func newBlobMainSrv(open OpenFunc, blobGet *blobPullSrv, swarm p2p.AskSwarm[Peer
 		blobPullSrv: blobGet,
 		swarm:       swarm,
 		open:        open,
-		log:         logrus.StandardLogger(),
 	}
 	return srv
 }
@@ -234,7 +230,7 @@ func (s *blobMainSrv) handleAsk(ctx context.Context, respBuf []byte, msg p2p.Mes
 		n = copy(respBuf, data)
 		return nil
 	}(); err != nil {
-		s.log.Error(err)
+		logctx.Errorf(ctx, "%v", err)
 		return -1
 	}
 	return n

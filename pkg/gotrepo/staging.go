@@ -8,6 +8,7 @@ import (
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/logctx"
 	"github.com/gotvc/got/pkg/staging"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
@@ -169,7 +170,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 	if yes, err := r.stage.IsEmpty(ctx); err != nil {
 		return err
 	} else if yes {
-		r.log.Warn("nothing to commit")
+		logctx.Warnf(ctx, "nothing to commit")
 		return nil
 	}
 	_, branch, err := r.GetActiveBranch(ctx)
@@ -196,12 +197,12 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 		if x != nil {
 			root = &x.Root
 		}
-		r.log.Println("begin applying staged changes")
+		logctx.Infof(ctx, "begin applying staged changes")
 		nextRoot, err := r.stage.Apply(ctx, fsop, src.FS, src.Raw, root)
 		if err != nil {
 			return nil, err
 		}
-		r.log.Println("done applying staged changes")
+		logctx.Infof(ctx, "done applying staged changes")
 		var parents []Snap
 		if x != nil {
 			parents = []Snap{*x}

@@ -19,11 +19,13 @@ import (
 	"github.com/gotvc/got/pkg/stores"
 )
 
+var ctx = context.Background()
+
 func TestSpace(t *testing.T) {
 	branches.TestSpace(t, func(t testing.TB) branches.Space {
 		s1, s2 := newTestPair(t)
-		go s1.srv.Serve()
-		go s2.srv.Serve()
+		go s1.srv.Serve(ctx)
+		go s2.srv.Serve(ctx)
 		peer2 := s2.swarm.LocalAddrs()[0]
 		return s1.srv.GetSpace(peer2)
 	})
@@ -32,8 +34,8 @@ func TestSpace(t *testing.T) {
 func TestStore(t *testing.T) {
 	storetest.TestStore(t, func(t testing.TB) cadata.Store {
 		s1, s2 := newTestPair(t)
-		go s1.srv.Serve()
-		go s2.srv.Serve()
+		go s1.srv.Serve(ctx)
+		go s2.srv.Serve(ctx)
 		peer2 := s2.swarm.LocalAddrs()[0]
 		space := s1.srv.GetSpace(peer2)
 		return createStore(t, space)
@@ -43,8 +45,8 @@ func TestStore(t *testing.T) {
 func TestCell(t *testing.T) {
 	celltest.CellTestSuite(t, func(t testing.TB) cells.Cell {
 		s1, s2 := newTestPair(t)
-		go s1.srv.Serve()
-		go s2.srv.Serve()
+		go s1.srv.Serve(ctx)
+		go s2.srv.Serve(ctx)
 		peer2 := s2.swarm.LocalAddrs()[0]
 		space := s1.srv.GetSpace(peer2)
 		return createCell(t, space)

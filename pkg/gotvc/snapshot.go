@@ -10,8 +10,8 @@ import (
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
+	"github.com/gotvc/got/pkg/logctx"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type (
@@ -178,7 +178,7 @@ func (op *Operator) RefFromSnapshot(snap Snapshot, s cadata.Store) Ref {
 
 // Check ensures that snapshot is valid.
 func (o *Operator) Check(ctx context.Context, s cadata.Store, snap Snapshot, checkRoot func(gotfs.Root) error) error {
-	logrus.Infof("checking snapshot #%d", snap.N)
+	logctx.Infof(ctx, "checking snapshot #%d", snap.N)
 	if err := checkRoot(snap.Root); err != nil {
 		return err
 	}

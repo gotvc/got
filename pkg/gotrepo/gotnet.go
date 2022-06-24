@@ -12,8 +12,8 @@ import (
 	"github.com/gotvc/got/pkg/gotnet"
 	"github.com/gotvc/got/pkg/gotnet/quichub"
 	"github.com/gotvc/got/pkg/goturl"
+	"github.com/gotvc/got/pkg/logctx"
 	"github.com/inet256/inet256/client/go_client/inet256client"
-	"github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -25,8 +25,8 @@ func (r *Repo) Serve(ctx context.Context) error {
 		return err
 	}
 	u := goturl.NewNativeSpace(r.GetID())
-	logrus.Infof("serving at %s...", u.String())
-	return srv.Serve()
+	logctx.Infof(ctx, "serving at %s...", u.String())
+	return srv.Serve(ctx)
 }
 
 func (r *Repo) ServeQUIC(ctx context.Context, laddr string) error {
@@ -36,8 +36,8 @@ func (r *Repo) ServeQUIC(ctx context.Context, laddr string) error {
 	}
 	gn := r.makeGotNet(qh)
 	u := goturl.NewQUICSpace(quichub.Addr{ID: r.GetID(), Addr: laddr})
-	logrus.Infof("serving at %s ...", u.String())
-	return gn.Serve()
+	logctx.Infof(ctx, "serving at %s ...", u.String())
+	return gn.Serve(ctx)
 }
 
 func (r *Repo) GotNetClient() (*gotnet.Service, error) {
@@ -57,11 +57,11 @@ func (r *Repo) getGotNet() (*gotnet.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	logrus.Println("setup INET256 node", node.LocalAddr())
+	logctx.Infof(ctx, "setup INET256 node", node.LocalAddr())
 	swarm := mbapp.New(inet256client.NewSwarm(node), gotnet.MaxMessageSize)
 	srv := r.makeGotNet(swarm)
 	r.gotNet = srv
-	go r.gotNet.Serve()
+	go r.gotNet.Serve(r.ctx)
 	return srv, nil
 }
 
@@ -71,13 +71,12 @@ func (r *Repo) getQUICGotNet(spec QUICSpaceSpec) (*gotnet.Service, error) {
 		return nil, err
 	}
 	gn := r.makeGotNet(sw)
-	go gn.Serve()
+	go gn.Serve(r.ctx)
 	return gn, nil
 }
 
 func (r *Repo) makeGotNet(swarm p2p.SecureAskSwarm[PeerID]) *gotnet.Service {
 	return gotnet.New(gotnet.Params{
-		Logger: logrus.StandardLogger(),
 		Open: func(peer PeerID) branches.Space {
 			return r.iamEngine.GetSpace(r.GetSpace(), peer)
 		},
@@ -91,7 +90,7 @@ func (r *Repo) getGRPCClient(endpoint string, headers map[string]string) (gotgrp
 	if strings.HasPrefix(endpoint, "http://") {
 		endpoint = strings.TrimPrefix(endpoint, "http://")
 		opts = append(opts, grpc.WithInsecure())
-		r.log.Warnf("insecure gRPC connection over http to %v", endpoint)
+		logctx.Warnf(ctx, "insecure gRPC connection over http to %v", endpoint)
 	} else if strings.HasPrefix(endpoint, "https://") {
 		endpoint = strings.TrimPrefix(endpoint, "https://")
 		opts = append(opts, grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})))
