@@ -37,9 +37,10 @@ func SetDenom(ctx context.Context, m string, n int, u units.Unit) {
 	r.SetDenom(m, int64(n), u)
 }
 
-func Child(ctx context.Context, name string) context.Context {
-	r := FromContext(ctx)
-	return WithCollector(ctx, r.Child(name))
+func Child(ctx context.Context, name string) (context.Context, func()) {
+	c := FromContext(ctx)
+	child := c.Child(name)
+	return WithCollector(ctx, child), child.Close
 }
 
 func Close(ctx context.Context) {
@@ -101,7 +102,18 @@ func (r *Collector) IsClosed() bool {
 func (r *Collector) GetCounter(m string) *Counter {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.counters[m]
+	agg := &Counter{}
+	if c := r.counters[m]; c != nil {
+		agg.Absorb(c)
+	}
+	for _, child := range r.children {
+		child.mu.RLock()
+		if c := child.counters[m]; c != nil {
+			agg.Absorb(c)
+		}
+		child.mu.RUnlock()
+	}
+	return agg
 }
 
 func (r *Collector) List() []string {
@@ -188,6 +200,6 @@ func (r *Collector) Close() {
 		} else if c1.unit != c2.unit {
 			continue
 		}
-		c2.Add(time.Now(), c1.num, c1.unit)
+		c2.Absorb(c1)
 	}
 }

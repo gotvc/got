@@ -8,23 +8,24 @@ import (
 )
 
 type Counter struct {
-	unit       units.Unit
-	num, denom int64
+	unit        units.Unit
+	first, last time.Time
+	num, denom  int64
 
-	deltaNum int64
-	deltaDur time.Duration
-	last     time.Time
+	delta float64
 }
 
 func (c *Counter) Set(now time.Time, x int64, u units.Unit) {
 	if c.unit != "" && c.unit != u {
 		panic("mismatch units: " + c.unit + " and " + u)
 	}
+	if c.first.IsZero() {
+		c.first = now
+	}
 	c.unit = u
 
-	c.deltaNum = c.num - x
 	c.num = x
-	c.deltaDur = now.Sub(c.last)
+	c.delta = float64(x-c.num) / now.Sub(c.last).Seconds()
 	c.last = now
 }
 
@@ -32,11 +33,13 @@ func (c *Counter) Add(now time.Time, d int64, u units.Unit) int64 {
 	if c.unit != "" && c.unit != u {
 		panic("mismatch units: " + c.unit + " and " + u)
 	}
+	if c.first.IsZero() {
+		c.first = now
+	}
 	c.unit = u
 
-	c.deltaNum = d
-	c.deltaDur = now.Sub(c.last)
 	c.num += d
+	c.delta = float64(d) / now.Sub(c.last).Seconds()
 	c.last = now
 	return c.num
 }
@@ -58,17 +61,41 @@ func (c *Counter) Get() Value {
 }
 
 func (c *Counter) GetDelta() Value {
+	last := c.last
+	if last.IsZero() {
+		last = time.Now()
+	}
 	return Value{
-		X:     float64(c.deltaNum) / c.deltaDur.Seconds(),
+		X:     float64(c.num) / last.Sub(c.first).Seconds(),
 		Units: c.unit + "/s",
 	}
 }
 
 func (c *Counter) GetDenom() Value {
 	return Value{
-		X:     float64(c.num),
+		X:     float64(c.denom),
 		Units: c.unit,
 	}
+}
+
+func (c *Counter) Absorb(c2 *Counter) {
+	if c.unit != "" && c.unit != c2.unit {
+		return
+	}
+	if c.unit == "" {
+		c.unit = c2.unit
+	}
+	if c.first.IsZero() {
+		c.first = c2.first
+	} else {
+		c.first = minTime(c.first, c2.first)
+	}
+	if c.last.IsZero() {
+		c.last = c2.last
+	} else {
+		c.last = maxTime(c.last, c2.last)
+	}
+	c.num += c2.num
 }
 
 func (c *Counter) String() string {
@@ -83,4 +110,18 @@ func (c *Counter) String() string {
 	b.WriteString(c.GetDelta().String())
 	b.WriteString(")")
 	return b.String()
+}
+
+func minTime(a, b time.Time) time.Time {
+	if a.Before(b) {
+		return a
+	}
+	return b
+}
+
+func maxTime(a, b time.Time) time.Time {
+	if a.After(b) {
+		return a
+	}
+	return b
 }

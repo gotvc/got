@@ -67,8 +67,8 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 	})
 	metrics.SetDenom(ctx, "paths", len(dirents), "paths")
 	for _, dirent := range dirents {
-		ctx := metrics.Child(ctx, dirent.Name)
-		defer metrics.Close(ctx)
+		ctx, cf := metrics.Child(ctx, dirent.Name)
+		defer cf()
 		p2 := path.Join(p, dirent.Name)
 		pathRoot, err := pr.ImportPath(ctx, fsx, p2)
 		if err != nil {
@@ -144,9 +144,9 @@ func importFileConcurrent(ctx context.Context, fsop *gotfs.Operator, ms, ds cada
 	for i := 0; i < numWorkers; i++ {
 		i := i
 		start, end := divide(fileSize, numWorkers, i)
-		ctx := metrics.Child(ctx, fmt.Sprintf("worker-%d", i))
+		ctx, cf := metrics.Child(ctx, fmt.Sprintf("worker-%d", i))
 		eg.Go(func() error {
-			defer metrics.Close(ctx)
+			defer cf()
 			f, err := fsx.OpenFile(p, posixfs.O_RDONLY, 0)
 			if err != nil {
 				return err

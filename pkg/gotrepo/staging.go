@@ -35,8 +35,8 @@ func (r *Repo) Add(ctx context.Context, paths ...string) error {
 			if err := stage.CheckConflict(ctx, p); err != nil {
 				return err
 			}
-			ctx := metrics.Child(ctx, p)
-			defer metrics.Close(ctx)
+			ctx, cf := metrics.Child(ctx, p)
+			defer cf()
 			fileRoot, err := porter.ImportFile(ctx, r.workingDir, p)
 			if err != nil {
 				return err
@@ -63,8 +63,8 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 	}
 	stage := r.stage
 	for _, p := range paths {
-		ctx := metrics.Child(ctx, p)
-		defer metrics.Close(ctx)
+		ctx, cf := metrics.Child(ctx, p)
+		defer cf()
 		if err := stage.CheckConflict(ctx, p); err != nil {
 			return err
 		}
@@ -198,17 +198,17 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 	}
 	fsop := r.getFSOp(branch)
 	vcop := r.getVCOp(branch)
+	ctx, cf := metrics.Child(ctx, "applying changes")
+	defer cf()
 	if err := branches.Apply(ctx, *branch, *src, func(x *Snap) (*Snap, error) {
 		var root *Root
 		if x != nil {
 			root = &x.Root
 		}
-		logctx.Infof(ctx, "begin applying staged changes")
 		nextRoot, err := r.stage.Apply(ctx, fsop, src.FS, src.Raw, root)
 		if err != nil {
 			return nil, err
 		}
-		logctx.Infof(ctx, "done applying staged changes")
 		var parents []Snap
 		if x != nil {
 			parents = []Snap{*x}

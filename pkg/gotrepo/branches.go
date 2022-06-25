@@ -8,7 +8,6 @@ import (
 	bolt "go.etcd.io/bbolt"
 
 	"github.com/gotvc/got/pkg/branches"
-	"github.com/gotvc/got/pkg/logctx"
 	"github.com/gotvc/got/pkg/metrics"
 )
 
@@ -124,9 +123,9 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	if err != nil {
 		return err
 	}
-	ctx2 := metrics.Child(ctx, "syncing")
-	defer metrics.Close(ctx2)
-	if err := branches.SyncVolumes(ctx2, baseBranch.Volume, nextBranch.Volume, false); err != nil {
+	ctx, cf := metrics.Child(ctx, "syncing")
+	defer cf()
+	if err := branches.SyncVolumes(ctx, baseBranch.Volume, nextBranch.Volume, false); err != nil {
 		return err
 	}
 	return r.SetActiveBranch(ctx, next)
@@ -145,11 +144,11 @@ func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	logctx.Infof(ctx, "begin cleanup on %q", name)
+	ctx, cf := metrics.Child(ctx, "cleanup volume")
+	defer cf()
 	if err := branches.CleanupVolume(ctx, branch.Volume); err != nil {
 		return err
 	}
-	logctx.Infof(ctx, "done cleanup on %q", name)
 	return nil
 }
 

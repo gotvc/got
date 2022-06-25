@@ -13,6 +13,7 @@ import (
 
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/logctx"
+	"github.com/gotvc/got/pkg/metrics"
 )
 
 type Storage interface {
@@ -180,10 +181,14 @@ func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.S
 		return nil, err
 	}
 	segs = gotfs.ChangesOnBase(*base, segs)
+	ctx, cf := metrics.Child(ctx, "splicing")
+	defer cf()
+	metrics.SetDenom(ctx, "segs", len(segs), "segs")
 	root, err := fsop.Splice(ctx, ms, ds, segs)
 	if err != nil {
 		return nil, err
 	}
+	metrics.AddInt(ctx, "segs", len(segs), "segs")
 	return root, nil
 }
 

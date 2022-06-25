@@ -17,8 +17,8 @@ func (r *Repo) Sync(ctx context.Context, src, dst string, force bool) error {
 	if err != nil {
 		return err
 	}
-	ctx = metrics.Child(ctx, "syncing volumes")
-	defer metrics.Close(ctx)
+	ctx, cf := metrics.Child(ctx, "syncing volumes")
+	defer cf()
 	return branches.SyncVolumes(ctx, srcBranch.Volume, dstBranch.Volume, force)
 }
 
