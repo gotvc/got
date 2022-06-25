@@ -5,13 +5,15 @@ import (
 	"os"
 
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/pkg/errors"
+
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/logctx"
+	"github.com/gotvc/got/pkg/metrics"
 	"github.com/gotvc/got/pkg/staging"
 	"github.com/gotvc/got/pkg/stores"
-	"github.com/pkg/errors"
 )
 
 // Add adds paths from the working directory to the staging area.
@@ -33,6 +35,8 @@ func (r *Repo) Add(ctx context.Context, paths ...string) error {
 			if err := stage.CheckConflict(ctx, p); err != nil {
 				return err
 			}
+			ctx, cf := metrics.Child(ctx, p)
+			defer cf()
 			fileRoot, err := porter.ImportFile(ctx, r.workingDir, p)
 			if err != nil {
 				return err
@@ -59,6 +63,8 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 	}
 	stage := r.stage
 	for _, p := range paths {
+		ctx, cf := metrics.Child(ctx, p)
+		defer cf()
 		if err := stage.CheckConflict(ctx, p); err != nil {
 			return err
 		}
@@ -192,17 +198,17 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 	}
 	fsop := r.getFSOp(branch)
 	vcop := r.getVCOp(branch)
+	ctx, cf := metrics.Child(ctx, "applying changes")
+	defer cf()
 	if err := branches.Apply(ctx, *branch, *src, func(x *Snap) (*Snap, error) {
 		var root *Root
 		if x != nil {
 			root = &x.Root
 		}
-		logctx.Infof(ctx, "begin applying staged changes")
 		nextRoot, err := r.stage.Apply(ctx, fsop, src.FS, src.Raw, root)
 		if err != nil {
 			return nil, err
 		}
-		logctx.Infof(ctx, "done applying staged changes")
 		var parents []Snap
 		if x != nil {
 			parents = []Snap{*x}

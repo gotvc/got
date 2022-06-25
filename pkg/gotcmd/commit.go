@@ -9,6 +9,7 @@ import (
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got"
 	"github.com/gotvc/got/pkg/gotrepo"
+	"github.com/gotvc/got/pkg/metrics"
 	"github.com/spf13/cobra"
 	"golang.org/x/sync/errgroup"
 )
@@ -22,6 +23,8 @@ func newCommitCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		PostRunE: closeRepo(repo),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			// TODO get message from -m flag
+			r := metrics.NewTTYRenderer(collector, cmd.OutOrStdout())
+			defer r.Close()
 			now := tai64.Now().TAI64()
 			return repo.Commit(ctx, got.SnapInfo{
 				Message:    "",

@@ -4,10 +4,11 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/gotvc/got/pkg/branches"
-	"github.com/gotvc/got/pkg/logctx"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
+
+	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/metrics"
 )
 
 // CreateBranch creates a branch using the default spec.
@@ -122,6 +123,8 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	if err != nil {
 		return err
 	}
+	ctx, cf := metrics.Child(ctx, "syncing")
+	defer cf()
 	if err := branches.SyncVolumes(ctx, baseBranch.Volume, nextBranch.Volume, false); err != nil {
 		return err
 	}
@@ -141,11 +144,11 @@ func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	logctx.Infof(ctx, "begin cleanup on %q", name)
+	ctx, cf := metrics.Child(ctx, "cleanup volume")
+	defer cf()
 	if err := branches.CleanupVolume(ctx, branch.Volume); err != nil {
 		return err
 	}
-	logctx.Infof(ctx, "done cleanup on %q", name)
 	return nil
 }
 

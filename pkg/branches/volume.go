@@ -9,9 +9,9 @@ import (
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/logctx"
+	"github.com/gotvc/got/pkg/metrics"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 )
 
 type Snap = gotvc.Snap
@@ -106,13 +106,11 @@ type StoreTriple struct {
 }
 
 func syncStores(ctx context.Context, src, dst StoreTriple, snap gotvc.Snapshot) (err error) {
-	logrus.Println("begin syncing stores")
-	defer func() {
-		if err == nil {
-			logrus.Println("done syncing stores")
-		}
-	}()
+	ctx, cf := metrics.Child(ctx, "syncing gotvc")
+	defer cf()
 	return gotvc.Sync(ctx, src.VC, dst.VC, snap, func(root gotfs.Root) error {
+		ctx, cf := metrics.Child(ctx, "syncing gotfs")
+		defer cf()
 		return gotfs.Sync(ctx, src.FS, src.Raw, dst.FS, dst.Raw, root)
 	})
 }

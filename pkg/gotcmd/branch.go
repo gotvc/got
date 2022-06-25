@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotrepo"
+	"github.com/gotvc/got/pkg/metrics"
 	"github.com/spf13/cobra"
 )
 
@@ -150,6 +151,8 @@ func newForkCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		Args:     cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			newName := args[0]
+			r := metrics.NewTTYRenderer(collector, cmd.OutOrStdout())
+			defer r.Close()
 			return repo.Fork(ctx, "", newName)
 		},
 	}
@@ -166,6 +169,8 @@ func newSyncCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 	}
 	force := c.Flags().Bool("force", false, "--force")
 	c.RunE = func(cmd *cobra.Command, args []string) error {
+		r := metrics.NewTTYRenderer(collector, cmd.OutOrStdout())
+		defer r.Close()
 		src, dst := args[0], args[1]
 		return repo.Sync(ctx, src, dst, *force)
 	}

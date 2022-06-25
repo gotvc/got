@@ -9,9 +9,11 @@ import (
 
 	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/pkg/errors"
+
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/logctx"
-	"github.com/pkg/errors"
+	"github.com/gotvc/got/pkg/metrics"
 )
 
 type Storage interface {
@@ -179,12 +181,14 @@ func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.S
 		return nil, err
 	}
 	segs = gotfs.ChangesOnBase(*base, segs)
-	logctx.Infof(ctx, "splicing...")
+	ctx, cf := metrics.Child(ctx, "splicing")
+	defer cf()
+	metrics.SetDenom(ctx, "segs", len(segs), "segs")
 	root, err := fsop.Splice(ctx, ms, ds, segs)
 	if err != nil {
 		return nil, err
 	}
-	logctx.Infof(ctx, "done splicing.")
+	metrics.AddInt(ctx, "segs", len(segs), "segs")
 	return root, nil
 }
 
