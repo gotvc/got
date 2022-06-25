@@ -108,6 +108,6 @@ func Equal(a, b Ref) bool {
 
 // Copy copies the data at ref from src to dst.
 func Copy(ctx context.Context, src, dst cadata.Store, ref *Ref) error {
-	defer metrics.AddInt(ctx, "blobs", 1, "blobs")
+	defer metrics.AddInt(ctx, "blob_copy", 1, "blobs")
 	return cadata.Copy(ctx, dst, src, ref.CID)
 }
