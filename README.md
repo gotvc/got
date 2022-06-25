@@ -21,11 +21,10 @@ It provides end-to-end encryption and uses an improved data structure with good 
 - [x] Commit changes, with `commit`.
 - [x] Create, delete, and list branches with `branch` commands.
 - [x] Copy one branch state to another with `sync`.
-- [x] Share repositories over INET256 using `serve` command.
+- [x] Share repositories over [INET256](https://github.com/inet256/inet256) using `serve` command.
+- [x] Share repositories using QUIC with the `serve-quic` command.
 - [x] Branch level access control using ACL defined in a `.got/policy` file.
 - [x] Efficiently pack many small files into fewer blobs.
-- [x] Connect repositories over [INET256](https://github.com/inet256/inet256)
-- [x] Connect repositories using QUIC.
 - [ ] Checkout the head of a branch to the working directory.
 - [ ] Merge 2 branches.
 
