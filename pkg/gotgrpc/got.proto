@@ -26,6 +26,7 @@ message BranchInfo {
     bytes salt = 1;
     bytes created_at = 2;
     repeated Annotation annotations = 3;
+    Mode mode = 4;
 }
 
 message CreateBranchReq {

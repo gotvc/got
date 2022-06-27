@@ -184,6 +184,7 @@ type BranchInfo struct {
 	Salt        []byte        `protobuf:"bytes,1,opt,name=salt,proto3" json:"salt,omitempty"`
 	CreatedAt   []byte        `protobuf:"bytes,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	Annotations []*Annotation `protobuf:"bytes,3,rep,name=annotations,proto3" json:"annotations,omitempty"`
+	Mode        Mode          `protobuf:"varint,4,opt,name=mode,proto3,enum=got.Mode" json:"mode,omitempty"`
 }
 
 func (x *BranchInfo) Reset() {
@@ -237,6 +238,13 @@ func (x *BranchInfo) GetAnnotations() []*Annotation {
 		return x.Annotations
 	}
 	return nil
+}
+
+func (x *BranchInfo) GetMode() Mode {
+	if x != nil {
+		return x.Mode
+	}
+	return Mode_FROZEN
 }
 
 type CreateBranchReq struct {
@@ -1375,14 +1383,16 @@ var file_got_proto_rawDesc = []byte{
 	0x22, 0x34, 0x0a, 0x0a, 0x41, 0x6e, 0x6e, 0x6f, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x12, 0x10,
 	0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79,
 	0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52,
-	0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x22, 0x72, 0x0a, 0x0a, 0x42, 0x72, 0x61, 0x6e, 0x63, 0x68,
-	0x49, 0x6e, 0x66, 0x6f, 0x12, 0x12, 0x0a, 0x04, 0x73, 0x61, 0x6c, 0x74, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x0c, 0x52, 0x04, 0x73, 0x61, 0x6c, 0x74, 0x12, 0x1d, 0x0a, 0x0a, 0x63, 0x72, 0x65, 0x61,
-	0x74, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x09, 0x63, 0x72,
-	0x65, 0x61, 0x74, 0x65, 0x64, 0x41, 0x74, 0x12, 0x31, 0x0a, 0x0b, 0x61, 0x6e, 0x6e, 0x6f, 0x74,
-	0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x0f, 0x2e, 0x67,
-	0x6f, 0x74, 0x2e, 0x41, 0x6e, 0x6e, 0x6f, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x0b, 0x61,
-	0x6e, 0x6e, 0x6f, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x22, 0x37, 0x0a, 0x0f, 0x43, 0x72,
+	0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x22, 0x91, 0x01, 0x0a, 0x0a, 0x42, 0x72, 0x61, 0x6e, 0x63,
+	0x68, 0x49, 0x6e, 0x66, 0x6f, 0x12, 0x12, 0x0a, 0x04, 0x73, 0x61, 0x6c, 0x74, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x0c, 0x52, 0x04, 0x73, 0x61, 0x6c, 0x74, 0x12, 0x1d, 0x0a, 0x0a, 0x63, 0x72, 0x65,
+	0x61, 0x74, 0x65, 0x64, 0x5f, 0x61, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x09, 0x63,
+	0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x41, 0x74, 0x12, 0x31, 0x0a, 0x0b, 0x61, 0x6e, 0x6e, 0x6f,
+	0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x0f, 0x2e,
+	0x67, 0x6f, 0x74, 0x2e, 0x41, 0x6e, 0x6e, 0x6f, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x0b,
+	0x61, 0x6e, 0x6e, 0x6f, 0x74, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x12, 0x1d, 0x0a, 0x04, 0x6d,
+	0x6f, 0x64, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x09, 0x2e, 0x67, 0x6f, 0x74, 0x2e,
+	0x4d, 0x6f, 0x64, 0x65, 0x52, 0x04, 0x6d, 0x6f, 0x64, 0x65, 0x22, 0x37, 0x0a, 0x0f, 0x43, 0x72,
 	0x65, 0x61, 0x74, 0x65, 0x42, 0x72, 0x61, 0x6e, 0x63, 0x68, 0x52, 0x65, 0x71, 0x12, 0x10, 0x0a,
 	0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12,
 	0x12, 0x0a, 0x04, 0x73, 0x61, 0x6c, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04, 0x73,
@@ -1557,42 +1567,43 @@ var file_got_proto_goTypes = []interface{}{
 }
 var file_got_proto_depIdxs = []int32{
 	2,  // 0: got.BranchInfo.annotations:type_name -> got.Annotation
-	1,  // 1: got.SetBranchReq.mode:type_name -> got.Mode
-	2,  // 2: got.SetBranchReq.annotations:type_name -> got.Annotation
-	0,  // 3: got.PostBlobReq.store_type:type_name -> got.StoreType
-	0,  // 4: got.GetBlobReq.store_type:type_name -> got.StoreType
-	0,  // 5: got.AddBlobReq.store_type:type_name -> got.StoreType
-	0,  // 6: got.ListBlobReq.store_type:type_name -> got.StoreType
-	0,  // 7: got.DeleteBlobReq.store_type:type_name -> got.StoreType
-	4,  // 8: got.GotSpace.CreateBranch:input_type -> got.CreateBranchReq
-	5,  // 9: got.GotSpace.GetBranch:input_type -> got.GetBranchReq
-	9,  // 10: got.GotSpace.DeleteBranch:input_type -> got.DeleteBranchReq
-	7,  // 11: got.GotSpace.ListBranch:input_type -> got.ListBranchReq
-	6,  // 12: got.GotSpace.SetBranch:input_type -> got.SetBranchReq
-	11, // 13: got.GotSpace.PostBlob:input_type -> got.PostBlobReq
-	13, // 14: got.GotSpace.GetBlob:input_type -> got.GetBlobReq
-	19, // 15: got.GotSpace.DeleteBlob:input_type -> got.DeleteBlobReq
-	15, // 16: got.GotSpace.AddBlob:input_type -> got.AddBlobReq
-	17, // 17: got.GotSpace.ListBlob:input_type -> got.ListBlobReq
-	21, // 18: got.GotSpace.ReadCell:input_type -> got.ReadCellReq
-	23, // 19: got.GotSpace.CASCell:input_type -> got.CASCellReq
-	3,  // 20: got.GotSpace.CreateBranch:output_type -> got.BranchInfo
-	3,  // 21: got.GotSpace.GetBranch:output_type -> got.BranchInfo
-	10, // 22: got.GotSpace.DeleteBranch:output_type -> got.DeleteBranchRes
-	8,  // 23: got.GotSpace.ListBranch:output_type -> got.ListBranchRes
-	3,  // 24: got.GotSpace.SetBranch:output_type -> got.BranchInfo
-	12, // 25: got.GotSpace.PostBlob:output_type -> got.PostBlobRes
-	14, // 26: got.GotSpace.GetBlob:output_type -> got.GetBlobRes
-	20, // 27: got.GotSpace.DeleteBlob:output_type -> got.DeleteBlobRes
-	16, // 28: got.GotSpace.AddBlob:output_type -> got.AddBlobRes
-	18, // 29: got.GotSpace.ListBlob:output_type -> got.ListBlobRes
-	22, // 30: got.GotSpace.ReadCell:output_type -> got.ReadCellRes
-	24, // 31: got.GotSpace.CASCell:output_type -> got.CASCellRes
-	20, // [20:32] is the sub-list for method output_type
-	8,  // [8:20] is the sub-list for method input_type
-	8,  // [8:8] is the sub-list for extension type_name
-	8,  // [8:8] is the sub-list for extension extendee
-	0,  // [0:8] is the sub-list for field type_name
+	1,  // 1: got.BranchInfo.mode:type_name -> got.Mode
+	1,  // 2: got.SetBranchReq.mode:type_name -> got.Mode
+	2,  // 3: got.SetBranchReq.annotations:type_name -> got.Annotation
+	0,  // 4: got.PostBlobReq.store_type:type_name -> got.StoreType
+	0,  // 5: got.GetBlobReq.store_type:type_name -> got.StoreType
+	0,  // 6: got.AddBlobReq.store_type:type_name -> got.StoreType
+	0,  // 7: got.ListBlobReq.store_type:type_name -> got.StoreType
+	0,  // 8: got.DeleteBlobReq.store_type:type_name -> got.StoreType
+	4,  // 9: got.GotSpace.CreateBranch:input_type -> got.CreateBranchReq
+	5,  // 10: got.GotSpace.GetBranch:input_type -> got.GetBranchReq
+	9,  // 11: got.GotSpace.DeleteBranch:input_type -> got.DeleteBranchReq
+	7,  // 12: got.GotSpace.ListBranch:input_type -> got.ListBranchReq
+	6,  // 13: got.GotSpace.SetBranch:input_type -> got.SetBranchReq
+	11, // 14: got.GotSpace.PostBlob:input_type -> got.PostBlobReq
+	13, // 15: got.GotSpace.GetBlob:input_type -> got.GetBlobReq
+	19, // 16: got.GotSpace.DeleteBlob:input_type -> got.DeleteBlobReq
+	15, // 17: got.GotSpace.AddBlob:input_type -> got.AddBlobReq
+	17, // 18: got.GotSpace.ListBlob:input_type -> got.ListBlobReq
+	21, // 19: got.GotSpace.ReadCell:input_type -> got.ReadCellReq
+	23, // 20: got.GotSpace.CASCell:input_type -> got.CASCellReq
+	3,  // 21: got.GotSpace.CreateBranch:output_type -> got.BranchInfo
+	3,  // 22: got.GotSpace.GetBranch:output_type -> got.BranchInfo
+	10, // 23: got.GotSpace.DeleteBranch:output_type -> got.DeleteBranchRes
+	8,  // 24: got.GotSpace.ListBranch:output_type -> got.ListBranchRes
+	3,  // 25: got.GotSpace.SetBranch:output_type -> got.BranchInfo
+	12, // 26: got.GotSpace.PostBlob:output_type -> got.PostBlobRes
+	14, // 27: got.GotSpace.GetBlob:output_type -> got.GetBlobRes
+	20, // 28: got.GotSpace.DeleteBlob:output_type -> got.DeleteBlobRes
+	16, // 29: got.GotSpace.AddBlob:output_type -> got.AddBlobRes
+	18, // 30: got.GotSpace.ListBlob:output_type -> got.ListBlobRes
+	22, // 31: got.GotSpace.ReadCell:output_type -> got.ReadCellRes
+	24, // 32: got.GotSpace.CASCell:output_type -> got.CASCellRes
+	21, // [21:33] is the sub-list for method output_type
+	9,  // [9:21] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_got_proto_init() }
