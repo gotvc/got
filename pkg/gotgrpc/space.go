@@ -91,6 +91,7 @@ func (s Space) makeBranch(key string, bi *BranchInfo) *branches.Branch {
 		Volume: s.makeVolume(key),
 		Metadata: branches.Metadata{
 			Salt: bi.Salt,
+			Mode: branches.Mode(bi.Mode),
 			Annotations: mapSlice(bi.Annotations, func(x *Annotation) branches.Annotation {
 				return branches.Annotation{Key: x.Key, Value: x.Value}
 			}),
