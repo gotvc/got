@@ -4,27 +4,62 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/pkg/errors"
-	"google.golang.org/protobuf/proto"
 )
 
-func (p *Extent) marshal() []byte {
-	data, err := proto.Marshal(p)
+// Extent is a reference to data using the gdat.Ref type.
+type Extent struct {
+	Ref    gdat.Ref
+	Offset uint32
+	Length uint32
+}
+
+func (e *Extent) MarshalBinary() ([]byte, error) {
+	var buf []byte
+	buf = append(buf, gdat.MarshalRef(e.Ref)...)
+	buf = appendUint32(buf, e.Offset)
+	buf = appendUint32(buf, e.Length)
+	return buf, nil
+}
+
+func (e *Extent) UnmarshalBinary(data []byte) error {
+	if len(data) < 8+64 {
+		return fmt.Errorf("too short to be extent: %q", data)
+	}
+	ref, err := gdat.ParseRef(data[:len(data)-8])
+	if err != nil {
+		return err
+	}
+	e.Offset = binary.BigEndian.Uint32(data[len(data)-8:])
+	e.Length = binary.BigEndian.Uint32(data[len(data)-4:])
+	e.Ref = *ref
+	return nil
+}
+
+func (e *Extent) Marshal() []byte {
+	data, err := e.MarshalBinary()
 	if err != nil {
 		panic(err)
 	}
 	return data
 }
 
-func parseExtent(data []byte) (*Extent, error) {
-	p := &Extent{}
-	if err := proto.Unmarshal(data, p); err != nil {
+func parseExtent(x []byte) (*Extent, error) {
+	var e Extent
+	if err := e.UnmarshalBinary(x); err != nil {
 		return nil, err
 	}
-	return p, nil
+	return &e, nil
+}
+
+func appendUint32(out []byte, x uint32) []byte {
+	var buf [4]byte
+	binary.BigEndian.PutUint32(buf[:], x)
+	return append(out, buf[:]...)
 }
 
 func splitExtentKey(k []byte) (p string, offset uint64, err error) {
@@ -65,11 +100,7 @@ func appendUint64(buf []byte, n uint64) []byte {
 }
 
 func (o *Operator) getExtentF(ctx context.Context, s Store, ext *Extent, fn func(data []byte) error) error {
-	ref, err := gdat.ParseRef(ext.Ref)
-	if err != nil {
-		return err
-	}
-	return o.rawOp.GetF(ctx, s, *ref, func(data []byte) error {
+	return o.rawOp.GetF(ctx, s, ext.Ref, func(data []byte) error {
 		if int(ext.Offset) >= len(data) {
 			return errors.Errorf("extent offset %d is >= len(data) %d", ext.Offset, len(data))
 		}
@@ -84,9 +115,9 @@ func (o *Operator) postExtent(ctx context.Context, s Store, data []byte) (*Exten
 		return nil, err
 	}
 	ext := &Extent{
+		Ref:    *ref,
 		Offset: 0,
 		Length: uint32(len(data)),
-		Ref:    gdat.MarshalRef(*ref),
 	}
 	return ext, nil
 }

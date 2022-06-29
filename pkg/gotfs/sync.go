@@ -14,15 +14,11 @@ import (
 func (o *Operator) Sync(ctx context.Context, srcMeta, srcData, dstMeta, dstData Store, root Root) error {
 	return o.gotkv.Sync(ctx, srcMeta, dstMeta, root, func(ent gotkv.Entry) error {
 		if isExtentKey(ent.Key) {
-			part, err := parseExtent(ent.Value)
+			ext, err := parseExtent(ent.Value)
 			if err != nil {
 				return err
 			}
-			ref, err := gdat.ParseRef(part.Ref)
-			if err != nil {
-				return err
-			}
-			return gdat.Copy(ctx, srcData, dstData, ref)
+			return gdat.Copy(ctx, srcData, dstData, &ext.Ref)
 		}
 		return nil
 	})
@@ -32,15 +28,11 @@ func (o *Operator) Sync(ctx context.Context, srcMeta, srcData, dstMeta, dstData 
 func (o *Operator) Populate(ctx context.Context, s Store, root Root, mdSet, dataSet cadata.Set) error {
 	return o.gotkv.Populate(ctx, s, root, mdSet, func(ent gotkv.Entry) error {
 		if isExtentKey(ent.Key) {
-			part, err := parseExtent(ent.Value)
+			ext, err := parseExtent(ent.Value)
 			if err != nil {
 				return err
 			}
-			ref, err := gdat.ParseRef(part.Ref)
-			if err != nil {
-				return err
-			}
-			return dataSet.Add(ctx, ref.CID)
+			return dataSet.Add(ctx, ext.Ref.CID)
 		}
 		return nil
 	})

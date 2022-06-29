@@ -225,7 +225,7 @@ func (b *Builder) handleExtent(ext *Extent) error {
 func (b *Builder) putExtent(p string, start uint64, ext *Extent) error {
 	endOffset := start + uint64(ext.Length)
 	k := makeExtentKey(p, endOffset)
-	return b.mBuilder.Put(b.ctx, k, ext.marshal())
+	return b.mBuilder.Put(b.ctx, k, ext.Marshal())
 }
 
 func (b *Builder) putInfo(p string, md *Info) error {
