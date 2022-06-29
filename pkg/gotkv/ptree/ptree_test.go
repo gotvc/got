@@ -1,6 +1,7 @@
 package ptree
 
 import (
+	"bytes"
 	"context"
 	"strconv"
 	"testing"
@@ -15,7 +16,7 @@ func TestBuilder(t *testing.T) {
 	ctx := context.Background()
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	op := gdat.NewOperator()
-	b := NewBuilder(s, &op, defaultAvgSize, defaultMaxSize, nil)
+	b := NewBuilder(&op, defaultAvgSize, defaultMaxSize, nil, bytes.Compare, s)
 
 	generateEntries(1e4, func(ent Entry) {
 		err := b.Put(ctx, ent.Key, ent.Value)
@@ -31,7 +32,7 @@ func TestBuildIterate(t *testing.T) {
 	ctx := context.Background()
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	op := gdat.NewOperator()
-	b := NewBuilder(s, &op, defaultAvgSize, defaultMaxSize, nil)
+	b := NewBuilder(&op, defaultAvgSize, defaultMaxSize, nil, bytes.Compare, s)
 
 	const N = 1e4
 	generateEntries(N, func(ent Entry) {
@@ -44,7 +45,7 @@ func TestBuildIterate(t *testing.T) {
 
 	t.Logf("produced %d blobs", s.Len())
 
-	it := NewIterator(s, &op, *root, Span{})
+	it := NewIterator(&op, bytes.Compare, s, *root, Span{})
 	var ent Entry
 	for i := 0; i < N; i++ {
 		err := it.Next(ctx, &ent)
@@ -60,7 +61,7 @@ func TestCopy(t *testing.T) {
 	ctx := context.Background()
 	s := cadata.NewMem(cadata.DefaultHash, maxSize)
 	op := gdat.NewOperator()
-	b := NewBuilder(s, &op, averageSize, maxSize, nil)
+	b := NewBuilder(&op, averageSize, maxSize, nil, bytes.Compare, s)
 	const N = 1e6
 	generateEntries(N, func(ent Entry) {
 		err := b.Put(ctx, ent.Key, ent.Value)
@@ -71,8 +72,8 @@ func TestCopy(t *testing.T) {
 	require.NotNil(t, root)
 
 	t.Log("being copying")
-	it := NewIterator(s, &op, *root, Span{})
-	b2 := NewBuilder(s, &op, averageSize, maxSize, nil)
+	it := NewIterator(&op, bytes.Compare, s, *root, Span{})
+	b2 := NewBuilder(&op, averageSize, maxSize, nil, bytes.Compare, s)
 	require.NoError(t, Copy(ctx, b2, it))
 	root2, err := b2.Finish(ctx)
 	require.NoError(t, err)

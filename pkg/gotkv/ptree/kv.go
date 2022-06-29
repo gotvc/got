@@ -16,9 +16,9 @@ type (
 )
 
 // MaxEntry returns the entry in span with the greatest (ordered last) key.
-func MaxEntry(ctx context.Context, s cadata.Store, x Root, span Span) (*Entry, error) {
+func MaxEntry(ctx context.Context, cmp CompareFunc, s cadata.Store, x Root, span Span) (*Entry, error) {
 	op := gdat.NewOperator()
-	sr := NewStreamReader(s, &op, []Index{rootToIndex(x)})
+	sr := NewStreamReader(s, &op, cmp, []Index{rootToIndex(x)})
 	ent, err := maxEntry(ctx, sr, span.End)
 	if err != nil {
 		return nil, err
@@ -36,7 +36,7 @@ func MaxEntry(ctx context.Context, s cadata.Store, x Root, span Span) (*Entry, e
 	if err != nil {
 		return nil, err
 	}
-	return MaxEntry(ctx, s, indexToRoot(idx, x.Depth-1), span)
+	return MaxEntry(ctx, cmp, s, indexToRoot(idx, x.Depth-1), span)
 }
 
 func maxEntry(ctx context.Context, sr *StreamReader, under []byte) (ret *Entry, _ error) {
@@ -69,8 +69,8 @@ func AddPrefix(x Root, prefix []byte) Root {
 }
 
 // RemovePrefix returns a new version of root with the prefix removed from all the keys
-func RemovePrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
-	if yes, err := HasPrefix(ctx, s, x, prefix); err != nil {
+func RemovePrefix(ctx context.Context, cmp CompareFunc, s cadata.Store, x Root, prefix []byte) (*Root, error) {
+	if yes, err := HasPrefix(ctx, cmp, s, x, prefix); err != nil {
 		return nil, err
 	} else if yes {
 		return nil, errors.Errorf("tree does not have prefix %q", prefix)
@@ -84,11 +84,11 @@ func RemovePrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*
 }
 
 // HasPrefix returns true if the tree rooted at x only has keys which are prefixed with prefix
-func HasPrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (bool, error) {
+func HasPrefix(ctx context.Context, cmp CompareFunc, s cadata.Store, x Root, prefix []byte) (bool, error) {
 	if !bytes.HasPrefix(x.First, prefix) {
 		return false, nil
 	}
-	maxEnt, err := MaxEntry(ctx, s, x, kvstreams.TotalSpan())
+	maxEnt, err := MaxEntry(ctx, cmp, s, x, kvstreams.TotalSpan())
 	if err != nil {
 		return false, err
 	}

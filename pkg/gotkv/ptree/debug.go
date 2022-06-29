@@ -11,7 +11,7 @@ import (
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
 
-func DebugTree(ctx context.Context, s cadata.Store, x Root, w io.Writer) error {
+func DebugTree(ctx context.Context, cmp CompareFunc, s cadata.Store, x Root, w io.Writer) error {
 	bw, ok := w.(*bufio.Writer)
 	if !ok {
 		bw = bufio.NewWriter(w)
@@ -25,7 +25,7 @@ func DebugTree(ctx context.Context, s cadata.Store, x Root, w io.Writer) error {
 			indent += "  "
 		}
 		ctx := context.TODO()
-		sr := NewStreamReader(s, &op, []Index{{Ref: x.Ref, First: x.First}})
+		sr := NewStreamReader(s, &op, cmp, []Index{{Ref: x.Ref, First: x.First}})
 		fmt.Fprintf(bw, "%sTREE NODE: %s %d\n", indent, x.Ref.CID.String(), x.Depth)
 		if x.Depth == 0 {
 			for {

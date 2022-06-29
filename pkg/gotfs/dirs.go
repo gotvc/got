@@ -133,7 +133,7 @@ type dirIterator struct {
 	s    Store
 	x    Root
 	p    string
-	iter gotkv.Iterator
+	iter *gotkv.Iterator
 }
 
 func (o *Operator) newDirIterator(ctx context.Context, s Store, x Root, p string) (*dirIterator, error) {

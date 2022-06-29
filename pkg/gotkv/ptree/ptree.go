@@ -9,6 +9,9 @@ import (
 	"github.com/pkg/errors"
 )
 
+// CompareFunc compares 2 keys
+type CompareFunc = func(a, b []byte) int
+
 const maxTreeDepth = 255
 
 // Root is the root of the tree
@@ -36,11 +39,11 @@ func Copy(ctx context.Context, b *Builder, it *Iterator) error {
 }
 
 // ListChildren returns the immediate children of root if any.
-func ListChildren(ctx context.Context, s cadata.Store, op *gdat.Operator, root Root) ([]Index, error) {
+func ListChildren(ctx context.Context, op *gdat.Operator, cmp CompareFunc, s cadata.Store, root Root) ([]Index, error) {
 	if PointsToEntries(root) {
 		return nil, errors.Errorf("cannot list children of root with depth=%d", root.Depth)
 	}
-	sr := NewStreamReader(s, op, []Index{rootToIndex(root)})
+	sr := NewStreamReader(s, op, cmp, []Index{rootToIndex(root)})
 	var idxs []Index
 	var ent Entry
 	for {
@@ -61,8 +64,8 @@ func ListChildren(ctx context.Context, s cadata.Store, op *gdat.Operator, root R
 
 // ListEntries returns a slice of all the entries pointed to by idx, directly.
 // If idx points to other indexes directly, then ListEntries returns the entries for those indexes.
-func ListEntries(ctx context.Context, s cadata.Store, op *gdat.Operator, idx Index) ([]Entry, error) {
-	sr := NewStreamReader(s, op, []Index{idx})
+func ListEntries(ctx context.Context, op *gdat.Operator, cmp CompareFunc, s cadata.Store, idx Index) ([]Entry, error) {
+	sr := NewStreamReader(s, op, cmp, []Index{idx})
 	return kvstreams.Collect(ctx, sr)
 }
 
