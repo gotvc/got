@@ -59,7 +59,7 @@ func (b *Builder) Write(data []byte) (int, error) {
 	if b.currentKey == nil {
 		return 0, errors.New("Write called before Begin")
 	}
-	if b.streamID >= 128 {
+	if !isInlineStream(b.streamID) {
 		return b.chunker.Write(data)
 	}
 	err := strideBytes(data, 4096, func(data []byte) error {

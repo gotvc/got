@@ -39,28 +39,29 @@ func (it *Iterator) Next(ctx context.Context, o *Object) error {
 	return nil
 }
 
-var _ io.ReadSeeker = &extentReader{}
+var _ io.ReadSeeker = &reader{}
 
-type extentReader struct {
-	ctx      context.Context
-	op       *Operator
-	ms, ds   cadata.Store
-	root     Root
-	key      []byte
-	streamID uint8
-	offset   int64
+type reader struct {
+	ctx   context.Context
+	ms    cadata.Store
+	gotkv *gotkv.Operator
+	root  Root
+	span  gotkv.Span
+	read  func(out []byte, v []byte) (int, error)
+
+	offset int64
 }
 
-func (r *extentReader) Read(buf []byte) (int, error) {
+func (r *reader) Read(buf []byte) (int, error) {
 	n, err := r.ReadAt(buf, r.offset)
 	r.offset += int64(n)
 	return n, err
 }
 
-func (r *extentReader) Seek(off int64, whence int) (int64, error) {
+func (r *reader) Seek(off int64, whence int) (int64, error) {
 	return r.offset, nil
 }
 
-func (r *extentReader) ReadAt(buf []byte, offset int64) (int, error) {
+func (r *reader) ReadAt(buf []byte, offset int64) (int, error) {
 	return 0, nil
 }
