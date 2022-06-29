@@ -30,9 +30,9 @@ const (
 
 type Option func(o *Operator)
 
-func WithSeed(seed *[32]byte) Option {
+func WithSalt(salt *[32]byte) Option {
 	return func(o *Operator) {
-		o.seed = seed
+		o.salt = salt
 	}
 }
 
@@ -53,7 +53,7 @@ func WithContentCacheSize(n int) Option {
 type Operator struct {
 	maxBlobSize                                   int
 	minSizeData, averageSizeData, averageSizeInfo int
-	seed                                          *[32]byte
+	salt                                          *[32]byte
 	rawCacheSize, metaCacheSize                   int
 
 	rawOp        gdat.Operator
@@ -67,7 +67,7 @@ func NewOperator(opts ...Option) Operator {
 		minSizeData:     DefaultMinBlobSizeData,
 		averageSizeData: DefaultAverageBlobSizeData,
 		averageSizeInfo: DefaultAverageBlobSizeInfo,
-		seed:            &[32]byte{},
+		salt:            &[32]byte{},
 		rawCacheSize:    8,
 		metaCacheSize:   16,
 	}
@@ -76,28 +76,30 @@ func NewOperator(opts ...Option) Operator {
 	}
 
 	// data
-	var rawSeed [32]byte
-	gdat.DeriveKey(rawSeed[:], o.seed, []byte("raw"))
+	var rawSalt [32]byte
+	gdat.DeriveKey(rawSalt[:], o.salt, []byte("raw"))
 	o.rawOp = gdat.NewOperator(
-		gdat.WithSalt(&rawSeed),
+		gdat.WithSalt(&rawSalt),
 		gdat.WithCacheSize(o.rawCacheSize),
 	)
 	var chunkingSeed [32]byte
-	gdat.DeriveKey(chunkingSeed[:], o.seed, []byte("chunking"))
+	gdat.DeriveKey(chunkingSeed[:], o.salt, []byte("chunking"))
 	o.chunkingSeed = &chunkingSeed
 
 	// metadata
-	var metaSeed [32]byte
-	gdat.DeriveKey(metaSeed[:], o.seed, []byte("gotkv"))
+	var metadataSalt [32]byte
+	gdat.DeriveKey(metadataSalt[:], o.salt, []byte("gotkv"))
 	metaOp := gdat.NewOperator(
-		gdat.WithSalt(&metaSeed),
+		gdat.WithSalt(&metadataSalt),
 		gdat.WithCacheSize(o.metaCacheSize),
 	)
+	var treeSeed [16]byte
+	gdat.DeriveKey(treeSeed[:], o.salt, []byte("gotkv-seed"))
 	o.gotkv = gotkv.NewOperator(
 		o.averageSizeInfo,
 		o.maxBlobSize,
 		gotkv.WithDataOperator(metaOp),
-		gotkv.WithSeed((*[16]byte)(metaSeed[:])),
+		gotkv.WithSeed(&treeSeed),
 	)
 	return o
 }

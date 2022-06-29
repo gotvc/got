@@ -115,3 +115,9 @@ func (c *portingCache) Delete(ctx context.Context, p string) error {
 func (c *portingCache) List(ctx context.Context, span state.Span[string], ks []string) (int, error) {
 	return 0, nil
 }
+
+func saltFromBytes(x []byte) *[32]byte {
+	var salt [32]byte
+	copy(salt[:], x)
+	return &salt
+}

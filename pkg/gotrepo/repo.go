@@ -19,7 +19,6 @@ import (
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
-	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotiam"
 	"github.com/gotvc/got/pkg/gotkv"
@@ -81,7 +80,7 @@ type Repo struct {
 	config       Config
 	privateKey   p2p.PrivateKey
 	// ctx is used as the background context for serving the repo
-	ctx          context.Context 
+	ctx context.Context
 
 	workingDir FS // workingDir is repoFS with reserved paths filtered.
 	stage      *staging.Stage
@@ -224,21 +223,11 @@ func (r *Repo) GetIAMPolicy() gotiam.Policy {
 }
 
 func (r *Repo) getFSOp(b *branches.Branch) *gotfs.Operator {
-	var seed [32]byte
-	gdat.DeriveKey(seed[:], saltFromBytes(b.Salt), []byte("gotfs"))
-	fsop := gotfs.NewOperator(
-		gotfs.WithSeed(&seed),
-	)
-	return &fsop
+	return branches.NewGotFS(b)
 }
 
 func (r *Repo) getVCOp(b *branches.Branch) *gotvc.Operator {
-	var seed [32]byte
-	gdat.DeriveKey(seed[:], saltFromBytes(b.Salt), []byte("gotvc"))
-	vcop := gotvc.NewOperator(
-		gotvc.WithSalt(&seed),
-	)
-	return &vcop
+	return branches.NewGotVC(b)
 }
 
 func (r *Repo) UnionStore() cadata.Store {
@@ -322,10 +311,4 @@ func bucketFromTx(tx *bolt.Tx, path []string) (*bolt.Bucket, error) {
 		path = path[1:]
 	}
 	return b, nil
-}
-
-func saltFromBytes(x []byte) *[32]byte {
-	var salt [32]byte
-	copy(salt[:], x)
-	return &salt
 }

@@ -9,6 +9,7 @@ import (
 
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
@@ -19,13 +20,13 @@ type Branch struct {
 	Volume Volume
 	Metadata
 
-	CreatedAt tai64.TAI64
+	CreatedAt tai64.TAI64 `json:"created_at"`
 }
 
 // Metadata is non-volume, user-modifiable information associated with a branch.
 type Metadata struct {
-	Mode        Mode         `json:"mode"`
-	Salt        []byte       `json:"salt"`
+	Mode Mode   `json:"mode"`
+	Salt []byte `json:"salt"`
 
 	Annotations []Annotation `json:"annotations"`
 }
@@ -197,4 +198,36 @@ func History(ctx context.Context, b Branch, vcop *gotvc.Operator, fn func(ref gd
 		return err
 	}
 	return gotvc.ForEach(ctx, b.Volume.VCStore, snap.Parents, fn)
+}
+
+// NewGotFS creates a new gotfs.Operator suitable for writing to the branch
+func NewGotFS(b *Branch, opts ...gotfs.Option) *gotfs.Operator {
+	opts = append(opts, gotfs.WithSalt(deriveFSSalt(b)))
+	fsop := gotfs.NewOperator(opts...)
+	return &fsop
+}
+
+// NewGotVC creates a new gotvc.Operator suitable for writing to the branch
+func NewGotVC(b *Branch, opts ...gotvc.Option) *gotvc.Operator {
+	opts = append(opts, gotvc.WithSalt(deriveVCSalt(b)))
+	fsop := gotvc.NewOperator(opts...)
+	return &fsop
+}
+
+func deriveFSSalt(b *Branch) *[32]byte {
+	var out [32]byte
+	gdat.DeriveKey(out[:], saltFromBytes(b.Salt), []byte("gotfs"))
+	return &out
+}
+
+func deriveVCSalt(b *Branch) *[32]byte {
+	var out [32]byte
+	gdat.DeriveKey(out[:], saltFromBytes(b.Salt), []byte("gotvc"))
+	return &out
+}
+
+func saltFromBytes(x []byte) *[32]byte {
+	var salt [32]byte
+	copy(salt[:], x)
+	return &salt
 }
