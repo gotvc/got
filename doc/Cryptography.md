@@ -34,6 +34,30 @@ The blob data would then be encrypted using the DEK.
 The ciphertext is hashed to produce the CID.
 Both the DEK and CID are stored as a reference to the data.
 
+## Keys Derived from Branch Salt
+Each level of indentation indicates a parent-child relationship in a tree.
+The root of the tree is the branch salt, which is the initial, high entropy 32-byte key.
+A child in the tree is derived using the parent key, and the string naming the child key.
+
+```
+<branch_salt>
+            "gotfs"
+                    "raw"
+                                <blob id A>     ... encrypts blob A
+                                ...
+                                <blob id Z>     ... encrypts blob Z
+                    "chunking"                  ... file content rolling hash parameters.
+                    "gotkv"
+                                <blob id A>     ... encrypts blob A
+                                ...
+                                <blob id Z>     ... encrypts blob Z
+                    "gotkv-seed"                ... keys SipHash used in probabilistic tree
+            "gotvc"
+                   <blob id A>                  ... encrypts blob A
+                    ...
+                   <blob id Z>                  ... encrypts blob Z
+```
+
 ## Tour
 - `branches/crypto.go`: contains the encrypted `branches.Space` implementation
 - `cells/cells.go`: AEAD for encrypted cells.
