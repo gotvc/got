@@ -1,4 +1,4 @@
-package gotobj
+package gotlob
 
 import (
 	"context"
@@ -13,8 +13,6 @@ import (
 
 type Object struct {
 	Key []byte
-
-	Contents io.ReadSeeker
 }
 
 type Iterator struct {
@@ -38,28 +36,31 @@ func (it *Iterator) Next(ctx context.Context, o *Object) error {
 	if err := it.it.Peek(ctx, &ent); err != nil && errors.Is(err, kvstreams.EOS) {
 		return err
 	}
-	key, off, err := splitKey(ent.Key)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
-type objReader struct {
-	op     *Operator
-	ms, ds cadata.Store
-	span   gotkv.Span
+var _ io.ReadSeeker = &extentReader{}
 
-	currentEnt *Entry
-	off        uint64
+type extentReader struct {
+	ctx      context.Context
+	op       *Operator
+	ms, ds   cadata.Store
+	root     Root
+	key      []byte
+	streamID uint8
+	offset   int64
 }
 
-func (r *Reader) Read(buf []byte) (int, error) {
-	if r.currentEnt == nil {
-
-	}
+func (r *extentReader) Read(buf []byte) (int, error) {
+	n, err := r.ReadAt(buf, r.offset)
+	r.offset += int64(n)
+	return n, err
 }
 
-func (r *Reader) Seek(whence int, off int64) {
+func (r *extentReader) Seek(off int64, whence int) (int64, error) {
+	return r.offset, nil
+}
 
+func (r *extentReader) ReadAt(buf []byte, offset int64) (int, error) {
+	return 0, nil
 }

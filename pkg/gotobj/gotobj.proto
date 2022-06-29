@@ -1,9 +1,0 @@
-syntax = "proto3";
-
-option go_package = "github.com/gotvc/got/pkg/gotobj";
-
-message Extent {
-    bytes ref = 1;
-    uint32 length = 2;
-    uint32 offset = 3;
-};
