@@ -2,12 +2,14 @@ package gotlob
 
 import (
 	"context"
-	"errors"
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/metrics"
+	"github.com/gotvc/got/pkg/units"
 )
 
 type Option func(o *Operator)
@@ -37,6 +39,7 @@ type Operator struct {
 	minSizeData, averageSizeData, averageSizeKV int
 	salt                                        *[32]byte
 	rawCacheSize, metaCacheSize                 int
+	flushBetween                                bool
 
 	rawOp        gdat.Operator
 	gotkv        gotkv.Operator
@@ -49,9 +52,11 @@ func NewOperator(opts ...Option) Operator {
 		minSizeData:     DefaultMinBlobSizeData,
 		averageSizeData: DefaultAverageBlobSizeData,
 		averageSizeKV:   DefaultAverageBlobSizeKV,
-		salt:            &[32]byte{},
-		rawCacheSize:    8,
-		metaCacheSize:   16,
+
+		salt:          &[32]byte{},
+		rawCacheSize:  8,
+		metaCacheSize: 16,
+		flushBetween:  false,
 	}
 	for _, opt := range opts {
 		opt(&o)
@@ -87,30 +92,40 @@ func NewOperator(opts ...Option) Operator {
 }
 
 func (o *Operator) CreateExtents(ctx context.Context, ms, ds cadata.Store, r io.Reader) ([]*Extent, error) {
-	return nil, nil
+	var exts []*Extent
+	chunker := o.newChunker(func(data []byte) error {
+		ext, err := o.post(ctx, ds, data)
+		if err != nil {
+			return err
+		}
+		metrics.AddInt(ctx, "data_in", len(data), units.Bytes)
+		metrics.AddInt(ctx, "blobs_in", 1, "blobs")
+		exts = append(exts, ext)
+		return nil
+	})
+	if _, err := io.Copy(chunker, r); err != nil {
+		return nil, err
+	}
+	if err := chunker.Flush(); err != nil {
+		return nil, err
+	}
+	return exts, nil
 }
 
-func (o *Operator) NewReader(ctx context.Context, ms, ds cadata.Store, root Root, key []byte, streamID uint8) (io.ReadSeeker, error) {
-	var readFn func([]byte, []byte) (int, error)
-	if isInlineStream(streamID) {
-		readFn = func(out []byte, v []byte) (int, error) {
-			return copy(out, v), nil
-		}
-	} else {
-		readFn = func(out []byte, v []byte) (int, error) {
-			ext, err := parseExtent(v)
-			if err != nil {
-				return 0, err
-			}
-			return o.readExtent(ctx, out, ds, ext)
-		}
+func (o *Operator) SizeOf(ctx context.Context, ms cadata.Store, root Root, key []byte) (uint64, error) {
+	ent, err := o.gotkv.MaxEntry(ctx, ms, root, gotkv.PrefixSpan(key))
+	if err != nil {
+		return 0, err
 	}
-	return &reader{
-		ctx:  ctx,
-		ms:   ms,
-		root: root,
-		read: readFn,
-	}, nil
+	_, offset, err := ParseExtentKey(ent.Key)
+	if err != nil {
+		return 0, err
+	}
+	return offset, nil
+}
+
+func (op *Operator) newChunker(fn chunking.ChunkHandler) *chunking.ContentDefined {
+	return chunking.NewContentDefined(op.minSizeData, op.averageSizeData, op.maxBlobSize, op.chunkingSeed, fn)
 }
 
 func (op *Operator) post(ctx context.Context, s cadata.Store, data []byte) (*Extent, error) {
@@ -130,8 +145,17 @@ func (op *Operator) readExtent(ctx context.Context, buf []byte, ds cadata.Store,
 	if err != nil {
 		return 0, err
 	}
-	if n < int(ext.Offset+ext.Length) || n < int(ext.Offset) {
-		return 0, errors.New("")
+	if err := checkExtentBounds(ext, n); err != nil {
+		return 0, err
 	}
 	return copy(buf[:], buf[ext.Offset:ext.Offset+ext.Length]), nil
+}
+
+func (op *Operator) getExtentF(ctx context.Context, ds cadata.Store, ext *Extent, fn func([]byte) error) error {
+	return op.rawOp.GetF(ctx, ds, ext.Ref, func(data []byte) error {
+		if err := checkExtentBounds(ext, len(data)); err != nil {
+			return err
+		}
+		return fn(data[ext.Offset : ext.Offset+ext.Length])
+	})
 }

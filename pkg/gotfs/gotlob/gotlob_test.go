@@ -14,7 +14,9 @@ func TestWrite(t *testing.T) {
 	ms, ds := stores.NewMem(), stores.NewMem()
 
 	b := op.NewBuilder(ctx, ms, ds)
-	err := b.Begin([]byte("test-key"), 0)
+	err := b.SetPrefix([]byte("test-key"))
+	require.NoError(t, err)
+	_, err = b.Write([]byte("test data"))
 	require.NoError(t, err)
 	root, err := b.Finish(ctx)
 	require.NoError(t, err)
