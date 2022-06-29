@@ -22,6 +22,7 @@ type Index struct {
 }
 
 type blobReader struct {
+	compare  func(a, b []byte) int
 	br       bytes.Reader
 	firstKey []byte
 	prevKey  []byte
@@ -41,14 +42,14 @@ func (r *blobReader) SeekIndexes(ctx context.Context, gteq []byte) error {
 	var ent Entry
 	for {
 		// if the prevKey is already <= gteq, then don't bother with this
-		if bytes.Compare(r.prevKey, gteq) <= 0 {
+		if r.compare(r.prevKey, gteq) <= 0 {
 			return nil
 		}
 		// check to see if the next key is also <= gteq
 		if err := r.Peek(ctx, &ent); err != nil {
 			return err
 		}
-		if bytes.Compare(ent.Key, gteq) >= 0 {
+		if r.compare(ent.Key, gteq) >= 0 {
 			return nil
 		}
 		if err := r.Next(ctx, &ent); err != nil {
@@ -66,7 +67,7 @@ func (r *blobReader) Seek(ctx context.Context, gteq []byte) error {
 			}
 			return err
 		}
-		if bytes.Compare(ent.Key, gteq) >= 0 {
+		if r.compare(ent.Key, gteq) >= 0 {
 			return nil
 		}
 		if err := r.Next(ctx, &ent); err != nil {
@@ -116,7 +117,7 @@ type StreamReader struct {
 	br        *blobReader
 }
 
-func NewStreamReader(s cadata.Store, op *gdat.Operator, idxs []Index) *StreamReader {
+func NewStreamReader(s cadata.Store, op *gdat.Operator, cmp CompareFunc, idxs []Index) *StreamReader {
 	for i := 0; i < len(idxs)-1; i++ {
 		if bytes.Compare(idxs[i].First, idxs[i+1].First) >= 0 {
 			panic(fmt.Sprintf("StreamReader: unordered indexes %q >= %q", idxs[i].First, idxs[i+1].First))
@@ -220,6 +221,7 @@ type IndexHandler = func(Index) error
 type StreamWriter struct {
 	s       cadata.Store
 	op      *gdat.Operator
+	compare func(a, b []byte) int
 	onIndex IndexHandler
 
 	seed             *[16]byte
@@ -238,6 +240,7 @@ func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, se
 	w := &StreamWriter{
 		s:       s,
 		op:      op,
+		compare: bytes.Compare,
 		onIndex: onIndex,
 
 		seed:    seed,
@@ -251,7 +254,7 @@ func (w *StreamWriter) Append(ctx context.Context, ent Entry) error {
 	w.ctx = ctx
 	defer func() { w.ctx = nil }()
 
-	if w.prevKey != nil && bytes.Compare(ent.Key, w.prevKey) <= 0 {
+	if w.prevKey != nil && w.compare(ent.Key, w.prevKey) <= 0 {
 		panic(fmt.Sprintf("out of order key: prev=%q key=%q", w.prevKey, ent.Key))
 	}
 	entryLen := w.computeEntryLen(ent)

@@ -109,7 +109,7 @@ func (o *Operator) ReadFileAt(ctx context.Context, ms, ds Store, x Root, p strin
 	return n, io.EOF
 }
 
-func (o *Operator) readFromIterator(ctx context.Context, it gotkv.Iterator, ds cadata.Store, start uint64, buf []byte) (int, error) {
+func (o *Operator) readFromIterator(ctx context.Context, it *gotkv.Iterator, ds cadata.Store, start uint64, buf []byte) (int, error) {
 	var ent gotkv.Entry
 	if err := it.Next(ctx, &ent); err != nil {
 		return 0, err

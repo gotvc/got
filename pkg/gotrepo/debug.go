@@ -1,6 +1,7 @@
 package gotrepo
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -50,5 +51,5 @@ func (r *Repo) DebugKV(ctx context.Context, w io.Writer) error {
 	if x == nil {
 		return errors.Errorf("no snapshot, no root")
 	}
-	return ptree.DebugTree(ctx, vol.FSStore, x.Root, w)
+	return ptree.DebugTree(ctx, bytes.Compare, vol.FSStore, x.Root, w)
 }

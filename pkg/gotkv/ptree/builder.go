@@ -21,7 +21,7 @@ type Builder struct {
 	ctx context.Context
 }
 
-func NewBuilder(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed *[16]byte) *Builder {
+func NewBuilder(op *gdat.Operator, avgSize, maxSize int, seed *[16]byte, cmp CompareFunc, s cadata.Store) *Builder {
 	b := &Builder{
 		s:       s,
 		op:      op,

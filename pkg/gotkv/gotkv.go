@@ -1,6 +1,7 @@
 package gotkv
 
 import (
+	"bytes"
 	"context"
 
 	"github.com/brendoncarroll/go-state/cadata"
@@ -40,7 +41,7 @@ func GetF(ctx context.Context, s Store, x Root, key []byte, fn func([]byte) erro
 }
 
 // CopyAll copies all the entries from iterator to builder.
-func CopyAll(ctx context.Context, b *Builder, it Iterator) error {
+func CopyAll(ctx context.Context, b *Builder, it kvstreams.Iterator) error {
 	if pti, ok := it.(*ptree.Iterator); ok {
 		return ptree.Copy(ctx, b, pti)
 	}
@@ -50,9 +51,8 @@ func CopyAll(ctx context.Context, b *Builder, it Iterator) error {
 }
 
 // Sync ensures dst has all the data reachable from x.
-func Sync(ctx context.Context, src, dst Store, x Root, entryFn func(Entry) error) error {
-	dop := gdat.NewOperator()
-	return do(ctx, src, &dop, x, doParams{
+func (o *Operator) Sync(ctx context.Context, src, dst Store, x Root, entryFn func(Entry) error) error {
+	return do(ctx, &o.dop, bytes.Compare, src, x, doParams{
 		CanSkip: func(r Root) (bool, error) {
 			return cadata.Exists(ctx, dst, r.Ref.CID)
 		},
@@ -65,9 +65,9 @@ func Sync(ctx context.Context, src, dst Store, x Root, entryFn func(Entry) error
 
 // Populate adds all blobs reachable from x to set.
 // If an item is in set all of the blobs reachable from it are also assumed to also be in set.
-func Populate(ctx context.Context, s Store, x Root, set cadata.Set, entryFn func(ent Entry) error) error {
+func (o *Operator) Populate(ctx context.Context, s Store, x Root, set cadata.Set, entryFn func(ent Entry) error) error {
 	dop := gdat.NewOperator()
-	return do(ctx, s, &dop, x, doParams{
+	return do(ctx, &dop, o.compare, s, x, doParams{
 		CanSkip: func(r Root) (bool, error) {
 			return set.Exists(ctx, r.Ref.CID)
 		},
@@ -88,14 +88,14 @@ type doParams struct {
 	NodeFn func(r Root) error
 }
 
-func do(ctx context.Context, s Store, dop *gdat.Operator, x Root, p doParams) error {
+func do(ctx context.Context, dop *gdat.Operator, cmp ptree.CompareFunc, s Store, x Root, p doParams) error {
 	if canSkip, err := p.CanSkip(x); err != nil {
 		return err
 	} else if canSkip {
 		return nil
 	}
 	if ptree.PointsToEntries(x) {
-		ents, err := ptree.ListEntries(ctx, s, dop, ptree.Index{First: x.First, Ref: x.Ref})
+		ents, err := ptree.ListEntries(ctx, dop, cmp, s, ptree.Index{First: x.First, Ref: x.Ref})
 		if err != nil {
 			return err
 		}
@@ -105,7 +105,7 @@ func do(ctx context.Context, s Store, dop *gdat.Operator, x Root, p doParams) er
 			}
 		}
 	} else {
-		idxs, err := ptree.ListChildren(ctx, s, dop, x)
+		idxs, err := ptree.ListChildren(ctx, dop, cmp, s, x)
 		if err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ func do(ctx context.Context, s Store, dop *gdat.Operator, x Root, p doParams) er
 				Depth: x.Depth - 1,
 			}
 			eg.Go(func() error {
-				return do(ctx, s, dop, root2, p)
+				return do(ctx, dop, cmp, s, root2, p)
 			})
 		}
 		if err := eg.Wait(); err != nil {

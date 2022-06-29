@@ -55,7 +55,7 @@ func TestStreamRW(t *testing.T) {
 	err := sw.Flush(ctx)
 	require.NoError(t, err)
 
-	sr := NewStreamReader(s, &op, idxs)
+	sr := NewStreamReader(s, &op, bytes.Compare, idxs)
 	var ent Entry
 	for i := 0; i < N; i++ {
 		err := sr.Next(ctx, &ent)

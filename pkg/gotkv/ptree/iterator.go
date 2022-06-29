@@ -11,16 +11,17 @@ import (
 )
 
 type Iterator struct {
-	s    cadata.Store
-	op   *gdat.Operator
-	root Root
-	span Span
+	op      *gdat.Operator
+	compare CompareFunc
+	s       cadata.Store
+	root    Root
+	span    Span
 
 	levels [][]Entry
 	pos    []byte
 }
 
-func NewIterator(s cadata.Store, op *gdat.Operator, root Root, span Span) *Iterator {
+func NewIterator(op *gdat.Operator, cmp CompareFunc, s cadata.Store, root Root, span Span) *Iterator {
 	it := &Iterator{
 		s:      s,
 		op:     op,
@@ -100,7 +101,7 @@ func (it *Iterator) getEntries(ctx context.Context, level int) ([]Entry, error) 
 			return nil, errors.Wrapf(err, "converting entry to index at level %d", level)
 		}
 		it.advanceLevel(level+1, false)
-		ents, err := ListEntries(ctx, it.s, it.op, idx)
+		ents, err := ListEntries(ctx, it.op, it.compare, it.s, idx)
 		if err != nil {
 			return nil, err
 		}

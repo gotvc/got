@@ -17,7 +17,7 @@ import (
 type Builder = ptree.Builder
 
 // Iterator is used to iterate through entries in GotKV instances.
-type Iterator = kvstreams.Iterator
+type Iterator = ptree.Iterator
 
 // Option is used to configure an Operator
 type Option func(op *Operator)
@@ -46,6 +46,7 @@ type Operator struct {
 	dop                  gdat.Operator
 	maxSize, averageSize int
 	seed                 *[16]byte
+	compare              func(a, b []byte) int
 }
 
 // NewOperator returns an operator which will create nodes with average size `avgSize`
@@ -55,6 +56,7 @@ func NewOperator(avgSize, maxSize int, opts ...Option) Operator {
 		dop:         gdat.NewOperator(),
 		averageSize: avgSize,
 		maxSize:     maxSize,
+		compare:     bytes.Compare,
 	}
 	if op.averageSize <= 0 {
 		panic(fmt.Sprintf("gotkv.NewOperator: invalid average size %d", op.averageSize))
@@ -125,7 +127,7 @@ func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) 
 
 // MaxEntry returns the entry in the instance x, within span, with the greatest lexicographic value.
 func (o *Operator) MaxEntry(ctx context.Context, s cadata.Store, x Root, span Span) (*Entry, error) {
-	return ptree.MaxEntry(ctx, s, x, span)
+	return ptree.MaxEntry(ctx, o.compare, s, x, span)
 }
 
 // AddPrefix prepends prefix to all the keys in instance x.
@@ -138,7 +140,7 @@ func (o *Operator) AddPrefix(x Root, prefix []byte) Root {
 // RemotePrefix errors if all the entries in x do not share a common prefix.
 // This is a O(1) operation.
 func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
-	return ptree.RemovePrefix(ctx, s, x, prefix)
+	return ptree.RemovePrefix(ctx, o.compare, s, x, prefix)
 }
 
 // NewBuilder returns a Builder for constructing a GotKV instance.
@@ -149,12 +151,12 @@ func (o *Operator) NewBuilder(s Store) *Builder {
 
 // NewIterator returns an iterator for the instance rooted at x, which
 // will emit all keys within span in the instance.
-func (o *Operator) NewIterator(s Store, root Root, span Span) Iterator {
-	return ptree.NewIterator(s, &o.dop, root, span)
+func (o *Operator) NewIterator(s Store, root Root, span Span) *Iterator {
+	return ptree.NewIterator(&o.dop, o.compare, s, root, span)
 }
 
 func (o *Operator) makeBuilder(s cadata.Store) *ptree.Builder {
-	return ptree.NewBuilder(s, &o.dop, o.averageSize, o.maxSize, o.seed)
+	return ptree.NewBuilder(&o.dop, o.averageSize, o.maxSize, o.seed, o.compare, s)
 }
 
 // ForEach calls fn with every entry, in the GotKV instance rooted at root, contained in span, in lexicographical order.
