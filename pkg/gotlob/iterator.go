@@ -18,7 +18,7 @@ type Object struct {
 type Iterator struct {
 	ms, ds cadata.Store
 	span   state.ByteSpan
-	it     gotkv.Iterator
+	it     *gotkv.Iterator
 	objKey []byte
 }
 
