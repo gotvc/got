@@ -39,6 +39,12 @@ func WithSeed(seed *[16]byte) Option {
 	}
 }
 
+func WithCompare(fn func(a, b []byte) int) Option {
+	return func(o *Operator) {
+		o.compare = fn
+	}
+}
+
 // Operator holds common configuration for operations on gotkv instances.
 // It has nothing to do with the state of a particular gotkv instance. It is NOT analagous to a collection object.
 // It is safe for use by multiple goroutines.
