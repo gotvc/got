@@ -58,12 +58,7 @@ func Dump(ctx context.Context, s Store, root Root, w io.Writer) error {
 				fmt.Fprintf(bw, "EXTENT (INVALID):\t%q\t%q\n", ent.Key, ent.Value)
 				continue
 			}
-			ref, err := gdat.ParseRef(ext.Ref)
-			var refString string
-			if err == nil {
-				refString = ref.String()
-			}
-			fmt.Fprintf(bw, "EXTENT\t%q\toffset=%d,length=%d,ref=%s\n", ent.Key, ext.Offset, ext.Length, refString)
+			fmt.Fprintf(bw, "EXTENT\t%q\toffset=%d,length=%d,ref=%s\n", ent.Key, ext.Offset, ext.Length, ext.Ref)
 		default:
 			md, err := parseInfo(ent.Value)
 			if err != nil {

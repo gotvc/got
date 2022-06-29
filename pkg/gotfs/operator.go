@@ -235,7 +235,7 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 			if err != nil {
 				return err
 			}
-			part, err := parseExtent(ent.Value)
+			ext, err := parseExtent(ent.Value)
 			if err != nil {
 				return err
 			}
@@ -245,11 +245,7 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 			if lastOffset != nil && off <= *lastOffset {
 				return errors.Errorf("part offsets not monotonic")
 			}
-			ref, err := gdat.ParseRef(part.Ref)
-			if err != nil {
-				return err
-			}
-			if err := checkData(*ref); err != nil {
+			if err := checkData(ext.Ref); err != nil {
 				return err
 			}
 			lastPath = &p
