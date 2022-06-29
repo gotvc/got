@@ -8,6 +8,7 @@ import (
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/metrics"
 	"github.com/gotvc/got/pkg/units"
 )
@@ -39,6 +40,7 @@ type Operator struct {
 	minSizeData, averageSizeData, averageSizeKV int
 	salt                                        *[32]byte
 	rawCacheSize, metaCacheSize                 int
+	keyFilter                                   func([]byte) bool
 	flushBetween                                bool
 
 	rawOp        gdat.Operator
@@ -56,6 +58,7 @@ func NewOperator(opts ...Option) Operator {
 		salt:          &[32]byte{},
 		rawCacheSize:  8,
 		metaCacheSize: 16,
+		keyFilter:     func([]byte) bool { return true },
 		flushBetween:  false,
 	}
 	for _, opt := range opts {
@@ -124,6 +127,16 @@ func (o *Operator) SizeOf(ctx context.Context, ms cadata.Store, root Root, key [
 	return offset, nil
 }
 
+func (o *Operator) Splice(ctx context.Context, ms, ds cadata.Store, segs []Segment) (*Root, error) {
+	b := o.NewBuilder(ctx, ms, ds)
+	for _, seg := range segs {
+		if err := b.copyFrom(ctx, seg.Root, seg.Span); err != nil {
+			return nil, err
+		}
+	}
+	return b.Finish(ctx)
+}
+
 func (op *Operator) newChunker(fn chunking.ChunkHandler) *chunking.ContentDefined {
 	return chunking.NewContentDefined(op.minSizeData, op.averageSizeData, op.maxBlobSize, op.chunkingSeed, fn)
 }
@@ -158,4 +171,10 @@ func (op *Operator) getExtentF(ctx context.Context, ds cadata.Store, ext *Extent
 		}
 		return fn(data[ext.Offset : ext.Offset+ext.Length])
 	})
+}
+
+// maxEntry finds the maximum extent entry in root within span.
+func (op *Operator) maxEntry(ctx context.Context, ms cadata.Store, root Root, span Span) (*kvstreams.Entry, error) {
+	// TODO: this needs to walk backwards
+	return op.gotkv.MaxEntry(ctx, ms, root, span)
 }

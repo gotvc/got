@@ -56,7 +56,7 @@ func ParseExtentKey(x []byte) ([]byte, uint64, error) {
 	if len(x) < 8 {
 		return nil, 0, fmt.Errorf("key too short to contain suffix len=%d", len(x))
 	}
-	splitI := len(x) - 9
+	splitI := len(x) - 8
 	k := x[:splitI]
 	offset := binary.BigEndian.Uint64(x[splitI:])
 	return k, offset, nil

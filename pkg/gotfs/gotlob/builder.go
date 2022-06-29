@@ -5,10 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
 
 type Builder struct {
@@ -63,6 +65,20 @@ func (b *Builder) SetPrefix(prefix []byte) error {
 		key:      append([]byte{}, prefix...),
 		isInline: false,
 	})
+	b.lastKey = append(b.lastKey[:0], prefix...)
+	return nil
+}
+
+// GetPrefix appends the current prefix to out if it exists, or returns nil if it does not
+func (b *Builder) GetPrefix(out []byte) []byte {
+	for i := len(b.queue) - 1; i >= 0; i-- {
+		op := b.queue[i]
+		if op.isInline {
+			continue
+		}
+		prefix := b.queue[len(b.queue)-1].key
+		return append(out, prefix...)
+	}
 	return nil
 }
 
@@ -111,7 +127,8 @@ func (b *Builder) handleChunk(data []byte) error {
 	}
 	var total uint32
 	k := make([]byte, 0, 4096)
-	for _, op := range b.queue {
+	log.Println("queue len", len(b.queue))
+	for i, op := range b.queue {
 		if op.isInline {
 			if err := b.kvb.Put(b.ctx, op.key, op.value); err != nil {
 				return err
@@ -135,17 +152,75 @@ func (b *Builder) handleChunk(data []byte) error {
 		if err := b.kvb.Put(b.ctx, k, MarshalExtent(ext2)); err != nil {
 			return err
 		}
-		op.lastOffset = offset
+		b.queue[i].lastOffset = offset
 		total += length
 	}
 	li := len(b.queue) - 1
-	if !b.queue[li].isInline {
+	if b.queue[li].isInline {
+		b.queue = b.queue[:0]
+	} else {
 		b.queue[0] = b.queue[len(b.queue)-1]
 		b.queue = b.queue[:1]
-	} else {
-		b.queue = b.queue[:0]
 	}
 	return nil
+}
+
+func (b *Builder) copyFrom(ctx context.Context, root Root, span Span) error {
+	maxExtentEntry, err := b.op.maxEntry(ctx, b.ms, root, span)
+	if err != nil {
+		return err
+	}
+	if maxExtentEntry == nil {
+		// just a metadata copy
+		it := b.op.gotkv.NewIterator(b.ms, root, span)
+		return gotkv.CopyAll(ctx, b.kvb, it)
+	}
+
+	span1 := span
+	span1.End = maxExtentEntry.Key
+	it := b.op.gotkv.NewIterator(b.ms, root, span1)
+	// copy one by one until we can fast copy
+	for b.chunker.Buffered() > 0 {
+		var ent kvstreams.Entry
+		if err := it.Next(ctx, &ent); err != nil {
+			if err == kvstreams.EOS {
+				break
+			}
+			return err
+		}
+		if err := b.copyEntry(ctx, ent); err != nil {
+			return err
+		}
+		// blind fast copy
+		if err := gotkv.CopyAll(ctx, b.kvb, it); err != nil {
+			return err
+		}
+	}
+	// the last extent needs to fill the chunker
+	if err := b.copyEntry(ctx, *maxExtentEntry); err != nil {
+		return err
+	}
+	// copy everything after in the span, to get all the metadata keys
+	span2 := span
+	span2.Begin = gotkv.KeyAfter(maxExtentEntry.Key)
+	it2 := b.op.gotkv.NewIterator(b.ms, root, span2)
+	if err := gotkv.CopyAll(ctx, b.kvb, it2); err != nil {
+		return err
+	}
+	return nil
+}
+
+// copyEntry copies a single entry to the metadata layer.
+func (b *Builder) copyEntry(ctx context.Context, ent kvstreams.Entry) error {
+	if b.op.keyFilter(ent.Key) {
+		ext, err := ParseExtent(ent.Value)
+		if err != nil {
+			return err
+		}
+		return b.CopyExtent(ctx, ext)
+	} else {
+		b.Put(ctx)
+	}
 }
 
 func (b *Builder) checkKey(key []byte) error {
