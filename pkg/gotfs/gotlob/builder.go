@@ -219,7 +219,7 @@ func (b *Builder) copyEntry(ctx context.Context, ent kvstreams.Entry) error {
 		}
 		return b.CopyExtent(ctx, ext)
 	} else {
-		b.Put(ctx)
+		return b.Put(ctx, ent.Key, ent.Value)
 	}
 }
 
