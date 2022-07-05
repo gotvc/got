@@ -75,7 +75,7 @@ func appendUint64(out []byte, x uint64) []byte {
 }
 
 func appendUint32(out []byte, x uint32) []byte {
-	var buf [8]byte
+	var buf [4]byte
 	binary.BigEndian.PutUint32(buf[:], x)
 	return append(out, buf[:]...)
 }

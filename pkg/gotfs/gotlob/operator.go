@@ -94,7 +94,7 @@ func NewOperator(opts ...Option) Operator {
 	return o
 }
 
-func (o *Operator) CreateExtents(ctx context.Context, ms, ds cadata.Store, r io.Reader) ([]*Extent, error) {
+func (o *Operator) CreateExtents(ctx context.Context, ds cadata.Store, r io.Reader) ([]*Extent, error) {
 	var exts []*Extent
 	chunker := o.newChunker(func(data []byte) error {
 		ext, err := o.post(ctx, ds, data)
@@ -130,11 +130,15 @@ func (o *Operator) SizeOf(ctx context.Context, ms cadata.Store, root Root, key [
 func (o *Operator) Splice(ctx context.Context, ms, ds cadata.Store, segs []Segment) (*Root, error) {
 	b := o.NewBuilder(ctx, ms, ds)
 	for _, seg := range segs {
-		if err := b.copyFrom(ctx, seg.Root, seg.Span); err != nil {
+		if err := b.CopyFrom(ctx, seg.Root, seg.Span); err != nil {
 			return nil, err
 		}
 	}
 	return b.Finish(ctx)
+}
+
+func (op *Operator) GotKV() *gotkv.Operator {
+	return &op.gotkv
 }
 
 func (op *Operator) newChunker(fn chunking.ChunkHandler) *chunking.ContentDefined {

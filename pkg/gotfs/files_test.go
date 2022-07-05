@@ -76,7 +76,8 @@ func TestLargeFiles(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, uint64(size), actualSize)
 		eg.Go(func() error {
-			r := op.NewReader(ctx, s, s, *root, p)
+			r, err := op.NewReader(ctx, s, s, *root, p)
+			require.NoError(t, err)
 			n, err := io.Copy(io.Discard, r)
 			if err != nil {
 				return err

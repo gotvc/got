@@ -3,7 +3,6 @@ package gotfs
 import (
 	"context"
 	"os"
-	"path"
 	"strings"
 
 	"github.com/brendoncarroll/go-state/posixfs"
@@ -103,18 +102,6 @@ func (o *Operator) RemoveAll(ctx context.Context, s Store, x Root, p string) (*R
 	k := makeInfoKey(p)
 	span := gotkv.PrefixSpan(k)
 	return o.gotkv.DeleteSpan(ctx, s, x, span)
-}
-
-func cleanPath(p string) string {
-	p = path.Clean(p)
-	if p == "." {
-		return ""
-	}
-	return strings.Trim(p, string(Sep))
-}
-
-func cleanName(p string) string {
-	return strings.Trim(p, string(Sep))
 }
 
 func dirSpan(p string) gotkv.Span {

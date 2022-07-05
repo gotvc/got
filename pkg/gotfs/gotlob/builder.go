@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/chunking"
@@ -13,6 +12,7 @@ import (
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
 
+// Builder chunks large objects, stores them, and then writes extents to a gotkv instance.
 type Builder struct {
 	op     *Operator
 	ctx    context.Context
@@ -26,6 +26,12 @@ type Builder struct {
 }
 
 func (o *Operator) NewBuilder(ctx context.Context, ms, ds cadata.Store) *Builder {
+	if ms.MaxSize() < o.maxBlobSize {
+		panic(fmt.Sprint("store size too small", ms.MaxSize()))
+	}
+	if ds.MaxSize() < o.maxBlobSize {
+		panic(fmt.Sprint("store size too small", ds.MaxSize()))
+	}
 	b := &Builder{
 		op:  o,
 		ctx: ctx,
@@ -92,12 +98,22 @@ func (b *Builder) Write(data []byte) (int, error) {
 	return b.chunker.Write(data)
 }
 
-// CopyExtent copies an extent to the current object.
-func (b *Builder) CopyExtent(ctx context.Context, ext *Extent) error {
+// WriteExtents copies multiple extents to the current object.
+func (b *Builder) CopyExtents(ctx context.Context, exts []*Extent) error {
+	for i, ext := range exts {
+		isShort := i == len(exts)-1
+		if err := b.CopyExtent(ctx, ext, isShort); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *Builder) CopyExtent(ctx context.Context, ext *Extent, isShort bool) error {
 	if len(b.queue) == 0 {
 		return errors.New("CopyExtent called before Begin")
 	}
-	if b.chunker.Buffered() > 0 {
+	if b.chunker.Buffered() > 0 || isShort {
 		// can't just copy the extent because we are not aligned.
 		return b.op.getExtentF(ctx, b.ds, ext, func(data []byte) error {
 			_, err := b.Write(data)
@@ -127,7 +143,6 @@ func (b *Builder) handleChunk(data []byte) error {
 	}
 	var total uint32
 	k := make([]byte, 0, 4096)
-	log.Println("queue len", len(b.queue))
 	for i, op := range b.queue {
 		if op.isInline {
 			if err := b.kvb.Put(b.ctx, op.key, op.value); err != nil {
@@ -165,7 +180,7 @@ func (b *Builder) handleChunk(data []byte) error {
 	return nil
 }
 
-func (b *Builder) copyFrom(ctx context.Context, root Root, span Span) error {
+func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 	maxExtentEntry, err := b.op.maxEntry(ctx, b.ms, root, span)
 	if err != nil {
 		return err
@@ -211,13 +226,14 @@ func (b *Builder) copyFrom(ctx context.Context, root Root, span Span) error {
 }
 
 // copyEntry copies a single entry to the metadata layer.
+// if ent contains an extent, then the extent is copied with isShort=true
 func (b *Builder) copyEntry(ctx context.Context, ent kvstreams.Entry) error {
 	if b.op.keyFilter(ent.Key) {
 		ext, err := ParseExtent(ent.Value)
 		if err != nil {
 			return err
 		}
-		return b.CopyExtent(ctx, ext)
+		return b.CopyExtent(ctx, ext, true)
 	} else {
 		return b.Put(ctx, ent.Key, ent.Value)
 	}

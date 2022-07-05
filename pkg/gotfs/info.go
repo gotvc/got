@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const MaxPathLen = 4096
+const MaxPathLen = gotkv.MaxKeySize - 1
 
 func (m *Info) marshal() []byte {
 	data, err := proto.Marshal(m)

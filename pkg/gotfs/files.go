@@ -4,11 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/gotkv"
-	"github.com/gotvc/got/pkg/metrics"
-	"github.com/gotvc/got/pkg/units"
-	"github.com/pkg/errors"
+	"github.com/gotvc/got/pkg/gotfs/gotlob"
 )
 
 // CreateFileRoot creates a new filesystem with the contents read from r at the root
@@ -26,24 +22,7 @@ func (o *Operator) CreateFileRoot(ctx context.Context, ms, ds Store, r io.Reader
 
 // CreateExtents returns a list of extents created from r
 func (o *Operator) CreateExtents(ctx context.Context, ds Store, r io.Reader) ([]*Extent, error) {
-	var exts []*Extent
-	chunker := o.newChunker(func(data []byte) error {
-		ext, err := o.postExtent(ctx, ds, data)
-		if err != nil {
-			return err
-		}
-		metrics.AddInt(ctx, "data_in", len(data), units.Bytes)
-		metrics.AddInt(ctx, "blobs_in", 1, "blobs")
-		exts = append(exts, ext)
-		return nil
-	})
-	if _, err := io.Copy(chunker, r); err != nil {
-		return nil, err
-	}
-	if err := chunker.Flush(); err != nil {
-		return nil, err
-	}
-	return exts, nil
+	return o.lob.CreateExtents(ctx, ds, r)
 }
 
 // CreateFile creates a file at p with data from r
@@ -65,76 +44,25 @@ func (o *Operator) CreateFile(ctx context.Context, ms, ds Store, x Root, p strin
 // SizeOfFile returns the size of the file at p in bytes.
 func (o *Operator) SizeOfFile(ctx context.Context, s Store, x Root, p string) (uint64, error) {
 	p = cleanPath(p)
-	k := makeInfoKey(p)
-	span := gotkv.Span{End: append(k, 0x01)}
-	ent, err := o.gotkv.MaxEntry(ctx, s, x, span)
-	if err != nil {
-		return 0, err
-	}
-	if !isExtentKey(ent.Key) {
-		return 0, nil
-	}
-	_, offset, err := splitExtentKey(ent.Key)
-	return offset, err
+	k := makeExtentPrefix(p)
+	return o.lob.SizeOf(ctx, s, x, k)
 }
 
 // ReadFileAt fills `buf` with data in the file at `p` starting at offset `start`
-func (o *Operator) ReadFileAt(ctx context.Context, ms, ds Store, x Root, p string, start uint64, buf []byte) (int, error) {
+func (o *Operator) ReadFileAt(ctx context.Context, ms, ds Store, x Root, p string, start int64, buf []byte) (int, error) {
+	r, err := o.NewReader(ctx, ms, ds, x, p)
+	if err != nil {
+		return 0, err
+	}
+	return r.ReadAt(buf, start)
+}
+
+func (o *Operator) NewReader(ctx context.Context, ms, ds Store, x Root, p string) (*gotlob.Reader, error) {
 	p = cleanPath(p)
 	_, err := o.GetFileInfo(ctx, ms, x, p)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	key := makeExtentKey(p, start)
-	span := gotkv.Span{
-		Begin: key,
-		End:   fileSpanEnd(p),
-	}
-	it := o.gotkv.NewIterator(ms, x, span)
-	var n int
-	for n < len(buf) {
-		n2, err := o.readFromIterator(ctx, it, ds, start, buf[n:])
-		if err != nil {
-			if err == gotkv.EOS {
-				break
-			}
-			return n, err
-		}
-		n += n2
-		start += uint64(n2)
-	}
-	if n > 0 {
-		return n, nil
-	}
-	return n, io.EOF
-}
-
-func (o *Operator) readFromIterator(ctx context.Context, it *gotkv.Iterator, ds cadata.Store, start uint64, buf []byte) (int, error) {
-	var ent gotkv.Entry
-	if err := it.Next(ctx, &ent); err != nil {
-		return 0, err
-	}
-	_, extentEnd, err := splitExtentKey(ent.Key)
-	if err != nil {
-		return 0, err
-	}
-	if extentEnd <= start {
-		return 0, nil
-	}
-	ext, err := parseExtent(ent.Value)
-	if err != nil {
-		return 0, err
-	}
-	extentStart := extentEnd - uint64(ext.Length)
-	if start < extentStart {
-		return 0, errors.Errorf("incorrect extent extentStart=%d asked for start=%d", extentEnd, start)
-	}
-	var n int
-	if err := o.getExtentF(ctx, ds, ext, func(data []byte) error {
-		n += copy(buf, data[start-extentStart:])
-		return nil
-	}); err != nil {
-		return 0, err
-	}
-	return n, err
+	k := makeExtentPrefix(p)
+	return o.lob.NewReader(ctx, ms, ds, x, k)
 }

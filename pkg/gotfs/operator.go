@@ -3,104 +3,60 @@ package gotfs
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"os"
 	"strings"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotfs/gotlob"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/logctx"
 	"github.com/pkg/errors"
 )
 
-type (
-	Ref   = gotkv.Ref
-	Store = gotkv.Store
-	Root  = gotkv.Root
-)
-
 const (
-	DefaultMaxBlobSize         = 1 << 21
-	DefaultMinBlobSizeData     = 1 << 12
-	DefaultAverageBlobSizeData = 1 << 20
-	DefaultAverageBlobSizeInfo = 1 << 13
+	DefaultMaxBlobSize         = gotlob.DefaultMaxBlobSize
+	DefaultMinBlobSizeData     = gotlob.DefaultMinBlobSizeData
+	DefaultAverageBlobSizeData = gotlob.DefaultAverageBlobSizeData
+	DefaultAverageBlobSizeInfo = gotlob.DefaultAverageBlobSizeKV
 )
 
 type Option func(o *Operator)
 
 func WithSalt(salt *[32]byte) Option {
 	return func(o *Operator) {
-		o.salt = salt
+		o.lobOpts = append(o.lobOpts, gotlob.WithSalt(salt))
 	}
 }
 
 // WithMetaCacheSize sets the size of the cache for metadata
 func WithMetaCacheSize(n int) Option {
 	return func(o *Operator) {
-		o.metaCacheSize = n
+		o.lobOpts = append(o.lobOpts, gotlob.WithMetaCacheSize(n))
 	}
 }
 
 // WithContentCacheSize sets the size of the cache for raw data
 func WithContentCacheSize(n int) Option {
 	return func(o *Operator) {
-		o.rawCacheSize = n
+		o.lobOpts = append(o.lobOpts, gotlob.WithContentCacheSize(n))
 	}
 }
 
 type Operator struct {
-	maxBlobSize                                   int
-	minSizeData, averageSizeData, averageSizeInfo int
-	salt                                          *[32]byte
-	rawCacheSize, metaCacheSize                   int
+	lobOpts []gotlob.Option
 
-	rawOp        gdat.Operator
-	gotkv        gotkv.Operator
-	chunkingSeed *[32]byte
+	lob   gotlob.Operator
+	gotkv *gotkv.Operator
 }
 
 func NewOperator(opts ...Option) Operator {
-	o := Operator{
-		maxBlobSize:     DefaultMaxBlobSize,
-		minSizeData:     DefaultMinBlobSizeData,
-		averageSizeData: DefaultAverageBlobSizeData,
-		averageSizeInfo: DefaultAverageBlobSizeInfo,
-		salt:            &[32]byte{},
-		rawCacheSize:    8,
-		metaCacheSize:   16,
-	}
+	o := Operator{}
 	for _, opt := range opts {
 		opt(&o)
 	}
-
-	// data
-	var rawSalt [32]byte
-	gdat.DeriveKey(rawSalt[:], o.salt, []byte("raw"))
-	o.rawOp = gdat.NewOperator(
-		gdat.WithSalt(&rawSalt),
-		gdat.WithCacheSize(o.rawCacheSize),
-	)
-	var chunkingSeed [32]byte
-	gdat.DeriveKey(chunkingSeed[:], o.salt, []byte("chunking"))
-	o.chunkingSeed = &chunkingSeed
-
-	// metadata
-	var metadataSalt [32]byte
-	gdat.DeriveKey(metadataSalt[:], o.salt, []byte("gotkv"))
-	metaOp := gdat.NewOperator(
-		gdat.WithSalt(&metadataSalt),
-		gdat.WithCacheSize(o.metaCacheSize),
-	)
-	var treeSeed [16]byte
-	gdat.DeriveKey(treeSeed[:], o.salt, []byte("gotkv-seed"))
-	o.gotkv = gotkv.NewOperator(
-		o.averageSizeInfo,
-		o.maxBlobSize,
-		gotkv.WithDataOperator(metaOp),
-		gotkv.WithSeed(&treeSeed),
-	)
+	o.lob = gotlob.NewOperator(o.lobOpts...)
+	o.gotkv = o.lob.GotKV()
 	return o
 }
 
@@ -158,7 +114,8 @@ func (o *Operator) ForEach(ctx context.Context, s cadata.Store, root Root, p str
 	return o.gotkv.ForEach(ctx, s, root, gotkv.PrefixSpan(k), fn2)
 }
 
-func (o *Operator) ForEachFile(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Info) error) error {
+// ForEachLeaf calls fn with each regular file in root, beneath p.
+func (o *Operator) ForEachLeaf(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Info) error) error {
 	return o.ForEach(ctx, s, root, p, func(p string, md *Info) error {
 		if os.FileMode(md.Mode).IsDir() {
 			return nil
@@ -200,6 +157,43 @@ func (o *Operator) AddPrefix(root Root, p string) Root {
 	p = cleanPath(p)
 	k := makeInfoKey(p)
 	return o.gotkv.AddPrefix(root, k[:len(k)-1])
+}
+
+// MaxInfo returns the maximum path and the corresponding Info for the path.
+// If no Info entry can be found MaxInfo returns ("", nil, nil)
+func (o *Operator) MaxInfo(ctx context.Context, ms cadata.Store, root Root, span Span) (string, *Info, error) {
+	for {
+		ent, err := o.gotkv.MaxEntry(ctx, ms, root, span)
+		if err != nil {
+			if errors.Is(err, gotkv.ErrKeyNotFound) {
+				err = nil
+			}
+			return "", nil, err
+		}
+		// found an info entry, parse it and return.
+		if isInfoKey(ent.Key) {
+			p, err := parseInfoKey(ent.Key)
+			if err != nil {
+				return "", nil, err
+			}
+			info, err := parseInfo(ent.Value)
+			if err != nil {
+				return "", nil, err
+			}
+			return p, info, nil
+		}
+		// found an extent key, use it's path to short cut to the info key.
+		if isExtentKey(ent.Key) {
+			p, _, err := splitExtentKey(ent.Key)
+			if err != nil {
+				return "", nil, err
+			}
+			info, err := o.GetInfo(ctx, ms, root, p)
+			return p, info, err
+		}
+		// need to keep going, update the span
+		span.Begin = ent.Key
+	}
 }
 
 func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func(ref gdat.Ref) error) error {
@@ -255,16 +249,6 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 	})
 }
 
-// Segment is a span of a GotFS instance.
-type Segment struct {
-	Span gotkv.Span
-	Root Root
-}
-
-func (s Segment) String() string {
-	return fmt.Sprintf("{ %v : %v}", s.Span, s.Root.Ref.CID)
-}
-
 func (o *Operator) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*Root, error) {
 	b := o.NewBuilder(ctx, ms, ds)
 	for _, seg := range segs {
@@ -273,8 +257,4 @@ func (o *Operator) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*R
 		}
 	}
 	return b.Finish()
-}
-
-func (o *Operator) newChunker(onChunk chunking.ChunkHandler) *chunking.ContentDefined {
-	return chunking.NewContentDefined(o.minSizeData, o.averageSizeData, o.maxBlobSize, o.chunkingSeed, onChunk)
 }

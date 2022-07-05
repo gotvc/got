@@ -2,9 +2,11 @@ package gotlob
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/pkg/errors"
 )
 
@@ -12,29 +14,22 @@ var _ io.ReadSeeker = &Reader{}
 
 type Reader struct {
 	ctx    context.Context
-	op     *Operator
-	ms     cadata.Store
+	o      *Operator
+	ms, ds cadata.Store
 	root   Root
 	prefix []byte
-	read   func(out []byte, v []byte) (int, error)
 
 	offset int64
 }
 
-func (o *Operator) NewReader(ctx context.Context, ms, ds cadata.Store, root Root, key []byte) (io.ReadSeeker, error) {
-	readFn := func(out []byte, v []byte) (int, error) {
-		ext, err := ParseExtent(v)
-		if err != nil {
-			return 0, err
-		}
-		return o.readExtent(ctx, out, ds, ext)
-	}
+func (o *Operator) NewReader(ctx context.Context, ms, ds cadata.Store, root Root, prefix []byte) (*Reader, error) {
 	return &Reader{
 		ctx:    ctx,
+		o:      o,
 		ms:     ms,
+		ds:     ds,
 		root:   root,
-		read:   readFn,
-		prefix: append([]byte{}, key...),
+		prefix: append([]byte{}, prefix...),
 	}, nil
 }
 
@@ -45,7 +40,7 @@ func (r *Reader) Read(buf []byte) (int, error) {
 }
 
 func (r *Reader) Seek(offset int64, whence int) (int64, error) {
-	size, err := r.op.SizeOf(r.ctx, r.ms, r.root, r.prefix)
+	size, err := r.o.SizeOf(r.ctx, r.ms, r.root, r.prefix)
 	if err != nil {
 		return 0, err
 	}
@@ -71,5 +66,54 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (r *Reader) ReadAt(buf []byte, offset int64) (int, error) {
-	return 0, nil
+	if offset < 0 {
+		return 0, fmt.Errorf("invalid offset %d", offset)
+	}
+	it := r.o.gotkv.NewIterator(r.ms, r.root, gotkv.PrefixSpan(r.prefix))
+	var n int
+	for n < len(buf) {
+		n2, err := r.readFromIterator(r.ctx, it, r.ds, uint64(offset), buf[n:])
+		if err != nil {
+			if err == gotkv.EOS {
+				break
+			}
+			return n, err
+		}
+		n += n2
+		offset += int64(n2)
+	}
+	if n > 0 {
+		return n, nil
+	}
+	return n, io.EOF
+}
+
+func (r *Reader) readFromIterator(ctx context.Context, it *gotkv.Iterator, ds cadata.Store, start uint64, buf []byte) (int, error) {
+	var ent gotkv.Entry
+	if err := it.Next(ctx, &ent); err != nil {
+		return 0, err
+	}
+	_, extentEnd, err := ParseExtentKey(ent.Key)
+	if err != nil {
+		return 0, err
+	}
+	if extentEnd <= start {
+		return 0, nil
+	}
+	ext, err := ParseExtent(ent.Value)
+	if err != nil {
+		return 0, err
+	}
+	extentStart := extentEnd - uint64(ext.Length)
+	if start < extentStart {
+		return 0, errors.Errorf("incorrect extent extentStart=%d asked for start=%d", extentEnd, start)
+	}
+	var n int
+	if err := r.o.getExtentF(ctx, ds, ext, func(data []byte) error {
+		n += copy(buf, data[start-extentStart:])
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+	return n, err
 }
