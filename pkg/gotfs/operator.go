@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs/gotlob"
 	"github.com/gotvc/got/pkg/gotkv"
@@ -15,51 +16,89 @@ import (
 )
 
 const (
-	DefaultMaxBlobSize         = gotlob.DefaultMaxBlobSize
-	DefaultMinBlobSizeData     = gotlob.DefaultMinBlobSizeData
-	DefaultAverageBlobSizeData = gotlob.DefaultAverageBlobSizeData
-	DefaultAverageBlobSizeInfo = gotlob.DefaultAverageBlobSizeKV
+	DefaultMaxBlobSize         = 1 << 21
+	DefaultMinBlobSizeData     = 1 << 12
+	DefaultAverageBlobSizeData = 1 << 20
+	DefaultAverageBlobSizeInfo = 1 << 13
 )
 
 type Option func(o *Operator)
 
 func WithSalt(salt *[32]byte) Option {
 	return func(o *Operator) {
-		o.lobOpts = append(o.lobOpts, gotlob.WithSalt(salt))
+		o.salt = salt
 	}
 }
 
 // WithMetaCacheSize sets the size of the cache for metadata
 func WithMetaCacheSize(n int) Option {
 	return func(o *Operator) {
-		o.lobOpts = append(o.lobOpts, gotlob.WithMetaCacheSize(n))
+		o.metaCacheSize = n
 	}
 }
 
 // WithContentCacheSize sets the size of the cache for raw data
 func WithContentCacheSize(n int) Option {
 	return func(o *Operator) {
-		o.lobOpts = append(o.lobOpts, gotlob.WithContentCacheSize(n))
+		o.rawCacheSize = n
 	}
 }
 
 type Operator struct {
-	lobOpts []gotlob.Option
+	maxBlobSize                                   int
+	minSizeData, averageSizeData, averageSizeInfo int
+	salt                                          *[32]byte
+	rawCacheSize, metaCacheSize                   int
 
-	lob   gotlob.Operator
-	gotkv *gotkv.Operator
+	rawOp        gdat.Operator
+	gotkv        gotkv.Operator
+	chunkingSeed *[32]byte
+	lob          gotlob.Operator
 }
 
 func NewOperator(opts ...Option) Operator {
-	o := Operator{}
+	o := Operator{
+		maxBlobSize:     DefaultMaxBlobSize,
+		minSizeData:     DefaultMinBlobSizeData,
+		averageSizeData: DefaultAverageBlobSizeData,
+		averageSizeInfo: DefaultAverageBlobSizeInfo,
+		salt:            &[32]byte{},
+		rawCacheSize:    8,
+		metaCacheSize:   16,
+	}
 	for _, opt := range opts {
 		opt(&o)
 	}
-	o.lobOpts = append(o.lobOpts, gotlob.WithFilter(func(x []byte) bool {
-		return isExtentKey(x)
+
+	// data
+	var rawSalt [32]byte
+	gdat.DeriveKey(rawSalt[:], o.salt, []byte("raw"))
+	o.rawOp = gdat.NewOperator(
+		gdat.WithSalt(&rawSalt),
+		gdat.WithCacheSize(o.rawCacheSize),
+	)
+	var chunkingSeed [32]byte
+	gdat.DeriveKey(chunkingSeed[:], o.salt, []byte("chunking"))
+	o.chunkingSeed = &chunkingSeed
+
+	// metadata
+	var metadataSalt [32]byte
+	gdat.DeriveKey(metadataSalt[:], o.salt, []byte("gotkv"))
+	metaOp := gdat.NewOperator(
+		gdat.WithSalt(&metadataSalt),
+		gdat.WithCacheSize(o.metaCacheSize),
+	)
+	var treeSeed [16]byte
+	gdat.DeriveKey(treeSeed[:], o.salt, []byte("gotkv-seed"))
+	o.gotkv = gotkv.NewOperator(
+		o.averageSizeInfo,
+		o.maxBlobSize,
+		gotkv.WithDataOperator(metaOp),
+		gotkv.WithSeed(&treeSeed),
+	)
+	o.lob = gotlob.NewOperator(&o.gotkv, &o.rawOp, gotlob.WithChunking(false, func(onChunk chunking.ChunkHandler) *chunking.ContentDefined {
+		return chunking.NewContentDefined(o.minSizeData, o.averageSizeData, o.maxBlobSize, o.chunkingSeed, onChunk)
 	}))
-	o.lob = gotlob.NewOperator(o.lobOpts...)
-	o.gotkv = o.lob.GotKV()
 	return o
 }
 

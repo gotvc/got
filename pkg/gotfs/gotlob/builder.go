@@ -28,11 +28,8 @@ type Builder struct {
 }
 
 func (o *Operator) NewBuilder(ctx context.Context, ms, ds cadata.Store) *Builder {
-	if ms.MaxSize() < o.maxBlobSize {
+	if ms.MaxSize() < o.gotkv.MaxSize() {
 		panic(fmt.Sprint("store size too small", ms.MaxSize()))
-	}
-	if ds.MaxSize() < o.maxBlobSize {
-		panic(fmt.Sprint("store size too small", ds.MaxSize()))
 	}
 	b := &Builder{
 		op:  o,
@@ -42,6 +39,9 @@ func (o *Operator) NewBuilder(ctx context.Context, ms, ds cadata.Store) *Builder
 		kvb: o.gotkv.NewBuilder(ms),
 	}
 	b.chunker = o.newChunker(b.handleChunk)
+	if ds.MaxSize() < b.chunker.MaxSize() {
+		panic(fmt.Sprint("store size too small", ds.MaxSize()))
+	}
 	return b
 }
 

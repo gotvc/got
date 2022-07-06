@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/gotvc/got/pkg/testutil"
@@ -16,7 +17,7 @@ import (
 
 func TestWrite(t *testing.T) {
 	ctx := context.Background()
-	op := NewOperator()
+	op := newOperator(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
 
 	b := op.NewBuilder(ctx, ms, ds)
@@ -36,7 +37,7 @@ func TestWrite(t *testing.T) {
 
 func TestSetPrefix(t *testing.T) {
 	ctx := context.Background()
-	op := NewOperator()
+	op := newOperator(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
 	b := op.NewBuilder(ctx, ms, ds)
 
@@ -50,7 +51,7 @@ func TestSetPrefix(t *testing.T) {
 
 func TestCopy(t *testing.T) {
 	ctx := context.Background()
-	op := NewOperator(WithFilter(func(x []byte) bool {
+	op := newOperator(t, WithFilter(func(x []byte) bool {
 		return len(x) >= 9
 	}))
 	ms, ds := stores.NewMem(), stores.NewMem()
@@ -90,4 +91,11 @@ func TestCopy(t *testing.T) {
 		require.NoError(t, err, "%v", k)
 		require.Equal(t, "test-value", string(v))
 	}
+}
+
+func newOperator(t testing.TB, opts ...Option) Operator {
+	gkv := gotkv.NewOperator(1<<13, 1<<20)
+	dop := gdat.NewOperator()
+	o := NewOperator(&gkv, &dop, opts...)
+	return o
 }

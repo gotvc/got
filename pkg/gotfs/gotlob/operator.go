@@ -15,88 +15,45 @@ import (
 
 type Option func(o *Operator)
 
-func WithSalt(salt *[32]byte) Option {
-	return func(o *Operator) {
-		o.salt = salt
-	}
-}
-
-// WithMetaCacheSize sets the size of the cache for metadata
-func WithMetaCacheSize(n int) Option {
-	return func(o *Operator) {
-		o.metaCacheSize = n
-	}
-}
-
-// WithContentCacheSize sets the size of the cache for raw data
-func WithContentCacheSize(n int) Option {
-	return func(o *Operator) {
-		o.rawCacheSize = n
-	}
-}
-
+// WithFilter sets a filter function, so that the operator ignores
+// any keys where fn(key) is false.
 func WithFilter(fn func([]byte) bool) Option {
 	return func(o *Operator) {
 		o.keyFilter = fn
 	}
 }
 
-type Operator struct {
-	maxBlobSize                                 int
-	minSizeData, averageSizeData, averageSizeKV int
-	salt                                        *[32]byte
-	rawCacheSize, metaCacheSize                 int
-	keyFilter                                   func([]byte) bool
-	flushBetween                                bool
-
-	rawOp        gdat.Operator
-	gotkv        gotkv.Operator
-	chunkingSeed *[32]byte
+// WithChunking sets the chunking strategy used by the Operator
+func WithChunking(flushBetween bool, fn func(onChunk chunking.ChunkHandler) *chunking.ContentDefined) Option {
+	return func(o *Operator) {
+		o.newChunker = fn
+		o.flushBetween = flushBetween
+	}
 }
 
-func NewOperator(opts ...Option) Operator {
-	o := Operator{
-		maxBlobSize:     DefaultMaxBlobSize,
-		minSizeData:     DefaultMinBlobSizeData,
-		averageSizeData: DefaultAverageBlobSizeData,
-		averageSizeKV:   DefaultAverageBlobSizeKV,
+type Operator struct {
+	gotkv *gotkv.Operator
+	gdat  *gdat.Operator
 
-		salt:          &[32]byte{},
-		rawCacheSize:  8,
-		metaCacheSize: 16,
-		keyFilter:     func([]byte) bool { return true },
-		flushBetween:  false,
+	newChunker   func(chunking.ChunkHandler) *chunking.ContentDefined
+	keyFilter    func([]byte) bool
+	flushBetween bool
+}
+
+func NewOperator(gkvop *gotkv.Operator, dop *gdat.Operator, opts ...Option) Operator {
+	o := Operator{
+		gotkv: gkvop,
+		gdat:  dop,
+
+		newChunker: func(onChunk chunking.ChunkHandler) *chunking.ContentDefined {
+			return chunking.NewContentDefined(64, 1<<20, 1<<21, new([32]byte), onChunk)
+		},
+		keyFilter:    func([]byte) bool { return true },
+		flushBetween: false,
 	}
 	for _, opt := range opts {
 		opt(&o)
 	}
-
-	// data
-	var rawSalt [32]byte
-	gdat.DeriveKey(rawSalt[:], o.salt, []byte("raw"))
-	o.rawOp = gdat.NewOperator(
-		gdat.WithSalt(&rawSalt),
-		gdat.WithCacheSize(o.rawCacheSize),
-	)
-	var chunkingSeed [32]byte
-	gdat.DeriveKey(chunkingSeed[:], o.salt, []byte("chunking"))
-	o.chunkingSeed = &chunkingSeed
-
-	// metadata
-	var metadataSalt [32]byte
-	gdat.DeriveKey(metadataSalt[:], o.salt, []byte("gotkv"))
-	metaOp := gdat.NewOperator(
-		gdat.WithSalt(&metadataSalt),
-		gdat.WithCacheSize(o.metaCacheSize),
-	)
-	var treeSeed [16]byte
-	gdat.DeriveKey(treeSeed[:], o.salt, []byte("gotkv-seed"))
-	o.gotkv = gotkv.NewOperator(
-		o.averageSizeKV,
-		o.maxBlobSize,
-		gotkv.WithDataOperator(metaOp),
-		gotkv.WithSeed(&treeSeed),
-	)
 	return o
 }
 
@@ -143,20 +100,12 @@ func (o *Operator) Splice(ctx context.Context, ms, ds cadata.Store, segs []Segme
 	return b.Finish(ctx)
 }
 
-func (op *Operator) GotKV() *gotkv.Operator {
-	return &op.gotkv
-}
-
-func (op *Operator) newChunker(fn chunking.ChunkHandler) *chunking.ContentDefined {
-	return chunking.NewContentDefined(op.minSizeData, op.averageSizeData, op.maxBlobSize, op.chunkingSeed, fn)
-}
-
 func (op *Operator) post(ctx context.Context, s cadata.Store, data []byte) (*Extent, error) {
 	l := len(data)
 	for len(data)%64 != 0 {
 		data = append(data, 0x00)
 	}
-	ref, err := op.rawOp.Post(ctx, s, data)
+	ref, err := op.gdat.Post(ctx, s, data)
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +113,7 @@ func (op *Operator) post(ctx context.Context, s cadata.Store, data []byte) (*Ext
 }
 
 func (op *Operator) readExtent(ctx context.Context, buf []byte, ds cadata.Store, ext *Extent) (int, error) {
-	n, err := op.rawOp.Read(ctx, ds, ext.Ref, buf)
+	n, err := op.gdat.Read(ctx, ds, ext.Ref, buf)
 	if err != nil {
 		return 0, err
 	}
@@ -175,7 +124,7 @@ func (op *Operator) readExtent(ctx context.Context, buf []byte, ds cadata.Store,
 }
 
 func (op *Operator) getExtentF(ctx context.Context, ds cadata.Store, ext *Extent, fn func([]byte) error) error {
-	return op.rawOp.GetF(ctx, ds, ext.Ref, func(data []byte) error {
+	return op.gdat.GetF(ctx, ds, ext.Ref, func(data []byte) error {
 		if err := checkExtentBounds(ext, len(data)); err != nil {
 			return err
 		}

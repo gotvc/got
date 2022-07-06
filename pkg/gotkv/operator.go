@@ -76,6 +76,14 @@ func NewOperator(avgSize, maxSize int, opts ...Option) Operator {
 	return op
 }
 
+func (o *Operator) MeanSize() int {
+	return o.averageSize
+}
+
+func (o *Operator) MaxSize() int {
+	return o.maxSize
+}
+
 // GetF calls fn with the value corresponding to key in the instance x.
 // The value must not be used outside the callback.
 func (o *Operator) GetF(ctx context.Context, s cadata.Store, x Root, key []byte, fn func([]byte) error) error {
