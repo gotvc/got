@@ -3,6 +3,7 @@ package gotfs
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
@@ -210,37 +211,34 @@ func (o *Operator) AddPrefix(root Root, p string) Root {
 // MaxInfo returns the maximum path and the corresponding Info for the path.
 // If no Info entry can be found MaxInfo returns ("", nil, nil)
 func (o *Operator) MaxInfo(ctx context.Context, ms cadata.Store, root Root, span Span) (string, *Info, error) {
-	for {
-		ent, err := o.gotkv.MaxEntry(ctx, ms, root, span)
+	ent, err := o.gotkv.MaxEntry(ctx, ms, root, span)
+	if err != nil {
+		return "", nil, err
+	}
+	switch {
+	case ent == nil:
+		return "", nil, nil
+	case isInfoKey(ent.Key):
+		// found an info entry, parse it and return.
+		p, err := parseInfoKey(ent.Key)
 		if err != nil {
 			return "", nil, err
 		}
-		if ent == nil {
-			return "", nil, nil
+		info, err := parseInfo(ent.Value)
+		if err != nil {
+			return "", nil, err
 		}
-		// found an info entry, parse it and return.
-		if isInfoKey(ent.Key) {
-			p, err := parseInfoKey(ent.Key)
-			if err != nil {
-				return "", nil, err
-			}
-			info, err := parseInfo(ent.Value)
-			if err != nil {
-				return "", nil, err
-			}
-			return p, info, nil
-		}
+		return p, info, nil
+	case isExtentKey(ent.Key):
 		// found an extent key, use it's path to short cut to the info key.
-		if isExtentKey(ent.Key) {
-			p, _, err := splitExtentKey(ent.Key)
-			if err != nil {
-				return "", nil, err
-			}
-			info, err := o.GetInfo(ctx, ms, root, p)
-			return p, info, err
+		p, _, err := splitExtentKey(ent.Key)
+		if err != nil {
+			return "", nil, err
 		}
-		// need to keep going, update the span
-		span.End = ent.Key
+		info, err := o.GetInfo(ctx, ms, root, p)
+		return p, info, err
+	default:
+		return "", nil, fmt.Errorf("gotfs: found invalid entry %v", ent)
 	}
 }
 

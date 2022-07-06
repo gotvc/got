@@ -19,9 +19,11 @@ import (
 var ctx = logctx.WithLogger(context.Background(), logrus.StandardLogger())
 
 func TestWrite(t *testing.T) {
+	t.Parallel()
 	op := newOperator(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
 	const N = 10
+	const size = 10e6
 
 	b := op.NewBuilder(ctx, ms, ds)
 	for i := 0; i < N; i++ {
@@ -30,7 +32,7 @@ func TestWrite(t *testing.T) {
 		prefix := []byte(k + "-data")
 		err := b.SetPrefix(prefix)
 		require.NoError(t, err)
-		rng := testutil.RandomStream(i, 10e6)
+		rng := testutil.RandomStream(i, size)
 		_, err = io.Copy(b, rng)
 		require.NoError(t, err)
 	}
@@ -41,11 +43,12 @@ func TestWrite(t *testing.T) {
 		r, err := op.NewReader(ctx, ms, ds, *root, []byte(prefix))
 		require.NoError(t, err)
 		t.Logf("reading prefix %q", prefix)
-		testutil.StreamsEqual(t, testutil.RandomStream(i, 10e6), r)
+		testutil.StreamsEqual(t, testutil.RandomStream(i, size), r)
 	}
 }
 
 func TestSetPrefix(t *testing.T) {
+	t.Parallel()
 	op := newOperator(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
 	b := op.NewBuilder(ctx, ms, ds)
@@ -59,6 +62,7 @@ func TestSetPrefix(t *testing.T) {
 }
 
 func TestCopyFrom(t *testing.T) {
+	t.Parallel()
 	op := newOperator(t, WithFilter(func(x []byte) bool {
 		return len(x) >= 9
 	}))
@@ -102,6 +106,7 @@ func TestCopyFrom(t *testing.T) {
 }
 
 func TestCopyExtents(t *testing.T) {
+	t.Parallel()
 	op := newOperator(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
 	b := op.NewBuilder(ctx, ms, ds)
