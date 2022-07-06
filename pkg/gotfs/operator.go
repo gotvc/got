@@ -96,9 +96,15 @@ func NewOperator(opts ...Option) Operator {
 		gotkv.WithDataOperator(metaOp),
 		gotkv.WithSeed(&treeSeed),
 	)
-	o.lob = gotlob.NewOperator(&o.gotkv, &o.rawOp, gotlob.WithChunking(false, func(onChunk chunking.ChunkHandler) *chunking.ContentDefined {
-		return chunking.NewContentDefined(o.minSizeData, o.averageSizeData, o.maxBlobSize, o.chunkingSeed, onChunk)
-	}))
+	lobOpts := []gotlob.Option{
+		gotlob.WithChunking(false, func(onChunk chunking.ChunkHandler) *chunking.ContentDefined {
+			return chunking.NewContentDefined(o.minSizeData, o.averageSizeData, o.maxBlobSize, o.chunkingSeed, onChunk)
+		}),
+		gotlob.WithFilter(func(x []byte) bool {
+			return isExtentKey(x)
+		}),
+	}
+	o.lob = gotlob.NewOperator(&o.gotkv, &o.rawOp, lobOpts...)
 	return o
 }
 
