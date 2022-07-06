@@ -2,13 +2,13 @@ package gotlob
 
 import (
 	"context"
+	"errors"
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
-	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/metrics"
 	"github.com/gotvc/got/pkg/units"
 )
@@ -32,6 +32,12 @@ func WithMetaCacheSize(n int) Option {
 func WithContentCacheSize(n int) Option {
 	return func(o *Operator) {
 		o.rawCacheSize = n
+	}
+}
+
+func WithFilter(fn func([]byte) bool) Option {
+	return func(o *Operator) {
+		o.keyFilter = fn
 	}
 }
 
@@ -178,7 +184,42 @@ func (op *Operator) getExtentF(ctx context.Context, ds cadata.Store, ext *Extent
 }
 
 // maxEntry finds the maximum extent entry in root within span.
-func (op *Operator) maxEntry(ctx context.Context, ms cadata.Store, root Root, span Span) (*kvstreams.Entry, error) {
-	// TODO: this needs to walk backwards
-	return op.gotkv.MaxEntry(ctx, ms, root, span)
+func (op *Operator) MaxExtent(ctx context.Context, ms cadata.Store, root Root, span Span) ([]byte, *Extent, error) {
+	for {
+		ent, err := op.gotkv.MaxEntry(ctx, ms, root, span)
+		if err != nil {
+			return nil, nil, err
+		}
+		if ent == nil {
+			return nil, nil, nil
+		}
+		if op.keyFilter(ent.Key) {
+			ext, err := ParseExtent(ent.Value)
+			if err != nil {
+				return nil, nil, err
+			}
+			return ent.Key, ext, nil
+		}
+		span.End = ent.Key
+	}
+}
+
+func (op *Operator) MinExtent(ctx context.Context, ms cadata.Store, root Root, span Span) ([]byte, *Extent, error) {
+	it := op.gotkv.NewIterator(ms, root, span)
+	var ent gotkv.Entry
+	for {
+		if err := it.Next(ctx, &ent); err != nil {
+			if errors.Is(err, gotkv.EOS) {
+				return nil, nil, nil
+			}
+			return nil, nil, err
+		}
+		if op.keyFilter(ent.Key) {
+			ext, err := ParseExtent(ent.Value)
+			if err != nil {
+				return nil, nil, err
+			}
+			return ent.Key, ext, nil
+		}
+	}
 }

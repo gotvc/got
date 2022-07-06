@@ -45,7 +45,7 @@ func splitExtentKey(k []byte) (string, uint64, error) {
 	if !isExtentKey(k) {
 		return "", 0, fmt.Errorf("%q is not an extent key", k)
 	}
-	return string(k[:len(k)-9]), binary.BigEndian.Uint64(k[:len(k)-8]), nil
+	return string(k[:len(k)-9]), binary.BigEndian.Uint64(k[len(k)-8:]), nil
 }
 
 func parseExtent(v []byte) (*Extent, error) {
@@ -53,6 +53,7 @@ func parseExtent(v []byte) (*Extent, error) {
 }
 
 func SplitPath(p string) []string {
+	p = cleanPath(p)
 	return strings.Split(p, "/")
 }
 

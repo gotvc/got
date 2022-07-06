@@ -3,13 +3,14 @@ package gotlob
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
+	"log"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
+	"github.com/pkg/errors"
 )
 
 // Builder chunks large objects, stores them, and then writes extents to a gotkv instance.
@@ -23,6 +24,8 @@ type Builder struct {
 
 	lastKey []byte
 	queue   []operation
+	root    *Root
+	err     error
 }
 
 func (o *Operator) NewBuilder(ctx context.Context, ms, ds cadata.Store) *Builder {
@@ -46,24 +49,26 @@ func (o *Operator) NewBuilder(ctx context.Context, ms, ds cadata.Store) *Builder
 // Put inserts a literal key, value into key stream.
 // Put is not affected by SetPrefix
 func (b *Builder) Put(ctx context.Context, key, value []byte) error {
-	if len(b.queue) == 0 {
-		if err := b.kvb.Put(ctx, key, value); err != nil {
-			return err
-		}
-	} else {
-		b.queue = append(b.queue, operation{
-			key:      append([]byte{}, key...),
-			isInline: true,
-			value:    append([]byte{}, value...),
-		})
+	if err := b.checkFinished(); err != nil {
+		return err
 	}
-	b.lastKey = append(b.lastKey[:0], key...)
-	return nil
+	if err := b.checkKey(key); err != nil {
+		return err
+	}
+	b.queue = append(b.queue, operation{
+		key:      append([]byte{}, key...),
+		isInline: true,
+		value:    append([]byte{}, value...),
+	})
+	return b.flushInline(ctx)
 }
 
 // SetPrefix set's the prefix used to generate extent keys.
 // Extents will be added as <prefix> + < 8 byte BigEndian extent >
 func (b *Builder) SetPrefix(prefix []byte) error {
+	if err := b.checkFinished(); err != nil {
+		return err
+	}
 	if err := b.checkKey(prefix); err != nil {
 		return err
 	}
@@ -71,35 +76,41 @@ func (b *Builder) SetPrefix(prefix []byte) error {
 		key:      append([]byte{}, prefix...),
 		isInline: false,
 	})
-	b.lastKey = append(b.lastKey[:0], prefix...)
+	b.setLastKey(prefix)
 	return nil
 }
 
 // GetPrefix appends the current prefix to out if it exists, or returns nil if it does not
 func (b *Builder) GetPrefix(out []byte) []byte {
-	for i := len(b.queue) - 1; i >= 0; i-- {
-		op := b.queue[i]
-		if op.isInline {
-			continue
-		}
-		prefix := b.queue[len(b.queue)-1].key
-		return append(out, prefix...)
+	if len(b.queue) == 0 {
+		return nil
 	}
-	return nil
+	op := b.queue[len(b.queue)-1]
+	if op.isInline {
+		return nil
+	}
+	prefix := b.queue[len(b.queue)-1].key
+	return append(out, prefix...)
 }
 
 // Write writes extents and creates entries for them under prefix, as specified by the
 // last call to SetPrefix
 func (b *Builder) Write(data []byte) (int, error) {
-	if len(b.queue) == 0 {
+	if err := b.checkFinished(); err != nil {
+		return 0, err
+	}
+	if prefix := b.GetPrefix(nil); prefix == nil {
 		return 0, errors.New("Write called before SetPrefix")
 	}
 	b.queue[len(b.queue)-1].bytesSent += uint64(len(data))
 	return b.chunker.Write(data)
 }
 
-// WriteExtents copies multiple extents to the current object.
+// CopyExtents copies multiple extents to the current object.
 func (b *Builder) CopyExtents(ctx context.Context, exts []*Extent) error {
+	if err := b.checkFinished(); err != nil {
+		return err
+	}
 	for i, ext := range exts {
 		isShort := i == len(exts)-1
 		if err := b.CopyExtent(ctx, ext, isShort); err != nil {
@@ -110,8 +121,8 @@ func (b *Builder) CopyExtents(ctx context.Context, exts []*Extent) error {
 }
 
 func (b *Builder) CopyExtent(ctx context.Context, ext *Extent, isShort bool) error {
-	if len(b.queue) == 0 {
-		return errors.New("CopyExtent called before Begin")
+	if prefix := b.GetPrefix(nil); prefix == nil {
+		return errors.New("CopyExtent called before SetPrefix")
 	}
 	if b.chunker.Buffered() > 0 || isShort {
 		// can't just copy the extent because we are not aligned.
@@ -121,19 +132,34 @@ func (b *Builder) CopyExtent(ctx context.Context, ext *Extent, isShort bool) err
 		})
 	}
 	li := len(b.queue) - 1
+	if b.queue[li].bytesSent != b.queue[li].lastOffset {
+		panic("data buffered in chunker")
+	}
 	b.queue[li].bytesSent += uint64(ext.Length)
-	b.queue[li].lastOffset += b.queue[li].bytesSent
+	b.queue[li].lastOffset = b.queue[li].bytesSent
 	offset := b.queue[li].lastOffset
 	k := make([]byte, 0, 4096)
-	k = appendKey(k, b.lastKey, offset)
+	k = appendKey(k, b.queue[li].key, offset)
 	return b.kvb.Put(ctx, k, MarshalExtent(ext))
 }
 
-func (b *Builder) Finish(context.Context) (*Root, error) {
-	if err := b.chunker.Flush(); err != nil {
-		return nil, err
+func (b *Builder) Finish(ctx context.Context) (*Root, error) {
+	if b.root == nil && b.err == nil {
+		b.root, b.err = func() (*Root, error) {
+			if err := b.chunker.Flush(); err != nil {
+				return nil, err
+			}
+			if err := b.flushInline(ctx); err != nil {
+				return nil, err
+			}
+			return b.kvb.Finish(ctx)
+		}()
 	}
-	return b.kvb.Finish(b.ctx)
+	return b.root, b.err
+}
+
+func (b *Builder) IsFinished() bool {
+	return b.root != nil || b.err != nil
 }
 
 func (b *Builder) handleChunk(data []byte) error {
@@ -170,78 +196,158 @@ func (b *Builder) handleChunk(data []byte) error {
 		b.queue[i].lastOffset = offset
 		total += length
 	}
-	li := len(b.queue) - 1
-	if b.queue[li].isInline {
-		b.queue = b.queue[:0]
-	} else {
-		b.queue[0] = b.queue[len(b.queue)-1]
-		b.queue = b.queue[:1]
+	b.clearQueue()
+	return nil
+}
+
+// flushInline flushes the inline entries from the queue and clears the queue.
+func (b *Builder) flushInline(ctx context.Context) error {
+	var remove int
+	for _, op := range b.queue {
+		if op.isInline {
+			if err := b.kvb.Put(ctx, op.key, op.value); err != nil {
+				return err
+			}
+		} else {
+			break
+		}
+		remove++
+	}
+	if remove > 0 {
+		copy(b.queue, b.queue[remove:])
+		b.queue = b.queue[:len(b.queue)-remove]
 	}
 	return nil
 }
 
+// clearQueue removes all the elements from the queue, except for the last element if
+// it is a non-inline operation.
+func (b *Builder) clearQueue() {
+	if len(b.queue) == 0 {
+		return
+	}
+	li := len(b.queue) - 1
+	if b.queue[li].isInline {
+		b.queue = b.queue[:0]
+	} else {
+		b.queue[0] = b.queue[li]
+		b.queue = b.queue[:1]
+	}
+}
+
 func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
-	maxExtentEntry, err := b.op.maxEntry(ctx, b.ms, root, span)
+	if err := b.checkFinished(); err != nil {
+		return err
+	}
+	maxExtKey, maxExt, err := b.op.MaxExtent(ctx, b.ms, root, span)
 	if err != nil {
 		return err
 	}
-	if maxExtentEntry == nil {
-		// just a metadata copy
-		it := b.op.gotkv.NewIterator(b.ms, root, span)
-		return gotkv.CopyAll(ctx, b.kvb, it)
-	}
-
 	span1 := span
-	span1.End = maxExtentEntry.Key
+	if maxExt != nil {
+		span1.End = maxExtKey
+	}
 	it := b.op.gotkv.NewIterator(b.ms, root, span1)
 	// copy one by one until we can fast copy
+	var ent kvstreams.Entry
 	for b.chunker.Buffered() > 0 {
-		var ent kvstreams.Entry
 		if err := it.Next(ctx, &ent); err != nil {
 			if err == kvstreams.EOS {
 				break
 			}
 			return err
 		}
-		if err := b.copyEntry(ctx, ent); err != nil {
-			return err
-		}
-		// blind fast copy
-		if err := gotkv.CopyAll(ctx, b.kvb, it); err != nil {
-			return err
+		if b.op.keyFilter(ent.Key) {
+			ext, err := ParseExtent(ent.Value)
+			if err != nil {
+				return err
+			}
+			if err := b.copyExtentAt(ctx, ent.Key, ext); err != nil {
+				return err
+			}
+		} else {
+			if err := b.Put(ctx, ent.Key, ent.Value); err != nil {
+				return err
+			}
 		}
 	}
-	// the last extent needs to fill the chunker
-	if err := b.copyEntry(ctx, *maxExtentEntry); err != nil {
+	// blind fast copy
+	if err := gotkv.CopyAll(ctx, b.kvb, it); err != nil {
 		return err
 	}
-	// copy everything after in the span, to get all the metadata keys
-	span2 := span
-	span2.Begin = gotkv.KeyAfter(maxExtentEntry.Key)
-	it2 := b.op.gotkv.NewIterator(b.ms, root, span2)
-	if err := gotkv.CopyAll(ctx, b.kvb, it2); err != nil {
+	// if the max entry is inline, then write it.
+	if maxEnt, err := b.op.gotkv.MaxEntry(ctx, b.ms, root, span1); err != nil {
+		return err
+	} else if maxEnt != nil && !b.op.keyFilter(maxEnt.Key) {
+		b.setLastKey(maxEnt.Key)
+	}
+	// the last extent needs to fill the chunker
+	if maxExt != nil {
+		log.Printf("copying last extent. key=%q ext=%v", maxExtKey, maxExt)
+		prefix, _, err := ParseExtentKey(maxExtKey)
+		if err != nil {
+			return err
+		}
+		b.queue = append(b.queue, operation{
+			key: prefix,
+			isInline: false,
+			bytesSent:  uint64(maxExt.Offset - maxExt.Length),
+			lastOffset: uint64(maxExt.Offset - maxExt.Length),
+		})
+		if err := b.copyExtentAt(ctx, maxExtKey, maxExt); err != nil {
+			return err
+		}
+		span2 := span
+		span2.Begin = gotkv.KeyAfter(maxExtKey)
+		it2 := b.op.gotkv.NewIterator(b.ms, root, span2)
+		if err := kvstreams.ForEach(ctx, it2, func(ent kvstreams.Entry) error {
+			if b.op.keyFilter(ent.Key) {
+				panic(fmt.Sprintf("found extent after max extent. %q", ent.Key))
+			}
+			return b.Put(ctx, ent.Key, ent.Value)
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (b *Builder) copyExtentAt(ctx context.Context, key []byte, ext *Extent) error {
+	prefix, offset, err := ParseExtentKey(key)
+	if err != nil {
+		return err
+	}
+	if oldPrefix := b.GetPrefix(nil); !bytes.Equal(oldPrefix, prefix) {
+		if err := b.SetPrefix(prefix); err != nil {
+			return err
+		}
+		log.Printf("new prefix %q", prefix)
+	} else {
+		log.Println("keeping prefix the same", prefix)
+	}
+	log.Printf("copyExtentAt %q %d", prefix, offset)
+	log.Printf("queue: %v", b.queue)
+	log.Printf("prefix: %q", b.GetPrefix(nil))
+	if err := b.CopyExtent(ctx, ext, true); err != nil {
 		return err
 	}
 	return nil
 }
 
-// copyEntry copies a single entry to the metadata layer.
-// if ent contains an extent, then the extent is copied with isShort=true
-func (b *Builder) copyEntry(ctx context.Context, ent kvstreams.Entry) error {
-	if b.op.keyFilter(ent.Key) {
-		ext, err := ParseExtent(ent.Value)
-		if err != nil {
-			return err
-		}
-		return b.CopyExtent(ctx, ext, true)
-	} else {
-		return b.Put(ctx, ent.Key, ent.Value)
-	}
-}
-
 func (b *Builder) checkKey(key []byte) error {
 	if cmp := bytes.Compare(key, b.lastKey); cmp <= 0 {
-		return fmt.Errorf("%q <= %q", key, b.lastKey)
+		return errors.Errorf("%q <= %q", key, b.lastKey)
+	}
+	return nil
+}
+
+func (b *Builder) setLastKey(k []byte) {
+	b.lastKey = append(b.lastKey[:0], k...)
+}
+
+func (b *Builder) checkFinished() error {
+	if b.root != nil || b.err != nil {
+		return errors.New("gotlob: Builder has already finished")
 	}
 	return nil
 }
@@ -262,4 +368,11 @@ type operation struct {
 	// this means there was a key set containing lastOffset.
 	// this value should only be modifeid by the chunk handler callback.
 	lastOffset uint64
+}
+
+func (op operation) String() string {
+	if op.isInline {
+		return fmt.Sprintf("{PUT, %q}", op.value)
+	}
+	return fmt.Sprintf("{EXT, bytes_sent=%d, last_offset=%d}", op.bytesSent, op.lastOffset)
 }

@@ -55,6 +55,9 @@ func NewOperator(opts ...Option) Operator {
 	for _, opt := range opts {
 		opt(&o)
 	}
+	o.lobOpts = append(o.lobOpts, gotlob.WithFilter(func(x []byte) bool {
+		return isExtentKey(x)
+	}))
 	o.lob = gotlob.NewOperator(o.lobOpts...)
 	o.gotkv = o.lob.GotKV()
 	return o
@@ -165,10 +168,10 @@ func (o *Operator) MaxInfo(ctx context.Context, ms cadata.Store, root Root, span
 	for {
 		ent, err := o.gotkv.MaxEntry(ctx, ms, root, span)
 		if err != nil {
-			if errors.Is(err, gotkv.ErrKeyNotFound) {
-				err = nil
-			}
 			return "", nil, err
+		}
+		if ent == nil {
+			return "", nil, nil
 		}
 		// found an info entry, parse it and return.
 		if isInfoKey(ent.Key) {
@@ -192,7 +195,7 @@ func (o *Operator) MaxInfo(ctx context.Context, ms cadata.Store, root Root, span
 			return p, info, err
 		}
 		// need to keep going, update the span
-		span.Begin = ent.Key
+		span.End = ent.Key
 	}
 }
 

@@ -93,6 +93,9 @@ func (r *Reader) readFromIterator(ctx context.Context, it *gotkv.Iterator, ds ca
 	if err := it.Next(ctx, &ent); err != nil {
 		return 0, err
 	}
+	if !r.o.keyFilter(ent.Key) {
+		return 0, nil
+	}
 	_, extentEnd, err := ParseExtentKey(ent.Key)
 	if err != nil {
 		return 0, err

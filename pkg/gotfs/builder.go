@@ -18,9 +18,6 @@ type Builder struct {
 
 	dirStack []string
 	b        *gotlob.Builder
-
-	root *Root
-	err  error
 }
 
 func (o *Operator) NewBuilder(ctx context.Context, ms, ds Store) *Builder {
@@ -105,10 +102,12 @@ func (b *Builder) copyFrom(ctx context.Context, root Root, span gotkv.Span) erro
 	if err != nil {
 		return err
 	}
-	if os.FileMode(info.Mode).IsDir() {
-		b.dirStack = append(b.dirStack[:0], SplitPath(p)...)
-	} else {
-		b.dirStack = append(b.dirStack[:0], SplitPath(parentPath(p))...)
+	if info != nil {
+		if os.FileMode(info.Mode).IsDir() {
+			b.dirStack = append(b.dirStack[:0], SplitPath(p)...)
+		} else {
+			b.dirStack = append(b.dirStack[:0], SplitPath(parentPath(p))...)
+		}
 	}
 	return nil
 }
@@ -117,18 +116,11 @@ func (b *Builder) copyFrom(ctx context.Context, root Root, span gotkv.Span) erro
 // Finish is idempotent, and is safe to call multiple times.
 // Not calling finish is not an error, the builder does not allocate resources other than memory.
 func (b *Builder) Finish() (*Root, error) {
-	if !b.IsFinished() {
-		b.root, b.err = b.finish(b.ctx)
-	}
-	return b.root, b.err
-}
-
-func (b *Builder) finish(ctx context.Context) (*Root, error) {
-	return b.b.Finish(ctx)
+	return b.b.Finish(b.ctx)
 }
 
 func (b *Builder) IsFinished() bool {
-	return b.root != nil || b.err != nil
+	return b.b.IsFinished()
 }
 
 // parentInStack checks is the parent of p
