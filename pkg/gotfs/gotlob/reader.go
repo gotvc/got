@@ -70,11 +70,16 @@ func (r *Reader) ReadAt(buf []byte, offset int64) (int, error) {
 		return 0, fmt.Errorf("invalid offset %d", offset)
 	}
 	it := r.o.gotkv.NewIterator(r.ms, r.root, gotkv.PrefixSpan(r.prefix))
+	gteq := make([]byte, 0, gotkv.MaxKeySize)
+	gteq = appendKey(gteq, r.prefix, uint64(offset))
+	if err := it.Seek(r.ctx, gteq); err != nil {
+		return 0, err
+	}
 	var n int
 	for n < len(buf) {
 		n2, err := r.readFromIterator(r.ctx, it, r.ds, uint64(offset), buf[n:])
 		if err != nil {
-			if err == gotkv.EOS {
+			if errors.Is(err, gotkv.EOS) {
 				break
 			}
 			return n, err
@@ -90,11 +95,13 @@ func (r *Reader) ReadAt(buf []byte, offset int64) (int, error) {
 
 func (r *Reader) readFromIterator(ctx context.Context, it *gotkv.Iterator, ds cadata.Store, start uint64, buf []byte) (int, error) {
 	var ent gotkv.Entry
-	if err := it.Next(ctx, &ent); err != nil {
-		return 0, err
-	}
-	if !r.o.keyFilter(ent.Key) {
-		return 0, nil
+	for {
+		if err := it.Next(ctx, &ent); err != nil {
+			return 0, err
+		}
+		if r.o.keyFilter(ent.Key) {
+			break
+		}
 	}
 	_, extentEnd, err := ParseExtentKey(ent.Key)
 	if err != nil {

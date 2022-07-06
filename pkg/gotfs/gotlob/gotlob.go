@@ -13,15 +13,6 @@ type (
 	Span  = gotkv.Span
 )
 
-const (
-	DefaultMaxBlobSize = 1 << 21
-
-	DefaultMinBlobSizeData     = 1 << 12
-	DefaultAverageBlobSizeData = 1 << 20
-
-	DefaultAverageBlobSizeKV = 1 << 13
-)
-
 type Segment struct {
 	Root Root
 	Span Span

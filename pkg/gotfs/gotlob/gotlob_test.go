@@ -4,39 +4,48 @@ import (
 	"context"
 	"fmt"
 	"io"
-	mrand "math/rand"
 	"strconv"
 	"testing"
 
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/logctx"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/gotvc/got/pkg/testutil"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
+var ctx = logctx.WithLogger(context.Background(), logrus.StandardLogger())
+
 func TestWrite(t *testing.T) {
-	ctx := context.Background()
 	op := newOperator(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
+	const N = 10
 
 	b := op.NewBuilder(ctx, ms, ds)
-	for i := 0; i < 10; i++ {
+	for i := 0; i < N; i++ {
 		k := fmt.Sprintf("key-%04d", i)
 		b.Put(ctx, []byte(k), []byte("value"))
-		err := b.SetPrefix([]byte(k + "-data"))
+		prefix := []byte(k + "-data")
+		err := b.SetPrefix(prefix)
 		require.NoError(t, err)
-		rng := mrand.New(mrand.NewSource(int64(i)))
-		_, err = io.CopyN(b, rng, 10e6)
+		rng := testutil.RandomStream(i, 10e6)
+		_, err = io.Copy(b, rng)
 		require.NoError(t, err)
 	}
 	root, err := b.Finish(ctx)
 	require.NoError(t, err)
-	t.Log(root)
+	for i := 0; i < N; i++ {
+		prefix := fmt.Sprintf("key-%04d-data", i)
+		r, err := op.NewReader(ctx, ms, ds, *root, []byte(prefix))
+		require.NoError(t, err)
+		t.Logf("reading prefix %q", prefix)
+		testutil.StreamsEqual(t, testutil.RandomStream(i, 10e6), r)
+	}
 }
 
 func TestSetPrefix(t *testing.T) {
-	ctx := context.Background()
 	op := newOperator(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
 	b := op.NewBuilder(ctx, ms, ds)
@@ -49,8 +58,7 @@ func TestSetPrefix(t *testing.T) {
 	require.NoError(t, err)
 }
 
-func TestCopy(t *testing.T) {
-	ctx := context.Background()
+func TestCopyFrom(t *testing.T) {
 	op := newOperator(t, WithFilter(func(x []byte) bool {
 		return len(x) >= 9
 	}))
@@ -91,6 +99,37 @@ func TestCopy(t *testing.T) {
 		require.NoError(t, err, "%v", k)
 		require.Equal(t, "test-value", string(v))
 	}
+}
+
+func TestCopyExtents(t *testing.T) {
+	op := newOperator(t)
+	ms, ds := stores.NewMem(), stores.NewMem()
+	b := op.NewBuilder(ctx, ms, ds)
+
+	const N = 5
+	var exts [][]*Extent
+	for i := 0; i < N; i++ {
+		exts2, err := op.CreateExtents(ctx, ds, testutil.RandomStream(i, 10e6))
+		require.NoError(t, err)
+		exts = append(exts, exts2)
+	}
+	err := b.SetPrefix([]byte("0"))
+	require.NoError(t, err)
+	for i := range exts {
+		err := b.CopyExtents(ctx, exts[i])
+		require.NoError(t, err)
+	}
+	root, err := b.Finish(ctx)
+	require.NoError(t, err)
+
+	rngs := make([]io.Reader, N)
+	for i := range rngs {
+		rngs[i] = testutil.RandomStream(i, 10e6)
+	}
+	actual, err := op.NewReader(ctx, ms, ds, *root, []byte("0"))
+	require.NoError(t, err)
+	expected := io.MultiReader(rngs...)
+	testutil.StreamsEqual(t, expected, actual)
 }
 
 func newOperator(t testing.TB, opts ...Option) Operator {

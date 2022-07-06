@@ -67,6 +67,9 @@ func (b *Builder) SetPrefix(prefix []byte) error {
 	if err := b.checkFinished(); err != nil {
 		return err
 	}
+	if bytes.Compare(prefix, b.lastKey) < 0 {
+		return errors.Errorf("prefix < last key: %q < %q", prefix, b.lastKey)
+	}
 	if err := b.checkKey(prefix); err != nil {
 		return err
 	}
@@ -166,7 +169,7 @@ func (b *Builder) handleChunk(data []byte) error {
 		return err
 	}
 	var total uint32
-	k := make([]byte, 0, 4096)
+	k := make([]byte, 0, gotkv.MaxKeySize)
 	for i, op := range b.queue {
 		if op.isInline {
 			if err := b.kvb.Put(b.ctx, op.key, op.value); err != nil {

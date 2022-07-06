@@ -81,7 +81,7 @@ func appendUint32(out []byte, x uint32) []byte {
 }
 
 func checkExtentBounds(ext *Extent, n int) error {
-	if n < int(ext.Offset+ext.Length) || n < int(ext.Offset) {
+	if n < int(ext.Offset) || n < int(ext.Offset+ext.Length) {
 		return fmt.Errorf("extent data too short len=%d offset=%d length=%d", n, ext.Offset, ext.Length)
 	}
 	return nil

@@ -101,15 +101,20 @@ func (o *Operator) Splice(ctx context.Context, ms, ds cadata.Store, segs []Segme
 }
 
 func (op *Operator) post(ctx context.Context, s cadata.Store, data []byte) (*Extent, error) {
-	l := len(data)
-	for len(data)%64 != 0 {
-		data = append(data, 0x00)
-	}
 	ref, err := op.gdat.Post(ctx, s, data)
 	if err != nil {
 		return nil, err
 	}
-	return &Extent{Offset: 0, Length: uint32(l), Ref: *ref}, nil
+	return &Extent{Offset: 0, Length: uint32(len(data)), Ref: *ref}, nil
+}
+
+func (op *Operator) getExtentF(ctx context.Context, ds cadata.Store, ext *Extent, fn func([]byte) error) error {
+	return op.gdat.GetF(ctx, ds, ext.Ref, func(data []byte) error {
+		if err := checkExtentBounds(ext, len(data)); err != nil {
+			return err
+		}
+		return fn(data[ext.Offset : ext.Offset+ext.Length])
+	})
 }
 
 func (op *Operator) readExtent(ctx context.Context, buf []byte, ds cadata.Store, ext *Extent) (int, error) {
@@ -121,15 +126,6 @@ func (op *Operator) readExtent(ctx context.Context, buf []byte, ds cadata.Store,
 		return 0, err
 	}
 	return copy(buf[:], buf[ext.Offset:ext.Offset+ext.Length]), nil
-}
-
-func (op *Operator) getExtentF(ctx context.Context, ds cadata.Store, ext *Extent, fn func([]byte) error) error {
-	return op.gdat.GetF(ctx, ds, ext.Ref, func(data []byte) error {
-		if err := checkExtentBounds(ext, len(data)); err != nil {
-			return err
-		}
-		return fn(data[ext.Offset : ext.Offset+ext.Length])
-	})
 }
 
 // maxEntry finds the maximum extent entry in root within span.
