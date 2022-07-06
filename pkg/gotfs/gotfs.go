@@ -37,7 +37,8 @@ func isInfoKey(k []byte) bool {
 // isExtentKey returns true if k can be interpretted as an extent key.
 // extent keys have the first null byte 9'th from the end.
 func isExtentKey(k []byte) bool {
-	return bytes.Index(k, []byte{0x00}) == len(k)-9
+	i := bytes.Index(k, []byte{0x00})
+	return i > 0 && i == len(k)-9
 }
 
 func splitExtentKey(k []byte) (string, uint64, error) {
