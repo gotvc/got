@@ -18,6 +18,8 @@ type (
 	Span   = gotkv.Span
 )
 
+const MaxPathLen = gotkv.MaxKeySize - 2 - 8
+
 // Segment is a span of a GotFS instance.
 type Segment struct {
 	Span gotkv.Span
