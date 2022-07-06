@@ -57,7 +57,10 @@ func (o *Operator) ReadFileAt(ctx context.Context, ms, ds Store, x Root, p strin
 	return r.ReadAt(buf, start)
 }
 
-func (o *Operator) NewReader(ctx context.Context, ms, ds Store, x Root, p string) (*gotlob.Reader, error) {
+type Reader = gotlob.Reader
+
+// NewReader returns an io.Reader | io.Seeker | io.ReaderAt
+func (o *Operator) NewReader(ctx context.Context, ms, ds Store, x Root, p string) (*Reader, error) {
 	p = cleanPath(p)
 	_, err := o.GetFileInfo(ctx, ms, x, p)
 	if err != nil {

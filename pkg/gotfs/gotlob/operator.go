@@ -121,12 +121,12 @@ func (o *Operator) CreateExtents(ctx context.Context, ds cadata.Store, r io.Read
 	return exts, nil
 }
 
-func (o *Operator) SizeOf(ctx context.Context, ms cadata.Store, root Root, key []byte) (uint64, error) {
-	ent, err := o.gotkv.MaxEntry(ctx, ms, root, gotkv.PrefixSpan(key))
+func (o *Operator) SizeOf(ctx context.Context, ms cadata.Store, root Root, prefix []byte) (uint64, error) {
+	key, _, err := o.MaxExtent(ctx, ms, root, gotkv.PrefixSpan(prefix))
 	if err != nil {
 		return 0, err
 	}
-	_, offset, err := ParseExtentKey(ent.Key)
+	_, offset, err := ParseExtentKey(key)
 	if err != nil {
 		return 0, err
 	}

@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/chunking"
@@ -283,16 +282,15 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 	}
 	// the last extent needs to fill the chunker
 	if maxExt != nil {
-		log.Printf("copying last extent. key=%q ext=%v", maxExtKey, maxExt)
-		prefix, _, err := ParseExtentKey(maxExtKey)
+		prefix, offset, err := ParseExtentKey(maxExtKey)
 		if err != nil {
 			return err
 		}
 		b.queue = append(b.queue, operation{
-			key: prefix,
-			isInline: false,
-			bytesSent:  uint64(maxExt.Offset - maxExt.Length),
-			lastOffset: uint64(maxExt.Offset - maxExt.Length),
+			key:        prefix,
+			isInline:   false,
+			bytesSent:  offset - uint64(maxExt.Length),
+			lastOffset: offset - uint64(maxExt.Length),
 		})
 		if err := b.copyExtentAt(ctx, maxExtKey, maxExt); err != nil {
 			return err
@@ -313,7 +311,7 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 }
 
 func (b *Builder) copyExtentAt(ctx context.Context, key []byte, ext *Extent) error {
-	prefix, offset, err := ParseExtentKey(key)
+	prefix, _, err := ParseExtentKey(key)
 	if err != nil {
 		return err
 	}
@@ -321,13 +319,7 @@ func (b *Builder) copyExtentAt(ctx context.Context, key []byte, ext *Extent) err
 		if err := b.SetPrefix(prefix); err != nil {
 			return err
 		}
-		log.Printf("new prefix %q", prefix)
-	} else {
-		log.Println("keeping prefix the same", prefix)
 	}
-	log.Printf("copyExtentAt %q %d", prefix, offset)
-	log.Printf("queue: %v", b.queue)
-	log.Printf("prefix: %q", b.GetPrefix(nil))
 	if err := b.CopyExtent(ctx, ext, true); err != nil {
 		return err
 	}
