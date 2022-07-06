@@ -2,7 +2,6 @@ package gotfs
 
 import (
 	"bytes"
-	"encoding/binary"
 	"fmt"
 	"path"
 	"strings"
@@ -45,7 +44,13 @@ func splitExtentKey(k []byte) (string, uint64, error) {
 	if !isExtentKey(k) {
 		return "", 0, fmt.Errorf("%q is not an extent key", k)
 	}
-	return string(k[:len(k)-9]), binary.BigEndian.Uint64(k[len(k)-8:]), nil
+	prefix, offset, err := gotlob.ParseExtentKey(k)
+	if err != nil {
+		return "", 0, err
+	}
+	p := string(prefix[:len(prefix)-1])
+	p = cleanPath(p)
+	return p, offset, nil
 }
 
 func parseExtent(v []byte) (*Extent, error) {

@@ -52,6 +52,9 @@ func (pr *Exporter) ExportFile(ctx context.Context, ms, ds cadata.Store, root go
 			return fmt.Errorf("refusing to overwrite unknown file at path %q.  current=%v", p, finfo.ModTime())
 		}
 	}
-	r := pr.gotfs.NewReader(ctx, ms, ds, root, p)
+	r, err := pr.gotfs.NewReader(ctx, ms, ds, root, p)
+	if err != nil {
+		return err
+	}
 	return posixfs.PutFile(ctx, pr.fsx, p, mode, r)
 }

@@ -1,8 +1,11 @@
 package testutil
 
 import (
+	"fmt"
 	"io"
-	"math/rand"
+	"math"
+	mrand "math/rand"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -37,6 +40,16 @@ func StreamsEqual(t testing.TB, a, b io.Reader) {
 	}
 }
 
-func RandomStream(seed, size int64) io.Reader {
-	return io.LimitReader(rand.New(rand.NewSource(seed)), size)
+func RandomStream(seed int, size int64) io.Reader {
+	return io.LimitReader(mrand.New(mrand.NewSource(int64(seed))), size)
+}
+
+func RandomFiles(seed int, numFiles int, sizeMean, sizeSig float64, fn func(string, io.Reader)) {
+	fmtStr := "%0" + strconv.Itoa(int(math.Ceil(math.Log10(float64(numFiles))))) + "d"
+	for i := 0; i < numFiles; i++ {
+		rng := mrand.New(mrand.NewSource(int64(i)))
+		size := int64(math.Round(rng.NormFloat64()*sizeSig + sizeMean))
+		p := fmt.Sprintf(fmtStr, i)
+		fn(p, RandomStream(i, size))
+	}
 }

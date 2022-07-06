@@ -67,7 +67,8 @@ type File struct {
 	ms, ds cadata.Store
 	root   gotfs.Root
 	path   string
-	r      *gotfs.FileReader
+
+	r *gotfs.Reader
 }
 
 func NewFile(fsop gotfs.Operator, ms, ds cadata.Store, root gotfs.Root, p string) *File {
@@ -79,24 +80,31 @@ func NewFile(fsop gotfs.Operator, ms, ds cadata.Store, root gotfs.Root, p string
 		ds:    ds,
 		root:  root,
 		path:  p,
-
-		r: fsop.NewReader(ctx, ms, ds, root, p),
 	}
 }
 
 func (f *File) Read(buf []byte) (int, error) {
+	if err := f.ensureReader(); err != nil {
+		return 0, err
+	}
 	n, err := f.r.Read(buf)
 	return n, convertError(err)
 }
 
 func (f *File) ReadAt(buf []byte, off int64) (int, error) {
+	if err := f.ensureReader(); err != nil {
+		return 0, err
+	}
 	if off < 0 {
 		return 0, errors.New("negative offset")
 	}
-	return f.gotfs.ReadFileAt(f.ctx, f.ms, f.ds, f.root, f.path, uint64(off), buf)
+	return f.gotfs.ReadFileAt(f.ctx, f.ms, f.ds, f.root, f.path, off, buf)
 }
 
 func (f *File) Seek(offset int64, whence int) (int64, error) {
+	if err := f.ensureReader(); err != nil {
+		return 0, err
+	}
 	n, err := f.r.Seek(offset, whence)
 	return n, convertError(err)
 }
@@ -126,6 +134,17 @@ func (f *File) ReadDir(n int) (ret []iofs.DirEntry, _ error) {
 }
 
 func (f *File) Close() error {
+	return nil
+}
+
+func (f *File) ensureReader() error {
+	if f.r == nil {
+		r, err := f.gotfs.NewReader(f.ctx, f.ms, f.ds, f.root, f.path)
+		if err != nil {
+			return err
+		}
+		f.r = r
+	}
 	return nil
 }
 

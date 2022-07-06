@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gotkv"
@@ -110,7 +109,6 @@ func (r *Reader) readFromIterator(ctx context.Context, it *gotkv.Iterator, ds ca
 	}
 	extentStart := extentEnd - uint64(ext.Length)
 	if start < extentStart {
-		log.Println("extentEnd length", extentEnd, ext.Length)
 		return 0, errors.Errorf("incorrect extent extentStart=%d asked for start=%d", extentStart, start)
 	}
 	var n int

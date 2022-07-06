@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/stores"
+	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -49,15 +50,19 @@ func TestSetPrefix(t *testing.T) {
 
 func TestCopy(t *testing.T) {
 	ctx := context.Background()
-	op := NewOperator()
+	op := NewOperator(WithFilter(func(x []byte) bool {
+		return len(x) >= 9
+	}))
 	ms, ds := stores.NewMem(), stores.NewMem()
 	roots := make([]Root, 3)
 	for i := range roots {
 		b := op.NewBuilder(ctx, ms, ds)
+		err := b.Put(ctx, []byte(strconv.Itoa(i)), []byte("test-value"))
+		require.NoError(t, err)
 		prefix := strconv.Itoa(i) + "\x00"
 		b.SetPrefix([]byte(prefix))
-		rng := randomStream(i, 1e8)
-		_, err := io.Copy(b, rng)
+		rng := testutil.RandomStream(i, 1e8)
+		_, err = io.Copy(b, rng)
 		require.NoError(t, err)
 		root, err := b.Finish(ctx)
 		require.NoError(t, err)
@@ -66,15 +71,23 @@ func TestCopy(t *testing.T) {
 
 	b := op.NewBuilder(ctx, ms, ds)
 	for i := range roots {
-		prefix := strconv.Itoa(i) + "\x00"
-		err := b.CopyFrom(ctx, roots[i], gotkv.PrefixSpan([]byte(prefix)))
+		err := b.CopyFrom(ctx, roots[i], gotkv.TotalSpan())
 		require.NoError(t, err)
 	}
 	root, err := b.Finish(ctx)
 	require.NoError(t, err)
-	t.Log(root)
-}
 
-func randomStream(seed int, size int64) io.Reader {
-	return io.LimitReader(mrand.New(mrand.NewSource(int64(seed))), size)
+	for i := range roots {
+		prefix := strconv.Itoa(i) + "\x00"
+
+		r, err := op.NewReader(ctx, ms, ds, *root, []byte(prefix))
+		require.NoError(t, err)
+		rng := testutil.RandomStream(i, 1e8)
+		testutil.StreamsEqual(t, rng, r)
+
+		k := strconv.Itoa(i)
+		v, err := gotkv.Get(ctx, ms, *root, []byte(k))
+		require.NoError(t, err, "%v", k)
+		require.Equal(t, "test-value", string(v))
+	}
 }

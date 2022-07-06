@@ -40,7 +40,10 @@ func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
 	}
 	ctx, cf := context.WithCancel(ctx)
 	defer cf()
-	fr := r.getFSOp(branch).NewReader(ctx, vol.FSStore, vol.RawStore, snap.Root, p)
+	fr, err := r.getFSOp(branch).NewReader(ctx, vol.FSStore, vol.RawStore, snap.Root, p)
+	if err != nil {
+		return err
+	}
 	_, err = io.Copy(w, fr)
 	return err
 }

@@ -237,6 +237,7 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 				return err
 			}
 			if *lastPath != p {
+				logctx.Errorf(ctx, "path=%v offset=%v ext=%v", p, off, ext)
 				return errors.Errorf("part not proceeded by metadata")
 			}
 			if lastOffset != nil && off <= *lastOffset {

@@ -101,7 +101,7 @@ func (r *Repo) Rm(ctx context.Context, paths ...string) error {
 		if snap == nil {
 			return errors.Errorf("path %q not found", target)
 		}
-		if err := fsop.ForEachFile(ctx, branch.Volume.FSStore, snap.Root, target, func(p string, _ *gotfs.Info) error {
+		if err := fsop.ForEachLeaf(ctx, branch.Volume.FSStore, snap.Root, target, func(p string, _ *gotfs.Info) error {
 			return stage.Delete(ctx, p)
 		}); err != nil {
 			return err

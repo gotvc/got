@@ -46,7 +46,6 @@ func (o *Operator) NewBuilder(ctx context.Context, ms, ds cadata.Store) *Builder
 }
 
 // Put inserts a literal key, value into key stream.
-// Put is not affected by SetPrefix
 func (b *Builder) Put(ctx context.Context, key, value []byte) error {
 	if err := b.checkFinished(); err != nil {
 		return err
@@ -274,7 +273,7 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 	if err := gotkv.CopyAll(ctx, b.kvb, it); err != nil {
 		return err
 	}
-	// if the max entry is inline, then write it.
+	// if the max entry was inline, then set the last key, otherwise the maxEnt will take care of it.
 	if maxEnt, err := b.op.gotkv.MaxEntry(ctx, b.ms, root, span1); err != nil {
 		return err
 	} else if maxEnt != nil && !b.op.keyFilter(maxEnt.Key) {
