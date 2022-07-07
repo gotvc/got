@@ -337,8 +337,6 @@ func (w *StreamWriter) computeEntryLen(ent Entry) int {
 	return computeEntryLen(prevKey, ent)
 }
 
-const maxKeySize = 4096
-
 // writeUvarint writes x varint-encoded to buf
 func writeUvarint(w *bytes.Buffer, x uint64) error {
 	lenBuf := [binary.MaxVarintLen64]byte{}
@@ -397,7 +395,7 @@ func readEntry(out *Entry, br *bytes.Reader, prevKey []byte, maxSize int) error 
 	}
 	end := len(prevKey) - int(keyBackspace)
 	out.Key = append(out.Key, prevKey[:end]...)
-	out.Key, err = readLPBytes(out.Key, br, maxKeySize)
+	out.Key, err = readLPBytes(out.Key, br, MaxKeySize)
 	if err != nil {
 		return err
 	}

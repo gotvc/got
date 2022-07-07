@@ -10,8 +10,6 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const MaxPathLen = 4096
-
 func (m *Info) marshal() []byte {
 	data, err := proto.Marshal(m)
 	if err != nil {

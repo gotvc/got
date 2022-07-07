@@ -2,8 +2,8 @@ package gotfs
 
 import (
 	"bytes"
-	"crypto/rand"
 	"io"
+	mrand "math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -51,7 +51,8 @@ func TestLargeFiles(t *testing.T) {
 	for i := 0; i < N; i++ {
 		i := i
 		eg.Go(func() error {
-			x, err := op.CreateFileRoot(ctx, s, s, io.LimitReader(rand.Reader, size))
+			rng := mrand.New(mrand.NewSource(int64(i)))
+			x, err := op.CreateFileRoot(ctx, s, s, io.LimitReader(rng, size))
 			if err != nil {
 				return err
 			}
@@ -76,7 +77,8 @@ func TestLargeFiles(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, uint64(size), actualSize)
 		eg.Go(func() error {
-			r := op.NewReader(ctx, s, s, *root, p)
+			r, err := op.NewReader(ctx, s, s, *root, p)
+			require.NoError(t, err)
 			n, err := io.Copy(io.Discard, r)
 			if err != nil {
 				return err

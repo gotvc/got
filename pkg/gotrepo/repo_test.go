@@ -12,13 +12,16 @@ import (
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/logctx"
 	"github.com/gotvc/got/pkg/testutil"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
+var ctx = logctx.WithLogger(context.Background(), logrus.StandardLogger())
+
 func TestRepoInit(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	dirpath := t.TempDir()
 	t.Log("testing in", dirpath)
 	require.NoError(t, Init(dirpath))
@@ -34,7 +37,6 @@ func TestRepoInit(t *testing.T) {
 
 func TestCommit(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	repo := newTestRepo(t)
 	fs := repo.WorkingDir()
 	p := "test.txt"
@@ -67,12 +69,11 @@ func TestCommit(t *testing.T) {
 
 func TestCommitLargeFile(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	repo := newTestRepo(t)
 	fs := repo.WorkingDir()
 
 	p := "largefile"
-	const size = 125e6
+	const size = 2e9
 	require.NoError(t, posixfs.PutFile(ctx, fs, p, 0o644, testutil.RandomStream(0, size)))
 	require.NoError(t, repo.Put(ctx, p))
 	require.NoError(t, repo.Commit(ctx, gotvc.SnapInfo{}))
@@ -82,7 +83,6 @@ func TestCommitLargeFile(t *testing.T) {
 
 func TestCommitDir(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	repo := newTestRepo(t)
 	fs := repo.WorkingDir()
 
@@ -112,7 +112,6 @@ func TestCommitDir(t *testing.T) {
 
 func TestFork(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
 	repo := newTestRepo(t)
 	fs := repo.WorkingDir()
 
@@ -180,7 +179,6 @@ func checkNotExists(t testing.TB, repo *Repo, p string) {
 }
 
 func countCommits(t testing.TB, repo *Repo, branchName string) int {
-	ctx := context.Background()
 	var count int
 	repo.History(ctx, branchName, func(_ Ref, _ Snap) error {
 		count++

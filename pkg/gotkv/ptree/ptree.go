@@ -12,7 +12,10 @@ import (
 // CompareFunc compares 2 keys
 type CompareFunc = func(a, b []byte) int
 
-const maxTreeDepth = 255
+const (
+	MaxKeySize   = 4096
+	MaxTreeDepth = 255
+)
 
 // Root is the root of the tree
 type Root struct {

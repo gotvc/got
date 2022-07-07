@@ -39,6 +39,12 @@ func WithSeed(seed *[16]byte) Option {
 	}
 }
 
+func WithCompare(fn func(a, b []byte) int) Option {
+	return func(o *Operator) {
+		o.compare = fn
+	}
+}
+
 // Operator holds common configuration for operations on gotkv instances.
 // It has nothing to do with the state of a particular gotkv instance. It is NOT analagous to a collection object.
 // It is safe for use by multiple goroutines.
@@ -68,6 +74,14 @@ func NewOperator(avgSize, maxSize int, opts ...Option) Operator {
 		opt(&op)
 	}
 	return op
+}
+
+func (o *Operator) MeanSize() int {
+	return o.averageSize
+}
+
+func (o *Operator) MaxSize() int {
+	return o.maxSize
 }
 
 // GetF calls fn with the value corresponding to key in the instance x.

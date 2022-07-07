@@ -112,6 +112,18 @@ func (c *ContentDefined) Flush() error {
 	return c.emit()
 }
 
+func (c *ContentDefined) MaxSize() int {
+	return c.maxSize
+}
+
+func (c *ContentDefined) MinSize() int {
+	return c.minSize
+}
+
+func (c *ContentDefined) MeanSize() int {
+	return int(c.mask) + 1
+}
+
 // ingest is like Write except returning n < len(data) is acceptable.
 func (c *ContentDefined) ingest(data []byte) (int, error) {
 	for i, b := range data {

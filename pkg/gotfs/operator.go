@@ -10,15 +10,10 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotfs/gotlob"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/logctx"
 	"github.com/pkg/errors"
-)
-
-type (
-	Ref   = gotkv.Ref
-	Store = gotkv.Store
-	Root  = gotkv.Root
 )
 
 const (
@@ -59,6 +54,7 @@ type Operator struct {
 	rawOp        gdat.Operator
 	gotkv        gotkv.Operator
 	chunkingSeed *[32]byte
+	lob          gotlob.Operator
 }
 
 func NewOperator(opts ...Option) Operator {
@@ -101,6 +97,15 @@ func NewOperator(opts ...Option) Operator {
 		gotkv.WithDataOperator(metaOp),
 		gotkv.WithSeed(&treeSeed),
 	)
+	lobOpts := []gotlob.Option{
+		gotlob.WithChunking(false, func(onChunk chunking.ChunkHandler) *chunking.ContentDefined {
+			return chunking.NewContentDefined(o.minSizeData, o.averageSizeData, o.maxBlobSize, o.chunkingSeed, onChunk)
+		}),
+		gotlob.WithFilter(func(x []byte) bool {
+			return isExtentKey(x)
+		}),
+	}
+	o.lob = gotlob.NewOperator(&o.gotkv, &o.rawOp, lobOpts...)
 	return o
 }
 
@@ -158,7 +163,8 @@ func (o *Operator) ForEach(ctx context.Context, s cadata.Store, root Root, p str
 	return o.gotkv.ForEach(ctx, s, root, gotkv.PrefixSpan(k), fn2)
 }
 
-func (o *Operator) ForEachFile(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Info) error) error {
+// ForEachLeaf calls fn with each regular file in root, beneath p.
+func (o *Operator) ForEachLeaf(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Info) error) error {
 	return o.ForEach(ctx, s, root, p, func(p string, md *Info) error {
 		if os.FileMode(md.Mode).IsDir() {
 			return nil
@@ -202,6 +208,40 @@ func (o *Operator) AddPrefix(root Root, p string) Root {
 	return o.gotkv.AddPrefix(root, k[:len(k)-1])
 }
 
+// MaxInfo returns the maximum path and the corresponding Info for the path.
+// If no Info entry can be found MaxInfo returns ("", nil, nil)
+func (o *Operator) MaxInfo(ctx context.Context, ms cadata.Store, root Root, span Span) (string, *Info, error) {
+	ent, err := o.gotkv.MaxEntry(ctx, ms, root, span)
+	if err != nil {
+		return "", nil, err
+	}
+	switch {
+	case ent == nil:
+		return "", nil, nil
+	case isInfoKey(ent.Key):
+		// found an info entry, parse it and return.
+		p, err := parseInfoKey(ent.Key)
+		if err != nil {
+			return "", nil, err
+		}
+		info, err := parseInfo(ent.Value)
+		if err != nil {
+			return "", nil, err
+		}
+		return p, info, nil
+	case isExtentKey(ent.Key):
+		// found an extent key, use it's path to short cut to the info key.
+		p, _, err := splitExtentKey(ent.Key)
+		if err != nil {
+			return "", nil, err
+		}
+		info, err := o.GetInfo(ctx, ms, root, p)
+		return p, info, err
+	default:
+		return "", nil, fmt.Errorf("gotfs: found invalid entry %v", ent)
+	}
+}
+
 func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func(ref gdat.Ref) error) error {
 	var lastPath *string
 	var lastOffset *uint64
@@ -240,6 +280,7 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 				return err
 			}
 			if *lastPath != p {
+				logctx.Errorf(ctx, "path=%v offset=%v ext=%v", p, off, ext)
 				return errors.Errorf("part not proceeded by metadata")
 			}
 			if lastOffset != nil && off <= *lastOffset {
@@ -255,16 +296,6 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 	})
 }
 
-// Segment is a span of a GotFS instance.
-type Segment struct {
-	Span gotkv.Span
-	Root Root
-}
-
-func (s Segment) String() string {
-	return fmt.Sprintf("{ %v : %v}", s.Span, s.Root.Ref.CID)
-}
-
 func (o *Operator) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*Root, error) {
 	b := o.NewBuilder(ctx, ms, ds)
 	for _, seg := range segs {
@@ -273,8 +304,4 @@ func (o *Operator) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*R
 		}
 	}
 	return b.Finish()
-}
-
-func (o *Operator) newChunker(onChunk chunking.ChunkHandler) *chunking.ContentDefined {
-	return chunking.NewContentDefined(o.minSizeData, o.averageSizeData, o.maxBlobSize, o.chunkingSeed, onChunk)
 }

@@ -113,5 +113,5 @@ func (b *Builder) syncLevel() int {
 			return i
 		}
 	}
-	return maxTreeDepth - 1 // allow copying at any depth
+	return MaxTreeDepth - 1 // allow copying at any depth
 }

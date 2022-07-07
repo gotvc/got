@@ -35,4 +35,3 @@ drop-replace:
 
 precommit: drop-replace test
 	go mod tidy
-

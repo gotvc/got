@@ -23,6 +23,10 @@ type (
 	Root = ptree.Root
 )
 
+const (
+	MaxKeySize = ptree.MaxKeySize
+)
+
 var (
 	ErrKeyNotFound = errors.Errorf("key not found")
 	EOS            = kvstreams.EOS
