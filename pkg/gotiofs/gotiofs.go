@@ -171,7 +171,7 @@ func Stat(ctx context.Context, fsop *gotfs.Operator, ms cadata.Store, root gotfs
 		size = int64(s)
 	}
 	return &fileInfo{
-		name:    path.Base(p),
+		name:    p,
 		mode:    mode,
 		size:    size,
 		modTime: time.Now(),

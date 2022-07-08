@@ -43,7 +43,7 @@ func newNFSCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		}
 		fsx := gotbilly.New(ctx, b)
 		handler := nfshelpers.NewNullAuthHandler(fsx)
-		handler = nfshelpers.NewCachingHandler(handler, 1)
+		handler = nfshelpers.NewCachingHandler(handler, 1024)
 		logctx.Infof(ctx, "serving NFS on %v ...", l.Addr())
 		logctx.Infof(ctx, "mount with:\n\t%s\n\t%s", "mkdir /private/nfs", mountCmd(addrport.Port()))
 		return nfs.Serve(l, handler)

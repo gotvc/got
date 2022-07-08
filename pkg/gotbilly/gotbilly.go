@@ -2,6 +2,8 @@ package gotbilly
 
 import (
 	"context"
+	"errors"
+	"io"
 	iofs "io/fs"
 	"os"
 	"path"
@@ -14,7 +16,11 @@ import (
 	"github.com/gotvc/got/pkg/logctx"
 )
 
-var _ billy.Basic = &FS{}
+var (
+	_ billy.Basic   = &FS{}
+	_ billy.Capable = &FS{}
+	_ billy.Dir     = &FS{}
+)
 
 type FS struct {
 	ctx   context.Context
@@ -31,6 +37,10 @@ func New(ctx context.Context, b *branches.Branch) billy.Filesystem {
 	return polyfill.New(fs)
 }
 
+func (fs *FS) Capabilities() billy.Capability {
+	return billy.ReadCapability | billy.SeekCapability
+}
+
 func (fs *FS) Create(filename string) (billy.File, error) {
 	return nil, billy.ErrReadOnly
 }
@@ -44,30 +54,37 @@ func (fs *FS) Open(p string) (billy.File, error) {
 }
 
 func (fs *FS) OpenFile(p string, flag int, perm iofs.FileMode) (billy.File, error) {
-	logctx.Infof(fs.ctx, "OpenFile (%s)", p)
-	// if flag&(^os.O_RDONLY) > 0 {
-	// 	return nil, billy.ErrReadOnly
-	// }
-	snap, err := branches.GetHead(fs.ctx, *fs.b)
+	if flag&(^os.O_RDONLY) > 0 {
+		logctx.Errorf(fs.ctx, "OpenFile with non-read flag %d", flag)
+		return nil, billy.ErrReadOnly
+	}
+	root, err := fs.getRoot()
 	if err != nil {
 		return nil, err
 	}
-	if snap == nil {
-		return nil, iofs.ErrNotExist
+	info, err := fs.gotfs.GetInfo(fs.ctx, fs.b.Volume.FSStore, *root, p)
+	if err != nil {
+		return nil, err
 	}
-	f := newFile(fs.ctx, &fs.gotfs, fs.b.Volume, snap.Root, p)
+	if iofs.FileMode(info.Mode).IsDir() {
+		return nil, errors.New("cannot open dir")
+	}
+	f := newFile(fs.ctx, &fs.gotfs, fs.b.Volume, *root, p)
 	return f, nil
 }
 
+func (fs *FS) MkdirAll(p string, perm iofs.FileMode) error {
+	return billy.ErrNotSupported
+}
+
 func (fs *FS) ReadDir(p string) (ret []iofs.FileInfo, retErr error) {
-	logctx.Infof(fs.ctx, "ReadDir (%s)", p)
-	defer func() { logctx.Infof(fs.ctx, "ReadDir (%s) -> (%v, %v)", p, ret, retErr) }()
 	root, err := fs.getRoot()
 	if err != nil {
 		return nil, err
 	}
 	if err := fs.gotfs.ReadDir(fs.ctx, fs.b.Volume.FSStore, *root, p, func(de gotfs.DirEnt) error {
-		fi, err := gotiofs.Stat(fs.ctx, &fs.gotfs, fs.b.Volume.FSStore, *root, p)
+		p2 := path.Join(p, de.Name)
+		fi, err := gotiofs.Stat(fs.ctx, &fs.gotfs, fs.b.Volume.FSStore, *root, p2)
 		if err != nil {
 			return err
 		}
@@ -88,8 +105,6 @@ func (fs *FS) Rename(oldpath, newpath string) error {
 }
 
 func (fs *FS) Stat(p string) (ret iofs.FileInfo, retErr error) {
-	logctx.Infof(fs.ctx, "stat (%s)", p)
-	defer func() { logctx.Infof(fs.ctx, "stat (%s) -> (%v, %v)", p, ret, retErr) }()
 	root, err := fs.getRoot()
 	if err != nil {
 		return nil, err
@@ -120,21 +135,27 @@ func (fs *FS) getRoot() (*gotfs.Root, error) {
 	return &snap.Root, nil
 }
 
+var (
+	_ io.ReadSeeker = &File{}
+	_ io.ReaderAt = &File{}
+)
+
 type File struct {
 	ctx   context.Context
-	vol   branches.Volume
 	gotfs *gotfs.Operator
+	vol   branches.Volume
 	root  gotfs.Root
 	p     string
-	r     *gotfs.Reader
+
+	r *gotfs.Reader
 }
 
 func newFile(ctx context.Context, gotfs *gotfs.Operator, vol branches.Volume, root gotfs.Root, p string) *File {
 	return &File{
 		ctx:   ctx,
 		gotfs: gotfs,
-		root:  root,
 		vol:   vol,
+		root:  root,
 		p:     p,
 	}
 }
@@ -166,7 +187,7 @@ func (f *File) ReadAt(buf []byte, offset int64) (int, error) {
 	if err := f.ensureReader(); err != nil {
 		return 0, err
 	}
-	return f.r.Read(buf)
+	return f.r.ReadAt(buf, offset)
 }
 
 func (f *File) Seek(offset int64, whence int) (int64, error) {
@@ -183,8 +204,6 @@ func (f *File) Truncate(x int64) error {
 func (f *File) Write(buf []byte) (int, error) {
 	return 0, billy.ErrNotSupported
 }
-
-func (f *File)
 
 func (f *File) ensureReader() error {
 	if f.r != nil {
