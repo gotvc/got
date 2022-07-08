@@ -10,9 +10,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newHTTPUICmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
+func newHTTPCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 	c := &cobra.Command{
-		Use:   "httpui [branch]",
+		Use:   "http [branch]",
 		Short: "serve a UI over HTTP",
 	}
 	laddr := c.Flags().String("addr", "127.0.0.1:6006", "--addr 127.0.0.1:12345")
