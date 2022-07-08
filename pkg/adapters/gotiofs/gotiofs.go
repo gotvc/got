@@ -53,7 +53,7 @@ func (s *FS) Open(name string) (iofs.File, error) {
 	if _, err := fsop.GetInfo(s.ctx, ms, snap.Root, name); err != nil {
 		return nil, convertError(err)
 	}
-	return NewFile(fsop, b.Volume.FSStore, b.Volume.RawStore, snap.Root, name), nil
+	return NewFile(s.ctx, fsop, b.Volume.FSStore, b.Volume.RawStore, snap.Root, name), nil
 }
 
 var _ iofs.File = &File{}
@@ -71,8 +71,7 @@ type File struct {
 	r *gotfs.Reader
 }
 
-func NewFile(fsop gotfs.Operator, ms, ds cadata.Store, root gotfs.Root, p string) *File {
-	ctx := context.Background()
+func NewFile(ctx context.Context, fsop gotfs.Operator, ms, ds cadata.Store, root gotfs.Root, p string) *File {
 	return &File{
 		ctx:   ctx,
 		gotfs: fsop,
@@ -82,6 +81,10 @@ func NewFile(fsop gotfs.Operator, ms, ds cadata.Store, root gotfs.Root, p string
 		path:  p,
 	}
 }
+
+// func (f *File) Write([]byte) (int, error) {
+// 	return 0, errors.New("writing not supported")
+// }
 
 func (f *File) Read(buf []byte) (int, error) {
 	if err := f.ensureReader(); err != nil {
@@ -110,7 +113,7 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (f *File) Stat() (iofs.FileInfo, error) {
-	return f.stat(f.path)
+	return Stat(f.ctx, &f.gotfs, f.ms, f.root, f.path)
 }
 
 func (f *File) ReadDir(n int) (ret []iofs.DirEntry, _ error) {
@@ -122,7 +125,7 @@ func (f *File) ReadDir(n int) (ret []iofs.DirEntry, _ error) {
 		ret = append(ret, &dirEntry{
 			name: e.Name,
 			mode: e.Mode,
-			getInfo: func() (*fileInfo, error) {
+			getInfo: func() (iofs.FileInfo, error) {
 				return f.stat(path.Join(f.path, e.Name))
 			},
 		})
@@ -149,21 +152,29 @@ func (f *File) ensureReader() error {
 }
 
 func (f *File) stat(p string) (*fileInfo, error) {
-	info, err := f.gotfs.GetInfo(f.ctx, f.ms, f.root, p)
+	finfo, err := Stat(f.ctx, &f.gotfs, f.ms, f.root, p)
+	if err != nil {
+		return nil, err
+	}
+	return finfo.(*fileInfo), nil
+}
+
+func Stat(ctx context.Context, fsop *gotfs.Operator, ms cadata.Store, root gotfs.Root, p string) (iofs.FileInfo, error) {
+	info, err := fsop.GetInfo(ctx, ms, root, p)
 	if err != nil {
 		return nil, convertError(err)
 	}
 	mode := iofs.FileMode(info.Mode)
 	var size int64
 	if mode.IsRegular() {
-		s, err := f.gotfs.SizeOfFile(f.ctx, f.ms, f.root, p)
+		s, err := fsop.SizeOfFile(ctx, ms, root, p)
 		if err != nil {
 			return nil, convertError(err)
 		}
 		size = int64(s)
 	}
 	return &fileInfo{
-		name:    path.Base(f.path),
+		name:    path.Base(p),
 		mode:    mode,
 		size:    size,
 		modTime: time.Now(),
@@ -206,7 +217,15 @@ var _ iofs.DirEntry = &dirEntry{}
 type dirEntry struct {
 	name    string
 	mode    iofs.FileMode
-	getInfo func() (*fileInfo, error)
+	getInfo func() (iofs.FileInfo, error)
+}
+
+func NewDirEntry(x gotfs.DirEnt, getInfo func() (iofs.FileInfo, error)) iofs.DirEntry {
+	return &dirEntry{
+		name:    x.Name,
+		mode:    x.Mode,
+		getInfo: getInfo,
+	}
 }
 
 func (de *dirEntry) Name() string {
