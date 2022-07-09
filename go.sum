@@ -438,8 +438,6 @@ go.uber.org/tools v0.0.0-20190618225709-2cfd321de3ee/go.mod h1:vJERXedbb3MVM5f9E
 go.uber.org/zap v1.10.0/go.mod h1:vwi/ZaCAaUcBkycHslxD9B2zi4UTXhF60s6SWpuDF0Q=
 go.uber.org/zap v1.13.0/go.mod h1:zwrFLgMcdUuIBviXEYEH1YKNaOBnKXsx2IPda5bBwHM=
 go4.org v0.0.0-20180809161055-417644f6feb5/go.mod h1:MkTOUMDaeVYJUOUsaDXIhWPZYa1yOyC1qaOBpL57BhE=
-goftp.io/server/v2 v2.0.0 h1:FF8JKXXKDxAeO1uXEZz7G+IZwCDhl19dpVIlDtp3QAg=
-goftp.io/server/v2 v2.0.0/go.mod h1:7+H/EIq7tXdfo1Muu5p+l3oQ6rYkDZ8lY7IM5d5kVdQ=
 goftp.io/server/v2 v2.0.1-0.20210902054531-841529b15085 h1:3ZagJnWfrO0a+cPP7eJ0+GOAJ+qvRcrqhJnaqDGjUUc=
 goftp.io/server/v2 v2.0.1-0.20210902054531-841529b15085/go.mod h1:7+H/EIq7tXdfo1Muu5p+l3oQ6rYkDZ8lY7IM5d5kVdQ=
 golang.org/x/build v0.0.0-20190111050920-041ab4dc3f9d/go.mod h1:OWs+y06UdEOHN4y+MfF/py+xQ/tYqIWW03b70/CG9Rw=
