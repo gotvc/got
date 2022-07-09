@@ -50,7 +50,8 @@ func NewRootCmd() *cobra.Command {
 		newLocalIDCmd,
 		newServeCmd,
 		newServeQUICCmd,
-		newHTTPUICmd,
+		newHTTPCmd,
+		newFTPCmd,
 
 		newSlurpCmd,
 		newCleanupCmd,

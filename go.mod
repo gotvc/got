@@ -15,6 +15,7 @@ require (
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.7.0
 	go.etcd.io/bbolt v1.3.5
+	goftp.io/server/v2 v2.0.1-0.20210902054531-841529b15085
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
 	golang.org/x/exp v0.0.0-20220518171630-0b5c67f07fdf
 	golang.org/x/net v0.0.0-20211015210444-4f30a5c0130f
