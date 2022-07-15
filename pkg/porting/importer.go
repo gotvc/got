@@ -104,7 +104,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 	fileSize := finfo.Size()
 	metrics.SetDenom(ctx, "data_in", int(fileSize), units.Bytes)
 	numWorkers := runtime.GOMAXPROCS(0)
-	sizeCutoff := 20 * gotfs.DefaultAverageBlobSizeData * numWorkers
+	sizeCutoff := 20 * pr.gotfs.MeanBlobSizeData() * numWorkers
 	// fast path for small files
 	var root *gotfs.Root
 	if fileSize < int64(sizeCutoff) {

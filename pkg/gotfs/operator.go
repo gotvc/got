@@ -17,10 +17,10 @@ import (
 )
 
 const (
-	DefaultMaxBlobSize         = 1 << 21
-	DefaultMinBlobSizeData     = 1 << 12
-	DefaultAverageBlobSizeData = 1 << 20
-	DefaultAverageBlobSizeInfo = 1 << 13
+	DefaultMaxBlobSize          = 1 << 21
+	DefaultMinBlobSizeData      = 1 << 12
+	DefaultMeanBlobSizeData     = 1 << 20
+	DefaultMeanBlobSizeMetadata = 1 << 13
 )
 
 type Option func(o *Operator)
@@ -46,10 +46,10 @@ func WithContentCacheSize(n int) Option {
 }
 
 type Operator struct {
-	maxBlobSize                                   int
-	minSizeData, averageSizeData, averageSizeInfo int
-	salt                                          *[32]byte
-	rawCacheSize, metaCacheSize                   int
+	maxBlobSize                                 int
+	minSizeData, meanSizeData, meanSizeMetadata int
+	salt                                        *[32]byte
+	rawCacheSize, metaCacheSize                 int
 
 	rawOp        gdat.Operator
 	gotkv        gotkv.Operator
@@ -59,13 +59,13 @@ type Operator struct {
 
 func NewOperator(opts ...Option) Operator {
 	o := Operator{
-		maxBlobSize:     DefaultMaxBlobSize,
-		minSizeData:     DefaultMinBlobSizeData,
-		averageSizeData: DefaultAverageBlobSizeData,
-		averageSizeInfo: DefaultAverageBlobSizeInfo,
-		salt:            &[32]byte{},
-		rawCacheSize:    8,
-		metaCacheSize:   16,
+		maxBlobSize:      DefaultMaxBlobSize,
+		minSizeData:      DefaultMinBlobSizeData,
+		meanSizeData:     DefaultMeanBlobSizeData,
+		meanSizeMetadata: DefaultMeanBlobSizeMetadata,
+		salt:             &[32]byte{},
+		rawCacheSize:     8,
+		metaCacheSize:    16,
 	}
 	for _, opt := range opts {
 		opt(&o)
@@ -92,14 +92,14 @@ func NewOperator(opts ...Option) Operator {
 	var treeSeed [16]byte
 	gdat.DeriveKey(treeSeed[:], o.salt, []byte("gotkv-seed"))
 	o.gotkv = gotkv.NewOperator(
-		o.averageSizeInfo,
+		o.meanSizeMetadata,
 		o.maxBlobSize,
 		gotkv.WithDataOperator(metaOp),
 		gotkv.WithSeed(&treeSeed),
 	)
 	lobOpts := []gotlob.Option{
 		gotlob.WithChunking(false, func(onChunk chunking.ChunkHandler) *chunking.ContentDefined {
-			return chunking.NewContentDefined(o.minSizeData, o.averageSizeData, o.maxBlobSize, o.chunkingSeed, onChunk)
+			return chunking.NewContentDefined(o.minSizeData, o.meanSizeData, o.maxBlobSize, o.chunkingSeed, onChunk)
 		}),
 		gotlob.WithFilter(func(x []byte) bool {
 			return isExtentKey(x)
@@ -107,6 +107,14 @@ func NewOperator(opts ...Option) Operator {
 	}
 	o.lob = gotlob.NewOperator(&o.gotkv, &o.rawOp, lobOpts...)
 	return o
+}
+
+func (o *Operator) MeanBlobSizeData() int {
+	return o.meanSizeData
+}
+
+func (o *Operator) MeanBlobSizeMetadata() int {
+	return o.meanSizeMetadata
 }
 
 // Select returns a new root containing everything under p, shifted to the root.
