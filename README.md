@@ -75,3 +75,6 @@ $ got add large_file.dat
 
 ## More
 Read more about the configuration objects in [doc/Config.md](./doc/Config.md).
+
+Support and development discussion happen in the INET256 discord.
+[<img src="https://discord.com/assets/cb48d2a8d4991281d7a6a95d2f58195e.svg" width="80">](https://discord.gg/TWy6aVWJ7f)
