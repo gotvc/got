@@ -52,7 +52,6 @@ type Params struct {
 
 type Service struct {
 	mux p2pmux.SecureAskMux[PeerID, string]
-	ctx context.Context
 
 	blobPullSrv *blobPullSrv
 	blobMainSrv *blobMainSrv

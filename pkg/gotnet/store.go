@@ -23,8 +23,7 @@ type StoreID struct {
 type StoreType uint8
 
 const (
-	Type_UNKNOWN = StoreType(iota)
-	Type_RAW
+	Type_RAW = StoreType(iota)
 	Type_FS
 	Type_VC
 )
