@@ -16,10 +16,10 @@ import (
 var _ branches.Space = Space{}
 
 type Space struct {
-	c GotSpaceClient
+	c SpaceClient
 }
 
-func NewSpace(c GotSpaceClient) Space {
+func NewSpace(c SpaceClient) Space {
 	return Space{c}
 }
 

@@ -10,7 +10,7 @@ import (
 var _ cells.Cell = &Cell{}
 
 type Cell struct {
-	c   GotSpaceClient
+	c   SpaceClient
 	key string
 }
 

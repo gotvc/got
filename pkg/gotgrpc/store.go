@@ -15,7 +15,7 @@ import (
 var _ cadata.Store = &Store{}
 
 type Store struct {
-	c   GotSpaceClient
+	c   SpaceClient
 	key string
 	st  StoreType
 }

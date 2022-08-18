@@ -132,7 +132,7 @@ message CASCellRes {
     bool swapped = 2;
 }
 
-service GotSpace {
+service Space {
     rpc CreateBranch(CreateBranchReq) returns (BranchInfo) {};
     rpc GetBranch(GetBranchReq) returns (BranchInfo) {};
     rpc DeleteBranch(DeleteBranchReq) returns (DeleteBranchRes) {};

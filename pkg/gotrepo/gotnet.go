@@ -84,7 +84,7 @@ func (r *Repo) makeGotNet(swarm p2p.SecureAskSwarm[PeerID]) *gotnet.Service {
 	})
 }
 
-func (r *Repo) getGRPCClient(endpoint string, headers map[string]string) (gotgrpc.GotSpaceClient, error) {
+func (r *Repo) getGRPCClient(endpoint string, headers map[string]string) (gotgrpc.SpaceClient, error) {
 	ctx := context.Background()
 	opts := []grpc.DialOption{}
 	if strings.HasPrefix(endpoint, "http://") {
@@ -102,5 +102,5 @@ func (r *Repo) getGRPCClient(endpoint string, headers map[string]string) (gotgrp
 	if err != nil {
 		return nil, err
 	}
-	return gotgrpc.NewGotSpaceClient(gc), nil
+	return gotgrpc.NewSpaceClient(gc), nil
 }
