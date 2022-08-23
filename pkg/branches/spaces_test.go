@@ -42,8 +42,12 @@ func TestIsValidName(t *testing.T) {
 		"test\n":        false,
 	}
 	for x, expected := range tcs {
-		actual := IsValidName(x)
-		require.Equal(t, expected, actual, "%s -> %v", x, actual)
+		actual := CheckName(x)
+		if !expected {
+			require.Error(t, actual, "%s -> %v", x, actual)
+		} else {
+			require.NoError(t, actual, "%s -> %v", x, actual)
+		}
 	}
 }
 

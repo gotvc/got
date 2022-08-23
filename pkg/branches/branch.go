@@ -11,7 +11,6 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
-	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
 )
 
@@ -141,15 +140,31 @@ func (m Mode) String() string {
 
 var nameRegExp = regexp.MustCompile(`^[\w- =.]+$`)
 
-func IsValidName(name string) bool {
-	return nameRegExp.MatchString(name)
+const MaxNameLen = 1024
+
+type ErrInvalidName struct {
+	Name   string
+	Reason string
+}
+
+func (e ErrInvalidName) Error() string {
+	return fmt.Sprintf("invalid branch name: %q reason: %v", e.Name, e.Reason)
 }
 
 func CheckName(name string) error {
-	if IsValidName(name) {
-		return nil
+	if len(name) > MaxNameLen {
+		return ErrInvalidName{
+			Name:   name,
+			Reason: "too long",
+		}
 	}
-	return errors.Errorf("%q is not a valid branch name", name)
+	if !nameRegExp.MatchString(name) {
+		return ErrInvalidName{
+			Name:   name,
+			Reason: "contains invalid characters (must match " + nameRegExp.String() + " )",
+		}
+	}
+	return nil
 }
 
 // SetHead forcibly sets the head of the branch.
