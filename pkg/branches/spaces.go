@@ -2,6 +2,8 @@ package branches
 
 import (
 	"context"
+	"fmt"
+	"regexp"
 	"sync"
 
 	"github.com/brendoncarroll/go-state/cadata"
@@ -23,6 +25,35 @@ func IsNotExist(err error) bool {
 
 func IsExists(err error) bool {
 	return errors.Is(err, ErrNotExist)
+}
+
+var nameRegExp = regexp.MustCompile(`^[\w-/=_.]+$`)
+
+const MaxNameLen = 1024
+
+type ErrInvalidName struct {
+	Name   string
+	Reason string
+}
+
+func (e ErrInvalidName) Error() string {
+	return fmt.Sprintf("invalid branch name: %q reason: %v", e.Name, e.Reason)
+}
+
+func CheckName(name string) error {
+	if len(name) > MaxNameLen {
+		return ErrInvalidName{
+			Name:   name,
+			Reason: "too long",
+		}
+	}
+	if !nameRegExp.MatchString(name) {
+		return ErrInvalidName{
+			Name:   name,
+			Reason: "contains invalid characters (must match " + nameRegExp.String() + " )",
+		}
+	}
+	return nil
 }
 
 type Span struct {

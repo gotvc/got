@@ -32,14 +32,16 @@ func TestCryptoSpace(t *testing.T) {
 	})
 }
 
-func TestIsValidName(t *testing.T) {
+func TestCheckName(t *testing.T) {
 	tcs := map[string]bool{
 		"":              false,
 		"test":          true,
-		"test\ttest":    false,
+		"test\ttest":    false, // no \t
 		"test123":       true,
-		"something.com": true,
-		"test\n":        false,
+		"something.com": true,  // .
+		"test\n":        false, // no \n
+		"test/-_":       true,  // / - _
+		"test ":         false, // no spaces
 	}
 	for x, expected := range tcs {
 		actual := CheckName(x)

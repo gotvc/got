@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"github.com/brendoncarroll/go-tai64"
@@ -136,35 +135,6 @@ func (m Mode) String() string {
 	default:
 		return fmt.Sprintf("Mode(INVALID, %d)", m)
 	}
-}
-
-var nameRegExp = regexp.MustCompile(`^[\w- =.]+$`)
-
-const MaxNameLen = 1024
-
-type ErrInvalidName struct {
-	Name   string
-	Reason string
-}
-
-func (e ErrInvalidName) Error() string {
-	return fmt.Sprintf("invalid branch name: %q reason: %v", e.Name, e.Reason)
-}
-
-func CheckName(name string) error {
-	if len(name) > MaxNameLen {
-		return ErrInvalidName{
-			Name:   name,
-			Reason: "too long",
-		}
-	}
-	if !nameRegExp.MatchString(name) {
-		return ErrInvalidName{
-			Name:   name,
-			Reason: "contains invalid characters (must match " + nameRegExp.String() + " )",
-		}
-	}
-	return nil
 }
 
 // SetHead forcibly sets the head of the branch.
