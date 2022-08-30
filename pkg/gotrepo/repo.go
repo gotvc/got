@@ -56,6 +56,7 @@ const (
 	dbPath         = ".got/got.db"
 	blobsPath      = ".got/blobs"
 	storeDBPath    = ".got/stores.db"
+	gotIgnorePath  = ".gotignore"
 )
 
 type (
@@ -159,6 +160,10 @@ func Open(p string) (*Repo, error) {
 		return nil, err
 	}
 	fsStore := stores.NewFSStore(posixfs.NewDirFS(filepath.Join(p, blobsPath)), MaxBlobSize)
+	ignoreFunc, err := loadIgnore(ctx, repoFS, gotIgnorePath)
+	if err != nil {
+		return nil, err
+	}
 	r := &Repo{
 		rootPath:   p,
 		repoFS:     repoFS,
@@ -169,7 +174,7 @@ func Open(p string) (*Repo, error) {
 		ctx:        ctx,
 
 		workingDir: posixfs.NewFiltered(repoFS, func(x string) bool {
-			return !strings.HasPrefix(x, gotPrefix)
+			return !(strings.HasPrefix(x, gotPrefix) || ignoreFunc(x))
 		}),
 		storeManager: newStoreManager(fsStore, storesDB),
 		stage:        staging.New(newBoltKVStore(db, bucketStaging)),
