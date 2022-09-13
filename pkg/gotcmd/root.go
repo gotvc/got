@@ -5,9 +5,10 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/context"
 
+	"github.com/brendoncarroll/stdctx/logctx"
+
 	"github.com/gotvc/got"
 	"github.com/gotvc/got/pkg/gotrepo"
-	"github.com/gotvc/got/pkg/logctx"
 	"github.com/gotvc/got/pkg/metrics"
 )
 

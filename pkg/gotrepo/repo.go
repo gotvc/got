@@ -17,6 +17,7 @@ import (
 	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
 
+	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/gotfs"
@@ -24,7 +25,6 @@ import (
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotnet"
 	"github.com/gotvc/got/pkg/gotvc"
-	"github.com/gotvc/got/pkg/logctx"
 	"github.com/gotvc/got/pkg/staging"
 	"github.com/gotvc/got/pkg/stores"
 )

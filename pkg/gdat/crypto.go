@@ -6,7 +6,7 @@ import (
 	"math"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/logctx"
+	"github.com/brendoncarroll/stdctx/logctx"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/chacha20"
 )

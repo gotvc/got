@@ -4,12 +4,13 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/brendoncarroll/stdctx/logctx"
+	"github.com/spf13/cobra"
+	ftpserver "goftp.io/server/v2"
+
 	"github.com/gotvc/got/pkg/adapters/gotftp"
 	"github.com/gotvc/got/pkg/adapters/gotiofs"
 	"github.com/gotvc/got/pkg/gotrepo"
-	"github.com/gotvc/got/pkg/logctx"
-	"github.com/spf13/cobra"
-	ftpserver "goftp.io/server/v2"
 )
 
 func newHTTPCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {

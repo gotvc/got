@@ -7,7 +7,7 @@ import (
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/logctx"
+	"github.com/brendoncarroll/stdctx/logctx"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
