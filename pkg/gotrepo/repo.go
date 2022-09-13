@@ -135,7 +135,7 @@ func Init(p string) error {
 
 func Open(p string) (*Repo, error) {
 	ctx := context.Background()
-	ctx = logctx.WithLogger(ctx, logrus.StandardLogger())
+	ctx = logctx.WithFmtLogger(ctx, logrus.StandardLogger())
 	repoFS := posixfs.NewDirFS(p)
 	config, err := LoadConfig(repoFS, configPath)
 	if err != nil {

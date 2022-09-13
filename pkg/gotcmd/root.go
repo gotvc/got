@@ -69,7 +69,7 @@ var (
 	log       = logrus.StandardLogger()
 	collector = metrics.NewCollector()
 
-	ctx = metrics.WithCollector(logctx.WithLogger(context.Background(), log), collector)
+	ctx = metrics.WithCollector(logctx.WithFmtLogger(context.Background(), log), collector)
 )
 
 func loadRepo(repo **gotrepo.Repo, open func() (*gotrepo.Repo, error)) func(cmd *cobra.Command, args []string) error {

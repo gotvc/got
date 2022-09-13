@@ -17,7 +17,7 @@ import (
 	"github.com/gotvc/got/pkg/testutil"
 )
 
-var ctx = logctx.WithLogger(context.Background(), logrus.StandardLogger())
+var ctx = logctx.WithFmtLogger(context.Background(), logrus.StandardLogger())
 
 func TestWrite(t *testing.T) {
 	t.Parallel()
