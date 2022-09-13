@@ -11,9 +11,9 @@ import (
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/pkg/errors"
 
+	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
-	"github.com/gotvc/got/pkg/logctx"
 )
 
 type BranchID struct {

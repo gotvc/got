@@ -10,15 +10,15 @@ import (
 	"testing"
 
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
-	"github.com/gotvc/got/pkg/logctx"
 	"github.com/gotvc/got/pkg/testutil"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
 )
 
-var ctx = logctx.WithLogger(context.Background(), logrus.StandardLogger())
+var ctx = logctx.WithFmtLogger(context.Background(), logrus.StandardLogger())
 
 func TestRepoInit(t *testing.T) {
 	t.Parallel()

@@ -7,10 +7,10 @@ import (
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/pkg/errors"
 
+	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
-	"github.com/gotvc/got/pkg/logctx"
 	"github.com/gotvc/got/pkg/metrics"
 	"github.com/gotvc/got/pkg/staging"
 	"github.com/gotvc/got/pkg/stores"

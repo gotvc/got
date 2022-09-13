@@ -9,10 +9,10 @@ import (
 
 	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/pkg/errors"
 
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/gotvc/got/pkg/logctx"
 	"github.com/gotvc/got/pkg/metrics"
 )
 

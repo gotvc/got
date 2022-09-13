@@ -7,16 +7,17 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/gotkv"
-	"github.com/gotvc/got/pkg/logctx"
-	"github.com/gotvc/got/pkg/stores"
-	"github.com/gotvc/got/pkg/testutil"
+	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/stores"
+	"github.com/gotvc/got/pkg/testutil"
 )
 
-var ctx = logctx.WithLogger(context.Background(), logrus.StandardLogger())
+var ctx = logctx.WithFmtLogger(context.Background(), logrus.StandardLogger())
 
 func TestWrite(t *testing.T) {
 	t.Parallel()

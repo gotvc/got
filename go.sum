@@ -41,6 +41,8 @@ github.com/brendoncarroll/go-state v0.0.0-20220617134034-2613fe050888 h1:K3nefzN
 github.com/brendoncarroll/go-state v0.0.0-20220617134034-2613fe050888/go.mod h1:iGr/QRPP1S157c7eb5NjWI0SOr2wRk7CzZHnt/Ff+H8=
 github.com/brendoncarroll/go-tai64 v0.0.0-20220527232055-eab29bd93d59 h1:lQUpAM005I5qy3OsNSTPGZ7QfoHHnQzQvNjhf5nBoMA=
 github.com/brendoncarroll/go-tai64 v0.0.0-20220527232055-eab29bd93d59/go.mod h1:E9+Qr3YRBlU8HsajHzdoyHAm8XRqITZrtsh1gZSzu+4=
+github.com/brendoncarroll/stdctx v0.0.0-20220906134452-42ebcbf4cd87 h1:TBHJ/zeARH36m9Rwsna0JNJ9pT01VRR1biD0lUc+7G4=
+github.com/brendoncarroll/stdctx v0.0.0-20220906134452-42ebcbf4cd87/go.mod h1:tx92+23a6VXpkOKtzdhYOjquLg+sux3/GLLlCtCRu/Y=
 github.com/buger/jsonparser v0.0.0-20181115193947-bf1c66bbce23/go.mod h1:bbYlZJ7hK1yFx9hf58LP0zeX7UjIGs20ufpu3evjr+s=
 github.com/casbin/casbin/v2 v2.1.2/go.mod h1:YcPU1XXisHhLzuxH9coDNf2FbKpjGlbCg3n9yuLkIJQ=
 github.com/cenkalti/backoff v2.2.1+incompatible/go.mod h1:90ReRw6GdpyfrHakVjL/QHaoyV4aDUVVkXQJJJ3NXXM=

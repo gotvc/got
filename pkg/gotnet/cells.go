@@ -6,7 +6,7 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cells"
-	"github.com/gotvc/got/pkg/logctx"
+	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/pkg/errors"
 )
 
