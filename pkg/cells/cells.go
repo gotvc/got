@@ -27,7 +27,7 @@ func NewMem() cells.Cell {
 	return cells.NewMem(1 << 16)
 }
 
-func NewEncrypted(inner cells.Cell, secret []byte) Cell {
+func NewEncrypted(inner cells.Cell, secret *[32]byte) Cell {
 	return cryptocell.NewChaCha20Poly1305(inner, secret)
 }
 

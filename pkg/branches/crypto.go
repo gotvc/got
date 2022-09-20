@@ -198,7 +198,7 @@ func (r *CryptoSpace) decryptSalt(x []byte) ([]byte, error) {
 func (r *CryptoSpace) wrapVolume(name string, x Volume) Volume {
 	var secret [32]byte
 	deriveKey(secret[:], r.secret, "got/space/cells/"+name)
-	yCell := cryptocell.NewChaCha20Poly1305(x.Cell, secret[:])
+	yCell := cryptocell.NewChaCha20Poly1305(x.Cell, &secret)
 	return Volume{
 		Cell:     yCell,
 		FSStore:  x.FSStore,

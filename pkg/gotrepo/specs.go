@@ -129,7 +129,11 @@ func (r *Repo) MakeCell(spec CellSpec) (Cell, error) {
 		if err != nil {
 			return nil, err
 		}
-		return cells.NewEncrypted(inner, spec.Encrypted.Secret), nil
+		if len(spec.Encrypted.Secret) != 32 {
+			return nil, fmt.Errorf("encrypted cell has incorrect secret length. HAVE: %d WANT: %d", len(spec.Encrypted.Secret), 32)
+		}
+		secret := (*[32]byte)(spec.Encrypted.Secret)
+		return cells.NewEncrypted(inner, secret), nil
 
 	case spec.Signed != nil:
 		inner, err := r.MakeCell(spec.Signed.Inner)

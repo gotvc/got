@@ -39,6 +39,8 @@ github.com/brendoncarroll/go-p2p v0.0.0-20220617145626-749dd26b09b0 h1:Idc/XRY+r
 github.com/brendoncarroll/go-p2p v0.0.0-20220617145626-749dd26b09b0/go.mod h1:SYrjMHMGtFrl7YEgojiE4ilnE4Shvc9KQD+1JLlug+g=
 github.com/brendoncarroll/go-state v0.0.0-20220617134034-2613fe050888 h1:K3nefzNog9/2Uv8amsYayEQIYb+Qe1SoV7vjPPWU+RM=
 github.com/brendoncarroll/go-state v0.0.0-20220617134034-2613fe050888/go.mod h1:iGr/QRPP1S157c7eb5NjWI0SOr2wRk7CzZHnt/Ff+H8=
+github.com/brendoncarroll/go-state v0.0.0-20220807215021-2d225f88aa85 h1:qAXnOjFfpy0g1xT8tPCSQvlG25EEL6y13HEdv4SJCgw=
+github.com/brendoncarroll/go-state v0.0.0-20220807215021-2d225f88aa85/go.mod h1:WXHBIIgecO9a1ofTqA/NXNRi02p7aIDTBsmdOju04/4=
 github.com/brendoncarroll/go-tai64 v0.0.0-20220527232055-eab29bd93d59 h1:lQUpAM005I5qy3OsNSTPGZ7QfoHHnQzQvNjhf5nBoMA=
 github.com/brendoncarroll/go-tai64 v0.0.0-20220527232055-eab29bd93d59/go.mod h1:E9+Qr3YRBlU8HsajHzdoyHAm8XRqITZrtsh1gZSzu+4=
 github.com/brendoncarroll/stdctx v0.0.0-20220906134452-42ebcbf4cd87 h1:TBHJ/zeARH36m9Rwsna0JNJ9pT01VRR1biD0lUc+7G4=
@@ -137,6 +139,8 @@ github.com/golang/protobuf v1.5.2/go.mod h1:XVQd3VNwM+JqD3oG2Ue2ip4fOMUkwXdXDdiu
 github.com/golang/snappy v0.0.0-20180518054509-2e65f85255db/go.mod h1:/XxbfmMg8lxefKM7IXC3fBNl/7bRcc72aCRzEWrmP2Q=
 github.com/google/btree v0.0.0-20180813153112-4030bb1f1f0c/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
 github.com/google/btree v1.0.0/go.mod h1:lNA+9X1NB3Zf8V7Ke586lFgjr2dZNuvo3lPJSGZ5JPQ=
+github.com/google/btree v1.1.2 h1:xf4v41cLI2Z6FxbKm+8Bu+m8ifhj15JuZ9sa0jZCMUU=
+github.com/google/btree v1.1.2/go.mod h1:qOPhT0dTNdNzV6Z/lhRX0YXUafgPLFUh+gZMl761Gm4=
 github.com/google/go-cmp v0.2.0/go.mod h1:oXzfMopK8JAjlY9xF4vHSVASa0yLyX7SntLO5aqRK0M=
 github.com/google/go-cmp v0.3.0/go.mod h1:8QqcDgzrUqlUb/G2PQTWiueGozuR1884gddMywk6iLU=
 github.com/google/go-cmp v0.3.1/go.mod h1:8QqcDgzrUqlUb/G2PQTWiueGozuR1884gddMywk6iLU=

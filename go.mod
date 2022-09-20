@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/brendoncarroll/go-p2p v0.0.0-20220617145626-749dd26b09b0
-	github.com/brendoncarroll/go-state v0.0.0-20220617134034-2613fe050888
+	github.com/brendoncarroll/go-state v0.0.0-20220807215021-2d225f88aa85
 	github.com/brendoncarroll/go-tai64 v0.0.0-20220527232055-eab29bd93d59
 	github.com/brendoncarroll/stdctx v0.0.0-20220906134452-42ebcbf4cd87
 	github.com/dchest/siphash v1.2.3
@@ -34,6 +34,7 @@ require (
 	github.com/go-chi/chi v4.0.3+incompatible // indirect
 	github.com/go-task/slim-sprig v0.0.0-20210107165309-348f09dbbbc0 // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
+	github.com/google/btree v1.1.2 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jonboulle/clockwork v0.1.1-0.20190114141812-62fb9bc030d1 // indirect
 	github.com/klauspost/cpuid v1.3.1 // indirect

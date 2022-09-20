@@ -66,13 +66,13 @@ Anytime you see "Ref", "reference", or "pointer" mentioned below, it is referrin
 GotKV is a key value store built on top of a Store, using Refs.
 GotKV is a persistent data structure, any change returns a reference to a new data structure which (likely) overlaps with the original.
 There is a practical limit on the length of keys and values, both should be somewhat small, way smaller than the maximum blob size.
-GotKV is implemented using a probablistic B-Tree.
+GotKV is implemented using a probabilistic B-Tree.
 
 ### GotFS
 GotFS is a filesystem, supporting directories and regular files.
 It is just a GotKV instance with a special schema.
 
-More information in `docs/gotfs.md`
+More information in `doc/gotfs.md`
 
 ### Snapshots
 A Snapshot or Snap is a GotFS instance, as well as a history of snapshots that came before it.
