@@ -86,7 +86,7 @@ func (o *Operator) MaxSize() int {
 
 // GetF calls fn with the value corresponding to key in the instance x.
 // The value must not be used outside the callback.
-func (o *Operator) GetF(ctx context.Context, s cadata.Store, x Root, key []byte, fn func([]byte) error) error {
+func (o *Operator) GetF(ctx context.Context, s cadata.Getter, x Root, key []byte, fn func([]byte) error) error {
 	it := o.NewIterator(s, x, kvstreams.SingleItemSpan(key))
 	var ent Entry
 	err := it.Next(ctx, &ent)
@@ -100,7 +100,7 @@ func (o *Operator) GetF(ctx context.Context, s cadata.Store, x Root, key []byte,
 }
 
 // Get returns the value corresponding to key in the instance x.
-func (o *Operator) Get(ctx context.Context, s cadata.Store, x Root, key []byte) ([]byte, error) {
+func (o *Operator) Get(ctx context.Context, s cadata.Getter, x Root, key []byte) ([]byte, error) {
 	var ret []byte
 	if err := o.GetF(ctx, s, x, key, func(data []byte) error {
 		ret = append([]byte{}, data...)
@@ -140,7 +140,7 @@ func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) 
 }
 
 // MaxEntry returns the entry in the instance x, within span, with the greatest lexicographic value.
-func (o *Operator) MaxEntry(ctx context.Context, s cadata.Store, x Root, span Span) (*Entry, error) {
+func (o *Operator) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span Span) (*Entry, error) {
 	return ptree.MaxEntry(ctx, o.compare, s, x, span)
 }
 
@@ -153,7 +153,7 @@ func (o *Operator) AddPrefix(x Root, prefix []byte) Root {
 // RemovePrefix removes a prefix from all the keys in instance x.
 // RemotePrefix errors if all the entries in x do not share a common prefix.
 // This is a O(1) operation.
-func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Store, x Root, prefix []byte) (*Root, error) {
+func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (*Root, error) {
 	return ptree.RemovePrefix(ctx, o.compare, s, x, prefix)
 }
 
@@ -165,7 +165,7 @@ func (o *Operator) NewBuilder(s Store) *Builder {
 
 // NewIterator returns an iterator for the instance rooted at x, which
 // will emit all keys within span in the instance.
-func (o *Operator) NewIterator(s Store, root Root, span Span) *Iterator {
+func (o *Operator) NewIterator(s Getter, root Root, span Span) *Iterator {
 	return ptree.NewIterator(&o.dop, o.compare, s, root, span)
 }
 
@@ -175,7 +175,7 @@ func (o *Operator) makeBuilder(s cadata.Store) *ptree.Builder {
 
 // ForEach calls fn with every entry, in the GotKV instance rooted at root, contained in span, in lexicographical order.
 // If fn returns an error, ForEach immediately returns that error.
-func (o *Operator) ForEach(ctx context.Context, s Store, root Root, span Span, fn func(Entry) error) error {
+func (o *Operator) ForEach(ctx context.Context, s Getter, root Root, span Span, fn func(Entry) error) error {
 	it := o.NewIterator(s, root, span)
 	var ent Entry
 	for {

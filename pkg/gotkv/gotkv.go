@@ -13,9 +13,10 @@ import (
 )
 
 type (
-	Store = cadata.Store
-	ID    = cadata.ID
-	Ref   = gdat.Ref
+	Getter = cadata.Getter
+	Store  = cadata.Store
+	ID     = cadata.ID
+	Ref    = gdat.Ref
 
 	Entry = kvstreams.Entry
 	Span  = kvstreams.Span
@@ -35,12 +36,12 @@ var (
 var defaultReadOnlyOperator = &Operator{dop: gdat.NewOperator()}
 
 // Get is a convenience function for performing Get without creating an Operator.
-func Get(ctx context.Context, s Store, x Root, key []byte) ([]byte, error) {
+func Get(ctx context.Context, s Getter, x Root, key []byte) ([]byte, error) {
 	return defaultReadOnlyOperator.Get(ctx, s, x, key)
 }
 
 // GetF is a convenience function for performing GetF without creating an Operator
-func GetF(ctx context.Context, s Store, x Root, key []byte, fn func([]byte) error) error {
+func GetF(ctx context.Context, s Getter, x Root, key []byte, fn func([]byte) error) error {
 	return defaultReadOnlyOperator.GetF(ctx, s, x, key, fn)
 }
 
@@ -55,7 +56,7 @@ func CopyAll(ctx context.Context, b *Builder, it kvstreams.Iterator) error {
 }
 
 // Sync ensures dst has all the data reachable from x.
-func (o *Operator) Sync(ctx context.Context, src, dst Store, x Root, entryFn func(Entry) error) error {
+func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Root, entryFn func(Entry) error) error {
 	return do(ctx, &o.dop, bytes.Compare, src, x, doParams{
 		CanSkip: func(r Root) (bool, error) {
 			return cadata.Exists(ctx, dst, r.Ref.CID)
@@ -92,7 +93,7 @@ type doParams struct {
 	NodeFn func(r Root) error
 }
 
-func do(ctx context.Context, dop *gdat.Operator, cmp ptree.CompareFunc, s Store, x Root, p doParams) error {
+func do(ctx context.Context, dop *gdat.Operator, cmp ptree.CompareFunc, s Getter, x Root, p doParams) error {
 	if canSkip, err := p.CanSkip(x); err != nil {
 		return err
 	} else if canSkip {

@@ -42,7 +42,7 @@ func Copy(ctx context.Context, b *Builder, it *Iterator) error {
 }
 
 // ListChildren returns the immediate children of root if any.
-func ListChildren(ctx context.Context, op *gdat.Operator, cmp CompareFunc, s cadata.Store, root Root) ([]Index, error) {
+func ListChildren(ctx context.Context, op *gdat.Operator, cmp CompareFunc, s cadata.Getter, root Root) ([]Index, error) {
 	if PointsToEntries(root) {
 		return nil, errors.Errorf("cannot list children of root with depth=%d", root.Depth)
 	}
@@ -67,7 +67,7 @@ func ListChildren(ctx context.Context, op *gdat.Operator, cmp CompareFunc, s cad
 
 // ListEntries returns a slice of all the entries pointed to by idx, directly.
 // If idx points to other indexes directly, then ListEntries returns the entries for those indexes.
-func ListEntries(ctx context.Context, op *gdat.Operator, cmp CompareFunc, s cadata.Store, idx Index) ([]Entry, error) {
+func ListEntries(ctx context.Context, op *gdat.Operator, cmp CompareFunc, s cadata.Getter, idx Index) ([]Entry, error) {
 	sr := NewStreamReader(s, op, cmp, []Index{idx})
 	return kvstreams.Collect(ctx, sr)
 }

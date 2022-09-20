@@ -16,7 +16,7 @@ type (
 )
 
 // MaxEntry returns the entry in span with the greatest (ordered last) key.
-func MaxEntry(ctx context.Context, cmp CompareFunc, s cadata.Store, x Root, span Span) (*Entry, error) {
+func MaxEntry(ctx context.Context, cmp CompareFunc, s cadata.Getter, x Root, span Span) (*Entry, error) {
 	op := gdat.NewOperator()
 	sr := NewStreamReader(s, &op, cmp, []Index{rootToIndex(x)})
 	ent, err := maxEntry(ctx, sr, span.End)
@@ -69,7 +69,7 @@ func AddPrefix(x Root, prefix []byte) Root {
 }
 
 // RemovePrefix returns a new version of root with the prefix removed from all the keys
-func RemovePrefix(ctx context.Context, cmp CompareFunc, s cadata.Store, x Root, prefix []byte) (*Root, error) {
+func RemovePrefix(ctx context.Context, cmp CompareFunc, s cadata.Getter, x Root, prefix []byte) (*Root, error) {
 	if yes, err := HasPrefix(ctx, cmp, s, x, prefix); err != nil {
 		return nil, err
 	} else if yes {
@@ -84,7 +84,7 @@ func RemovePrefix(ctx context.Context, cmp CompareFunc, s cadata.Store, x Root, 
 }
 
 // HasPrefix returns true if the tree rooted at x only has keys which are prefixed with prefix
-func HasPrefix(ctx context.Context, cmp CompareFunc, s cadata.Store, x Root, prefix []byte) (bool, error) {
+func HasPrefix(ctx context.Context, cmp CompareFunc, s cadata.Getter, x Root, prefix []byte) (bool, error) {
 	if !bytes.HasPrefix(x.First, prefix) {
 		return false, nil
 	}

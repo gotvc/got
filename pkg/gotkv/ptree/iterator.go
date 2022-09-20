@@ -13,7 +13,7 @@ import (
 type Iterator struct {
 	op      *gdat.Operator
 	compare CompareFunc
-	s       cadata.Store
+	s       cadata.Getter
 	root    Root
 	span    Span
 
@@ -21,7 +21,7 @@ type Iterator struct {
 	pos    []byte
 }
 
-func NewIterator(op *gdat.Operator, cmp CompareFunc, s cadata.Store, root Root, span Span) *Iterator {
+func NewIterator(op *gdat.Operator, cmp CompareFunc, s cadata.Getter, root Root, span Span) *Iterator {
 	it := &Iterator{
 		s:      s,
 		op:     op,

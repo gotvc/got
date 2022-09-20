@@ -8,7 +8,10 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 )
 
-type Store = cadata.Store
+type (
+	Getter = cadata.Getter
+	Store  = cadata.Store
+)
 
 type Option = func(*Operator)
 
@@ -64,7 +67,7 @@ func (o *Operator) Post(ctx context.Context, s Store, data []byte) (*Ref, error)
 	}, nil
 }
 
-func (o *Operator) GetF(ctx context.Context, s Store, ref Ref, fn func(data []byte) error) error {
+func (o *Operator) GetF(ctx context.Context, s Getter, ref Ref, fn func(data []byte) error) error {
 	if data := o.checkCache(ref); data != nil {
 		return fn(data)
 	}
@@ -78,7 +81,7 @@ func (o *Operator) GetF(ctx context.Context, s Store, ref Ref, fn func(data []by
 	return fn(data)
 }
 
-func (o *Operator) Read(ctx context.Context, s Store, ref Ref, buf []byte) (int, error) {
+func (o *Operator) Read(ctx context.Context, s Getter, ref Ref, buf []byte) (int, error) {
 	return getDecrypt(ctx, s, ref.DEK, ref.CID, buf)
 }
 

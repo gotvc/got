@@ -89,7 +89,7 @@ func (o *Operator) postEncrypt(ctx context.Context, s cadata.Poster, keyFunc Key
 	return id, &dek, nil
 }
 
-func getDecrypt(ctx context.Context, s cadata.Store, dek DEK, id cadata.ID, buf []byte) (int, error) {
+func getDecrypt(ctx context.Context, s cadata.Getter, dek DEK, id cadata.ID, buf []byte) (int, error) {
 	n, err := s.Get(ctx, id, buf)
 	if err != nil {
 		return 0, err

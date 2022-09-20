@@ -110,14 +110,14 @@ func (r *blobReader) setPrevKey(x []byte) {
 }
 
 type StreamReader struct {
-	s         cadata.Store
+	s         cadata.Getter
 	op        *gdat.Operator
 	idxs      []Index
 	nextIndex int
 	br        *blobReader
 }
 
-func NewStreamReader(s cadata.Store, op *gdat.Operator, cmp CompareFunc, idxs []Index) *StreamReader {
+func NewStreamReader(s cadata.Getter, op *gdat.Operator, cmp CompareFunc, idxs []Index) *StreamReader {
 	for i := 0; i < len(idxs)-1; i++ {
 		if bytes.Compare(idxs[i].First, idxs[i+1].First) >= 0 {
 			panic(fmt.Sprintf("StreamReader: unordered indexes %q >= %q", idxs[i].First, idxs[i+1].First))
