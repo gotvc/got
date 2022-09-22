@@ -3,7 +3,6 @@ package porting
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"path"
 	"runtime"
@@ -19,7 +18,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
-	"golang.org/x/sync/errgroup"
 )
 
 type Importer struct {
@@ -113,7 +111,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 			return nil, err
 		}
 		defer f.Close()
-		root, err = pr.gotfs.CreateFileRoot(ctx, pr.ms, pr.ds, f)
+		root, err = pr.gotfs.FileFromReader(ctx, pr.ms, pr.ds, finfo.Mode(), f)
 		if err != nil {
 			return nil, err
 		}
@@ -139,46 +137,22 @@ func importFileConcurrent(ctx context.Context, fsop *gotfs.Operator, ms, ds cada
 		return nil, err
 	}
 	fileSize := stat.Size()
-	eg := errgroup.Group{}
-	extSlices := make([][]*gotfs.Extent, numWorkers)
+	rs := make([]io.Reader, numWorkers)
 	for i := 0; i < numWorkers; i++ {
-		i := i
 		start, end := divide(fileSize, numWorkers, i)
-		ctx, cf := metrics.Child(ctx, fmt.Sprintf("worker-%d", i))
-		eg.Go(func() error {
-			defer cf()
-			f, err := fsx.OpenFile(p, posixfs.O_RDONLY, 0)
-			if err != nil {
-				return err
-			}
-			defer f.Close()
-			if n, err := f.Seek(start, io.SeekStart); err != nil {
-				return err
-			} else if n != start {
-				return errors.Errorf("file seeked to wrong place HAVE: %d WANT: %d", n, start)
-			}
-			r := io.LimitReader(f, end-start)
-			exts, err := fsop.CreateExtents(ctx, ds, r)
-			if err != nil {
-				return err
-			}
-			extSlices[i] = exts
-			return nil
-		})
-	}
-	if err := eg.Wait(); err != nil {
-		return nil, err
-	}
-	b := fsop.NewBuilder(ctx, ms, ds)
-	if err := b.BeginFile("", stat.Mode()); err != nil {
-		return nil, err
-	}
-	for _, extSlice := range extSlices {
-		if err := b.WriteExtents(ctx, extSlice); err != nil {
+		f, err := fsx.OpenFile(p, posixfs.O_RDONLY, 0)
+		if err != nil {
 			return nil, err
 		}
+		defer f.Close()
+		if n, err := f.Seek(start, io.SeekStart); err != nil {
+			return nil, err
+		} else if n != start {
+			return nil, errors.Errorf("file seeked to wrong place HAVE: %d WANT: %d", n, start)
+		}
+		rs[i] = io.LimitReader(f, end-start)
 	}
-	return b.Finish()
+	return fsop.FileFromReaders(ctx, ms, ds, stat.Mode(), rs)
 }
 
 func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {

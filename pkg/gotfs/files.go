@@ -2,27 +2,48 @@ package gotfs
 
 import (
 	"context"
+	"fmt"
 	"io"
 
+	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotfs/gotlob"
+	"github.com/gotvc/got/pkg/metrics"
+	"golang.org/x/sync/errgroup"
 )
 
-// CreateFileRoot creates a new filesystem with the contents read from r at the root
-func (o *Operator) CreateFileRoot(ctx context.Context, ms, ds Store, r io.Reader) (*Root, error) {
+func (o *Operator) FileFromReader(ctx context.Context, ms, ds Store, mode posixfs.FileMode, r io.Reader) (*Root, error) {
+	return o.FileFromReaders(ctx, ms, ds, mode, []io.Reader{r})
+}
+
+// ImportReaders creates a single file at the root from concatenating the data in rs.
+// Each reader will be imported from in parallel.
+func (o *Operator) FileFromReaders(ctx context.Context, ms, ds Store, mode posixfs.FileMode, rs []io.Reader) (*Root, error) {
+	exts := make([][]*Extent, len(rs))
+	eg := errgroup.Group{}
+	for i, r := range rs {
+		i := i
+		r := r
+		eg.Go(func() error {
+			ctx, cf := metrics.Child(ctx, fmt.Sprintf("worker-%d", i))
+			defer cf()
+			var err error
+			exts[i], err = o.lob.CreateExtents(ctx, ds, r)
+			return err
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
 	b := o.NewBuilder(ctx, ms, ds)
 	if err := b.BeginFile("", 0o644); err != nil {
 		return nil, err
 	}
-	_, err := io.Copy(b, r)
-	if err != nil {
-		return nil, err
+	for i := range exts {
+		if err := b.writeExtents(ctx, exts[i]); err != nil {
+			return nil, err
+		}
 	}
 	return b.Finish()
-}
-
-// CreateExtents returns a list of extents created from r
-func (o *Operator) CreateExtents(ctx context.Context, ds Store, r io.Reader) ([]*Extent, error) {
-	return o.lob.CreateExtents(ctx, ds, r)
 }
 
 // CreateFile creates a file at p with data from r
@@ -34,7 +55,7 @@ func (o *Operator) CreateFile(ctx context.Context, ms, ds Store, x Root, p strin
 	if err := o.checkNoEntry(ctx, ms, x, p); err != nil {
 		return nil, err
 	}
-	fileRoot, err := o.CreateFileRoot(ctx, ms, ds, r)
+	fileRoot, err := o.FileFromReader(ctx, ms, ds, 0o755, r)
 	if err != nil {
 		return nil, err
 	}

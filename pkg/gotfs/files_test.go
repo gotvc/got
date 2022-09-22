@@ -52,7 +52,7 @@ func TestLargeFiles(t *testing.T) {
 		i := i
 		eg.Go(func() error {
 			rng := mrand.New(mrand.NewSource(int64(i)))
-			x, err := op.CreateFileRoot(ctx, s, s, io.LimitReader(rng, size))
+			x, err := op.FileFromReader(ctx, s, s, 0o755, io.LimitReader(rng, size))
 			if err != nil {
 				return err
 			}

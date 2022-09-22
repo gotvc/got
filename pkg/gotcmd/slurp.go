@@ -34,7 +34,7 @@ func newSlurpCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 				return err
 			}
 			fsop := gotfs.NewOperator()
-			root, err := fsop.CreateFileRoot(ctx, st.FS, st.Raw, f)
+			root, err := fsop.FileFromReader(ctx, st.FS, st.Raw, 0o755, f)
 			if err != nil {
 				return err
 			}
