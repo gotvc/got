@@ -1,8 +1,10 @@
 package gotcmd
 
 import (
-	"github.com/sirupsen/logrus"
+	"os"
+
 	"github.com/spf13/cobra"
+	"golang.org/x/exp/slog"
 	"golang.org/x/net/context"
 
 	"github.com/brendoncarroll/stdctx/logctx"
@@ -66,10 +68,15 @@ func NewRootCmd() *cobra.Command {
 }
 
 var (
-	log       = logrus.StandardLogger()
+	log       = slog.New(slog.NewTextHandler(os.Stderr))
 	collector = metrics.NewCollector()
 
-	ctx = metrics.WithCollector(logctx.WithFmtLogger(context.Background(), log), collector)
+	ctx = func() context.Context {
+		ctx := context.Background()
+		ctx = logctx.NewContext(ctx, log)
+		ctx = metrics.WithCollector(ctx, collector)
+		return ctx
+	}()
 )
 
 func loadRepo(repo **gotrepo.Repo, open func() (*gotrepo.Repo, error)) func(cmd *cobra.Command, args []string) error {

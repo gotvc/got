@@ -23,8 +23,8 @@ func (o *Operator) FileFromReaders(ctx context.Context, ms, ds Store, mode posix
 	for i, r := range rs {
 		i := i
 		r := r
+		ctx, cf := metrics.Child(ctx, fmt.Sprintf("worker-%d", i))
 		eg.Go(func() error {
-			ctx, cf := metrics.Child(ctx, fmt.Sprintf("worker-%d", i))
 			defer cf()
 			var err error
 			exts[i], err = o.lob.CreateExtents(ctx, ds, r)

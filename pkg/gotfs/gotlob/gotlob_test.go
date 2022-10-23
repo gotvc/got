@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"strconv"
 	"testing"
 
 	"github.com/brendoncarroll/stdctx/logctx"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slog"
 
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
@@ -17,7 +18,7 @@ import (
 	"github.com/gotvc/got/pkg/testutil"
 )
 
-var ctx = logctx.WithFmtLogger(context.Background(), logrus.StandardLogger())
+var ctx = logctx.NewContext(context.Background(), slog.New(slog.NewTextHandler(os.Stderr)))
 
 func TestWrite(t *testing.T) {
 	t.Parallel()

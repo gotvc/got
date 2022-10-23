@@ -11,12 +11,12 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/brendoncarroll/go-tai64"
+	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/metrics"
 	"github.com/gotvc/got/pkg/units"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/exp/slices"
 )
 
@@ -96,7 +96,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 		return nil, errors.Errorf("ImportFile called for non-regular file at path %q", p)
 	}
 	if ent, err := pr.cache.Get(ctx, p); err == nil && ent.ModifiedAt == tai64.FromGoTime(finfo.ModTime()) {
-		logrus.Infof("using cache entry for path %q. skipped import", p)
+		logctx.Infof(ctx, "using cache entry for path %q. skipped import", p)
 		return &ent.Root, nil
 	}
 	fileSize := finfo.Size()

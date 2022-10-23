@@ -32,7 +32,7 @@ func newHTTPCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		fs := gotiofs.New(b)
+		fs := gotiofs.New(ctx, b)
 		h := http.FileServer(http.FS(fs))
 		l, err := net.Listen("tcp", *laddr)
 		if err != nil {

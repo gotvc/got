@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -14,11 +15,11 @@ import (
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/testutil"
-	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/slog"
 )
 
-var ctx = logctx.WithFmtLogger(context.Background(), logrus.StandardLogger())
+var ctx = logctx.NewContext(context.Background(), slog.New(slog.NewTextHandler(os.Stderr)))
 
 func TestRepoInit(t *testing.T) {
 	t.Parallel()

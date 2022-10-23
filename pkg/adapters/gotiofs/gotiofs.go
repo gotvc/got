@@ -11,10 +11,10 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
-	"github.com/sirupsen/logrus"
 )
 
 var _ iofs.FS = &FS{}
@@ -22,16 +22,14 @@ var _ iofs.FS = &FS{}
 // FS implements io/fs.FS
 type FS struct {
 	ctx    context.Context
-	log    logrus.FieldLogger
 	gotvc  gotvc.Operator
 	gotfs  gotfs.Operator
 	branch *branches.Branch
 }
 
-func New(b *branches.Branch) *FS {
+func New(ctx context.Context, b *branches.Branch) *FS {
 	return &FS{
-		ctx:    context.Background(),
-		log:    logrus.StandardLogger(),
+		ctx:    ctx,
 		gotvc:  gotvc.NewOperator(),
 		gotfs:  gotfs.NewOperator(gotfs.WithMetaCacheSize(128), gotfs.WithContentCacheSize(16)),
 		branch: b,
@@ -39,7 +37,7 @@ func New(b *branches.Branch) *FS {
 }
 
 func (s *FS) Open(name string) (iofs.File, error) {
-	s.log.Infof("open %q", name)
+	logctx.Infof(s.ctx, "open %q", name)
 	b := s.branch
 	snap, err := branches.GetHead(s.ctx, *b)
 	if err != nil {
@@ -53,7 +51,7 @@ func (s *FS) Open(name string) (iofs.File, error) {
 	if _, err := fsop.GetInfo(s.ctx, ms, snap.Root, name); err != nil {
 		return nil, convertError(err)
 	}
-	return NewFile(s.ctx, fsop, b.Volume.FSStore, b.Volume.RawStore, snap.Root, name), nil
+	return NewFile(s.ctx, &fsop, b.Volume.FSStore, b.Volume.RawStore, snap.Root, name), nil
 }
 
 var _ iofs.File = &File{}
@@ -63,7 +61,7 @@ var _ io.Seeker = &File{}
 
 type File struct {
 	ctx    context.Context
-	gotfs  gotfs.Operator
+	gotfs  *gotfs.Operator
 	ms, ds cadata.Store
 	root   gotfs.Root
 	path   string
@@ -71,7 +69,7 @@ type File struct {
 	r *gotfs.Reader
 }
 
-func NewFile(ctx context.Context, fsop gotfs.Operator, ms, ds cadata.Store, root gotfs.Root, p string) *File {
+func NewFile(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, root gotfs.Root, p string) *File {
 	return &File{
 		ctx:   ctx,
 		gotfs: fsop,
@@ -113,7 +111,7 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (f *File) Stat() (iofs.FileInfo, error) {
-	return Stat(f.ctx, &f.gotfs, f.ms, f.root, f.path)
+	return Stat(f.ctx, f.gotfs, f.ms, f.root, f.path)
 }
 
 func (f *File) ReadDir(n int) (ret []iofs.DirEntry, _ error) {
@@ -152,7 +150,7 @@ func (f *File) ensureReader() error {
 }
 
 func (f *File) stat(p string) (*fileInfo, error) {
-	finfo, err := Stat(f.ctx, &f.gotfs, f.ms, f.root, p)
+	finfo, err := Stat(f.ctx, f.gotfs, f.ms, f.root, p)
 	if err != nil {
 		return nil, err
 	}

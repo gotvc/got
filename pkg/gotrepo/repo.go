@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -14,8 +15,8 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/pkg/errors"
-	"github.com/sirupsen/logrus"
 	bolt "go.etcd.io/bbolt"
+	"golang.org/x/exp/slog"
 
 	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/branches"
@@ -135,7 +136,7 @@ func Init(p string) error {
 
 func Open(p string) (*Repo, error) {
 	ctx := context.Background()
-	ctx = logctx.WithFmtLogger(ctx, logrus.StandardLogger())
+	ctx = logctx.NewContext(ctx, slog.New(slog.NewTextHandler(os.Stderr)))
 	repoFS := posixfs.NewDirFS(p)
 	config, err := LoadConfig(repoFS, configPath)
 	if err != nil {

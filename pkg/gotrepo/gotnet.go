@@ -57,7 +57,7 @@ func (r *Repo) getGotNet() (*gotnet.Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	logctx.Infof(ctx, "setup INET256 node", node.LocalAddr())
+	logctx.Infof(ctx, "setup INET256 node %v", node.LocalAddr())
 	swarm := mbapp.New(inet256client.NewSwarm(node), gotnet.MaxMessageSize)
 	srv := r.makeGotNet(swarm)
 	r.gotNet = srv

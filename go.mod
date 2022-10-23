@@ -6,21 +6,20 @@ require (
 	github.com/brendoncarroll/go-p2p v0.0.0-20220617145626-749dd26b09b0
 	github.com/brendoncarroll/go-state v0.0.0-20220920143402-2cb0444ec628
 	github.com/brendoncarroll/go-tai64 v0.0.0-20220527232055-eab29bd93d59
-	github.com/brendoncarroll/stdctx v0.0.0-20220906134452-42ebcbf4cd87
+	github.com/brendoncarroll/stdctx v0.0.0-20221023182057-986b9c600f6c
 	github.com/dchest/siphash v1.2.3
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/inet256/inet256 v0.0.5
 	github.com/pkg/errors v0.9.1
-	github.com/sirupsen/logrus v1.7.0
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.7.0
 	go.etcd.io/bbolt v1.3.5
 	goftp.io/server/v2 v2.0.1-0.20210902054531-841529b15085
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
-	golang.org/x/exp v0.0.0-20220722155223-a9213eeb770e
-	golang.org/x/net v0.0.0-20220624214902-1bab6f366d9e
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
+	golang.org/x/exp v0.0.0-20221023144134-a1e5550cf13e
+	golang.org/x/net v0.0.0-20220722155237-a158d28d115b
+	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4
 	google.golang.org/grpc v1.33.2
 	google.golang.org/protobuf v1.27.1
 )
@@ -51,12 +50,12 @@ require (
 	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.14.0 // indirect
 	github.com/prometheus/procfs v0.2.0 // indirect
+	github.com/sirupsen/logrus v1.7.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
-	golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a // indirect
+	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
+	golang.org/x/sys v0.0.0-20220722155257-8c9f86f7a55f // indirect
 	golang.org/x/text v0.3.7 // indirect
-	golang.org/x/tools v0.1.10 // indirect
-	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
+	golang.org/x/tools v0.1.12 // indirect
 	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c // indirect
