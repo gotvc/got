@@ -142,7 +142,7 @@ func (qh *QUICHub) upwardMessage(m p2p.Message[quicswarm.Addr[udpswarm.Addr]]) p
 	dst := m.Dst
 	srcID := inet256.ID(src.ID)
 	dstID := inet256.ID(dst.ID)
-	qh.directory[srcID] = src.Addr.(udpswarm.Addr)
+	qh.directory[srcID] = src.Addr
 	return p2p.Message[inet256.Addr]{
 		Src:     srcID,
 		Dst:     dstID,

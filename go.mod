@@ -3,14 +3,14 @@ module github.com/gotvc/got
 go 1.18
 
 require (
-	github.com/brendoncarroll/go-p2p v0.0.0-20220617145626-749dd26b09b0
+	github.com/brendoncarroll/go-p2p v0.0.0-20221106152522-e250e2942e27
 	github.com/brendoncarroll/go-state v0.0.0-20220920143402-2cb0444ec628
 	github.com/brendoncarroll/go-tai64 v0.0.0-20220527232055-eab29bd93d59
 	github.com/brendoncarroll/stdctx v0.0.0-20221023182057-986b9c600f6c
 	github.com/dchest/siphash v1.2.3
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/golang-lru v0.5.1
-	github.com/inet256/inet256 v0.0.5
+	github.com/inet256/inet256 v0.0.6-0.20221106171430-a5966e5247b4
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.7.0
@@ -37,9 +37,9 @@ require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/jonboulle/clockwork v0.1.1-0.20190114141812-62fb9bc030d1 // indirect
 	github.com/klauspost/cpuid v1.3.1 // indirect
-	github.com/lucas-clemente/quic-go v0.29.0 // indirect
-	github.com/marten-seemann/qtls-go1-18 v0.1.2 // indirect
-	github.com/marten-seemann/qtls-go1-19 v0.1.0 // indirect
+	github.com/lucas-clemente/quic-go v0.29.2 // indirect
+	github.com/marten-seemann/qtls-go1-18 v0.1.3 // indirect
+	github.com/marten-seemann/qtls-go1-19 v0.1.1 // indirect
 	github.com/mattn/go-colorable v0.1.9 // indirect
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
