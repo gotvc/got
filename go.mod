@@ -1,6 +1,6 @@
 module github.com/gotvc/got
 
-go 1.18
+go 1.19
 
 require (
 	github.com/brendoncarroll/go-p2p v0.0.0-20221106152522-e250e2942e27
@@ -10,7 +10,7 @@ require (
 	github.com/dchest/siphash v1.2.3
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/golang-lru v0.5.1
-	github.com/inet256/inet256 v0.0.6-0.20221106171430-a5966e5247b4
+	github.com/inet256/inet256 v0.0.6
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.7.0

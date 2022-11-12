@@ -137,7 +137,7 @@ func listBranches(t testing.TB, r *got.Repo) (ret []string) {
 	return ret
 }
 
-const inet256Endpoint = "127.0.0.1:12345"
+const inet256Endpoint = "http://127.0.0.1:12345"
 
 func TestMain(m *testing.M) {
 	code := func() int {
@@ -153,7 +153,7 @@ func TestMain(m *testing.M) {
 			},
 		})
 		go d.Run(ctx)
-		if err := os.Setenv("INET256_API", inet256Endpoint); err != nil {
+		if err := os.Setenv("INET256_API", inet256Endpoint+"/nodes/"); err != nil {
 			panic(err)
 		}
 		return m.Run()
