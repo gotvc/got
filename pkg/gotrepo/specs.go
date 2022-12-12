@@ -85,7 +85,6 @@ type CellSpec struct {
 	Local     *LocalCellSpec     `json:"local,omitempty"`
 	HTTP      *HTTPCellSpec      `json:"http,omitempty"`
 	Encrypted *EncryptedCellSpec `json:"encrypted,omitempty"`
-	Signed    *SignedCellSpec    `json:"signed,omitempty"`
 }
 
 type LocalCellSpec = CellID
@@ -100,12 +99,6 @@ type EncryptedCellSpec struct {
 type PeerCellSpec struct {
 	ID   p2p.PeerID `json:"id"`
 	Name string     `json:"name"`
-}
-
-type SignedCellSpec struct {
-	Inner          CellSpec `json:"inner"`
-	PublicKeyX509  []byte   `json:"public_key"`
-	PrivateKeyX509 []byte   `json:"private_key"`
 }
 
 func ParseCellSpec(data []byte) (*CellSpec, error) {
@@ -134,25 +127,6 @@ func (r *Repo) MakeCell(spec CellSpec) (Cell, error) {
 		}
 		secret := (*[32]byte)(spec.Encrypted.Secret)
 		return cells.NewEncrypted(inner, secret), nil
-
-	case spec.Signed != nil:
-		inner, err := r.MakeCell(spec.Signed.Inner)
-		if err != nil {
-			return nil, err
-		}
-		pubKey, err := p2p.ParsePublicKey(spec.Signed.PublicKeyX509)
-		if err != nil {
-			return nil, err
-		}
-		var privateKey p2p.PrivateKey
-		if len(spec.Signed.PrivateKeyX509) > 0 {
-			privKey, err := parsePrivateKey(spec.Signed.PrivateKeyX509)
-			if err != nil {
-				return nil, err
-			}
-			privateKey = privKey
-		}
-		return cells.NewSigned(inner, pubKey, privateKey), nil
 
 	default:
 		return nil, errors.Errorf("empty cell spec")

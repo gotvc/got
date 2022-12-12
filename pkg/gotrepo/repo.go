@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/exp/slog"
@@ -79,7 +79,7 @@ type Repo struct {
 	repoFS       FS // repoFS is the directory that the repo is in
 	db, storesDB *bolt.DB
 	config       Config
-	privateKey   p2p.PrivateKey
+	privateKey   inet256.PrivateKey
 	// ctx is used as the background context for serving the repo
 	ctx context.Context
 
@@ -136,7 +136,9 @@ func Init(p string) error {
 
 func Open(p string) (*Repo, error) {
 	ctx := context.Background()
-	ctx = logctx.NewContext(ctx, slog.New(slog.NewTextHandler(os.Stderr)))
+	log := slog.New(slog.NewTextHandler(os.Stderr))
+	ctx = logctx.NewContext(ctx, &log)
+
 	repoFS := posixfs.NewDirFS(p)
 	config, err := LoadConfig(repoFS, configPath)
 	if err != nil {

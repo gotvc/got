@@ -14,7 +14,11 @@ import (
 
 var quicOpts = []quicswarm.Option[udpswarm.Addr]{
 	quicswarm.WithFingerprinter[udpswarm.Addr](func(pubKey p2p.PublicKey) p2p.PeerID {
-		return p2p.PeerID(inet256.NewAddr(pubKey))
+		pubKey2, err := inet256.PublicKeyFromBuiltIn(pubKey)
+		if err != nil {
+			return p2p.PeerID{}
+		}
+		return p2p.PeerID(inet256.NewAddr(pubKey2))
 	}),
 	quicswarm.WithMTU[udpswarm.Addr](gotfs.DefaultMaxBlobSize),
 }
@@ -24,7 +28,7 @@ func Dial(privateKey inet256.PrivateKey, id inet256.ID, addr string) (p2p.Secure
 	if err != nil {
 		return nil, err
 	}
-	sw, err := quicswarm.NewOnUDP("0.0.0.0:", privateKey, quicOpts...)
+	sw, err := quicswarm.NewOnUDP("0.0.0.0:", privateKey.BuiltIn(), quicOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +42,7 @@ func Dial(privateKey inet256.PrivateKey, id inet256.ID, addr string) (p2p.Secure
 }
 
 func Listen(privateKey inet256.PrivateKey, addr string) (p2p.SecureAskSwarm[inet256.Addr], error) {
-	sw, err := quicswarm.NewOnUDP(addr, privateKey, quicOpts...)
+	sw, err := quicswarm.NewOnUDP(addr, privateKey.BuiltIn(), quicOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +105,12 @@ func (qh *QUICHub) MTU(ctx context.Context, target inet256.Addr) int {
 }
 
 func (qh *QUICHub) LocalAddrs() []inet256.Addr {
-	return []inet256.Addr{inet256.NewAddr(qh.sw.PublicKey())}
+	pubKey, err := inet256.PublicKeyFromBuiltIn(qh.sw.PublicKey())
+	if err != nil {
+		// this is our key, so okay to panic.  This can't be triggered remotely
+		panic(err)
+	}
+	return []inet256.Addr{inet256.NewAddr(pubKey)}
 }
 
 func (qh *QUICHub) LookupPublicKey(ctx context.Context, target inet256.Addr) (p2p.PublicKey, error) {

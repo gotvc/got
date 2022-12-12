@@ -3,8 +3,6 @@ package cells
 import (
 	"context"
 
-	"github.com/brendoncarroll/go-p2p"
-	p2pcryptocell "github.com/brendoncarroll/go-p2p/c/cryptocell"
 	"github.com/brendoncarroll/go-state/cells"
 	"github.com/brendoncarroll/go-state/cells/cryptocell"
 )
@@ -29,8 +27,4 @@ func NewMem() cells.Cell {
 
 func NewEncrypted(inner cells.Cell, secret *[32]byte) Cell {
 	return cryptocell.NewChaCha20Poly1305(inner, secret)
-}
-
-func NewSigned(inner cells.Cell, pubKey p2p.PublicKey, privKey p2p.PrivateKey) Cell {
-	return p2pcryptocell.NewSigned(inner, "got/signed-cell", pubKey, privKey)
 }

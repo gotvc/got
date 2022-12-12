@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/inet256/inet256/networks/beaconnet"
+	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/inet256/inet256/pkg/inet256d"
 	"github.com/inet256/inet256/pkg/mesh256"
 	"github.com/stretchr/testify/require"
@@ -143,7 +144,7 @@ func TestMain(m *testing.M) {
 	code := func() int {
 		ctx, cf := context.WithCancel(context.Background())
 		defer cf()
-		privateKey := ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize))
+		privateKey, _ := inet256.PrivateKeyFromBuiltIn(ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)))
 		d := inet256d.New(inet256d.Params{
 			APIAddr: inet256Endpoint,
 			MainNodeParams: mesh256.Params{

@@ -18,7 +18,10 @@ import (
 	"github.com/gotvc/got/pkg/testutil"
 )
 
-var ctx = logctx.NewContext(context.Background(), slog.New(slog.NewTextHandler(os.Stderr)))
+var ctx = func() context.Context {
+	l := slog.New(slog.NewTextHandler(os.Stderr))
+	return logctx.NewContext(context.Background(), &l)
+}()
 
 func TestWrite(t *testing.T) {
 	t.Parallel()

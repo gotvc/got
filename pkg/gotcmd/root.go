@@ -73,7 +73,7 @@ var (
 
 	ctx = func() context.Context {
 		ctx := context.Background()
-		ctx = logctx.NewContext(ctx, log)
+		ctx = logctx.NewContext(ctx, &log)
 		ctx = metrics.WithCollector(ctx, collector)
 		return ctx
 	}()

@@ -3,6 +3,7 @@ package gotrepo
 import (
 	"bytes"
 	"context"
+	"crypto"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
@@ -23,11 +24,11 @@ func (r *Repo) GetID() inet256.Addr {
 	return inet256.NewAddr(r.privateKey.Public())
 }
 
-func (r *Repo) GetPrivateKey() p2p.PrivateKey {
+func (r *Repo) GetPrivateKey() inet256.PrivateKey {
 	return r.privateKey
 }
 
-func LoadPrivateKey(fsx posixfs.FS, p string) (p2p.PrivateKey, error) {
+func LoadPrivateKey(fsx posixfs.FS, p string) (inet256.PrivateKey, error) {
 	data, err := posixfs.ReadFile(context.TODO(), fsx, p)
 	if err != nil {
 		return nil, err
@@ -78,7 +79,7 @@ func marshalPrivateKey(x p2p.PrivateKey) []byte {
 	return marshalPEM(pemTypePrivateKey, data)
 }
 
-func parsePrivateKey(data []byte) (p2p.PrivateKey, error) {
+func parsePrivateKey(data []byte) (inet256.PrivateKey, error) {
 	data, err := parsePEM(pemTypePrivateKey, data)
 	if err != nil {
 		return nil, err
@@ -87,7 +88,7 @@ func parsePrivateKey(data []byte) (p2p.PrivateKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	return privateKey.(p2p.PrivateKey), nil
+	return inet256.PrivateKeyFromBuiltIn(privateKey.(crypto.Signer))
 }
 
 func generatePrivateKey() p2p.PrivateKey {

@@ -6,12 +6,12 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/mbapp"
-	"github.com/brendoncarroll/go-p2p/p2ptest"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cadata/storetest"
 	"github.com/brendoncarroll/go-state/cells/celltest"
 	"github.com/inet256/inet256/client/go_client/inet256client"
 	"github.com/inet256/inet256/pkg/inet256"
+	"github.com/inet256/inet256/pkg/inet256test"
 	"github.com/stretchr/testify/require"
 
 	"github.com/gotvc/got/pkg/branches"
@@ -81,14 +81,14 @@ type side struct {
 
 func newTestPair(t testing.TB) (s1, s2 *side) {
 	srv := inet256client.NewTestService(t)
-	key1 := p2ptest.NewTestKey(t, 0)
-	key2 := p2ptest.NewTestKey(t, 1)
+	key1 := inet256test.NewPrivateKey(t, 0)
+	key2 := inet256test.NewPrivateKey(t, 1)
 	s1 = newTestSide(t, srv, key1)
 	s2 = newTestSide(t, srv, key2)
 	return s1, s2
 }
 
-func newTestSide(t testing.TB, inetSrv inet256.Service, privKey p2p.PrivateKey) *side {
+func newTestSide(t testing.TB, inetSrv inet256.Service, privKey inet256.PrivateKey) *side {
 	node, err := inetSrv.Open(context.Background(), privKey)
 	require.NoError(t, err)
 	t.Cleanup(func() {
