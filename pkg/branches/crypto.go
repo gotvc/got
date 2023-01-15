@@ -8,11 +8,12 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/brendoncarroll/go-state/cells/cryptocell"
-	"github.com/gotvc/got/pkg/gdat"
 	"github.com/pkg/errors"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/exp/slices"
+
+	"github.com/gotvc/got/pkg/cells"
+	"github.com/gotvc/got/pkg/gdat"
 )
 
 const SecretSize = 32
@@ -198,7 +199,7 @@ func (r *CryptoSpace) decryptSalt(x []byte) ([]byte, error) {
 func (r *CryptoSpace) wrapVolume(name string, x Volume) Volume {
 	var secret [32]byte
 	deriveKey(secret[:], r.secret, "got/space/cells/"+name)
-	yCell := cryptocell.NewChaCha20Poly1305(x.Cell, &secret)
+	yCell := cells.NewEncrypted(x.Cell, &secret)
 	return Volume{
 		Cell:     yCell,
 		FSStore:  x.FSStore,

@@ -14,6 +14,8 @@ import (
 	"github.com/gotvc/got/pkg/gotnet/quichub"
 	"github.com/gotvc/got/pkg/goturl"
 	"github.com/inet256/inet256/client/go_client/inet256client"
+	"github.com/inet256/inet256/pkg/inet256"
+	"github.com/inet256/inet256/pkg/p2padapter"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 )
@@ -58,7 +60,7 @@ func (r *Repo) getGotNet() (*gotnet.Service, error) {
 		return nil, err
 	}
 	logctx.Infof(ctx, "setup INET256 node %v", node.LocalAddr())
-	swarm := mbapp.New(inet256client.NewSwarm(node), gotnet.MaxMessageSize)
+	swarm := mbapp.New(p2padapter.SwarmFromNode(node), gotnet.MaxMessageSize)
 	srv := r.makeGotNet(swarm)
 	r.gotNet = srv
 	go r.gotNet.Serve(r.ctx)
@@ -75,7 +77,7 @@ func (r *Repo) getQUICGotNet(spec QUICSpaceSpec) (*gotnet.Service, error) {
 	return gn, nil
 }
 
-func (r *Repo) makeGotNet(swarm p2p.SecureAskSwarm[PeerID]) *gotnet.Service {
+func (r *Repo) makeGotNet(swarm p2p.SecureAskSwarm[PeerID, inet256.PublicKey]) *gotnet.Service {
 	return gotnet.New(gotnet.Params{
 		Open: func(peer PeerID) branches.Space {
 			return r.iamEngine.GetSpace(r.GetSpace(), peer)

@@ -2,18 +2,22 @@ package quichub
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"sync"
 
 	"github.com/brendoncarroll/go-p2p"
+	"github.com/brendoncarroll/go-p2p/f/x509"
 	"github.com/brendoncarroll/go-p2p/s/quicswarm"
 	"github.com/brendoncarroll/go-p2p/s/udpswarm"
-	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/inet256/inet256/pkg/inet256"
+	"github.com/inet256/inet256/pkg/mesh256"
+
+	"github.com/gotvc/got/pkg/gotfs"
 )
 
 var quicOpts = []quicswarm.Option[udpswarm.Addr]{
-	quicswarm.WithFingerprinter[udpswarm.Addr](func(pubKey p2p.PublicKey) p2p.PeerID {
+	quicswarm.WithFingerprinter[udpswarm.Addr](func(pubKey x509.PublicKey) p2p.PeerID {
 		pubKey2, err := inet256.PublicKeyFromBuiltIn(pubKey)
 		if err != nil {
 			return p2p.PeerID{}
@@ -23,12 +27,16 @@ var quicOpts = []quicswarm.Option[udpswarm.Addr]{
 	quicswarm.WithMTU[udpswarm.Addr](gotfs.DefaultMaxBlobSize),
 }
 
-func Dial(privateKey inet256.PrivateKey, id inet256.ID, addr string) (p2p.SecureAskSwarm[inet256.Addr], error) {
+func Dial(privateKey inet256.PrivateKey, id inet256.ID, addr string) (p2p.SecureAskSwarm[inet256.Addr, inet256.PublicKey], error) {
 	ua, err := net.ResolveUDPAddr("udp", addr)
 	if err != nil {
 		return nil, err
 	}
-	sw, err := quicswarm.NewOnUDP("0.0.0.0:", privateKey.BuiltIn(), quicOpts...)
+	privX509, err := convertPrivateKey(privateKey)
+	if err != nil {
+		return nil, err
+	}
+	sw, err := quicswarm.NewOnUDP("0.0.0.0:", privX509, quicOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -41,8 +49,12 @@ func Dial(privateKey inet256.PrivateKey, id inet256.ID, addr string) (p2p.Secure
 	}, nil
 }
 
-func Listen(privateKey inet256.PrivateKey, addr string) (p2p.SecureAskSwarm[inet256.Addr], error) {
-	sw, err := quicswarm.NewOnUDP(addr, privateKey.BuiltIn(), quicOpts...)
+func Listen(privateKey inet256.PrivateKey, addr string) (p2p.SecureAskSwarm[inet256.Addr, inet256.PublicKey], error) {
+	privX509, err := convertPrivateKey(privateKey)
+	if err != nil {
+		return nil, err
+	}
+	sw, err := quicswarm.NewOnUDP(addr, privX509, quicOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +65,7 @@ func Listen(privateKey inet256.PrivateKey, addr string) (p2p.SecureAskSwarm[inet
 	}, nil
 }
 
-var _ p2p.SecureAskSwarm[inet256.Addr] = &QUICHub{}
+var _ p2p.SecureAskSwarm[inet256.Addr, inet256.PublicKey] = &QUICHub{}
 
 // QUICHub provides a p2p.SecureAskSwarm[inet256.Addr] using QUIC.
 type QUICHub struct {
@@ -105,7 +117,7 @@ func (qh *QUICHub) MTU(ctx context.Context, target inet256.Addr) int {
 }
 
 func (qh *QUICHub) LocalAddrs() []inet256.Addr {
-	pubKey, err := inet256.PublicKeyFromBuiltIn(qh.sw.PublicKey())
+	pubKey, err := mesh256.PublicKeyFromX509(qh.sw.PublicKey())
 	if err != nil {
 		// this is our key, so okay to panic.  This can't be triggered remotely
 		panic(err)
@@ -113,12 +125,16 @@ func (qh *QUICHub) LocalAddrs() []inet256.Addr {
 	return []inet256.Addr{inet256.NewAddr(pubKey)}
 }
 
-func (qh *QUICHub) LookupPublicKey(ctx context.Context, target inet256.Addr) (p2p.PublicKey, error) {
+func (qh *QUICHub) LookupPublicKey(ctx context.Context, target inet256.Addr) (inet256.PublicKey, error) {
 	addr, err := qh.pickAddr(target)
 	if err != nil {
 		return nil, err
 	}
-	return qh.sw.LookupPublicKey(ctx, *addr)
+	pub, err := qh.sw.LookupPublicKey(ctx, *addr)
+	if err != nil {
+		return nil, err
+	}
+	return mesh256.PublicKeyFromX509(pub)
 }
 
 func (qh *QUICHub) MaxIncomingSize() int {
@@ -129,8 +145,12 @@ func (qh *QUICHub) ParseAddr(x []byte) (inet256.Addr, error) {
 	return inet256.ParseAddrBase64(x)
 }
 
-func (qh *QUICHub) PublicKey() p2p.PublicKey {
-	return qh.sw.PublicKey()
+func (qh *QUICHub) PublicKey() inet256.PublicKey {
+	pub, err := mesh256.PublicKeyFromX509(qh.sw.PublicKey())
+	if err != nil {
+		panic(err)
+	}
+	return pub
 }
 
 func (qh *QUICHub) pickAddr(target inet256.Addr) (*quicswarm.Addr[udpswarm.Addr], error) {
@@ -156,5 +176,17 @@ func (qh *QUICHub) upwardMessage(m p2p.Message[quicswarm.Addr[udpswarm.Addr]]) p
 		Src:     srcID,
 		Dst:     dstID,
 		Payload: m.Payload,
+	}
+}
+
+func convertPrivateKey(x inet256.PrivateKey) (x509.PrivateKey, error) {
+	switch x := x.(type) {
+	case *inet256.Ed25519PrivateKey:
+		return x509.PrivateKey{
+			Algorithm: x509.Algo_Ed25519,
+			Data:      x.Seed()[:],
+		}, nil
+	default:
+		return x509.PrivateKey{}, fmt.Errorf("cannot convert INET256 private key into x509 private key")
 	}
 }

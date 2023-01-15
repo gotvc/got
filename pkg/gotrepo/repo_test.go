@@ -21,7 +21,7 @@ import (
 
 var ctx = func() context.Context {
 	l := slog.New(slog.NewTextHandler(os.Stderr))
-	return logctx.NewContext(context.Background(), &l)
+	return logctx.NewContext(context.Background(), l)
 }()
 
 func TestRepoInit(t *testing.T) {

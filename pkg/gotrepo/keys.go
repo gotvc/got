@@ -4,15 +4,14 @@ import (
 	"bytes"
 	"context"
 	"crypto"
-	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
 	"io"
 
-	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/inet256/inet256/pkg/inet256"
+	"github.com/inet256/inet256/pkg/serde"
 	"github.com/pkg/errors"
 )
 
@@ -36,7 +35,7 @@ func LoadPrivateKey(fsx posixfs.FS, p string) (inet256.PrivateKey, error) {
 	return parsePrivateKey(data)
 }
 
-func SavePrivateKey(fsx posixfs.FS, p string, privateKey p2p.PrivateKey) error {
+func SavePrivateKey(fsx posixfs.FS, p string, privateKey inet256.PrivateKey) error {
 	data := marshalPrivateKey(privateKey)
 	return writeIfNotExists(fsx, p, 0o600, bytes.NewReader(data))
 }
@@ -71,12 +70,8 @@ func parsePEM(ty string, pemData []byte) ([]byte, error) {
 	return b.Bytes, nil
 }
 
-func marshalPrivateKey(x p2p.PrivateKey) []byte {
-	data, err := x509.MarshalPKCS8PrivateKey(x)
-	if err != nil {
-		panic(err)
-	}
-	return marshalPEM(pemTypePrivateKey, data)
+func marshalPrivateKey(x inet256.PrivateKey) []byte {
+	return marshalPEM(pemTypePrivateKey, serde.MarshalPrivateKey(x))
 }
 
 func parsePrivateKey(data []byte) (inet256.PrivateKey, error) {
@@ -91,8 +86,8 @@ func parsePrivateKey(data []byte) (inet256.PrivateKey, error) {
 	return inet256.PrivateKeyFromBuiltIn(privateKey.(crypto.Signer))
 }
 
-func generatePrivateKey() p2p.PrivateKey {
-	_, priv, err := ed25519.GenerateKey(rand.Reader)
+func generatePrivateKey() inet256.PrivateKey {
+	_, priv, err := inet256.GenerateKey(rand.Reader)
 	if err != nil {
 		panic(err)
 	}

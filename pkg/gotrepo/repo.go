@@ -137,7 +137,7 @@ func Init(p string) error {
 func Open(p string) (*Repo, error) {
 	ctx := context.Background()
 	log := slog.New(slog.NewTextHandler(os.Stderr))
-	ctx = logctx.NewContext(ctx, &log)
+	ctx = logctx.NewContext(ctx, log)
 
 	repoFS := posixfs.NewDirFS(p)
 	config, err := LoadConfig(repoFS, configPath)

@@ -12,6 +12,7 @@ import (
 	"github.com/inet256/inet256/client/go_client/inet256client"
 	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/inet256/inet256/pkg/inet256test"
+	"github.com/inet256/inet256/pkg/p2padapter"
 	"github.com/stretchr/testify/require"
 
 	"github.com/gotvc/got/pkg/branches"
@@ -76,7 +77,7 @@ func createStore(t testing.TB, space branches.Space) cadata.Store {
 type side struct {
 	space branches.Space
 	srv   *Service
-	swarm p2p.SecureAskSwarm[PeerID]
+	swarm p2p.SecureAskSwarm[PeerID, inet256.PublicKey]
 }
 
 func newTestPair(t testing.TB) (s1, s2 *side) {
@@ -94,7 +95,7 @@ func newTestSide(t testing.TB, inetSrv inet256.Service, privKey inet256.PrivateK
 	t.Cleanup(func() {
 		require.NoError(t, node.Close())
 	})
-	swarm := mbapp.New(inet256client.NewSwarm(node), MaxMessageSize)
+	swarm := mbapp.New(p2padapter.SwarmFromNode(node), MaxMessageSize)
 	newStore := func() cadata.Store { return stores.NewMem() }
 	space := branches.NewMem(newStore, cells.NewMem)
 	srv := New(Params{

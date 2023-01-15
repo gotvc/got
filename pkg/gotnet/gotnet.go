@@ -46,12 +46,12 @@ type PeerID = inet256.Addr
 type OpenFunc = func(PeerID) branches.Space
 
 type Params struct {
-	Swarm p2p.SecureAskSwarm[PeerID]
+	Swarm p2p.SecureAskSwarm[PeerID, inet256.PublicKey]
 	Open  OpenFunc
 }
 
 type Service struct {
-	mux p2pmux.SecureAskMux[PeerID, string]
+	mux p2pmux.SecureAskMux[PeerID, string, inet256.PublicKey]
 
 	blobPullSrv *blobPullSrv
 	blobMainSrv *blobMainSrv

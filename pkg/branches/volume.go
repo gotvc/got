@@ -15,6 +15,8 @@ import (
 	"github.com/gotvc/got/pkg/stores"
 )
 
+const maxRetries = 10
+
 type Snap = gotvc.Snap
 
 // Volume is a Cell and a set of stores
@@ -82,7 +84,7 @@ func getSnapshot(ctx context.Context, c cells.Cell) (*Snap, error) {
 }
 
 func applySnapshot(ctx context.Context, c cells.Cell, fn func(*Snap) (*Snap, error)) error {
-	return cells.Apply(ctx, c, func(xData []byte) ([]byte, error) {
+	return cells.Apply(ctx, c, maxRetries, func(xData []byte) ([]byte, error) {
 		var xSnap *Snap
 		if len(xData) > 0 {
 			xSnap = &Snap{}
