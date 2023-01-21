@@ -110,6 +110,11 @@ func (d *Decoder) ReadEntry(src []byte, ent *Entry) (int, error) {
 	return n, nil
 }
 
+func (d *Decoder) PeekEntry(src []byte, ent *Entry) error {
+	_, err := readEntry(ent, src, d.prevKey)
+	return err
+}
+
 func (d *Decoder) Reset(parentKey []byte) {
 	d.prevKey = append(d.prevKey[:0], parentKey...)
 	d.count = 0

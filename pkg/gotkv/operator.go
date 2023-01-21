@@ -134,7 +134,7 @@ func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) 
 // MaxEntry returns the entry in the instance x, within span, with the greatest lexicographic value.
 func (o *Operator) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span Span) (*Entry, error) {
 	ps := &ptreeGetter{op: &o.dop, s: s}
-	return ptree.MaxEntry(ctx, bytes.Compare, ps, x, span)
+	return ptree.MaxEntry(ctx, bytes.Compare, &Decoder{}, ps, x, span)
 }
 
 func (o *Operator) HasPrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (bool, error) {
@@ -184,10 +184,11 @@ func (o *Operator) NewBuilder(s Store) *Builder {
 // will emit all keys within span in the instance.
 func (o *Operator) NewIterator(s Getter, root Root, span Span) *Iterator {
 	return ptree.NewIterator(ptree.IteratorParams{
-		Store:   &ptreeGetter{op: &o.dop, s: s},
-		Compare: bytes.Compare,
-		Root:    root,
-		Span:    span,
+		Store:      &ptreeGetter{op: &o.dop, s: s},
+		Compare:    bytes.Compare,
+		NewDecoder: func() ptree.Decoder { return &Decoder{} },
+		Root:       root,
+		Span:       span,
 	})
 }
 

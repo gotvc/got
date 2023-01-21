@@ -45,8 +45,12 @@ type Encoder interface {
 }
 
 type Decoder interface {
+	// ReadEntry parses an entry from src into ent.  It returns the number of bytes read or an error.a
 	ReadEntry(src []byte, ent *kvstreams.Entry) (int, error)
-	Reset()
+	// PeekEntry is like ReadEntry except it should not affect the state of the Decoder
+	PeekEntry(src []byte, ent *kvstreams.Entry) error
+	// Reset returns the decoder to the original state for the star of a node.
+	Reset(parentKey []byte)
 }
 
 // CompareFunc compares 2 keys
@@ -82,13 +86,14 @@ func Copy(ctx context.Context, b *Builder, it *Iterator) error {
 }
 
 // ListChildren returns the immediate children of root if any.
-func ListChildren(ctx context.Context, cmp CompareFunc, s Getter, root Root) ([]Index, error) {
+func ListChildren(ctx context.Context, cmp CompareFunc, dec Decoder, s Getter, root Root) ([]Index, error) {
 	if PointsToEntries(root) {
 		return nil, errors.Errorf("cannot list children of root with depth=%d", root.Depth)
 	}
 	sr := NewStreamReader(StreamReaderParams{
 		Store:   s,
 		Compare: cmp,
+		Decoder: dec,
 		Indexes: []Index{rootToIndex(root)},
 	})
 	var idxs []Index
@@ -111,10 +116,11 @@ func ListChildren(ctx context.Context, cmp CompareFunc, s Getter, root Root) ([]
 
 // ListEntries returns a slice of all the entries pointed to by idx, directly.
 // If idx points to other indexes directly, then ListEntries returns the entries for those indexes.
-func ListEntries(ctx context.Context, cmp CompareFunc, s Getter, idx Index) ([]Entry, error) {
+func ListEntries(ctx context.Context, cmp CompareFunc, dec Decoder, s Getter, idx Index) ([]Entry, error) {
 	sr := NewStreamReader(StreamReaderParams{
 		Store:   s,
 		Compare: cmp,
+		Decoder: dec,
 		Indexes: []Index{idx},
 	})
 	return kvstreams.Collect(ctx, sr)

@@ -13,10 +13,11 @@ type (
 )
 
 // MaxEntry returns the entry in span with the greatest (ordered last) key.
-func MaxEntry(ctx context.Context, cmp CompareFunc, s Getter, x Root, span Span) (*Entry, error) {
+func MaxEntry(ctx context.Context, cmp CompareFunc, dec Decoder, s Getter, x Root, span Span) (*Entry, error) {
 	sr := NewStreamReader(StreamReaderParams{
 		Store:   s,
 		Compare: cmp,
+		Decoder: dec,
 		Indexes: []Index{rootToIndex(x)},
 	})
 	ent, err := maxEntry(ctx, sr, span.End)
@@ -36,7 +37,7 @@ func MaxEntry(ctx context.Context, cmp CompareFunc, s Getter, x Root, span Span)
 	if err != nil {
 		return nil, err
 	}
-	return MaxEntry(ctx, cmp, s, indexToRoot(idx, x.Depth-1), span)
+	return MaxEntry(ctx, cmp, dec, s, indexToRoot(idx, x.Depth-1), span)
 }
 
 func maxEntry(ctx context.Context, sr *StreamReader, under []byte) (ret *Entry, _ error) {

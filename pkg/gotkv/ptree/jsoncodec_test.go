@@ -8,7 +8,11 @@ import (
 
 type JSONEncoder struct{}
 
-func (enc *JSONEncoder) Encode(dst []byte, ent Entry) (int, error) {
+func NewJSONEncoder() Encoder {
+	return &JSONEncoder{}
+}
+
+func (enc *JSONEncoder) WriteEntry(dst []byte, ent Entry) (int, error) {
 	data, err := json.Marshal(ent)
 	if err != nil {
 		return 0, err
@@ -30,7 +34,11 @@ func (dec *JSONEncoder) Reset() {}
 
 type JSONDecoder struct{}
 
-func (dec *JSONDecoder) Decode(src []byte, ent *Entry) (int, error) {
+func NewJSONDecoder() Decoder {
+	return &JSONDecoder{}
+}
+
+func (dec *JSONDecoder) ReadEntry(src []byte, ent *Entry) (int, error) {
 	parts := bytes.SplitN(src, []byte{'\n'}, 2)
 	if len(parts) < 2 {
 		return 0, errors.New("could not parse next entry")
@@ -42,4 +50,9 @@ func (dec *JSONDecoder) Decode(src []byte, ent *Entry) (int, error) {
 	return len(entryData) + 1, nil
 }
 
-func (dec *JSONDecoder) Reset() {}
+func (dec *JSONDecoder) PeekEntry(src []byte, ent *Entry) error {
+	_, err := dec.ReadEntry(src, ent)
+	return err
+}
+
+func (dec *JSONDecoder) Reset(firstKey []byte) {}

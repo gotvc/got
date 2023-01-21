@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"log"
 	"math"
 
 	"github.com/dchest/siphash"
@@ -21,20 +20,31 @@ type Index struct {
 	First []byte
 }
 
+func (idx Index) Clone() Index {
+	return Index{
+		Ref:   idx.Ref,
+		First: append([]byte{}, idx.First...),
+	}
+}
+
 type blobReader struct {
-	compare  func(a, b []byte) int
-	br       bytes.Reader
-	firstKey []byte
-	prevKey  []byte
+	dec     Decoder
+	compare func(a, b []byte) int
+
+	buf         []byte
+	offset, len int
+
+	prevKey []byte
 }
 
 // newBlobReader reads the entries from data, using firstKey as the first key
 // firstKey and data must not be modified while using the blobReader
-func newBlobReader(firstKey []byte, data []byte) *blobReader {
+func newBlobReader(dec Decoder, firstKey []byte, data []byte) *blobReader {
+	dec.Reset(firstKey)
 	return &blobReader{
-		br:       *bytes.NewReader(data),
-		firstKey: firstKey,
-		prevKey:  append([]byte{}, firstKey...),
+		dec: dec,
+		buf: data,
+		len: len(data), // TODO: eventually we want to reuse the buffer
 	}
 }
 
@@ -85,24 +95,20 @@ func (r *blobReader) Next(ctx context.Context, ent *Entry) error {
 }
 
 func (r *blobReader) Peek(ctx context.Context, ent *Entry) error {
-	l1 := r.br.Len()
-	defer func() {
-		l2 := r.br.Len()
-		for i := 0; i < l1-l2; i++ {
-			if err := r.br.UnreadByte(); err != nil {
-				panic(err)
-			}
-		}
-	}()
-	return r.next(ctx, ent)
+	return r.dec.PeekEntry(r.buf[r.offset:r.len], ent)
 }
 
 // next reads the next entry, but does not update r.prevKey
 func (r *blobReader) next(ctx context.Context, ent *Entry) error {
-	if r.br.Len() == 0 {
+	if r.len-r.offset == 0 {
 		return kvstreams.EOS
 	}
-	return readEntry(ent, &r.br, r.prevKey, r.br.Len())
+	n, err := r.dec.ReadEntry(r.buf[r.offset:r.len], ent)
+	if err != nil {
+		return err
+	}
+	r.offset += n
+	return nil
 }
 
 func (r *blobReader) setPrevKey(x []byte) {
@@ -112,6 +118,7 @@ func (r *blobReader) setPrevKey(x []byte) {
 type StreamReader struct {
 	s   Getter
 	cmp CompareFunc
+	dec Decoder
 
 	idxs      []Index
 	nextIndex int
@@ -120,6 +127,7 @@ type StreamReader struct {
 
 type StreamReaderParams struct {
 	Store   Getter
+	Decoder Decoder
 	Compare CompareFunc
 	Indexes []Index
 }
@@ -132,8 +140,10 @@ func NewStreamReader(params StreamReaderParams) *StreamReader {
 		}
 	}
 	return &StreamReader{
-		s:    params.Store,
-		cmp:  params.Compare,
+		s:   params.Store,
+		cmp: params.Compare,
+		dec: params.Decoder,
+
 		idxs: idxs,
 	}
 }
@@ -220,7 +230,7 @@ func (r *StreamReader) getBlobReader(ctx context.Context, idx Index) (*blobReade
 	if err != nil {
 		return nil, err
 	}
-	return newBlobReader(idx.First, buf[:n]), nil
+	return newBlobReader(r.dec, idx.First, buf[:n]), nil
 }
 
 type IndexHandler = func(Index) error
@@ -291,10 +301,11 @@ func (w *StreamWriter) Append(ctx context.Context, ent Entry) error {
 	if n != entryLen {
 		return fmt.Errorf("encoder reported inaccurate entry length, claimed=%d, actual=%d", entryLen, n)
 	}
-	w.n = offset + n
 	if offset == 0 {
 		w.firstKey = append(w.firstKey[:0], ent.Key...)
 	}
+	w.n += n
+
 	w.prevKey = append(w.prevKey[:0], ent.Key...)
 	// split after writing the entry
 	if w.isSplitPoint(w.buf[offset : offset+n]) {
@@ -336,131 +347,6 @@ func (w *StreamWriter) isSplitPoint(data []byte) bool {
 	r := sum64(data, w.seed)
 	prob := math.MaxUint64 / uint64(w.meanSize) * uint64(len(data))
 	return r < prob
-}
-
-// writeUvarint writes x varint-encoded to buf
-func writeUvarint(w *bytes.Buffer, x uint64) error {
-	lenBuf := [binary.MaxVarintLen64]byte{}
-	n := binary.PutUvarint(lenBuf[:], uint64(x))
-	_, err := w.Write(lenBuf[:n])
-	return err
-}
-
-// writeLPBytes writes len(x) varint-encoded, followed by x, to buf
-func writeLPBytes(w *bytes.Buffer, x []byte) error {
-	if err := writeUvarint(w, uint64(len(x))); err != nil {
-		return err
-	}
-	_, err := w.Write(x)
-	return err
-}
-
-// readLPBytes reads a varint from br, and then appends that many bytes from br to out
-// it returns the new slice, or an error.
-func readLPBytes(out []byte, br *bytes.Reader, max int) ([]byte, error) {
-	l, err := binary.ReadUvarint(br)
-	if err != nil {
-		return nil, err
-	}
-	if l > uint64(max) {
-		return nil, errors.Errorf("lp bytestring exceeds max size %d > %d", l, max)
-	}
-	for i := uint64(0); i < l; i++ {
-		b, err := br.ReadByte()
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, b)
-	}
-	return out, nil
-}
-
-// readEntry reads an entry into out
-func readEntry(out *Entry, br *bytes.Reader, prevKey []byte, maxSize int) error {
-	totalLen, err := binary.ReadUvarint(br)
-	if err != nil {
-		return err
-	}
-	if totalLen > uint64(maxSize) {
-		return errors.Errorf("entry exceeds max size: %d > %d", totalLen, maxSize)
-	}
-	l1 := br.Len()
-	// key
-	out.Key = out.Key[:0]
-	keyBackspace, err := binary.ReadUvarint(br)
-	if err != nil {
-		return err
-	}
-	if int(keyBackspace) > len(prevKey) {
-		return errors.Errorf("backspace is > len(prevKey): prevKey=%q bs=%d", prevKey, keyBackspace)
-	}
-	end := len(prevKey) - int(keyBackspace)
-	out.Key = append(out.Key, prevKey[:end]...)
-	out.Key, err = readLPBytes(out.Key, br, MaxKeySize)
-	if err != nil {
-		return err
-	}
-	// value
-	out.Value = out.Value[:0]
-	out.Value, err = readLPBytes(out.Value, br, maxSize)
-	if err != nil {
-		return err
-	}
-	// check we read the right amount
-	l2 := br.Len()
-	if uint64(l1-l2) != totalLen {
-		log.Println(l1, l2, totalLen)
-		return errors.Errorf("invalid entry")
-	}
-	return nil
-}
-
-func writeEntry(w *bytes.Buffer, prevKey []byte, ent Entry) {
-	cpLen := commonPrefix(prevKey, ent.Key)
-	keySuffix := ent.Key[cpLen:]
-	backspace := uint32(len(prevKey) - cpLen)
-
-	l := computeEntryLen(prevKey, ent)
-	if err := writeUvarint(w, uint64(l)); err != nil {
-		panic(err)
-	}
-	if err := writeUvarint(w, uint64(backspace)); err != nil {
-		panic(err)
-	}
-	if err := writeLPBytes(w, keySuffix); err != nil {
-		panic(err)
-	}
-	if err := writeLPBytes(w, ent.Value); err != nil {
-		panic(err)
-	}
-}
-
-func computeEntryLen(prevKey []byte, ent Entry) int {
-	cpLen := commonPrefix(prevKey, ent.Key)
-	keySuffix := ent.Key[cpLen:]
-	backspace := uint32(len(prevKey) - cpLen)
-
-	var total int
-	total += uvarintLen(uint64(backspace))
-	total += uvarintLen(uint64(len(keySuffix)))
-	total += len(keySuffix)
-	total += uvarintLen(uint64(len(ent.Value)))
-	total += len(ent.Value)
-	return total
-}
-
-func uvarintLen(x uint64) int {
-	buf := [binary.MaxVarintLen64]byte{}
-	return binary.PutUvarint(buf[:], x)
-}
-
-func commonPrefix(a, b []byte) int {
-	for i := 0; i < len(a) && i < len(b); i++ {
-		if a[i] != b[i] {
-			return i
-		}
-	}
-	return min(len(a), len(b))
 }
 
 func min(a, b int) int {
