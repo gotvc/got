@@ -10,13 +10,19 @@ import (
 
 // Getter is used to retrieve nodes from storage by Ref
 type Getter interface {
-	Get(ctx context.Context, ref Ref, buf []byte) (int, error)
+	// Get fills buf with data at ref, or returns an error.
+	// Get will always return an n <= MaxSize()
+	Get(ctx context.Context, ref Ref, buf []byte) (n int, err error)
+	// MaxSize returns the maximum amount of bytes that could be stored at a ref.
 	MaxSize() int
 }
 
 // Poster is used to store nodes in storage and retrieve a Ref
 type Poster interface {
+	// Posts stores the data and returns a Ref for retrieving it.
 	Post(ctx context.Context, data []byte) (Ref, error)
+	// MaxSize is the maximum amount of data that can be Posted in bytes
+	MaxSize() int
 }
 
 type Store interface {
