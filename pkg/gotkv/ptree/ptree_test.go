@@ -7,16 +7,20 @@ import (
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/gdat"
 	"github.com/stretchr/testify/require"
 )
 
 func TestBuilder(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
-	op := gdat.NewOperator()
-	b := NewBuilder(&op, defaultAvgSize, defaultMaxSize, nil, bytes.Compare, s)
+	s := wrapStore(cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize))
+	b := NewBuilder(BuilderParams{
+		Store:    s,
+		MeanSize: defaultAvgSize,
+		MaxSize:  defaultMaxSize,
+		Seed:     nil,
+		Compare:  bytes.Compare,
+	})
 
 	generateEntries(1e4, func(ent Entry) {
 		err := b.Put(ctx, ent.Key, ent.Value)
@@ -31,8 +35,14 @@ func TestBuildIterate(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
-	op := gdat.NewOperator()
-	b := NewBuilder(&op, defaultAvgSize, defaultMaxSize, nil, bytes.Compare, s)
+	s2 := wrapStore(s)
+	b := NewBuilder(BuilderParams{
+		Store:    s2,
+		MeanSize: defaultAvgSize,
+		MaxSize:  defaultMaxSize,
+		Seed:     nil,
+		Compare:  bytes.Compare,
+	})
 
 	const N = 1e4
 	generateEntries(N, func(ent Entry) {
@@ -45,7 +55,12 @@ func TestBuildIterate(t *testing.T) {
 
 	t.Logf("produced %d blobs", s.Len())
 
-	it := NewIterator(&op, bytes.Compare, s, *root, Span{})
+	it := NewIterator(IteratorParams{
+		Store:   s2,
+		Compare: bytes.Compare,
+		Root:    *root,
+		Span:    Span{},
+	})
 	var ent Entry
 	for i := 0; i < N; i++ {
 		err := it.Next(ctx, &ent)
@@ -55,13 +70,18 @@ func TestBuildIterate(t *testing.T) {
 }
 
 func TestCopy(t *testing.T) {
+	t.Parallel()
 	averageSize := 1 << 12
 	maxSize := 1 << 16
-	t.Parallel()
 	ctx := context.Background()
-	s := cadata.NewMem(cadata.DefaultHash, maxSize)
-	op := gdat.NewOperator()
-	b := NewBuilder(&op, averageSize, maxSize, nil, bytes.Compare, s)
+	s := wrapStore(cadata.NewMem(cadata.DefaultHash, maxSize))
+	b := NewBuilder(BuilderParams{
+		Store:    s,
+		MeanSize: averageSize,
+		MaxSize:  maxSize,
+		Seed:     nil,
+		Compare:  bytes.Compare,
+	})
 	const N = 1e6
 	generateEntries(N, func(ent Entry) {
 		err := b.Put(ctx, ent.Key, ent.Value)
@@ -71,9 +91,20 @@ func TestCopy(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, root)
 
-	t.Log("being copying")
-	it := NewIterator(&op, bytes.Compare, s, *root, Span{})
-	b2 := NewBuilder(&op, averageSize, maxSize, nil, bytes.Compare, s)
+	t.Log("begin copying")
+	it := NewIterator(IteratorParams{
+		Store:   s,
+		Compare: bytes.Compare,
+		Root:    *root,
+		Span:    Span{},
+	})
+	b2 := NewBuilder(BuilderParams{
+		Store:    s,
+		MeanSize: averageSize,
+		MaxSize:  maxSize,
+		Seed:     nil,
+		Compare:  bytes.Compare,
+	})
 	require.NoError(t, Copy(ctx, b2, it))
 	root2, err := b2.Finish(ctx)
 	require.NoError(t, err)

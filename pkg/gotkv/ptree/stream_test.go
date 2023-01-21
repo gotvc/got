@@ -36,15 +36,20 @@ func TestEntry(t *testing.T) {
 func TestStreamRW(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	op := gdat.NewOperator()
 	var refs []Ref
 	var idxs []Index
 
-	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
-	sw := NewStreamWriter(s, &op, defaultAvgSize, defaultMaxSize, nil, func(idx Index) error {
-		idxs = append(idxs, idx)
-		refs = append(refs, idx.Ref)
-		return nil
+	s := wrapStore(cadata.NewMem(cadata.DefaultHash, defaultMaxSize))
+	sw := NewStreamWriter(StreamWriterParams{
+		Store:    s,
+		MeanSize: defaultAvgSize,
+		MaxSize:  defaultMaxSize,
+		Seed:     nil,
+		OnIndex: func(idx Index) error {
+			idxs = append(idxs, idx)
+			refs = append(refs, idx.Ref)
+			return nil
+		},
 	})
 
 	const N = 1e4
@@ -55,7 +60,11 @@ func TestStreamRW(t *testing.T) {
 	err := sw.Flush(ctx)
 	require.NoError(t, err)
 
-	sr := NewStreamReader(s, &op, bytes.Compare, idxs)
+	sr := NewStreamReader(StreamReaderParams{
+		Store:   s,
+		Compare: bytes.Compare,
+		Indexes: idxs,
+	})
 	var ent Entry
 	for i := 0; i < N; i++ {
 		err := sr.Next(ctx, &ent)
@@ -69,13 +78,18 @@ func TestStreamRW(t *testing.T) {
 func TestStreamWriterChunkSize(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	op := gdat.NewOperator()
 	var refs []Ref
 
-	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
-	sw := NewStreamWriter(s, &op, defaultAvgSize, defaultMaxSize, nil, func(idx Index) error {
-		refs = append(refs, idx.Ref)
-		return nil
+	s := wrapStore(cadata.NewMem(cadata.DefaultHash, defaultMaxSize))
+	sw := NewStreamWriter(StreamWriterParams{
+		Store:    s,
+		MeanSize: defaultAvgSize,
+		MaxSize:  defaultMaxSize,
+		Seed:     nil,
+		OnIndex: func(idx Index) error {
+			refs = append(refs, idx.Ref)
+			return nil
+		},
 	})
 
 	const N = 1e5
@@ -89,12 +103,11 @@ func TestStreamWriterChunkSize(t *testing.T) {
 	count := len(refs)
 	t.Log("count:", count)
 	var total int
+	buf := make([]byte, sw.maxSize)
 	for _, ref := range refs {
-		err := cadata.GetF(ctx, s, ref.CID, func(data []byte) error {
-			total += len(data)
-			return nil
-		})
+		n, err := s.Get(ctx, ref, buf)
 		require.NoError(t, err)
+		total += n
 	}
 	avgSize := total / count
 	withinTolerance(t, avgSize, defaultAvgSize, 0.1)
@@ -117,10 +130,13 @@ func BenchmarkStreamWriter(b *testing.B) {
 	b.ReportAllocs()
 
 	ctx := context.Background()
-	op := gdat.NewOperator()
-	s := cadata.NewVoid(gdat.Hash, defaultMaxSize)
-	sw := NewStreamWriter(s, &op, defaultAvgSize, defaultMaxSize, nil, func(idx Index) error {
-		return nil
+	s := wrapStore(cadata.NewVoid(gdat.Hash, defaultMaxSize))
+	sw := NewStreamWriter(StreamWriterParams{
+		Store:    s,
+		MeanSize: defaultAvgSize,
+		MaxSize:  defaultMaxSize,
+		Seed:     nil,
+		OnIndex:  func(idx Index) error { return nil },
 	})
 	generateEntries(b.N, func(ent Entry) {
 		err := sw.Append(ctx, ent)

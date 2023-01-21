@@ -3,16 +3,14 @@ package ptree
 import (
 	"context"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/pkg/errors"
 )
 
 type Builder struct {
-	s                cadata.Store
-	op               *gdat.Operator
-	avgSize, maxSize int
-	seed             *[16]byte
+	s                 Poster
+	meanSize, maxSize int
+	seed              *[16]byte
 
 	levels []*StreamWriter
 	isDone bool
@@ -21,13 +19,20 @@ type Builder struct {
 	ctx context.Context
 }
 
-func NewBuilder(op *gdat.Operator, avgSize, maxSize int, seed *[16]byte, cmp CompareFunc, s cadata.Store) *Builder {
+type BuilderParams struct {
+	Store    Poster
+	MeanSize int
+	MaxSize  int
+	Seed     *[16]byte
+	Compare  CompareFunc
+}
+
+func NewBuilder(params BuilderParams) *Builder {
 	b := &Builder{
-		s:       s,
-		op:      op,
-		avgSize: avgSize,
-		maxSize: maxSize,
-		seed:    seed,
+		s:        params.Store,
+		meanSize: params.MeanSize,
+		maxSize:  params.MaxSize,
+		seed:     params.Seed,
 	}
 	b.levels = []*StreamWriter{
 		b.makeWriter(0),
@@ -36,20 +41,27 @@ func NewBuilder(op *gdat.Operator, avgSize, maxSize int, seed *[16]byte, cmp Com
 }
 
 func (b *Builder) makeWriter(i int) *StreamWriter {
-	return NewStreamWriter(b.s, b.op, b.avgSize, b.maxSize, b.seed, func(idx Index) error {
-		if b.isDone && i == len(b.levels)-1 {
-			b.root = &Root{
-				Ref:   idx.Ref,
-				First: append([]byte{}, idx.First...),
-				Depth: uint8(i),
+	params := StreamWriterParams{
+		Store:    b.s,
+		MaxSize:  b.maxSize,
+		MeanSize: b.meanSize,
+		Seed:     b.seed,
+		OnIndex: func(idx Index) error {
+			if b.isDone && i == len(b.levels)-1 {
+				b.root = &Root{
+					Ref:   idx.Ref,
+					First: append([]byte{}, idx.First...),
+					Depth: uint8(i),
+				}
+				return nil
 			}
-			return nil
-		}
-		return b.getWriter(i+1).Append(b.ctx, Entry{
-			Key:   idx.First,
-			Value: gdat.MarshalRef(idx.Ref),
-		})
-	})
+			return b.getWriter(i+1).Append(b.ctx, Entry{
+				Key:   idx.First,
+				Value: gdat.MarshalRef(idx.Ref),
+			})
+		},
+	}
+	return NewStreamWriter(params)
 }
 
 func (b *Builder) getWriter(level int) *StreamWriter {
@@ -98,11 +110,11 @@ func (b *Builder) Finish(ctx context.Context) (*Root, error) {
 	}
 	// handle empty root
 	if b.root == nil {
-		ref, err := b.op.Post(ctx, b.s, nil)
+		ref, err := b.s.Post(ctx, nil)
 		if err != nil {
 			return nil, err
 		}
-		b.root = &Root{Ref: *ref, Depth: 1}
+		b.root = &Root{Ref: ref, Depth: 1}
 	}
 	return b.root, nil
 }
