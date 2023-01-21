@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/dchest/siphash"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
@@ -30,8 +29,8 @@ type blobReader struct {
 
 // newBlobReader reads the entries from data, using firstKey as the first key
 // firstKey and data must not be modified while using the blobReader
-func newBlobReader(firstKey []byte, data []byte) blobReader {
-	return blobReader{
+func newBlobReader(firstKey []byte, data []byte) *blobReader {
+	return &blobReader{
 		br:       *bytes.NewReader(data),
 		firstKey: firstKey,
 		prevKey:  append([]byte{}, firstKey...),
@@ -110,22 +109,30 @@ func (r *blobReader) setPrevKey(x []byte) {
 }
 
 type StreamReader struct {
-	s         cadata.Getter
-	op        *gdat.Operator
+	s   Getter
+	cmp CompareFunc
+
 	idxs      []Index
 	nextIndex int
 	br        *blobReader
 }
 
-func NewStreamReader(s cadata.Getter, op *gdat.Operator, cmp CompareFunc, idxs []Index) *StreamReader {
+type StreamReaderParams struct {
+	Store   Getter
+	Compare CompareFunc
+	Indexes []Index
+}
+
+func NewStreamReader(params StreamReaderParams) *StreamReader {
+	idxs := params.Indexes
 	for i := 0; i < len(idxs)-1; i++ {
 		if bytes.Compare(idxs[i].First, idxs[i+1].First) >= 0 {
 			panic(fmt.Sprintf("StreamReader: unordered indexes %q >= %q", idxs[i].First, idxs[i+1].First))
 		}
 	}
 	return &StreamReader{
-		s:    s,
-		op:   op,
+		s:    params.Store,
+		cmp:  params.Compare,
 		idxs: idxs,
 	}
 }
@@ -207,45 +214,51 @@ func (r *StreamReader) withBlobReader(ctx context.Context, fn func(*blobReader) 
 }
 
 func (r *StreamReader) getBlobReader(ctx context.Context, idx Index) (*blobReader, error) {
-	var br blobReader
-	err := r.op.GetF(ctx, r.s, idx.Ref, func(data []byte) error {
-		data2 := append([]byte{}, data...)
-		br = newBlobReader(idx.First, data2)
-		return nil
-	})
-	return &br, err
+	buf := make([]byte, r.s.MaxSize())
+	n, err := r.s.Get(ctx, idx.Ref, buf)
+	if err != nil {
+		return nil, err
+	}
+	return newBlobReader(idx.First, buf[:n]), nil
 }
 
 type IndexHandler = func(Index) error
 
 type StreamWriter struct {
-	s       cadata.Store
-	op      *gdat.Operator
+	s       Poster
 	compare func(a, b []byte) int
 	onIndex IndexHandler
 
-	seed             *[16]byte
-	avgSize, maxSize int
-	buf              bytes.Buffer
+	seed              *[16]byte
+	meanSize, maxSize int
+	buf               bytes.Buffer
 
 	firstKey []byte
 	prevKey  []byte
 	ctx      context.Context
 }
 
-func NewStreamWriter(s cadata.Store, op *gdat.Operator, avgSize, maxSize int, seed *[16]byte, onIndex IndexHandler) *StreamWriter {
-	if seed == nil {
-		seed = new([16]byte)
+type StreamWriterParams struct {
+	Store    Poster
+	Seed     *[16]byte
+	MeanSize int
+	MaxSize  int
+	Compare  func(a, b []byte) int
+	OnIndex  IndexHandler
+}
+
+func NewStreamWriter(params StreamWriterParams) *StreamWriter {
+	if params.Seed == nil {
+		params.Seed = new([16]byte)
 	}
 	w := &StreamWriter{
-		s:       s,
-		op:      op,
+		s:       params.Store,
 		compare: bytes.Compare,
-		onIndex: onIndex,
+		onIndex: params.OnIndex,
 
-		seed:    seed,
-		avgSize: avgSize,
-		maxSize: maxSize,
+		seed:     params.Seed,
+		meanSize: params.MeanSize,
+		maxSize:  params.MaxSize,
 	}
 	return w
 }
@@ -304,13 +317,13 @@ func (w *StreamWriter) Flush(ctx context.Context) error {
 		}
 		return nil
 	}
-	ref, err := w.op.Post(ctx, w.s, w.buf.Bytes())
+	ref, err := w.s.Post(ctx, w.buf.Bytes())
 	if err != nil {
 		return err
 	}
 	if err := w.onIndex(Index{
 		First: w.firstKey,
-		Ref:   *ref,
+		Ref:   ref,
 	}); err != nil {
 		return err
 	}
@@ -325,7 +338,7 @@ func (w *StreamWriter) setPrevKey(k []byte) {
 
 func (w *StreamWriter) isSplitPoint(data []byte) bool {
 	r := sum64(data, w.seed)
-	prob := math.MaxUint64 / uint64(w.avgSize) * uint64(len(data))
+	prob := math.MaxUint64 / uint64(w.meanSize) * uint64(len(data))
 	return r < prob
 }
 

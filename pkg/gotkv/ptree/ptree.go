@@ -3,11 +3,32 @@ package ptree
 import (
 	"context"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/pkg/errors"
 )
+
+// Getter is used to retrieve nodes from storage by Ref
+type Getter interface {
+	// Get fills buf with data at ref, or returns an error.
+	// Get will always return an n <= MaxSize()
+	Get(ctx context.Context, ref Ref, buf []byte) (n int, err error)
+	// MaxSize returns the maximum amount of bytes that could be stored at a ref.
+	MaxSize() int
+}
+
+// Poster is used to store nodes in storage and retrieve a Ref
+type Poster interface {
+	// Posts stores the data and returns a Ref for retrieving it.
+	Post(ctx context.Context, data []byte) (Ref, error)
+	// MaxSize is the maximum amount of data that can be Posted in bytes
+	MaxSize() int
+}
+
+type Store interface {
+	Getter
+	Poster
+}
 
 // CompareFunc compares 2 keys
 type CompareFunc = func(a, b []byte) int
@@ -42,11 +63,15 @@ func Copy(ctx context.Context, b *Builder, it *Iterator) error {
 }
 
 // ListChildren returns the immediate children of root if any.
-func ListChildren(ctx context.Context, op *gdat.Operator, cmp CompareFunc, s cadata.Getter, root Root) ([]Index, error) {
+func ListChildren(ctx context.Context, cmp CompareFunc, s Getter, root Root) ([]Index, error) {
 	if PointsToEntries(root) {
 		return nil, errors.Errorf("cannot list children of root with depth=%d", root.Depth)
 	}
-	sr := NewStreamReader(s, op, cmp, []Index{rootToIndex(root)})
+	sr := NewStreamReader(StreamReaderParams{
+		Store:   s,
+		Compare: cmp,
+		Indexes: []Index{rootToIndex(root)},
+	})
 	var idxs []Index
 	var ent Entry
 	for {
@@ -67,8 +92,12 @@ func ListChildren(ctx context.Context, op *gdat.Operator, cmp CompareFunc, s cad
 
 // ListEntries returns a slice of all the entries pointed to by idx, directly.
 // If idx points to other indexes directly, then ListEntries returns the entries for those indexes.
-func ListEntries(ctx context.Context, op *gdat.Operator, cmp CompareFunc, s cadata.Getter, idx Index) ([]Entry, error) {
-	sr := NewStreamReader(s, op, cmp, []Index{idx})
+func ListEntries(ctx context.Context, cmp CompareFunc, s Getter, idx Index) ([]Entry, error) {
+	sr := NewStreamReader(StreamReaderParams{
+		Store:   s,
+		Compare: cmp,
+		Indexes: []Index{idx},
+	})
 	return kvstreams.Collect(ctx, sr)
 }
 

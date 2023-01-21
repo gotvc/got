@@ -11,13 +11,13 @@ import (
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
 
-func DebugTree(ctx context.Context, cmp CompareFunc, s cadata.Store, x Root, w io.Writer) error {
+func DebugTree(ctx context.Context, cmp CompareFunc, cadataStore cadata.Store, x Root, w io.Writer) error {
+	s := wrapStore(cadataStore)
 	bw, ok := w.(*bufio.Writer)
 	if !ok {
 		bw = bufio.NewWriter(w)
 	}
 	max := x.Depth
-	op := gdat.NewOperator()
 	var debugTree func(Root)
 	debugTree = func(x Root) {
 		indent := ""
@@ -25,7 +25,11 @@ func DebugTree(ctx context.Context, cmp CompareFunc, s cadata.Store, x Root, w i
 			indent += "  "
 		}
 		ctx := context.TODO()
-		sr := NewStreamReader(s, &op, cmp, []Index{{Ref: x.Ref, First: x.First}})
+		sr := NewStreamReader(StreamReaderParams{
+			Store:   s,
+			Compare: cmp,
+			Indexes: []Index{{Ref: x.Ref, First: x.First}},
+		})
 		fmt.Fprintf(bw, "%sTREE NODE: %s %d\n", indent, x.Ref.CID.String(), x.Depth)
 		if x.Depth == 0 {
 			for {
@@ -58,4 +62,30 @@ func DebugTree(ctx context.Context, cmp CompareFunc, s cadata.Store, x Root, w i
 	}
 	debugTree(x)
 	return bw.Flush()
+}
+
+func wrapStore(s cadata.Store) Store {
+	op := gdat.NewOperator()
+	return &storeWrapper{s: s, op: op}
+}
+
+type storeWrapper struct {
+	s  cadata.Store
+	op gdat.Operator
+}
+
+func (sw *storeWrapper) Post(ctx context.Context, data []byte) (Ref, error) {
+	ref, err := sw.op.Post(ctx, sw.s, data)
+	if err != nil {
+		return Ref{}, err
+	}
+	return *ref, nil
+}
+
+func (sw *storeWrapper) Get(ctx context.Context, ref Ref, buf []byte) (int, error) {
+	return sw.op.Read(ctx, sw.s, ref, buf)
+}
+
+func (sw *storeWrapper) MaxSize() int {
+	return sw.s.MaxSize()
 }

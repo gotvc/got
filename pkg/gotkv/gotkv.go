@@ -57,7 +57,8 @@ func CopyAll(ctx context.Context, b *Builder, it kvstreams.Iterator) error {
 
 // Sync ensures dst has all the data reachable from x.
 func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Root, entryFn func(Entry) error) error {
-	return do(ctx, &o.dop, bytes.Compare, src, x, doParams{
+	s := &ptreeGetter{op: &o.dop, s: src}
+	return do(ctx, s, x, doer{
 		CanSkip: func(r Root) (bool, error) {
 			return cadata.Exists(ctx, dst, r.Ref.CID)
 		},
@@ -71,8 +72,8 @@ func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Roo
 // Populate adds all blobs reachable from x to set.
 // If an item is in set all of the blobs reachable from it are also assumed to also be in set.
 func (o *Operator) Populate(ctx context.Context, s Store, x Root, set cadata.Set, entryFn func(ent Entry) error) error {
-	dop := gdat.NewOperator()
-	return do(ctx, &dop, o.compare, s, x, doParams{
+	ps := &ptreeGetter{op: &o.dop, s: s}
+	return do(ctx, ps, x, doer{
 		CanSkip: func(r Root) (bool, error) {
 			return set.Exists(ctx, r.Ref.CID)
 		},
@@ -83,7 +84,7 @@ func (o *Operator) Populate(ctx context.Context, s Store, x Root, set cadata.Set
 	})
 }
 
-type doParams struct {
+type doer struct {
 	// CanSkip is called before processing each node.
 	// CanSkip should return true if the node can be skipped
 	CanSkip func(r Root) (bool, error)
@@ -93,14 +94,15 @@ type doParams struct {
 	NodeFn func(r Root) error
 }
 
-func do(ctx context.Context, dop *gdat.Operator, cmp ptree.CompareFunc, s Getter, x Root, p doParams) error {
+func do(ctx context.Context, s ptree.Getter, x Root, p doer) error {
+	cmp := bytes.Compare
 	if canSkip, err := p.CanSkip(x); err != nil {
 		return err
 	} else if canSkip {
 		return nil
 	}
 	if ptree.PointsToEntries(x) {
-		ents, err := ptree.ListEntries(ctx, dop, cmp, s, ptree.Index{First: x.First, Ref: x.Ref})
+		ents, err := ptree.ListEntries(ctx, cmp, s, ptree.Index{First: x.First, Ref: x.Ref})
 		if err != nil {
 			return err
 		}
@@ -110,7 +112,7 @@ func do(ctx context.Context, dop *gdat.Operator, cmp ptree.CompareFunc, s Getter
 			}
 		}
 	} else {
-		idxs, err := ptree.ListChildren(ctx, dop, cmp, s, x)
+		idxs, err := ptree.ListChildren(ctx, cmp, s, x)
 		if err != nil {
 			return err
 		}
@@ -122,7 +124,7 @@ func do(ctx context.Context, dop *gdat.Operator, cmp ptree.CompareFunc, s Getter
 				Depth: x.Depth - 1,
 			}
 			eg.Go(func() error {
-				return do(ctx, dop, cmp, s, root2, p)
+				return do(ctx, s, root2, p)
 			})
 		}
 		if err := eg.Wait(); err != nil {
@@ -130,4 +132,38 @@ func do(ctx context.Context, dop *gdat.Operator, cmp ptree.CompareFunc, s Getter
 		}
 	}
 	return p.NodeFn(x)
+}
+
+type ptreeGetter struct {
+	op *gdat.Operator
+	s  cadata.Getter
+}
+
+func (s *ptreeGetter) Get(ctx context.Context, ref Ref, buf []byte) (int, error) {
+	return s.op.Read(ctx, s.s, ref, buf)
+}
+
+func (s *ptreeGetter) MaxSize() int {
+	return s.s.MaxSize()
+}
+
+type ptreeStore struct {
+	op *gdat.Operator
+	s  cadata.Store
+}
+
+func (s *ptreeStore) Post(ctx context.Context, data []byte) (Ref, error) {
+	ref, err := s.op.Post(ctx, s.s, data)
+	if err != nil {
+		return Ref{}, err
+	}
+	return *ref, nil
+}
+
+func (s *ptreeStore) Get(ctx context.Context, ref Ref, buf []byte) (int, error) {
+	return s.op.Read(ctx, s.s, ref, buf)
+}
+
+func (s *ptreeStore) MaxSize() int {
+	return s.s.MaxSize()
 }

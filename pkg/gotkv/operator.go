@@ -39,33 +39,25 @@ func WithSeed(seed *[16]byte) Option {
 	}
 }
 
-func WithCompare(fn func(a, b []byte) int) Option {
-	return func(o *Operator) {
-		o.compare = fn
-	}
-}
-
 // Operator holds common configuration for operations on gotkv instances.
 // It has nothing to do with the state of a particular gotkv instance. It is NOT analagous to a collection object.
 // It is safe for use by multiple goroutines.
 type Operator struct {
-	dop                  gdat.Operator
-	maxSize, averageSize int
-	seed                 *[16]byte
-	compare              func(a, b []byte) int
+	dop               gdat.Operator
+	maxSize, meanSize int
+	seed              *[16]byte
 }
 
-// NewOperator returns an operator which will create nodes with average size `avgSize`
+// NewOperator returns an operator which will create nodes with mean size `meanSize`
 // and maximum size `maxSize`.
-func NewOperator(avgSize, maxSize int, opts ...Option) Operator {
+func NewOperator(meanSize, maxSize int, opts ...Option) Operator {
 	op := Operator{
-		dop:         gdat.NewOperator(),
-		averageSize: avgSize,
-		maxSize:     maxSize,
-		compare:     bytes.Compare,
+		dop:      gdat.NewOperator(),
+		meanSize: meanSize,
+		maxSize:  maxSize,
 	}
-	if op.averageSize <= 0 {
-		panic(fmt.Sprintf("gotkv.NewOperator: invalid average size %d", op.averageSize))
+	if op.meanSize <= 0 {
+		panic(fmt.Sprintf("gotkv.NewOperator: invalid average size %d", op.meanSize))
 	}
 	if op.maxSize <= 0 {
 		panic(fmt.Sprintf("gotkv.NewOperator: invalid max size %d", op.maxSize))
@@ -77,7 +69,7 @@ func NewOperator(avgSize, maxSize int, opts ...Option) Operator {
 }
 
 func (o *Operator) MeanSize() int {
-	return o.averageSize
+	return o.meanSize
 }
 
 func (o *Operator) MaxSize() int {
@@ -141,7 +133,8 @@ func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) 
 
 // MaxEntry returns the entry in the instance x, within span, with the greatest lexicographic value.
 func (o *Operator) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span Span) (*Entry, error) {
-	return ptree.MaxEntry(ctx, o.compare, s, x, span)
+	ps := &ptreeGetter{op: &o.dop, s: s}
+	return ptree.MaxEntry(ctx, bytes.Compare, ps, x, span)
 }
 
 // AddPrefix prepends prefix to all the keys in instance x.
@@ -154,7 +147,8 @@ func (o *Operator) AddPrefix(x Root, prefix []byte) Root {
 // RemotePrefix errors if all the entries in x do not share a common prefix.
 // This is a O(1) operation.
 func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (*Root, error) {
-	return ptree.RemovePrefix(ctx, o.compare, s, x, prefix)
+	ps := &ptreeGetter{op: &o.dop, s: s}
+	return ptree.RemovePrefix(ctx, bytes.Compare, ps, x, prefix)
 }
 
 // NewBuilder returns a Builder for constructing a GotKV instance.
@@ -166,11 +160,22 @@ func (o *Operator) NewBuilder(s Store) *Builder {
 // NewIterator returns an iterator for the instance rooted at x, which
 // will emit all keys within span in the instance.
 func (o *Operator) NewIterator(s Getter, root Root, span Span) *Iterator {
-	return ptree.NewIterator(&o.dop, o.compare, s, root, span)
+	return ptree.NewIterator(ptree.IteratorParams{
+		Store:   &ptreeGetter{op: &o.dop, s: s},
+		Compare: bytes.Compare,
+		Root:    root,
+		Span:    span,
+	})
 }
 
 func (o *Operator) makeBuilder(s cadata.Store) *ptree.Builder {
-	return ptree.NewBuilder(&o.dop, o.averageSize, o.maxSize, o.seed, o.compare, s)
+	return ptree.NewBuilder(ptree.BuilderParams{
+		Store:    &ptreeStore{op: &o.dop, s: s},
+		MeanSize: o.meanSize,
+		MaxSize:  o.maxSize,
+		Seed:     o.seed,
+		Compare:  bytes.Compare,
+	})
 }
 
 // ForEach calls fn with every entry, in the GotKV instance rooted at root, contained in span, in lexicographical order.

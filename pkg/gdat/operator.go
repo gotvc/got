@@ -56,7 +56,7 @@ func NewOperator(opts ...Option) Operator {
 	return o
 }
 
-func (o *Operator) Post(ctx context.Context, s Store, data []byte) (*Ref, error) {
+func (o *Operator) Post(ctx context.Context, s cadata.Poster, data []byte) (*Ref, error) {
 	id, dek, err := o.postEncrypt(ctx, s, o.kf, data)
 	if err != nil {
 		return nil, err

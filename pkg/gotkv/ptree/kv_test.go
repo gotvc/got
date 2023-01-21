@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/stretchr/testify/require"
 )
@@ -15,8 +14,13 @@ func TestAddPrefix(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
-	op := gdat.NewOperator()
-	b := NewBuilder(&op, defaultAvgSize, defaultMaxSize, nil, bytes.Compare, s)
+	b := NewBuilder(BuilderParams{
+		Store:    wrapStore(s),
+		MeanSize: defaultAvgSize,
+		MaxSize:  defaultMaxSize,
+		Seed:     nil,
+		Compare:  bytes.Compare,
+	})
 
 	const N = 1e4
 	generateEntries(N, func(ent Entry) {
@@ -32,7 +36,12 @@ func TestAddPrefix(t *testing.T) {
 
 	t.Logf("produced %d blobs", s.Len())
 
-	it := NewIterator(&op, bytes.Compare, s, root2, kvstreams.TotalSpan())
+	it := NewIterator(IteratorParams{
+		Compare: bytes.Compare,
+		Store:   wrapStore(s),
+		Root:    root2,
+		Span:    kvstreams.TotalSpan(),
+	})
 	var ent Entry
 	for i := 0; i < N; i++ {
 		err := it.Next(ctx, &ent)

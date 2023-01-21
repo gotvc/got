@@ -4,16 +4,13 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/pkg/errors"
 )
 
 type Iterator struct {
-	op      *gdat.Operator
+	s       Getter
 	compare CompareFunc
-	s       cadata.Getter
 	root    Root
 	span    Span
 
@@ -21,16 +18,22 @@ type Iterator struct {
 	pos    []byte
 }
 
-func NewIterator(op *gdat.Operator, cmp CompareFunc, s cadata.Getter, root Root, span Span) *Iterator {
+type IteratorParams struct {
+	Compare CompareFunc
+	Store   Getter
+	Root    Root
+	Span    Span
+}
+
+func NewIterator(params IteratorParams) *Iterator {
 	it := &Iterator{
-		s:      s,
-		op:     op,
-		root:   root,
-		span:   kvstreams.CloneSpan(span),
-		levels: make([][]Entry, root.Depth+2),
+		s:      params.Store,
+		root:   params.Root,
+		span:   kvstreams.CloneSpan(params.Span),
+		levels: make([][]Entry, params.Root.Depth+2),
 	}
-	it.levels[root.Depth+1] = []Entry{indexToEntry(rootToIndex(root))}
-	it.setPos(span.Begin)
+	it.levels[it.root.Depth+1] = []Entry{indexToEntry(rootToIndex(it.root))}
+	it.setPos(it.span.Begin)
 	return it
 }
 
@@ -101,7 +104,7 @@ func (it *Iterator) getEntries(ctx context.Context, level int) ([]Entry, error) 
 			return nil, errors.Wrapf(err, "converting entry to index at level %d", level)
 		}
 		it.advanceLevel(level+1, false)
-		ents, err := ListEntries(ctx, it.op, it.compare, it.s, idx)
+		ents, err := ListEntries(ctx, it.compare, it.s, idx)
 		if err != nil {
 			return nil, err
 		}
