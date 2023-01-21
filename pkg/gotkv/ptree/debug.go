@@ -66,12 +66,12 @@ func DebugTree(ctx context.Context, cmp CompareFunc, cadataStore cadata.Store, x
 
 func wrapStore(s cadata.Store) Store {
 	op := gdat.NewOperator()
-	return &storeWrapper{s: s, op: op}
+	return &storeWrapper{s: s, op: &op}
 }
 
 type storeWrapper struct {
 	s  cadata.Store
-	op gdat.Operator
+	op *gdat.Operator
 }
 
 func (sw *storeWrapper) Post(ctx context.Context, data []byte) (Ref, error) {

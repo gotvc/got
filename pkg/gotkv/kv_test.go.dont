@@ -1,4 +1,4 @@
-package ptree
+package gotkv
 
 import (
 	"bytes"

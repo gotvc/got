@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"log"
 	"math"
 
 	"github.com/dchest/siphash"
@@ -225,17 +226,18 @@ func (r *StreamReader) getBlobReader(ctx context.Context, idx Index) (*blobReade
 type IndexHandler = func(Index) error
 
 type StreamWriter struct {
-	s       Poster
-	compare func(a, b []byte) int
-	onIndex IndexHandler
-
+	s                 Poster
+	enc               Encoder
+	compare           func(a, b []byte) int
+	onIndex           IndexHandler
 	seed              *[16]byte
 	meanSize, maxSize int
-	buf               bytes.Buffer
+
+	buf []byte
+	n   int
 
 	firstKey []byte
 	prevKey  []byte
-	ctx      context.Context
 }
 
 type StreamWriterParams struct {
@@ -244,6 +246,7 @@ type StreamWriterParams struct {
 	MeanSize int
 	MaxSize  int
 	Compare  func(a, b []byte) int
+	Encoder  Encoder
 	OnIndex  IndexHandler
 }
 
@@ -252,72 +255,68 @@ func NewStreamWriter(params StreamWriterParams) *StreamWriter {
 		params.Seed = new([16]byte)
 	}
 	w := &StreamWriter{
-		s:       params.Store,
-		compare: bytes.Compare,
-		onIndex: params.OnIndex,
-
+		s:        params.Store,
+		compare:  bytes.Compare,
+		enc:      params.Encoder,
+		onIndex:  params.OnIndex,
 		seed:     params.Seed,
 		meanSize: params.MeanSize,
 		maxSize:  params.MaxSize,
+
+		buf: make([]byte, params.MaxSize),
 	}
+	w.enc.Reset()
 	return w
 }
 
 func (w *StreamWriter) Append(ctx context.Context, ent Entry) error {
-	w.ctx = ctx
-	defer func() { w.ctx = nil }()
-
 	if w.prevKey != nil && w.compare(ent.Key, w.prevKey) <= 0 {
 		panic(fmt.Sprintf("out of order key: prev=%q key=%q", w.prevKey, ent.Key))
 	}
-	entryLen := w.computeEntryLen(ent)
+	entryLen := w.enc.EncodedLen(ent)
 	if entryLen > w.maxSize {
 		return errors.Errorf("entry (size=%d) exceeds maximum size %d", entryLen, w.maxSize)
 	}
-	if entryLen+w.buf.Len() > w.maxSize {
+	if entryLen+w.n > w.maxSize {
 		if err := w.Flush(ctx); err != nil {
 			return err
 		}
 	}
 
-	offset := w.buf.Len()
-	if w.firstKey == nil {
-		if w.buf.Len() > 0 {
-			panic("writeFirst called with partially full chunker")
-		}
-		if w.firstKey != nil {
-			panic("w.firstKey should be nil")
-		}
-		w.firstKey = append([]byte{}, ent.Key...)
-		// the first key is always fully compressed.  It is provided from the layer above.
-		writeEntry(&w.buf, w.firstKey, ent)
-	} else {
-		writeEntry(&w.buf, w.prevKey, ent)
+	offset := w.n
+	n, err := w.enc.WriteEntry(w.buf[offset:], ent)
+	if err != nil {
+		return err
 	}
+	if n != entryLen {
+		return fmt.Errorf("encoder reported inaccurate entry length, claimed=%d, actual=%d", entryLen, n)
+	}
+	w.n = offset + n
+	if offset == 0 {
+		w.firstKey = append(w.firstKey[:0], ent.Key...)
+	}
+	w.prevKey = append(w.prevKey[:0], ent.Key...)
 	// split after writing the entry
-	if w.isSplitPoint(w.buf.Bytes()[offset:]) {
+	if w.isSplitPoint(w.buf[offset : offset+n]) {
 		if err := w.Flush(ctx); err != nil {
 			return err
 		}
 	}
-	w.setPrevKey(ent.Key)
 	return nil
 }
 
 func (w *StreamWriter) Buffered() int {
-	return w.buf.Len()
+	return w.n
 }
 
 func (w *StreamWriter) Flush(ctx context.Context) error {
-	w.ctx = ctx
-	defer func() { w.ctx = nil }()
 	if w.Buffered() == 0 {
-		if w.firstKey != nil {
+		if len(w.firstKey) != 0 {
 			panic("StreamWriter: firstKey set for empty buffer")
 		}
 		return nil
 	}
-	ref, err := w.s.Post(ctx, w.buf.Bytes())
+	ref, err := w.s.Post(ctx, w.buf[:w.n])
 	if err != nil {
 		return err
 	}
@@ -327,27 +326,16 @@ func (w *StreamWriter) Flush(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
-	w.firstKey = nil
-	w.buf.Reset()
+	w.firstKey = w.firstKey[:0]
+	w.n = 0
+	w.enc.Reset()
 	return nil
-}
-
-func (w *StreamWriter) setPrevKey(k []byte) {
-	w.prevKey = append(w.prevKey[:0], k...)
 }
 
 func (w *StreamWriter) isSplitPoint(data []byte) bool {
 	r := sum64(data, w.seed)
 	prob := math.MaxUint64 / uint64(w.meanSize) * uint64(len(data))
 	return r < prob
-}
-
-func (w *StreamWriter) computeEntryLen(ent Entry) int {
-	prevKey := w.prevKey
-	if w.firstKey == nil {
-		prevKey = ent.Key
-	}
-	return computeEntryLen(prevKey, ent)
 }
 
 // writeUvarint writes x varint-encoded to buf
@@ -421,6 +409,7 @@ func readEntry(out *Entry, br *bytes.Reader, prevKey []byte, maxSize int) error 
 	// check we read the right amount
 	l2 := br.Len()
 	if uint64(l1-l2) != totalLen {
+		log.Println(l1, l2, totalLen)
 		return errors.Errorf("invalid entry")
 	}
 	return nil

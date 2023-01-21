@@ -137,18 +137,41 @@ func (o *Operator) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span S
 	return ptree.MaxEntry(ctx, bytes.Compare, ps, x, span)
 }
 
+func (o *Operator) HasPrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (bool, error) {
+	if !bytes.HasPrefix(x.First, prefix) {
+		return false, nil
+	}
+	maxEnt, err := o.MaxEntry(ctx, s, x, kvstreams.TotalSpan())
+	if err != nil {
+		return false, err
+	}
+	if !bytes.HasPrefix(maxEnt.Key, prefix) {
+		return false, nil
+	}
+	return true, nil
+}
+
 // AddPrefix prepends prefix to all the keys in instance x.
 // This is a O(1) operation.
 func (o *Operator) AddPrefix(x Root, prefix []byte) Root {
-	return ptree.AddPrefix(x, prefix)
+	return AddPrefix(x, prefix)
 }
 
 // RemovePrefix removes a prefix from all the keys in instance x.
 // RemotePrefix errors if all the entries in x do not share a common prefix.
 // This is a O(1) operation.
 func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (*Root, error) {
-	ps := &ptreeGetter{op: &o.dop, s: s}
-	return ptree.RemovePrefix(ctx, bytes.Compare, ps, x, prefix)
+	if yes, err := o.HasPrefix(ctx, s, x, prefix); err != nil {
+		return nil, err
+	} else if yes {
+		return nil, errors.Errorf("tree does not have prefix %q", prefix)
+	}
+	y := Root{
+		First: append([]byte{}, x.First[len(prefix):]...),
+		Ref:   x.Ref,
+		Depth: x.Depth,
+	}
+	return &y, nil
 }
 
 // NewBuilder returns a Builder for constructing a GotKV instance.
@@ -174,7 +197,10 @@ func (o *Operator) makeBuilder(s cadata.Store) *ptree.Builder {
 		MeanSize: o.meanSize,
 		MaxSize:  o.maxSize,
 		Seed:     o.seed,
-		Compare:  bytes.Compare,
+		NewEncoder: func() ptree.Encoder {
+			return &Encoder{}
+		},
+		Compare: bytes.Compare,
 	})
 }
 

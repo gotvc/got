@@ -30,6 +30,25 @@ type Store interface {
 	Poster
 }
 
+// ErrOutOfRoom is returned when an encoder does not have enough room to write an entry.
+var ErrOutOfRoom = errors.New("out of room")
+
+type Encoder interface {
+	// WriteEntry encodes ent to dst and returns the number of bytes written or an error.
+	// ErrOutOfRoom should be returned to indicate that the entry will not fit in the buffer.
+	WriteEntry(dst []byte, ent kvstreams.Entry) (int, error)
+	// EncodednLen returns the number of bytes that it would take to encode ent.
+	// Calling EncodedLen should not affect the state of the Encoder.
+	EncodedLen(ent kvstreams.Entry) int
+	// Reset returns the encoder to it's orginally contructed state.
+	Reset()
+}
+
+type Decoder interface {
+	ReadEntry(src []byte, ent *kvstreams.Entry) (int, error)
+	Reset()
+}
+
 // CompareFunc compares 2 keys
 type CompareFunc = func(a, b []byte) int
 

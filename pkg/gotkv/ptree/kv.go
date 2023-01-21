@@ -5,7 +5,6 @@ import (
 	"context"
 
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
-	"github.com/pkg/errors"
 )
 
 type (
@@ -54,47 +53,4 @@ func maxEntry(ctx context.Context, sr *StreamReader, under []byte) (ret *Entry, 
 		ret = &ent2
 	}
 	return ret, nil
-}
-
-// AddPrefix returns a new version of root with the prefix prepended to all the keys
-func AddPrefix(x Root, prefix []byte) Root {
-	var first []byte
-	first = append(first, prefix...)
-	first = append(first, x.First...)
-	y := Root{
-		First: first,
-		Ref:   x.Ref,
-		Depth: x.Depth,
-	}
-	return y
-}
-
-// RemovePrefix returns a new version of root with the prefix removed from all the keys
-func RemovePrefix(ctx context.Context, cmp CompareFunc, s Getter, x Root, prefix []byte) (*Root, error) {
-	if yes, err := HasPrefix(ctx, cmp, s, x, prefix); err != nil {
-		return nil, err
-	} else if yes {
-		return nil, errors.Errorf("tree does not have prefix %q", prefix)
-	}
-	y := Root{
-		First: append([]byte{}, x.First[len(prefix):]...),
-		Ref:   x.Ref,
-		Depth: x.Depth,
-	}
-	return &y, nil
-}
-
-// HasPrefix returns true if the tree rooted at x only has keys which are prefixed with prefix
-func HasPrefix(ctx context.Context, cmp CompareFunc, s Getter, x Root, prefix []byte) (bool, error) {
-	if !bytes.HasPrefix(x.First, prefix) {
-		return false, nil
-	}
-	maxEnt, err := MaxEntry(ctx, cmp, s, x, kvstreams.TotalSpan())
-	if err != nil {
-		return false, err
-	}
-	if !bytes.HasPrefix(maxEnt.Key, prefix) {
-		return false, nil
-	}
-	return true, nil
 }
