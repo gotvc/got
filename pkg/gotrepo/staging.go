@@ -126,10 +126,10 @@ func (r *Repo) Clear(ctx context.Context) error {
 }
 
 type FileOperation struct {
-	Create   *Root
-	Modify   *Root
-	Delete   bool
-	MoveFrom *string
+	Delete *staging.DeleteOp
+
+	Create *staging.PutOp
+	Modify *staging.PutOp
 }
 
 func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOperation) error) error {
@@ -155,8 +155,8 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 	return r.stage.ForEach(ctx, func(p string, sop staging.Operation) error {
 		var op FileOperation
 		switch {
-		case sop.Delete:
-			op.Delete = true
+		case sop.Delete != nil:
+			op.Delete = sop.Delete
 		case sop.Put != nil:
 			md, err := fsop.GetInfo(ctx, branch.Volume.FSStore, root, p)
 			if err != nil && !posixfs.IsErrNotExist(err) {
@@ -221,8 +221,8 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 }
 
 // ForEachUntracked lists all the files which are not in either:
-// 	1) the staging area
-//  2) the active branch head
+//  1. the staging area
+//  2. the active branch head
 func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) error {
 	_, b, err := r.GetActiveBranch(ctx)
 	if err != nil {

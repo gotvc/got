@@ -40,19 +40,19 @@ $ got init
 ## Contributing
 To run the tests:
 ```shell
-$ make test
+$ just test
 ```
 
-Installs to `$GOPATH/bin` with make.
+Installs to `$GOPATH/bin` with just.
 If that isn't on your path, just copy the executable from there to wherever you want.
 
 ```shell
-$ make install
+$ just install
 ```
 
 To build release binaries
 ```shell
-TAG=v0.0.x make build
+TAG=v0.0.x just build
 ```
 Where `TAG` is an environment variable which should be set to the release version, or the Git hash of the source used for the build.
 The release binaries will be under the `out` directory.

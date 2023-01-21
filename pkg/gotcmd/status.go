@@ -31,7 +31,7 @@ func newStatusCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 			if err := repo.ForEachStaging(ctx, func(p string, op gotrepo.FileOperation) error {
 				var desc = "UNKNOWN"
 				switch {
-				case op.Delete:
+				case op.Delete != nil:
 					desc = color.RedString("DELETE")
 				case op.Create != nil:
 					desc = color.BlueString("CREATE")

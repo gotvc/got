@@ -21,9 +21,15 @@ type Storage interface {
 }
 
 type Operation struct {
-	Delete bool        `json:"del,omitempty"`
-	Put    *gotfs.Root `json:"put,omitempty"`
+	Delete *DeleteOp `json:"del,omitempty"`
+	Put    *PutOp    `json:"put,omitempty"`
 }
+
+// DeleteOp deletes a path and everything beneath it
+type DeleteOp struct{}
+
+// PutOp replaces a path with a filesystem.
+type PutOp gotfs.Root
 
 type Stage struct {
 	storage Storage
@@ -42,7 +48,7 @@ func (s *Stage) Put(ctx context.Context, p string, root gotfs.Root) error {
 		return err
 	}
 	op := Operation{
-		Put: &root,
+		Put: (*PutOp)(&root),
 	}
 	return s.storage.Put(ctx, []byte(p), jsonMarshal(op))
 }
@@ -54,7 +60,7 @@ func (s *Stage) Delete(ctx context.Context, p string) error {
 		return err
 	}
 	fo := Operation{
-		Delete: true,
+		Delete: &DeleteOp{},
 	}
 	return s.storage.Put(ctx, []byte(p), jsonMarshal(fo))
 }
@@ -163,8 +169,8 @@ func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.S
 			if err != nil {
 				return err
 			}
-			pathRoot = *fileOp.Put
-		case fileOp.Delete:
+			pathRoot = gotfs.Root(*fileOp.Put)
+		case fileOp.Delete != nil:
 			pathRoot = *emptyRoot
 		default:
 			logctx.Warnf(ctx, "empty op for path %q", p)

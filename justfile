@@ -1,6 +1,4 @@
 
-.PHONY: test testv
-
 test: protobuf
 	go test ./...
 
