@@ -9,28 +9,31 @@ import (
 )
 
 type Iterator struct {
-	s       Getter
-	compare CompareFunc
-	root    Root
-	span    Span
+	s          Getter
+	newDecoder func() Decoder
+	compare    CompareFunc
+	root       Root
+	span       Span
 
 	levels [][]Entry
 	pos    []byte
 }
 
 type IteratorParams struct {
-	Compare CompareFunc
-	Store   Getter
-	Root    Root
-	Span    Span
+	Store      Getter
+	Compare    CompareFunc
+	NewDecoder func() Decoder
+	Root       Root
+	Span       Span
 }
 
 func NewIterator(params IteratorParams) *Iterator {
 	it := &Iterator{
-		s:      params.Store,
-		root:   params.Root,
-		span:   kvstreams.CloneSpan(params.Span),
-		levels: make([][]Entry, params.Root.Depth+2),
+		s:          params.Store,
+		newDecoder: params.NewDecoder,
+		root:       params.Root,
+		span:       kvstreams.CloneSpan(params.Span),
+		levels:     make([][]Entry, params.Root.Depth+2),
 	}
 	it.levels[it.root.Depth+1] = []Entry{indexToEntry(rootToIndex(it.root))}
 	it.setPos(it.span.Begin)
@@ -104,7 +107,7 @@ func (it *Iterator) getEntries(ctx context.Context, level int) ([]Entry, error) 
 			return nil, errors.Wrapf(err, "converting entry to index at level %d", level)
 		}
 		it.advanceLevel(level+1, false)
-		ents, err := ListEntries(ctx, it.compare, it.s, idx)
+		ents, err := ListEntries(ctx, it.compare, it.newDecoder(), it.s, idx)
 		if err != nil {
 			return nil, err
 		}

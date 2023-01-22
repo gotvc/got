@@ -3,6 +3,7 @@ package gotkv
 import (
 	"bytes"
 	"context"
+	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
@@ -102,7 +103,7 @@ func do(ctx context.Context, s ptree.Getter, x Root, p doer) error {
 		return nil
 	}
 	if ptree.PointsToEntries(x) {
-		ents, err := ptree.ListEntries(ctx, cmp, s, ptree.Index{First: x.First, Ref: x.Ref})
+		ents, err := ptree.ListEntries(ctx, cmp, &Decoder{}, s, ptree.Index{First: x.First, Ref: x.Ref})
 		if err != nil {
 			return err
 		}
@@ -112,7 +113,7 @@ func do(ctx context.Context, s ptree.Getter, x Root, p doer) error {
 			}
 		}
 	} else {
-		idxs, err := ptree.ListChildren(ctx, cmp, s, x)
+		idxs, err := ptree.ListChildren(ctx, cmp, &Decoder{}, s, x)
 		if err != nil {
 			return err
 		}
@@ -166,4 +167,10 @@ func (s *ptreeStore) Get(ctx context.Context, ref Ref, buf []byte) (int, error) 
 
 func (s *ptreeStore) MaxSize() int {
 	return s.s.MaxSize()
+}
+
+// DebugTree writes human-readable debug information about the tree to w.
+func DebugTree(ctx context.Context, s cadata.Store, root Root, w io.Writer) error {
+	dec := &Decoder{}
+	return ptree.DebugTree(ctx, bytes.Compare, dec, s, root, w)
 }

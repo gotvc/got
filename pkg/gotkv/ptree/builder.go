@@ -11,6 +11,7 @@ type Builder struct {
 	s                 Poster
 	meanSize, maxSize int
 	seed              *[16]byte
+	newEncoder        func() Encoder
 
 	levels []*StreamWriter
 	isDone bool
@@ -20,19 +21,21 @@ type Builder struct {
 }
 
 type BuilderParams struct {
-	Store    Poster
-	MeanSize int
-	MaxSize  int
-	Seed     *[16]byte
-	Compare  CompareFunc
+	Store      Poster
+	MeanSize   int
+	MaxSize    int
+	Seed       *[16]byte
+	Compare    CompareFunc
+	NewEncoder func() Encoder
 }
 
 func NewBuilder(params BuilderParams) *Builder {
 	b := &Builder{
-		s:        params.Store,
-		meanSize: params.MeanSize,
-		maxSize:  params.MaxSize,
-		seed:     params.Seed,
+		s:          params.Store,
+		meanSize:   params.MeanSize,
+		maxSize:    params.MaxSize,
+		seed:       params.Seed,
+		newEncoder: params.NewEncoder,
 	}
 	b.levels = []*StreamWriter{
 		b.makeWriter(0),
@@ -46,6 +49,7 @@ func (b *Builder) makeWriter(i int) *StreamWriter {
 		MaxSize:  b.maxSize,
 		MeanSize: b.meanSize,
 		Seed:     b.seed,
+		Encoder:  b.newEncoder(),
 		OnIndex: func(idx Index) error {
 			if b.isDone && i == len(b.levels)-1 {
 				b.root = &Root{

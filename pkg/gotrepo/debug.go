@@ -1,14 +1,13 @@
 package gotrepo
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io"
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/gotvc/got/pkg/gotkv/ptree"
+	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
@@ -51,5 +50,5 @@ func (r *Repo) DebugKV(ctx context.Context, w io.Writer) error {
 	if x == nil {
 		return errors.Errorf("no snapshot, no root")
 	}
-	return ptree.DebugTree(ctx, bytes.Compare, vol.FSStore, x.Root, w)
+	return gotkv.DebugTree(ctx, vol.FSStore, x.Root, w)
 }

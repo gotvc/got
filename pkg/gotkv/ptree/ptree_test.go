@@ -15,11 +15,12 @@ func TestBuilder(t *testing.T) {
 	ctx := context.Background()
 	s := wrapStore(cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize))
 	b := NewBuilder(BuilderParams{
-		Store:    s,
-		MeanSize: defaultAvgSize,
-		MaxSize:  defaultMaxSize,
-		Seed:     nil,
-		Compare:  bytes.Compare,
+		Store:      s,
+		MeanSize:   defaultAvgSize,
+		MaxSize:    defaultMaxSize,
+		Seed:       nil,
+		Compare:    bytes.Compare,
+		NewEncoder: NewJSONEncoder,
 	})
 
 	generateEntries(1e4, func(ent Entry) {
@@ -37,11 +38,12 @@ func TestBuildIterate(t *testing.T) {
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	s2 := wrapStore(s)
 	b := NewBuilder(BuilderParams{
-		Store:    s2,
-		MeanSize: defaultAvgSize,
-		MaxSize:  defaultMaxSize,
-		Seed:     nil,
-		Compare:  bytes.Compare,
+		Store:      s2,
+		MeanSize:   defaultAvgSize,
+		MaxSize:    defaultMaxSize,
+		Seed:       nil,
+		Compare:    bytes.Compare,
+		NewEncoder: NewJSONEncoder,
 	})
 
 	const N = 1e4
@@ -56,10 +58,11 @@ func TestBuildIterate(t *testing.T) {
 	t.Logf("produced %d blobs", s.Len())
 
 	it := NewIterator(IteratorParams{
-		Store:   s2,
-		Compare: bytes.Compare,
-		Root:    *root,
-		Span:    Span{},
+		Store:      s2,
+		Compare:    bytes.Compare,
+		NewDecoder: NewJSONDecoder,
+		Root:       *root,
+		Span:       Span{},
 	})
 	var ent Entry
 	for i := 0; i < N; i++ {
@@ -76,11 +79,12 @@ func TestCopy(t *testing.T) {
 	ctx := context.Background()
 	s := wrapStore(cadata.NewMem(cadata.DefaultHash, maxSize))
 	b := NewBuilder(BuilderParams{
-		Store:    s,
-		MeanSize: averageSize,
-		MaxSize:  maxSize,
-		Seed:     nil,
-		Compare:  bytes.Compare,
+		Store:      s,
+		MeanSize:   averageSize,
+		MaxSize:    maxSize,
+		Seed:       nil,
+		Compare:    bytes.Compare,
+		NewEncoder: NewJSONEncoder,
 	})
 	const N = 1e6
 	generateEntries(N, func(ent Entry) {
@@ -93,17 +97,19 @@ func TestCopy(t *testing.T) {
 
 	t.Log("begin copying")
 	it := NewIterator(IteratorParams{
-		Store:   s,
-		Compare: bytes.Compare,
-		Root:    *root,
-		Span:    Span{},
+		Store:      s,
+		Compare:    bytes.Compare,
+		NewDecoder: NewJSONDecoder,
+		Root:       *root,
+		Span:       Span{},
 	})
 	b2 := NewBuilder(BuilderParams{
-		Store:    s,
-		MeanSize: averageSize,
-		MaxSize:  maxSize,
-		Seed:     nil,
-		Compare:  bytes.Compare,
+		Store:      s,
+		MeanSize:   averageSize,
+		MaxSize:    maxSize,
+		Seed:       nil,
+		NewEncoder: NewJSONEncoder,
+		Compare:    bytes.Compare,
 	})
 	require.NoError(t, Copy(ctx, b2, it))
 	root2, err := b2.Finish(ctx)

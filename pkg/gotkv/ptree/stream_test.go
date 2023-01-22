@@ -21,15 +21,21 @@ const (
 
 func TestEntry(t *testing.T) {
 	t.Parallel()
-	buf := &bytes.Buffer{}
+	buf := make([]byte, 1<<10)
 	expected := Entry{
 		Key:   []byte("key1"),
 		Value: []byte("value1"),
 	}
-	writeEntry(buf, nil, expected)
-	var actual Entry
-	err := readEntry(&actual, bytes.NewReader(buf.Bytes()), nil, defaultMaxSize)
+	enc := JSONEncoder{}
+	n, err := enc.WriteEntry(buf, expected)
 	require.NoError(t, err)
+
+	var actual Entry
+	dec := JSONDecoder{}
+	n2, err := dec.ReadEntry(buf[:n], &actual)
+	require.NoError(t, err)
+
+	require.Equal(t, n, n2)
 	require.Equal(t, expected, actual)
 }
 
@@ -45,8 +51,9 @@ func TestStreamRW(t *testing.T) {
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
+		Encoder:  &JSONEncoder{},
 		OnIndex: func(idx Index) error {
-			idxs = append(idxs, idx)
+			idxs = append(idxs, idx.Clone())
 			refs = append(refs, idx.Ref)
 			return nil
 		},
@@ -64,6 +71,7 @@ func TestStreamRW(t *testing.T) {
 		Store:   s,
 		Compare: bytes.Compare,
 		Indexes: idxs,
+		Decoder: &JSONDecoder{},
 	})
 	var ent Entry
 	for i := 0; i < N; i++ {
@@ -86,6 +94,7 @@ func TestStreamWriterChunkSize(t *testing.T) {
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
+		Encoder:  &JSONEncoder{},
 		OnIndex: func(idx Index) error {
 			refs = append(refs, idx.Ref)
 			return nil
@@ -136,6 +145,7 @@ func BenchmarkStreamWriter(b *testing.B) {
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
+		Encoder:  &JSONEncoder{},
 		OnIndex:  func(idx Index) error { return nil },
 	})
 	generateEntries(b.N, func(ent Entry) {

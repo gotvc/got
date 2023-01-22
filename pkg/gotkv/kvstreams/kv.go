@@ -2,6 +2,7 @@ package kvstreams
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/brendoncarroll/go-state"
@@ -20,22 +21,29 @@ func (e Entry) Clone() Entry {
 	}
 }
 
+func (e Entry) String() string {
+	return fmt.Sprintf("{%q => %q}", e.Key, e.Value)
+}
+
 // EOS signals the end of a stream
-var EOS = fmt.Errorf("end of stream")
+var EOS = errors.New("end of stream")
 
 // Iterator iterates over entries
 //
 // e.g.
-// if err := it.Seek(ctx, key); err != nil {
-//   return err
-// }
+//
+//	if err := it.Seek(ctx, key); err != nil {
+//	  return err
+//	}
+//
 // var ent Entry
-// for err := it.Next(ctx, &ent); err != EOS; err = it.Next(ctx, &ent) {
-//   if err != nil {
-//	   return err
-//   }
-//   // use ent here. ent will be valid until the next call to it.Next
-// }
+//
+//	for err := it.Next(ctx, &ent); err != EOS; err = it.Next(ctx, &ent) {
+//	  if err != nil {
+//		   return err
+//	  }
+//	  // use ent here. ent will be valid until the next call to it.Next
+//	}
 type Iterator interface {
 	Next(ctx context.Context, ent *Entry) error
 	Seek(ctx context.Context, gteq []byte) error
