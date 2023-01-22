@@ -20,7 +20,7 @@ type Encoder struct {
 func (e *Encoder) WriteEntry(dst []byte, ent Entry) (int, error) {
 	prevKey := e.prevKey
 	if e.count == 0 {
-		prevKey = ent.Key // this will make backspace=0, suffix=0
+		prevKey = ent.Key // this will make backspace=0, suffix=""
 	}
 	if len(dst) < computeEntryLen(prevKey, ent) {
 		return 0, ptree.ErrOutOfRoom
@@ -36,7 +36,7 @@ func (e *Encoder) WriteEntry(dst []byte, ent Entry) (int, error) {
 func (e *Encoder) EncodedLen(ent Entry) int {
 	prevKey := e.prevKey
 	if e.count == 0 {
-		prevKey = ent.Key // this will make backspace=0, suffix=0
+		prevKey = ent.Key // this will make backspace=0, suffix=""
 	}
 	return computeEntryLen(prevKey, ent)
 }
