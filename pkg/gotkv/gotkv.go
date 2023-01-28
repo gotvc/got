@@ -22,7 +22,7 @@ type (
 	Entry = kvstreams.Entry
 	Span  = kvstreams.Span
 
-	Root = ptree.Root
+	Root = ptree.Root[Ref]
 )
 
 const (
@@ -48,7 +48,7 @@ func GetF(ctx context.Context, s Getter, x Root, key []byte, fn func([]byte) err
 
 // CopyAll copies all the entries from iterator to builder.
 func CopyAll(ctx context.Context, b *Builder, it kvstreams.Iterator) error {
-	if pti, ok := it.(*ptree.Iterator); ok {
+	if pti, ok := it.(*ptree.Iterator[Ref]); ok {
 		return ptree.Copy(ctx, b, pti)
 	}
 	return kvstreams.ForEach(ctx, it, func(ent Entry) error {
@@ -58,8 +58,13 @@ func CopyAll(ctx context.Context, b *Builder, it kvstreams.Iterator) error {
 
 // Sync ensures dst has all the data reachable from x.
 func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Root, entryFn func(Entry) error) error {
-	s := &ptreeGetter{op: &o.dop, s: src}
-	return do(ctx, s, x, doer{
+	rp := ptree.ReadParams[Ref]{
+		Compare:    bytes.Compare,
+		Store:      &ptreeGetter{op: &o.dop, s: src},
+		ParseRef:   gdat.ParseRef,
+		NewDecoder: func() ptree.Decoder { return &Decoder{} },
+	}
+	return do(ctx, rp, x, doer{
 		CanSkip: func(r Root) (bool, error) {
 			return cadata.Exists(ctx, dst, r.Ref.CID)
 		},
@@ -73,8 +78,13 @@ func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Roo
 // Populate adds all blobs reachable from x to set.
 // If an item is in set all of the blobs reachable from it are also assumed to also be in set.
 func (o *Operator) Populate(ctx context.Context, s Store, x Root, set cadata.Set, entryFn func(ent Entry) error) error {
-	ps := &ptreeGetter{op: &o.dop, s: s}
-	return do(ctx, ps, x, doer{
+	rp := ptree.ReadParams[Ref]{
+		Compare:    bytes.Compare,
+		Store:      &ptreeGetter{op: &o.dop, s: s},
+		ParseRef:   gdat.ParseRef,
+		NewDecoder: func() ptree.Decoder { return &Decoder{} },
+	}
+	return do(ctx, rp, x, doer{
 		CanSkip: func(r Root) (bool, error) {
 			return set.Exists(ctx, r.Ref.CID)
 		},
@@ -95,15 +105,14 @@ type doer struct {
 	NodeFn func(r Root) error
 }
 
-func do(ctx context.Context, s ptree.Getter, x Root, p doer) error {
-	cmp := bytes.Compare
+func do(ctx context.Context, rp ptree.ReadParams[Ref], x Root, p doer) error {
 	if canSkip, err := p.CanSkip(x); err != nil {
 		return err
 	} else if canSkip {
 		return nil
 	}
 	if ptree.PointsToEntries(x) {
-		ents, err := ptree.ListEntries(ctx, cmp, &Decoder{}, s, ptree.Index{First: x.First, Ref: x.Ref})
+		ents, err := ptree.ListEntries(ctx, rp, ptree.Index[Ref]{First: x.First, Ref: x.Ref})
 		if err != nil {
 			return err
 		}
@@ -113,7 +122,7 @@ func do(ctx context.Context, s ptree.Getter, x Root, p doer) error {
 			}
 		}
 	} else {
-		idxs, err := ptree.ListChildren(ctx, cmp, &Decoder{}, s, x)
+		idxs, err := ptree.ListChildren(ctx, rp, x)
 		if err != nil {
 			return err
 		}
@@ -125,7 +134,7 @@ func do(ctx context.Context, s ptree.Getter, x Root, p doer) error {
 				Depth: x.Depth - 1,
 			}
 			eg.Go(func() error {
-				return do(ctx, s, root2, p)
+				return do(ctx, rp, root2, p)
 			})
 		}
 		if err := eg.Wait(); err != nil {
@@ -171,6 +180,11 @@ func (s *ptreeStore) MaxSize() int {
 
 // DebugTree writes human-readable debug information about the tree to w.
 func DebugTree(ctx context.Context, s cadata.Store, root Root, w io.Writer) error {
-	dec := &Decoder{}
-	return ptree.DebugTree(ctx, bytes.Compare, dec, s, root, w)
+	rp := ptree.ReadParams[Ref]{
+		Store:      &ptreeGetter{s: s, op: &defaultReadOnlyOperator.dop},
+		Compare:    bytes.Compare,
+		ParseRef:   gdat.ParseRef,
+		NewDecoder: func() ptree.Decoder { return &Decoder{} },
+	}
+	return ptree.DebugTree(ctx, rp, root, w)
 }

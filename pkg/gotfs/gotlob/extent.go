@@ -16,7 +16,7 @@ type Extent struct {
 
 func (e *Extent) MarshalBinary() ([]byte, error) {
 	var buf []byte
-	buf = append(buf, gdat.MarshalRef(e.Ref)...)
+	buf = gdat.AppendRef(buf, e.Ref)
 	buf = appendUint32(buf, e.Offset)
 	buf = appendUint32(buf, e.Length)
 	return buf, nil
@@ -32,7 +32,7 @@ func (e *Extent) UnmarshalBinary(data []byte) error {
 	}
 	e.Offset = binary.BigEndian.Uint32(data[len(data)-8:])
 	e.Length = binary.BigEndian.Uint32(data[len(data)-4:])
-	e.Ref = *ref
+	e.Ref = ref
 	return nil
 }
 

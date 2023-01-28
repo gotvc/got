@@ -2,73 +2,79 @@ package ptree
 
 import (
 	"context"
-
-	"github.com/gotvc/got/pkg/gdat"
-	"github.com/pkg/errors"
+	"fmt"
 )
 
-type Builder struct {
-	s                 Poster
+type Builder[Ref any] struct {
+	s                 Poster[Ref]
 	meanSize, maxSize int
 	seed              *[16]byte
 	newEncoder        func() Encoder
+	appendRef         func([]byte, Ref) []byte
 
-	levels []*StreamWriter
+	levels []*StreamWriter[Ref]
 	isDone bool
-	root   *Root
+	root   *Root[Ref]
 
 	ctx context.Context
 }
 
-type BuilderParams struct {
-	Store      Poster
+type BuilderParams[Ref any] struct {
+	Store      Poster[Ref]
 	MeanSize   int
 	MaxSize    int
 	Seed       *[16]byte
 	Compare    CompareFunc
 	NewEncoder func() Encoder
+	AppendRef  func(out []byte, ref Ref) []byte
 }
 
-func NewBuilder(params BuilderParams) *Builder {
-	b := &Builder{
+func NewBuilder[Ref any](params BuilderParams[Ref]) *Builder[Ref] {
+	b := &Builder[Ref]{
 		s:          params.Store,
 		meanSize:   params.MeanSize,
 		maxSize:    params.MaxSize,
 		seed:       params.Seed,
 		newEncoder: params.NewEncoder,
+		appendRef:  params.AppendRef,
 	}
-	b.levels = []*StreamWriter{
+	b.levels = []*StreamWriter[Ref]{
 		b.makeWriter(0),
 	}
 	return b
 }
 
-func (b *Builder) makeWriter(i int) *StreamWriter {
-	params := StreamWriterParams{
+func (b *Builder[Ref]) makeWriter(i int) *StreamWriter[Ref] {
+	params := StreamWriterParams[Ref]{
 		Store:    b.s,
 		MaxSize:  b.maxSize,
 		MeanSize: b.meanSize,
 		Seed:     b.seed,
 		Encoder:  b.newEncoder(),
-		OnIndex: func(idx Index) error {
+		OnIndex: func(idx Index[Ref]) error {
 			if b.isDone && i == len(b.levels)-1 {
-				b.root = &Root{
+				b.root = &Root[Ref]{
 					Ref:   idx.Ref,
 					First: append([]byte{}, idx.First...),
 					Depth: uint8(i),
 				}
 				return nil
 			}
+			refBytes := make([]byte, 0, 64)
+			refBytes = b.appendRef(refBytes, idx.Ref)
+			if len(refBytes) > MaxRefSize {
+				return fmt.Errorf("marshaled Ref is too large. size=%d MaxRefSize=%d", len(refBytes), MaxRefSize)
+			}
 			return b.getWriter(i+1).Append(b.ctx, Entry{
 				Key:   idx.First,
-				Value: gdat.MarshalRef(idx.Ref),
+				Value: refBytes,
 			})
 		},
 	}
 	return NewStreamWriter(params)
 }
 
-func (b *Builder) getWriter(level int) *StreamWriter {
+func (b *Builder[Ref]) getWriter(level int) *StreamWriter[Ref] {
 	for len(b.levels) <= level {
 		i := len(b.levels)
 		b.levels = append(b.levels, b.makeWriter(i))
@@ -76,18 +82,18 @@ func (b *Builder) getWriter(level int) *StreamWriter {
 	return b.levels[level]
 }
 
-func (b *Builder) Put(ctx context.Context, key, value []byte) error {
+func (b *Builder[Ref]) Put(ctx context.Context, key, value []byte) error {
 	return b.put(ctx, 0, key, value)
 }
 
-func (b *Builder) put(ctx context.Context, level int, key, value []byte) error {
+func (b *Builder[Ref]) put(ctx context.Context, level int, key, value []byte) error {
 	b.ctx = ctx
 	defer func() { b.ctx = nil }()
 	if b.isDone {
-		return errors.Errorf("builder is closed")
+		return fmt.Errorf("builder is closed")
 	}
 	if b.syncLevel() < level {
-		return errors.Errorf("cannot put at level %d", level)
+		return fmt.Errorf("cannot put at level %d", level)
 	}
 	err := b.getWriter(level).Append(ctx, Entry{
 		Key:   key,
@@ -99,12 +105,12 @@ func (b *Builder) put(ctx context.Context, level int, key, value []byte) error {
 	return nil
 }
 
-func (b *Builder) Finish(ctx context.Context) (*Root, error) {
+func (b *Builder[Ref]) Finish(ctx context.Context) (*Root[Ref], error) {
 	b.ctx = ctx
 	defer func() { b.ctx = nil }()
 
 	if b.isDone {
-		return nil, errors.Errorf("builder is closed")
+		return nil, fmt.Errorf("builder is closed")
 	}
 	b.isDone = true
 	for _, w := range b.levels {
@@ -118,12 +124,12 @@ func (b *Builder) Finish(ctx context.Context) (*Root, error) {
 		if err != nil {
 			return nil, err
 		}
-		b.root = &Root{Ref: ref, Depth: 1}
+		b.root = &Root[Ref]{Ref: ref, Depth: 1}
 	}
 	return b.root, nil
 }
 
-func (b *Builder) syncLevel() int {
+func (b *Builder[Ref]) syncLevel() int {
 	for i := range b.levels {
 		if b.levels[i].Buffered() > 0 {
 			return i

@@ -8,20 +8,16 @@ import (
 	"math"
 
 	"github.com/dchest/siphash"
-	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
-	"github.com/pkg/errors"
 )
 
-type Ref = gdat.Ref
-
-type Index struct {
+type Index[Ref any] struct {
 	Ref   Ref
 	First []byte
 }
 
-func (idx Index) Clone() Index {
-	return Index{
+func (idx Index[Ref]) Clone() Index[Ref] {
+	return Index[Ref]{
 		Ref:   idx.Ref,
 		First: append([]byte{}, idx.First...),
 	}
@@ -115,31 +111,37 @@ func (r *blobReader) setPrevKey(x []byte) {
 	r.prevKey = append(r.prevKey[:0], x...)
 }
 
-type StreamReader struct {
-	s   Getter
+type StreamReader[Ref any] struct {
+	s   Getter[Ref]
 	cmp CompareFunc
 	dec Decoder
 
-	idxs      []Index
+	idxs      []Index[Ref]
 	nextIndex int
 	br        *blobReader
 }
 
-type StreamReaderParams struct {
-	Store   Getter
+type StreamReaderParams[Ref any] struct {
+	Store   Getter[Ref]
 	Decoder Decoder
 	Compare CompareFunc
-	Indexes []Index
+	Indexes []Index[Ref]
 }
 
-func NewStreamReader(params StreamReaderParams) *StreamReader {
+func NewStreamReader[Ref any](params StreamReaderParams[Ref]) *StreamReader[Ref] {
+	if params.Store == nil {
+		panic("NewStreamReader nil Store")
+	}
+	if params.Decoder == nil {
+		panic("NewStreamReader nil Decoder")
+	}
 	idxs := params.Indexes
 	for i := 0; i < len(idxs)-1; i++ {
 		if bytes.Compare(idxs[i].First, idxs[i+1].First) >= 0 {
 			panic(fmt.Sprintf("StreamReader: unordered indexes %q >= %q", idxs[i].First, idxs[i+1].First))
 		}
 	}
-	return &StreamReader{
+	return &StreamReader[Ref]{
 		s:   params.Store,
 		cmp: params.Compare,
 		dec: params.Decoder,
@@ -148,19 +150,19 @@ func NewStreamReader(params StreamReaderParams) *StreamReader {
 	}
 }
 
-func (r *StreamReader) Next(ctx context.Context, ent *Entry) error {
+func (r *StreamReader[Ref]) Next(ctx context.Context, ent *Entry) error {
 	return r.withBlobReader(ctx, func(br *blobReader) error {
 		return br.Next(ctx, ent)
 	})
 }
 
-func (r *StreamReader) Peek(ctx context.Context, ent *Entry) error {
+func (r *StreamReader[Ref]) Peek(ctx context.Context, ent *Entry) error {
 	return r.withBlobReader(ctx, func(br *blobReader) error {
 		return br.Peek(ctx, ent)
 	})
 }
 
-func (r *StreamReader) SeekIndexes(ctx context.Context, gteq []byte) error {
+func (r *StreamReader[Ref]) SeekIndexes(ctx context.Context, gteq []byte) error {
 	if err := r.seekCommon(ctx, gteq); err != nil {
 		return err
 	}
@@ -170,7 +172,7 @@ func (r *StreamReader) SeekIndexes(ctx context.Context, gteq []byte) error {
 	return r.br.SeekIndexes(ctx, gteq)
 }
 
-func (r *StreamReader) Seek(ctx context.Context, gteq []byte) error {
+func (r *StreamReader[Ref]) Seek(ctx context.Context, gteq []byte) error {
 	if err := r.seekCommon(ctx, gteq); err != nil {
 		return err
 	}
@@ -180,7 +182,7 @@ func (r *StreamReader) Seek(ctx context.Context, gteq []byte) error {
 	return r.br.Seek(ctx, gteq)
 }
 
-func (r *StreamReader) seekCommon(ctx context.Context, gteq []byte) error {
+func (r *StreamReader[Ref]) seekCommon(ctx context.Context, gteq []byte) error {
 	if len(r.idxs) < 1 {
 		return nil
 	}
@@ -203,7 +205,7 @@ func (r *StreamReader) seekCommon(ctx context.Context, gteq []byte) error {
 	return nil
 }
 
-func (r *StreamReader) withBlobReader(ctx context.Context, fn func(*blobReader) error) error {
+func (r *StreamReader[Ref]) withBlobReader(ctx context.Context, fn func(*blobReader) error) error {
 	if r.br == nil {
 		if r.nextIndex == len(r.idxs) {
 			return kvstreams.EOS
@@ -224,7 +226,7 @@ func (r *StreamReader) withBlobReader(ctx context.Context, fn func(*blobReader) 
 	return err
 }
 
-func (r *StreamReader) getBlobReader(ctx context.Context, idx Index) (*blobReader, error) {
+func (r *StreamReader[Ref]) getBlobReader(ctx context.Context, idx Index[Ref]) (*blobReader, error) {
 	buf := make([]byte, r.s.MaxSize())
 	n, err := r.s.Get(ctx, idx.Ref, buf)
 	if err != nil {
@@ -233,13 +235,13 @@ func (r *StreamReader) getBlobReader(ctx context.Context, idx Index) (*blobReade
 	return newBlobReader(r.dec, idx.First, buf[:n]), nil
 }
 
-type IndexHandler = func(Index) error
+type IndexHandler[Ref any] func(Index[Ref]) error
 
-type StreamWriter struct {
-	s                 Poster
+type StreamWriter[Ref any] struct {
+	s                 Poster[Ref]
 	enc               Encoder
 	compare           func(a, b []byte) int
-	onIndex           IndexHandler
+	onIndex           IndexHandler[Ref]
 	seed              *[16]byte
 	meanSize, maxSize int
 
@@ -250,21 +252,21 @@ type StreamWriter struct {
 	prevKey  []byte
 }
 
-type StreamWriterParams struct {
-	Store    Poster
+type StreamWriterParams[Ref any] struct {
+	Store    Poster[Ref]
 	Seed     *[16]byte
 	MeanSize int
 	MaxSize  int
 	Compare  func(a, b []byte) int
 	Encoder  Encoder
-	OnIndex  IndexHandler
+	OnIndex  IndexHandler[Ref]
 }
 
-func NewStreamWriter(params StreamWriterParams) *StreamWriter {
+func NewStreamWriter[Ref any](params StreamWriterParams[Ref]) *StreamWriter[Ref] {
 	if params.Seed == nil {
 		params.Seed = new([16]byte)
 	}
-	w := &StreamWriter{
+	w := &StreamWriter[Ref]{
 		s:        params.Store,
 		compare:  bytes.Compare,
 		enc:      params.Encoder,
@@ -279,13 +281,13 @@ func NewStreamWriter(params StreamWriterParams) *StreamWriter {
 	return w
 }
 
-func (w *StreamWriter) Append(ctx context.Context, ent Entry) error {
+func (w *StreamWriter[Ref]) Append(ctx context.Context, ent Entry) error {
 	if w.prevKey != nil && w.compare(ent.Key, w.prevKey) <= 0 {
 		panic(fmt.Sprintf("out of order key: prev=%q key=%q", w.prevKey, ent.Key))
 	}
 	entryLen := w.enc.EncodedLen(ent)
 	if entryLen > w.maxSize {
-		return errors.Errorf("entry (size=%d) exceeds maximum size %d", entryLen, w.maxSize)
+		return fmt.Errorf("entry (size=%d) exceeds maximum size %d", entryLen, w.maxSize)
 	}
 	if entryLen+w.n > w.maxSize {
 		if err := w.Flush(ctx); err != nil {
@@ -316,11 +318,11 @@ func (w *StreamWriter) Append(ctx context.Context, ent Entry) error {
 	return nil
 }
 
-func (w *StreamWriter) Buffered() int {
+func (w *StreamWriter[Ref]) Buffered() int {
 	return w.n
 }
 
-func (w *StreamWriter) Flush(ctx context.Context) error {
+func (w *StreamWriter[Ref]) Flush(ctx context.Context) error {
 	if w.Buffered() == 0 {
 		if len(w.firstKey) != 0 {
 			panic("StreamWriter: firstKey set for empty buffer")
@@ -331,7 +333,7 @@ func (w *StreamWriter) Flush(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if err := w.onIndex(Index{
+	if err := w.onIndex(Index[Ref]{
 		First: w.firstKey,
 		Ref:   ref,
 	}); err != nil {
@@ -343,7 +345,7 @@ func (w *StreamWriter) Flush(ctx context.Context) error {
 	return nil
 }
 
-func (w *StreamWriter) isSplitPoint(data []byte) bool {
+func (w *StreamWriter[Ref]) isSplitPoint(data []byte) bool {
 	r := sum64(data, w.seed)
 	prob := math.MaxUint64 / uint64(w.meanSize) * uint64(len(data))
 	return r < prob

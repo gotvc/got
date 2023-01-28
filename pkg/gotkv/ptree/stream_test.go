@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/stretchr/testify/require"
 )
@@ -42,17 +41,17 @@ func TestEntry(t *testing.T) {
 func TestStreamRW(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	var refs []Ref
-	var idxs []Index
+	var refs []cadata.ID
+	var idxs []Index[cadata.ID]
 
-	s := wrapStore(cadata.NewMem(cadata.DefaultHash, defaultMaxSize))
-	sw := NewStreamWriter(StreamWriterParams{
+	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
+	sw := NewStreamWriter(StreamWriterParams[cadata.ID]{
 		Store:    s,
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
 		Encoder:  &JSONEncoder{},
-		OnIndex: func(idx Index) error {
+		OnIndex: func(idx Index[cadata.ID]) error {
 			idxs = append(idxs, idx.Clone())
 			refs = append(refs, idx.Ref)
 			return nil
@@ -67,7 +66,7 @@ func TestStreamRW(t *testing.T) {
 	err := sw.Flush(ctx)
 	require.NoError(t, err)
 
-	sr := NewStreamReader(StreamReaderParams{
+	sr := NewStreamReader(StreamReaderParams[cadata.ID]{
 		Store:   s,
 		Compare: bytes.Compare,
 		Indexes: idxs,
@@ -86,16 +85,16 @@ func TestStreamRW(t *testing.T) {
 func TestStreamWriterChunkSize(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	var refs []Ref
+	var refs []cadata.ID
 
-	s := wrapStore(cadata.NewMem(cadata.DefaultHash, defaultMaxSize))
-	sw := NewStreamWriter(StreamWriterParams{
+	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
+	sw := NewStreamWriter(StreamWriterParams[cadata.ID]{
 		Store:    s,
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
 		Encoder:  &JSONEncoder{},
-		OnIndex: func(idx Index) error {
+		OnIndex: func(idx Index[cadata.ID]) error {
 			refs = append(refs, idx.Ref)
 			return nil
 		},
@@ -139,14 +138,14 @@ func BenchmarkStreamWriter(b *testing.B) {
 	b.ReportAllocs()
 
 	ctx := context.Background()
-	s := wrapStore(cadata.NewVoid(gdat.Hash, defaultMaxSize))
-	sw := NewStreamWriter(StreamWriterParams{
+	s := cadata.NewVoid(cadata.DefaultHash, defaultMaxSize)
+	sw := NewStreamWriter(StreamWriterParams[cadata.ID]{
 		Store:    s,
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
 		Encoder:  &JSONEncoder{},
-		OnIndex:  func(idx Index) error { return nil },
+		OnIndex:  func(idx Index[cadata.ID]) error { return nil },
 	})
 	generateEntries(b.N, func(ent Entry) {
 		err := sw.Append(ctx, ent)
@@ -162,14 +161,14 @@ func withinTolerance(t *testing.T, x int, target int, tol float64) {
 	}
 }
 
-func refSimilarity(as, bs []Ref) int {
-	am := map[cadata.ID]struct{}{}
+func refSimilarity[Ref comparable](as, bs []Ref) int {
+	am := map[Ref]struct{}{}
 	for _, ref := range as {
-		am[ref.CID] = struct{}{}
+		am[ref] = struct{}{}
 	}
 	var count int
 	for _, ref := range bs {
-		if _, exists := am[ref.CID]; exists {
+		if _, exists := am[ref]; exists {
 			count++
 		}
 	}

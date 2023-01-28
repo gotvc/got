@@ -3,53 +3,63 @@ package ptree
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
-	"github.com/pkg/errors"
 )
 
-type Iterator struct {
-	s          Getter
+type Iterator[Ref any] struct {
+	s          Getter[Ref]
 	newDecoder func() Decoder
+	parseRef   func([]byte) (Ref, error)
+	appendRef  func([]byte, Ref) []byte
 	compare    CompareFunc
-	root       Root
-	span       Span
+
+	root Root[Ref]
+	span Span
 
 	levels [][]Entry
 	pos    []byte
 }
 
-type IteratorParams struct {
-	Store      Getter
-	Compare    CompareFunc
+type IteratorParams[Ref any] struct {
+	Store      Getter[Ref]
+	ParseRef   func([]byte) (Ref, error)
+	AppendRef  func([]byte, Ref) []byte
 	NewDecoder func() Decoder
-	Root       Root
-	Span       Span
+	Compare    CompareFunc
+
+	Root Root[Ref]
+	Span Span
 }
 
-func NewIterator(params IteratorParams) *Iterator {
-	it := &Iterator{
+func NewIterator[Ref any](params IteratorParams[Ref]) *Iterator[Ref] {
+	it := &Iterator[Ref]{
 		s:          params.Store,
 		newDecoder: params.NewDecoder,
-		root:       params.Root,
-		span:       kvstreams.CloneSpan(params.Span),
-		levels:     make([][]Entry, params.Root.Depth+2),
+		parseRef:   params.ParseRef,
+		appendRef:  params.AppendRef,
+		compare:    params.Compare,
+
+		root:   params.Root,
+		span:   kvstreams.CloneSpan(params.Span),
+		levels: make([][]Entry, params.Root.Depth+2),
 	}
-	it.levels[it.root.Depth+1] = []Entry{indexToEntry(rootToIndex(it.root))}
+	it.levels[it.root.Depth+1] = []Entry{indexToEntry(rootToIndex(it.root), it.appendRef)}
 	it.setPos(it.span.Begin)
 	return it
 }
 
-func (it *Iterator) Next(ctx context.Context, ent *Entry) error {
+func (it *Iterator[Ref]) Next(ctx context.Context, ent *Entry) error {
 	return it.next(ctx, 0, ent)
 }
 
-func (it *Iterator) Peek(ctx context.Context, ent *Entry) error {
+func (it *Iterator[Ref]) Peek(ctx context.Context, ent *Entry) error {
 	return it.peek(ctx, 0, ent)
 }
 
-func (it *Iterator) Seek(ctx context.Context, gteq []byte) error {
-	it.levels[it.root.Depth+1] = []Entry{indexToEntry(rootToIndex(it.root))}
+func (it *Iterator[Ref]) Seek(ctx context.Context, gteq []byte) error {
+	it.levels[it.root.Depth+1] = []Entry{indexToEntry(rootToIndex(it.root), it.appendRef)}
 	it.setPos(gteq)
 	for i := len(it.levels) - 1; i >= 0; i-- {
 		if i == 0 {
@@ -61,9 +71,9 @@ func (it *Iterator) Seek(ctx context.Context, gteq []byte) error {
 	return nil
 }
 
-func (it *Iterator) next(ctx context.Context, level int, ent *Entry) error {
+func (it *Iterator[Ref]) next(ctx context.Context, level int, ent *Entry) error {
 	if it.syncLevel() < level {
-		return errors.Errorf("cannot read from level %d, only synced to %d", level, it.syncLevel())
+		return fmt.Errorf("cannot read from level %d, only synced to %d", level, it.syncLevel())
 	}
 	entries, err := it.getEntries(ctx, level)
 	if err != nil {
@@ -76,9 +86,9 @@ func (it *Iterator) next(ctx context.Context, level int, ent *Entry) error {
 	return nil
 }
 
-func (it *Iterator) peek(ctx context.Context, level int, ent *Entry) error {
+func (it *Iterator[Ref]) peek(ctx context.Context, level int, ent *Entry) error {
 	if it.syncLevel() < level {
-		return errors.Errorf("cannot read from level %d, only synced to %d", level, it.syncLevel())
+		return fmt.Errorf("cannot read from level %d, only synced to %d", level, it.syncLevel())
 	}
 	entries, err := it.getEntries(ctx, level)
 	if err != nil {
@@ -90,7 +100,7 @@ func (it *Iterator) peek(ctx context.Context, level int, ent *Entry) error {
 	return nil
 }
 
-func (it *Iterator) getEntries(ctx context.Context, level int) ([]Entry, error) {
+func (it *Iterator[Ref]) getEntries(ctx context.Context, level int) ([]Entry, error) {
 	if level >= len(it.levels) {
 		return nil, kvstreams.EOS
 	}
@@ -102,12 +112,12 @@ func (it *Iterator) getEntries(ctx context.Context, level int) ([]Entry, error) 
 		if err != nil {
 			return nil, err
 		}
-		idx, err := entryToIndex(above[0])
+		idx, err := entryToIndex(above[0], it.parseRef)
 		if err != nil {
-			return nil, errors.Wrapf(err, "converting entry to index at level %d", level)
+			return nil, fmt.Errorf("converting entry to index at level %d: %w", level, err)
 		}
 		it.advanceLevel(level+1, false)
-		ents, err := ListEntries(ctx, it.compare, it.newDecoder(), it.s, idx)
+		ents, err := ListEntries(ctx, ReadParams[Ref]{Store: it.s, Compare: it.compare, NewDecoder: it.newDecoder, ParseRef: it.parseRef}, idx)
 		if err != nil {
 			return nil, err
 		}
@@ -123,7 +133,7 @@ func (it *Iterator) getEntries(ctx context.Context, level int) ([]Entry, error) 
 	}
 }
 
-func (it *Iterator) syncLevel() int {
+func (it *Iterator[Ref]) syncLevel() int {
 	// bot is the index below which all levels are synced
 	var bot int
 	for i := range it.levels {
@@ -146,7 +156,7 @@ func (it *Iterator) syncLevel() int {
 	return min(bot, top)
 }
 
-func (it *Iterator) advanceLevel(level int, updatePos bool) {
+func (it *Iterator[Ref]) advanceLevel(level int, updatePos bool) {
 	entries := it.levels[level]
 	it.levels[level] = entries[1:]
 	if !updatePos {
@@ -162,11 +172,11 @@ func (it *Iterator) advanceLevel(level int, updatePos bool) {
 	it.pos = nil // end of the stream
 }
 
-func (it *Iterator) setPos(x []byte) {
+func (it *Iterator[Ref]) setPos(x []byte) {
 	it.pos = append(it.pos[:0], x...)
 }
 
-func (it *Iterator) getSpan() Span {
+func (it *Iterator[Ref]) getSpan() Span {
 	return Span{
 		Begin: it.pos,
 		End:   it.span.End,

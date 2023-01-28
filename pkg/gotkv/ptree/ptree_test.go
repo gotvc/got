@@ -7,20 +7,22 @@ import (
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 )
 
 func TestBuilder(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	s := wrapStore(cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize))
-	b := NewBuilder(BuilderParams{
+	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
+	b := NewBuilder(BuilderParams[cadata.ID]{
 		Store:      s,
 		MeanSize:   defaultAvgSize,
 		MaxSize:    defaultMaxSize,
 		Seed:       nil,
 		Compare:    bytes.Compare,
 		NewEncoder: NewJSONEncoder,
+		AppendRef:  appendCID,
 	})
 
 	generateEntries(1e4, func(ent Entry) {
@@ -36,14 +38,14 @@ func TestBuildIterate(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
-	s2 := wrapStore(s)
-	b := NewBuilder(BuilderParams{
-		Store:      s2,
+	b := NewBuilder(BuilderParams[cadata.ID]{
+		Store:      s,
 		MeanSize:   defaultAvgSize,
 		MaxSize:    defaultMaxSize,
 		Seed:       nil,
 		Compare:    bytes.Compare,
 		NewEncoder: NewJSONEncoder,
+		AppendRef:  appendCID,
 	})
 
 	const N = 1e4
@@ -57,10 +59,12 @@ func TestBuildIterate(t *testing.T) {
 
 	t.Logf("produced %d blobs", s.Len())
 
-	it := NewIterator(IteratorParams{
-		Store:      s2,
+	it := NewIterator(IteratorParams[cadata.ID]{
+		Store:      s,
 		Compare:    bytes.Compare,
 		NewDecoder: NewJSONDecoder,
+		ParseRef:   parseCID,
+		AppendRef:  appendCID,
 		Root:       *root,
 		Span:       Span{},
 	})
@@ -76,15 +80,16 @@ func TestCopy(t *testing.T) {
 	t.Parallel()
 	averageSize := 1 << 12
 	maxSize := 1 << 16
+	s := cadata.NewMem(cadata.DefaultHash, maxSize)
 	ctx := context.Background()
-	s := wrapStore(cadata.NewMem(cadata.DefaultHash, maxSize))
-	b := NewBuilder(BuilderParams{
+	b := NewBuilder(BuilderParams[cadata.ID]{
 		Store:      s,
 		MeanSize:   averageSize,
 		MaxSize:    maxSize,
 		Seed:       nil,
 		Compare:    bytes.Compare,
 		NewEncoder: NewJSONEncoder,
+		AppendRef:  appendCID,
 	})
 	const N = 1e6
 	generateEntries(N, func(ent Entry) {
@@ -96,18 +101,21 @@ func TestCopy(t *testing.T) {
 	require.NotNil(t, root)
 
 	t.Log("begin copying")
-	it := NewIterator(IteratorParams{
+	it := NewIterator(IteratorParams[cadata.ID]{
 		Store:      s,
 		Compare:    bytes.Compare,
 		NewDecoder: NewJSONDecoder,
+		AppendRef:  appendCID,
+		ParseRef:   parseCID,
 		Root:       *root,
 		Span:       Span{},
 	})
-	b2 := NewBuilder(BuilderParams{
+	b2 := NewBuilder(BuilderParams[cadata.ID]{
 		Store:      s,
 		MeanSize:   averageSize,
 		MaxSize:    maxSize,
 		Seed:       nil,
+		AppendRef:  appendCID,
 		NewEncoder: NewJSONEncoder,
 		Compare:    bytes.Compare,
 	})
@@ -115,4 +123,16 @@ func TestCopy(t *testing.T) {
 	root2, err := b2.Finish(ctx)
 	require.NoError(t, err)
 	require.Equal(t, root, root2)
+}
+
+func parseCID(x []byte) (ret cadata.ID, _ error) {
+	if len(x) != len(ret) {
+		return ret, errors.New("incorrect length for Ref")
+	}
+	copy(ret[:], x)
+	return ret, nil
+}
+
+func appendCID(out []byte, x cadata.ID) []byte {
+	return append(out, x[:]...)
 }

@@ -13,12 +13,12 @@ type (
 )
 
 // MaxEntry returns the entry in span with the greatest (ordered last) key.
-func MaxEntry(ctx context.Context, cmp CompareFunc, dec Decoder, s Getter, x Root, span Span) (*Entry, error) {
-	sr := NewStreamReader(StreamReaderParams{
-		Store:   s,
-		Compare: cmp,
-		Decoder: dec,
-		Indexes: []Index{rootToIndex(x)},
+func MaxEntry[Ref any](ctx context.Context, params ReadParams[Ref], x Root[Ref], span Span) (*Entry, error) {
+	sr := NewStreamReader(StreamReaderParams[Ref]{
+		Store:   params.Store,
+		Compare: params.Compare,
+		Decoder: params.NewDecoder(),
+		Indexes: []Index[Ref]{rootToIndex(x)},
 	})
 	ent, err := maxEntry(ctx, sr, span.End)
 	if err != nil {
@@ -33,14 +33,14 @@ func MaxEntry(ctx context.Context, cmp CompareFunc, dec Decoder, s Getter, x Roo
 		}
 		return ent, nil
 	}
-	idx, err := entryToIndex(*ent)
+	idx, err := entryToIndex(*ent, params.ParseRef)
 	if err != nil {
 		return nil, err
 	}
-	return MaxEntry(ctx, cmp, dec, s, indexToRoot(idx, x.Depth-1), span)
+	return MaxEntry(ctx, params, indexToRoot(idx, x.Depth-1), span)
 }
 
-func maxEntry(ctx context.Context, sr *StreamReader, under []byte) (ret *Entry, _ error) {
+func maxEntry[Ref any](ctx context.Context, sr *StreamReader[Ref], under []byte) (ret *Entry, _ error) {
 	// TODO: this can be more efficient using Peek
 	var ent Entry
 	for err := sr.Next(ctx, &ent); err != kvstreams.EOS; err = sr.Next(ctx, &ent) {
