@@ -14,10 +14,10 @@ import (
 
 // Builder is used to construct GotKV instances
 // by adding keys in lexicographical order.
-type Builder = ptree.Builder
+type Builder = ptree.Builder[Ref]
 
 // Iterator is used to iterate through entries in GotKV instances.
-type Iterator = ptree.Iterator
+type Iterator = ptree.Iterator[Ref]
 
 // Option is used to configure an Operator
 type Option func(op *Operator)
@@ -133,8 +133,13 @@ func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) 
 
 // MaxEntry returns the entry in the instance x, within span, with the greatest lexicographic value.
 func (o *Operator) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span Span) (*Entry, error) {
-	ps := &ptreeGetter{op: &o.dop, s: s}
-	return ptree.MaxEntry(ctx, bytes.Compare, &Decoder{}, ps, x, span)
+	rp := ptree.ReadParams[Ref]{
+		Store:      &ptreeGetter{op: &o.dop, s: s},
+		Compare:    bytes.Compare,
+		NewDecoder: func() ptree.Decoder { return &Decoder{} },
+		ParseRef:   gdat.ParseRef,
+	}
+	return ptree.MaxEntry(ctx, rp, x, span)
 }
 
 func (o *Operator) HasPrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (bool, error) {
@@ -183,17 +188,20 @@ func (o *Operator) NewBuilder(s Store) *Builder {
 // NewIterator returns an iterator for the instance rooted at x, which
 // will emit all keys within span in the instance.
 func (o *Operator) NewIterator(s Getter, root Root, span Span) *Iterator {
-	return ptree.NewIterator(ptree.IteratorParams{
+	return ptree.NewIterator(ptree.IteratorParams[Ref]{
 		Store:      &ptreeGetter{op: &o.dop, s: s},
 		Compare:    bytes.Compare,
 		NewDecoder: func() ptree.Decoder { return &Decoder{} },
-		Root:       root,
-		Span:       span,
+		ParseRef:   gdat.ParseRef,
+		AppendRef:  gdat.AppendRef,
+
+		Root: root,
+		Span: span,
 	})
 }
 
-func (o *Operator) makeBuilder(s cadata.Store) *ptree.Builder {
-	return ptree.NewBuilder(ptree.BuilderParams{
+func (o *Operator) makeBuilder(s cadata.Store) *ptree.Builder[Ref] {
+	return ptree.NewBuilder(ptree.BuilderParams[Ref]{
 		Store:    &ptreeStore{op: &o.dop, s: s},
 		MeanSize: o.meanSize,
 		MaxSize:  o.maxSize,
@@ -201,7 +209,8 @@ func (o *Operator) makeBuilder(s cadata.Store) *ptree.Builder {
 		NewEncoder: func() ptree.Encoder {
 			return &Encoder{}
 		},
-		Compare: bytes.Compare,
+		Compare:   bytes.Compare,
+		AppendRef: gdat.AppendRef,
 	})
 }
 

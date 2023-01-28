@@ -2,14 +2,14 @@ package ptree
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
-	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
-	"github.com/pkg/errors"
 )
 
 // Getter is used to retrieve nodes from storage by Ref
-type Getter interface {
+type Getter[Ref any] interface {
 	// Get fills buf with data at ref, or returns an error.
 	// Get will always return an n <= MaxSize()
 	Get(ctx context.Context, ref Ref, buf []byte) (n int, err error)
@@ -18,16 +18,16 @@ type Getter interface {
 }
 
 // Poster is used to store nodes in storage and retrieve a Ref
-type Poster interface {
+type Poster[Ref any] interface {
 	// Posts stores the data and returns a Ref for retrieving it.
 	Post(ctx context.Context, data []byte) (Ref, error)
 	// MaxSize is the maximum amount of data that can be Posted in bytes
 	MaxSize() int
 }
 
-type Store interface {
-	Getter
-	Poster
+type Store[Ref any] interface {
+	Getter[Ref]
+	Poster[Ref]
 }
 
 // ErrOutOfRoom is returned when an encoder does not have enough room to write an entry.
@@ -58,18 +58,27 @@ type CompareFunc = func(a, b []byte) int
 
 const (
 	MaxKeySize   = 4096
+	MaxRefSize   = 256
 	MaxTreeDepth = 255
 )
 
 // Root is the root of the tree
-type Root struct {
+type Root[Ref any] struct {
 	Ref   Ref    `json:"ref"`
 	Depth uint8  `json:"depth"`
 	First []byte `json:"first,omitempty"`
 }
 
+// ReadParams are parameters needed to read from a tree
+type ReadParams[Ref any] struct {
+	Store      Getter[Ref]
+	NewDecoder func() Decoder
+	ParseRef   func([]byte) (Ref, error)
+	Compare    CompareFunc
+}
+
 // Copy copies all the entries from it to b.
-func Copy(ctx context.Context, b *Builder, it *Iterator) error {
+func Copy[Ref any](ctx context.Context, b *Builder[Ref], it *Iterator[Ref]) error {
 	var ent Entry
 	for {
 		level := min(b.syncLevel(), it.syncLevel())
@@ -86,17 +95,17 @@ func Copy(ctx context.Context, b *Builder, it *Iterator) error {
 }
 
 // ListChildren returns the immediate children of root if any.
-func ListChildren(ctx context.Context, cmp CompareFunc, dec Decoder, s Getter, root Root) ([]Index, error) {
+func ListChildren[Ref any](ctx context.Context, params ReadParams[Ref], root Root[Ref]) ([]Index[Ref], error) {
 	if PointsToEntries(root) {
-		return nil, errors.Errorf("cannot list children of root with depth=%d", root.Depth)
+		return nil, fmt.Errorf("cannot list children of root with depth=%d", root.Depth)
 	}
-	sr := NewStreamReader(StreamReaderParams{
-		Store:   s,
-		Compare: cmp,
-		Decoder: dec,
-		Indexes: []Index{rootToIndex(root)},
+	sr := NewStreamReader(StreamReaderParams[Ref]{
+		Store:   params.Store,
+		Compare: params.Compare,
+		Decoder: params.NewDecoder(),
+		Indexes: []Index[Ref]{rootToIndex(root)},
 	})
-	var idxs []Index
+	var idxs []Index[Ref]
 	var ent Entry
 	for {
 		if err := sr.Next(ctx, &ent); err != nil {
@@ -105,7 +114,7 @@ func ListChildren(ctx context.Context, cmp CompareFunc, dec Decoder, s Getter, r
 			}
 			return nil, err
 		}
-		idx, err := entryToIndex(ent)
+		idx, err := entryToIndex(ent, params.ParseRef)
 		if err != nil {
 			return nil, err
 		}
@@ -116,51 +125,51 @@ func ListChildren(ctx context.Context, cmp CompareFunc, dec Decoder, s Getter, r
 
 // ListEntries returns a slice of all the entries pointed to by idx, directly.
 // If idx points to other indexes directly, then ListEntries returns the entries for those indexes.
-func ListEntries(ctx context.Context, cmp CompareFunc, dec Decoder, s Getter, idx Index) ([]Entry, error) {
-	sr := NewStreamReader(StreamReaderParams{
-		Store:   s,
-		Compare: cmp,
-		Decoder: dec,
-		Indexes: []Index{idx},
+func ListEntries[Ref any](ctx context.Context, params ReadParams[Ref], idx Index[Ref]) ([]Entry, error) {
+	sr := NewStreamReader(StreamReaderParams[Ref]{
+		Store:   params.Store,
+		Compare: params.Compare,
+		Decoder: params.NewDecoder(),
+		Indexes: []Index[Ref]{idx},
 	})
 	return kvstreams.Collect(ctx, sr)
 }
 
 // PointsToEntries returns true if root points to non-index Entries
-func PointsToEntries(root Root) bool {
+func PointsToEntries[Ref any](root Root[Ref]) bool {
 	return root.Depth == 0
 }
 
 // PointsToIndexes returns true if root points to indexes.
-func PointsToIndexes(root Root) bool {
+func PointsToIndexes[Ref any](root Root[Ref]) bool {
 	return root.Depth > 0
 }
 
-func entryToIndex(ent Entry) (Index, error) {
-	ref, err := gdat.ParseRef(ent.Value)
+func entryToIndex[Ref any](ent Entry, parseRef func([]byte) (Ref, error)) (Index[Ref], error) {
+	ref, err := parseRef(ent.Value)
 	if err != nil {
-		return Index{}, err
+		return Index[Ref]{}, err
 	}
-	return Index{
+	return Index[Ref]{
 		First: append([]byte{}, ent.Key...),
-		Ref:   *ref,
+		Ref:   ref,
 	}, nil
 }
 
-func indexToEntry(idx Index) Entry {
-	return Entry{Key: idx.First, Value: gdat.MarshalRef(idx.Ref)}
+func indexToEntry[Ref any](idx Index[Ref], marshalRef func([]byte, Ref) []byte) Entry {
+	return Entry{Key: idx.First, Value: marshalRef(nil, idx.Ref)}
 }
 
-func indexToRoot(idx Index, depth uint8) Root {
-	return Root{
+func indexToRoot[Ref any](idx Index[Ref], depth uint8) Root[Ref] {
+	return Root[Ref]{
 		Ref:   idx.Ref,
 		First: idx.First,
 		Depth: depth,
 	}
 }
 
-func rootToIndex(r Root) Index {
-	return Index{
+func rootToIndex[Ref any](r Root[Ref]) Index[Ref] {
+	return Index[Ref]{
 		Ref:   r.Ref,
 		First: r.First,
 	}

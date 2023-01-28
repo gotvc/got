@@ -82,6 +82,12 @@ func Collect(ctx context.Context, it Iterator) ([]Entry, error) {
 	return ents, nil
 }
 
+// CopyEntry copies an entry from src to dst.
+func CopyEntry(dst, src *Entry) {
+	dst.Key = append(dst.Key[:0], src.Key...)
+	dst.Value = append(dst.Value[:0], src.Value...)
+}
+
 // A span of keys [Begin, End)
 // If you want to include a specific end key, use the KeyAfter function.
 // nil is interpretted as no bound, not as a 0 length key.  This behaviour is only releveant for End.

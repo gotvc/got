@@ -89,17 +89,14 @@ func (r Ref) IsZero() bool {
 	return true
 }
 
-func ParseRef(x []byte) (*Ref, error) {
-	var ref Ref
-	if err := ref.UnmarshalBinary(x); err != nil {
-		return nil, err
-	}
-	return &ref, nil
+func ParseRef(x []byte) (ret Ref, _ error) {
+	err := ret.UnmarshalBinary(x)
+	return ret, err
 }
 
-func MarshalRef(x Ref) []byte {
+func AppendRef(out []byte, x Ref) []byte {
 	data, _ := x.MarshalBinary()
-	return data
+	return append(out, data...)
 }
 
 func Equal(a, b Ref) bool {
