@@ -9,8 +9,8 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cadata/storetest"
 	"github.com/brendoncarroll/go-state/cells/celltest"
-	"github.com/inet256/inet256/client/go_client/inet256client"
 	"github.com/inet256/inet256/pkg/inet256"
+	"github.com/inet256/inet256/pkg/inet256mem"
 	"github.com/inet256/inet256/pkg/inet256test"
 	"github.com/inet256/inet256/pkg/p2padapter"
 	"github.com/stretchr/testify/require"
@@ -81,7 +81,7 @@ type side struct {
 }
 
 func newTestPair(t testing.TB) (s1, s2 *side) {
-	srv := inet256client.NewTestService(t)
+	srv := inet256mem.New(inet256mem.WithQueueLen(4))
 	key1 := inet256test.NewPrivateKey(t, 0)
 	key2 := inet256test.NewPrivateKey(t, 1)
 	s1 = newTestSide(t, srv, key1)
