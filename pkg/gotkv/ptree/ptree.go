@@ -33,28 +33,28 @@ type Store[Ref any] interface {
 // ErrOutOfRoom is returned when an encoder does not have enough room to write an entry.
 var ErrOutOfRoom = errors.New("out of room")
 
-type Encoder interface {
+type Encoder[T any] interface {
 	// WriteEntry encodes ent to dst and returns the number of bytes written or an error.
 	// ErrOutOfRoom should be returned to indicate that the entry will not fit in the buffer.
-	WriteEntry(dst []byte, ent kvstreams.Entry) (int, error)
+	WriteEntry(dst []byte, ent T) (int, error)
 	// EncodednLen returns the number of bytes that it would take to encode ent.
 	// Calling EncodedLen should not affect the state of the Encoder.
-	EncodedLen(ent kvstreams.Entry) int
+	EncodedLen(ent T) int
 	// Reset returns the encoder to it's orginally contructed state.
 	Reset()
 }
 
-type Decoder interface {
+type Decoder[T, Ref any] interface {
 	// ReadEntry parses an entry from src into ent.  It returns the number of bytes read or an error.a
-	ReadEntry(src []byte, ent *kvstreams.Entry) (int, error)
+	ReadEntry(src []byte, ent *T) (int, error)
 	// PeekEntry is like ReadEntry except it should not affect the state of the Decoder
-	PeekEntry(src []byte, ent *kvstreams.Entry) error
+	PeekEntry(src []byte, ent *T) error
 	// Reset returns the decoder to the original state for the star of a node.
-	Reset(parentKey []byte)
+	Reset(parent Index[Ref])
 }
 
 // CompareFunc compares 2 keys
-type CompareFunc = func(a, b []byte) int
+type CompareFunc[T any] func(a, b T) int
 
 const (
 	MaxKeySize   = 4096
@@ -70,16 +70,16 @@ type Root[Ref any] struct {
 }
 
 // ReadParams are parameters needed to read from a tree
-type ReadParams[Ref any] struct {
+type ReadParams[T, Ref any] struct {
 	Store      Getter[Ref]
-	NewDecoder func() Decoder
+	NewDecoder func() Decoder[T, Ref]
 	ParseRef   func([]byte) (Ref, error)
-	Compare    CompareFunc
+	Compare    CompareFunc[T]
 }
 
 // Copy copies all the entries from it to b.
-func Copy[Ref any](ctx context.Context, b *Builder[Ref], it *Iterator[Ref]) error {
-	var ent Entry
+func Copy[T, Ref any](ctx context.Context, b *Builder[Ref], it *Iterator[Ref]) error {
+	var ent T
 	for {
 		level := min(b.syncLevel(), it.syncLevel())
 		if err := it.next(ctx, level, &ent); err != nil {
@@ -95,7 +95,7 @@ func Copy[Ref any](ctx context.Context, b *Builder[Ref], it *Iterator[Ref]) erro
 }
 
 // ListChildren returns the immediate children of root if any.
-func ListChildren[Ref any](ctx context.Context, params ReadParams[Ref], root Root[Ref]) ([]Index[Ref], error) {
+func ListChildren[T, Ref any](ctx context.Context, params ReadParams[Ref], root Root[Ref]) ([]Index[Ref], error) {
 	if PointsToEntries(root) {
 		return nil, fmt.Errorf("cannot list children of root with depth=%d", root.Depth)
 	}
@@ -125,14 +125,25 @@ func ListChildren[Ref any](ctx context.Context, params ReadParams[Ref], root Roo
 
 // ListEntries returns a slice of all the entries pointed to by idx, directly.
 // If idx points to other indexes directly, then ListEntries returns the entries for those indexes.
-func ListEntries[Ref any](ctx context.Context, params ReadParams[Ref], idx Index[Ref]) ([]Entry, error) {
-	sr := NewStreamReader(StreamReaderParams[Ref]{
+func ListEntries[T, Ref any](ctx context.Context, params ReadParams[Ref], idx Index[Ref]) ([]T, error) {
+	sr := NewStreamReader(StreamReaderParams[T, Ref]{
 		Store:   params.Store,
 		Compare: params.Compare,
 		Decoder: params.NewDecoder(),
 		Indexes: []Index[Ref]{idx},
 	})
-	return kvstreams.Collect(ctx, sr)
+	var ret []T
+	var ent T
+	for err := sr.Next(ctx, &ent); err != EOS; err = sr.Next(ctx, &ent) {
+		if err != nil {
+			return nil, err
+		}
+		if err := fn(ent); err != nil {
+			return nil, err
+		}
+		ret = append(ret, ent)
+	}
+	return ret, nil
 }
 
 // PointsToEntries returns true if root points to non-index Entries

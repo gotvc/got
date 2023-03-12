@@ -1,7 +1,6 @@
 package ptree
 
 import (
-	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -11,51 +10,51 @@ import (
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
 
-type Index[Ref any] struct {
+type Index[T, Ref any] struct {
 	Ref   Ref
-	First []byte
+	First T
 }
 
-func (idx Index[Ref]) Clone() Index[Ref] {
-	return Index[Ref]{
+func (idx Index[T, Ref]) Clone() Index[T, Ref] {
+	return Index[T, Ref]{
 		Ref:   idx.Ref,
 		First: append([]byte{}, idx.First...),
 	}
 }
 
-type blobReader struct {
-	dec     Decoder
-	compare func(a, b []byte) int
+type blobReader[T, Ref any] struct {
+	dec     Decoder[T, Ref]
+	compare func(a, b T) int
 
 	buf         []byte
 	offset, len int
 
-	prevKey []byte
+	//prevKey []byte
 }
 
 // newBlobReader reads the entries from data, using firstKey as the first key
 // firstKey and data must not be modified while using the blobReader
-func newBlobReader(dec Decoder, firstKey []byte, data []byte) *blobReader {
-	dec.Reset(firstKey)
-	return &blobReader{
+func newBlobReader[T, Ref any](dec Decoder[T, Ref], parent Index[Ref], data []byte) *blobReader[T, Ref] {
+	dec.Reset(parent)
+	return &blobReader[T, Ref]{
 		dec: dec,
 		buf: data,
 		len: len(data), // TODO: eventually we want to reuse the buffer
 	}
 }
 
-func (r *blobReader) SeekIndexes(ctx context.Context, gteq []byte) error {
-	var ent Entry
+func (r *blobReader[T, Ref]) SeekIndexes(ctx context.Context, gteq T) error {
+	var ent T
 	for {
 		// if the prevKey is already <= gteq, then don't bother with this
-		if r.compare(r.prevKey, gteq) <= 0 {
-			return nil
-		}
+		//if r.compare(r.prevKey, gteq) <= 0 {
+		//	return nil
+		//}
 		// check to see if the next key is also <= gteq
 		if err := r.Peek(ctx, &ent); err != nil {
 			return err
 		}
-		if r.compare(ent.Key, gteq) >= 0 {
+		if r.compare(ent, gteq) >= 0 {
 			return nil
 		}
 		if err := r.Next(ctx, &ent); err != nil {
@@ -64,8 +63,8 @@ func (r *blobReader) SeekIndexes(ctx context.Context, gteq []byte) error {
 	}
 }
 
-func (r *blobReader) Seek(ctx context.Context, gteq []byte) error {
-	var ent Entry
+func (r *blobReader[T, Ref]) Seek(ctx context.Context, gteq T) error {
+	var ent T
 	for {
 		if err := r.Peek(ctx, &ent); err != nil {
 			if err == kvstreams.EOS {
@@ -73,7 +72,7 @@ func (r *blobReader) Seek(ctx context.Context, gteq []byte) error {
 			}
 			return err
 		}
-		if r.compare(ent.Key, gteq) >= 0 {
+		if r.compare(ent, gteq) >= 0 {
 			return nil
 		}
 		if err := r.Next(ctx, &ent); err != nil {
@@ -82,20 +81,19 @@ func (r *blobReader) Seek(ctx context.Context, gteq []byte) error {
 	}
 }
 
-func (r *blobReader) Next(ctx context.Context, ent *Entry) error {
+func (r *blobReader[T, Ref]) Next(ctx context.Context, ent *T) error {
 	if err := r.next(ctx, ent); err != nil {
 		return err
 	}
-	r.setPrevKey(ent.Key)
 	return nil
 }
 
-func (r *blobReader) Peek(ctx context.Context, ent *Entry) error {
+func (r *blobReader[T, Ref]) Peek(ctx context.Context, ent *T) error {
 	return r.dec.PeekEntry(r.buf[r.offset:r.len], ent)
 }
 
 // next reads the next entry, but does not update r.prevKey
-func (r *blobReader) next(ctx context.Context, ent *Entry) error {
+func (r *blobReader[T, Ref]) next(ctx context.Context, ent *T) error {
 	if r.len-r.offset == 0 {
 		return kvstreams.EOS
 	}
@@ -107,26 +105,24 @@ func (r *blobReader) next(ctx context.Context, ent *Entry) error {
 	return nil
 }
 
-func (r *blobReader) setPrevKey(x []byte) {
-	r.prevKey = append(r.prevKey[:0], x...)
-}
-
-type StreamReader[Ref any] struct {
-	p StreamReaderParams[Ref]
+type StreamReader[T, Ref any] struct {
+	s   Getter[Ref]
+	cmp CompareFunc[T]
+	dec Decoder[T, Ref]
 
 	idxs      []Index[Ref]
 	nextIndex int
-	br        *blobReader
+	br        *blobReader[T, Ref]
 }
 
-type StreamReaderParams[Ref any] struct {
+type StreamReaderParams[T, Ref any] struct {
 	Store   Getter[Ref]
-	Decoder Decoder
-	Compare CompareFunc
+	Decoder Decoder[T, Ref]
+	Compare CompareFunc[T]
 	Indexes []Index[Ref]
 }
 
-func NewStreamReader[Ref any](params StreamReaderParams[Ref]) *StreamReader[Ref] {
+func NewStreamReader[T, Ref any](params StreamReaderParams[T, Ref]) *StreamReader[T, Ref] {
 	if params.Store == nil {
 		panic("NewStreamReader nil Store")
 	}
@@ -146,19 +142,19 @@ func NewStreamReader[Ref any](params StreamReaderParams[Ref]) *StreamReader[Ref]
 	}
 }
 
-func (r *StreamReader[Ref]) Next(ctx context.Context, ent *Entry) error {
-	return r.withBlobReader(ctx, func(br *blobReader) error {
+func (r *StreamReader[T, Ref]) Next(ctx context.Context, ent *T) error {
+	return r.withBlobReader(ctx, func(br *blobReader[T, Ref]) error {
 		return br.Next(ctx, ent)
 	})
 }
 
-func (r *StreamReader[Ref]) Peek(ctx context.Context, ent *Entry) error {
-	return r.withBlobReader(ctx, func(br *blobReader) error {
+func (r *StreamReader[T, Ref]) Peek(ctx context.Context, ent *T) error {
+	return r.withBlobReader(ctx, func(br *blobReader[T, Ref]) error {
 		return br.Peek(ctx, ent)
 	})
 }
 
-func (r *StreamReader[Ref]) SeekIndexes(ctx context.Context, gteq []byte) error {
+func (r *StreamReader[T, Ref]) SeekIndexes(ctx context.Context, gteq T) error {
 	if err := r.seekCommon(ctx, gteq); err != nil {
 		return err
 	}
@@ -168,7 +164,7 @@ func (r *StreamReader[Ref]) SeekIndexes(ctx context.Context, gteq []byte) error 
 	return r.br.SeekIndexes(ctx, gteq)
 }
 
-func (r *StreamReader[Ref]) Seek(ctx context.Context, gteq []byte) error {
+func (r *StreamReader[T, Ref]) Seek(ctx context.Context, gteq T) error {
 	if err := r.seekCommon(ctx, gteq); err != nil {
 		return err
 	}
@@ -178,13 +174,13 @@ func (r *StreamReader[Ref]) Seek(ctx context.Context, gteq []byte) error {
 	return r.br.Seek(ctx, gteq)
 }
 
-func (r *StreamReader[Ref]) seekCommon(ctx context.Context, gteq []byte) error {
+func (r *StreamReader[T, Ref]) seekCommon(ctx context.Context, gteq T) error {
 	if len(r.idxs) < 1 {
 		return nil
 	}
 	var targetIndex int
 	for i := 1; i < len(r.idxs); i++ {
-		if bytes.Compare(r.idxs[i].First, gteq) <= 0 {
+		if r.cmp(r.idxs[i].First, gteq) <= 0 {
 			targetIndex = i
 		} else {
 			break
@@ -201,7 +197,7 @@ func (r *StreamReader[Ref]) seekCommon(ctx context.Context, gteq []byte) error {
 	return nil
 }
 
-func (r *StreamReader[Ref]) withBlobReader(ctx context.Context, fn func(*blobReader) error) error {
+func (r *StreamReader[T, Ref]) withBlobReader(ctx context.Context, fn func(*blobReader[T, Ref]) error) error {
 	if r.br == nil {
 		if r.nextIndex == len(r.idxs) {
 			return kvstreams.EOS
@@ -243,17 +239,17 @@ type StreamWriter[Ref any] struct {
 	prevKey  []byte
 }
 
-type StreamWriterParams[Ref any] struct {
+type StreamWriterParams[T, Ref any] struct {
 	Store    Poster[Ref]
 	Seed     *[16]byte
 	MeanSize int
 	MaxSize  int
-	Compare  func(a, b []byte) int
-	Encoder  Encoder
+	Compare  func(a, b T) int
+	Encoder  Encoder[T]
 	OnIndex  IndexHandler[Ref]
 }
 
-func NewStreamWriter[Ref any](params StreamWriterParams[Ref]) *StreamWriter[Ref] {
+func NewStreamWriter[T, Ref any](params StreamWriterParams[T, Ref]) *StreamWriter[T, Ref] {
 	if params.Seed == nil {
 		params.Seed = new([16]byte)
 	}
@@ -303,11 +299,11 @@ func (w *StreamWriter[Ref]) Append(ctx context.Context, ent Entry) error {
 	return nil
 }
 
-func (w *StreamWriter[Ref]) Buffered() int {
+func (w *StreamWriter[T, Ref]) Buffered() int {
 	return w.n
 }
 
-func (w *StreamWriter[Ref]) Flush(ctx context.Context) error {
+func (w *StreamWriter[T, Ref]) Flush(ctx context.Context) error {
 	if w.Buffered() == 0 {
 		if len(w.firstKey) != 0 {
 			panic("StreamWriter: firstKey set for empty buffer")
