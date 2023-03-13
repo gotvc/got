@@ -1,10 +1,10 @@
 package ptree
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
 
@@ -15,15 +15,16 @@ type Iterator[Ref any] struct {
 	pos    []byte
 }
 
-type IteratorParams[Ref any] struct {
-	Store      Getter[Ref]
-	ParseRef   func([]byte) (Ref, error)
-	AppendRef  func([]byte, Ref) []byte
-	NewDecoder func() Decoder
-	Compare    CompareFunc
+type IteratorParams[T, Ref any] struct {
+	Store        Getter[Ref]
+	NewDecoder   func() Decoder[T, Ref]
+	Compare      CompareFunc[T]
+	Copy         func(dst *T, src T)
+	ConvertIndex func(Index[T, Ref]) T
+	ConvertEntry func(T) (Index[T, Ref], error)
 
-	Root Root[Ref]
-	Span Span
+	Root Root[T, Ref]
+	Span state.Span[T]
 }
 
 func NewIterator[Ref any](params IteratorParams[Ref]) *Iterator[Ref] {
@@ -37,28 +38,28 @@ func NewIterator[Ref any](params IteratorParams[Ref]) *Iterator[Ref] {
 	return it
 }
 
-func (it *Iterator[Ref]) Next(ctx context.Context, ent *Entry) error {
+func (it *Iterator[T, Ref]) Next(ctx context.Context, ent *T) error {
 	return it.next(ctx, 0, ent)
 }
 
-func (it *Iterator[Ref]) Peek(ctx context.Context, ent *Entry) error {
+func (it *Iterator[T, Ref]) Peek(ctx context.Context, ent *T) error {
 	return it.peek(ctx, 0, ent)
 }
 
-func (it *Iterator[Ref]) Seek(ctx context.Context, gteq []byte) error {
-	it.levels[it.p.Root.Depth+1] = []Entry{indexToEntry(rootToIndex(it.p.Root), it.p.AppendRef)}
+func (it *Iterator[T, Ref]) Seek(ctx context.Context, gteq T) error {
+	it.levels[it.root.Depth+1] = []T{it.convertIndex(rootToIndex(it.root))}
 	it.setPos(gteq)
 	for i := len(it.levels) - 1; i >= 0; i-- {
 		if i == 0 {
-			it.levels[i] = filterEntries(it.levels[i], it.getSpan())
+			it.levels[i] = filterEntries(it.levels[i], it.span, it.compare)
 		} else {
-			it.levels[i] = filterIndexes(it.levels[i], it.getSpan())
+			it.levels[i] = filterIndexes(it.levels[i], it.span, it.compare)
 		}
 	}
 	return nil
 }
 
-func (it *Iterator[Ref]) next(ctx context.Context, level int, ent *Entry) error {
+func (it *Iterator[T, Ref]) next(ctx context.Context, level int, ent *T) error {
 	if it.syncLevel() < level {
 		return fmt.Errorf("cannot read from level %d, only synced to %d", level, it.syncLevel())
 	}
@@ -66,14 +67,12 @@ func (it *Iterator[Ref]) next(ctx context.Context, level int, ent *Entry) error 
 	if err != nil {
 		return err
 	}
-	ent2 := entries[0]
-	ent.Key = append(ent.Key[:0], ent2.Key...)
-	ent.Value = append(ent.Value[:0], ent2.Value...)
+	it.copy(ent, entries[0])
 	it.advanceLevel(level, true)
 	return nil
 }
 
-func (it *Iterator[Ref]) peek(ctx context.Context, level int, ent *Entry) error {
+func (it *Iterator[T, Ref]) peek(ctx context.Context, level int, ent *T) error {
 	if it.syncLevel() < level {
 		return fmt.Errorf("cannot read from level %d, only synced to %d", level, it.syncLevel())
 	}
@@ -81,13 +80,11 @@ func (it *Iterator[Ref]) peek(ctx context.Context, level int, ent *Entry) error 
 	if err != nil {
 		return err
 	}
-	ent2 := entries[0]
-	ent.Key = append(ent.Key[:0], ent2.Key...)
-	ent.Value = append(ent.Value[:0], ent2.Value...)
+	it.copy(ent, entries[0])
 	return nil
 }
 
-func (it *Iterator[Ref]) getEntries(ctx context.Context, level int) ([]Entry, error) {
+func (it *Iterator[T, Ref]) getEntries(ctx context.Context, level int) ([]T, error) {
 	if level >= len(it.levels) {
 		return nil, kvstreams.EOS
 	}
@@ -99,19 +96,19 @@ func (it *Iterator[Ref]) getEntries(ctx context.Context, level int) ([]Entry, er
 		if err != nil {
 			return nil, err
 		}
-		idx, err := entryToIndex(above[0], it.p.ParseRef)
+		idx, err := it.convertEntry(above[0])
 		if err != nil {
 			return nil, fmt.Errorf("converting entry to index at level %d: %w", level, err)
 		}
 		it.advanceLevel(level+1, false)
-		ents, err := ListEntries(ctx, ReadParams[Ref]{Store: it.p.Store, Compare: it.p.Compare, NewDecoder: it.p.NewDecoder, ParseRef: it.p.ParseRef}, idx)
+		ents, err := ListEntries(ctx, ReadParams[T, Ref]{Store: it.s, Compare: it.compare, NewDecoder: it.newDecoder, ConvertEntry: it.convertEntry}, idx)
 		if err != nil {
 			return nil, err
 		}
 		if level == 0 {
-			ents = filterEntries(ents, it.getSpan())
+			ents = filterEntries(ents, it.span, it.compare)
 		} else {
-			ents = filterIndexes(ents, it.getSpan())
+			ents = filterIndexes(ents, it.span, it.compare)
 		}
 		if len(ents) > 0 {
 			it.levels[level] = ents
@@ -120,7 +117,7 @@ func (it *Iterator[Ref]) getEntries(ctx context.Context, level int) ([]Entry, er
 	}
 }
 
-func (it *Iterator[Ref]) syncLevel() int {
+func (it *Iterator[T, Ref]) syncLevel() int {
 	// bot is the index below which all levels are synced
 	var bot int
 	for i := range it.levels {
@@ -136,14 +133,18 @@ func (it *Iterator[Ref]) syncLevel() int {
 	var top int
 	for i := len(it.levels) - 1; i >= 0; i-- {
 		top = i
+<<<<<<< HEAD
 		if len(it.levels[i]) > 1 && (it.p.Span.End == nil || bytes.Compare(it.levels[i][1].Key, it.p.Span.End) < 0) {
+=======
+		if len(it.levels[i]) > 1 && it.span.Contains(it.levels[i][1], it.compare) {
+>>>>>>> 8eedaef (wip)
 			break
 		}
 	}
 	return min(bot, top)
 }
 
-func (it *Iterator[Ref]) advanceLevel(level int, updatePos bool) {
+func (it *Iterator[T, Ref]) advanceLevel(level int, updatePos bool) {
 	entries := it.levels[level]
 	it.levels[level] = entries[1:]
 	if !updatePos {
@@ -152,15 +153,17 @@ func (it *Iterator[Ref]) advanceLevel(level int, updatePos bool) {
 	for i := level; i < len(it.levels); i++ {
 		entries := it.levels[i]
 		if len(entries) > 0 {
-			it.setPos(entries[0].Key)
+			it.setPos(entries[0])
 			return
 		}
 	}
-	it.pos = nil // end of the stream
+	// end of the stream
 }
 
-func (it *Iterator[Ref]) setPos(x []byte) {
-	it.pos = append(it.pos[:0], x...)
+func (it *Iterator[T, Ref]) setPos(x T) {
+	var x2 T
+	it.copy(&x2, x)
+	it.span = it.span.WithLowerIncl(x2)
 }
 
 func (it *Iterator[Ref]) getSpan() Span {
@@ -173,7 +176,7 @@ func (it *Iterator[Ref]) getSpan() Span {
 func filterEntries(xs []Entry, span Span) []Entry {
 	ret := xs[:0]
 	for i := range xs {
-		if span.Contains(xs[i].Key) {
+		if span.Contains(xs[i], cmp) {
 			ret = append(ret, xs[i])
 		}
 	}
@@ -181,13 +184,13 @@ func filterEntries(xs []Entry, span Span) []Entry {
 }
 
 // filterIndexes removes indexes that could not point to items in span.
-func filterIndexes(xs []Entry, span Span) []Entry {
+func filterIndexes[T any](xs []T, span state.Span[T], cmp func(a, b T) int) []T {
 	ret := xs[:0]
 	for i := range xs {
-		if span.AllLt(xs[i].Key) {
+		if span.Compare(xs[i], cmp) < 0 {
 			continue
 		}
-		if i+1 < len(xs) && bytes.Compare(span.Begin, xs[i+1].Key) >= 0 {
+		if i+1 < len(xs) && span.Compare(xs[i+1], cmp) > 0 {
 			continue
 		}
 		ret = append(ret, xs[i])

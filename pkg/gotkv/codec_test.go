@@ -62,7 +62,7 @@ func TestEncodeDecode(t *testing.T) {
 	}
 
 	dec := Decoder{}
-	dec.Reset(makeKey(0))
+	dec.Reset(Index{First: Entry{Key: makeKey(0)}})
 	var nread int
 	var ent kvstreams.Entry
 	for i := 0; i < 10; i++ {

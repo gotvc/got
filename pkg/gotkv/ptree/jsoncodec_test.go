@@ -4,11 +4,21 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+
+	"github.com/brendoncarroll/go-state/cadata"
 )
+
+type Entry struct {
+	Key, Value []byte
+}
+
+func (e Entry) Clone() Entry {
+	return Entry{Key: e.Key, Value: e.Value}
+}
 
 type JSONEncoder struct{}
 
-func NewJSONEncoder() Encoder {
+func NewJSONEncoder() Encoder[Entry] {
 	return &JSONEncoder{}
 }
 
@@ -34,7 +44,7 @@ func (dec *JSONEncoder) Reset() {}
 
 type JSONDecoder struct{}
 
-func NewJSONDecoder() Decoder {
+func NewJSONDecoder() Decoder[Entry, cadata.ID] {
 	return &JSONDecoder{}
 }
 
@@ -55,4 +65,4 @@ func (dec *JSONDecoder) PeekEntry(src []byte, ent *Entry) error {
 	return err
 }
 
-func (dec *JSONDecoder) Reset(firstKey []byte) {}
+func (dec *JSONDecoder) Reset(idx Index[Entry, cadata.ID]) {}

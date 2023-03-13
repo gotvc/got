@@ -158,13 +158,13 @@ func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) 
 
 // MaxEntry returns the entry in the instance x, within span, with the greatest lexicographic value.
 func (o *Operator) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span Span) (*Entry, error) {
-	rp := ptree.ReadParams[Ref]{
+	rp := ptree.ReadParams[Entry, Ref]{
 		Store:      &ptreeGetter{op: &o.dop, s: s},
-		Compare:    bytes.Compare,
-		NewDecoder: func() ptree.Decoder { return &Decoder{} },
+		Compare:    compareEntries,
+		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 		ParseRef:   gdat.ParseRef,
 	}
-	return ptree.MaxEntry(ctx, rp, x.toPtree(), span)
+	return ptree.MaxEntry(ctx, rp, x.toPtree(), Entry{Key: span.End})
 }
 
 func (o *Operator) HasPrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (bool, error) {
@@ -222,17 +222,34 @@ func (o *Operator) NewBuilder(s Store) *Builder {
 // NewIterator returns an iterator for the instance rooted at x, which
 // will emit all keys within span in the instance.
 func (o *Operator) NewIterator(s Getter, root Root, span Span) *Iterator {
-	it := ptree.NewIterator(ptree.IteratorParams[Ref]{
-		Store:      &ptreeGetter{op: &o.dop, s: s},
-		Compare:    bytes.Compare,
-		NewDecoder: func() ptree.Decoder { return &Decoder{} },
-		ParseRef:   gdat.ParseRef,
-		AppendRef:  gdat.AppendRef,
+	it := ptree.NewIterator(ptree.IteratorParams[Entry, Ref]{
+		Store:        &ptreeGetter{op: &o.dop, s: s},
+		Compare:      compareEntries,
+		NewDecoder:   func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
+		Copy:         copyEntry,
+		ConvertIndex: convertIndex,
+		ConvertEntry: convertEntry,
 
 		Root: root.toPtree(),
-		Span: span,
+		Span: convertSpan(span),
 	})
 	return &Iterator{it: *it}
+}
+
+func (o *Operator) makeBuilder(s cadata.Store) *Builder {
+	b := ptree.NewBuilder(ptree.BuilderParams[Entry, Ref]{
+		Store:    &ptreeStore{op: &o.dop, s: s},
+		MeanSize: o.meanSize,
+		MaxSize:  o.maxSize,
+		Seed:     o.seed,
+		NewEncoder: func() ptree.Encoder[Entry] {
+			return &Encoder{}
+		},
+		Compare:      compareEntries,
+		Copy:         kvstreams.CopyEntry,
+		ConvertIndex: convertIndex,
+	})
+	return &Builder{b: *b}
 }
 
 // ForEach calls fn with every entry, in the GotKV instance rooted at root, contained in span, in lexicographical order.

@@ -15,26 +15,17 @@ type Index[T, Ref any] struct {
 	First T
 }
 
-func (idx Index[T, Ref]) Clone() Index[T, Ref] {
-	return Index[T, Ref]{
-		Ref:   idx.Ref,
-		First: append([]byte{}, idx.First...),
-	}
-}
-
 type blobReader[T, Ref any] struct {
 	dec     Decoder[T, Ref]
 	compare func(a, b T) int
 
 	buf         []byte
 	offset, len int
-
-	//prevKey []byte
 }
 
 // newBlobReader reads the entries from data, using firstKey as the first key
 // firstKey and data must not be modified while using the blobReader
-func newBlobReader[T, Ref any](dec Decoder[T, Ref], parent Index[Ref], data []byte) *blobReader[T, Ref] {
+func newBlobReader[T, Ref any](dec Decoder[T, Ref], parent Index[T, Ref], data []byte) *blobReader[T, Ref] {
 	dec.Reset(parent)
 	return &blobReader[T, Ref]{
 		dec: dec,
@@ -95,7 +86,7 @@ func (r *blobReader[T, Ref]) Peek(ctx context.Context, ent *T) error {
 // next reads the next entry, but does not update r.prevKey
 func (r *blobReader[T, Ref]) next(ctx context.Context, ent *T) error {
 	if r.len-r.offset == 0 {
-		return kvstreams.EOS
+		return EOS
 	}
 	n, err := r.dec.ReadEntry(r.buf[r.offset:r.len], ent)
 	if err != nil {
@@ -110,7 +101,7 @@ type StreamReader[T, Ref any] struct {
 	cmp CompareFunc[T]
 	dec Decoder[T, Ref]
 
-	idxs      []Index[Ref]
+	idxs      []Index[T, Ref]
 	nextIndex int
 	br        *blobReader[T, Ref]
 }
@@ -119,7 +110,7 @@ type StreamReaderParams[T, Ref any] struct {
 	Store   Getter[Ref]
 	Decoder Decoder[T, Ref]
 	Compare CompareFunc[T]
-	Indexes []Index[Ref]
+	Indexes []Index[T, Ref]
 }
 
 func NewStreamReader[T, Ref any](params StreamReaderParams[T, Ref]) *StreamReader[T, Ref] {
@@ -218,7 +209,7 @@ func (r *StreamReader[T, Ref]) withBlobReader(ctx context.Context, fn func(*blob
 	return err
 }
 
-func (r *StreamReader[Ref]) getBlobReader(ctx context.Context, idx Index[Ref]) (*blobReader, error) {
+func (r *StreamReader[T, Ref]) getBlobReader(ctx context.Context, idx Index[T, Ref]) (*blobReader[T, Ref], error) {
 	buf := make([]byte, r.p.Store.MaxSize())
 	n, err := r.p.Store.Get(ctx, idx.Ref, buf)
 	if err != nil {
@@ -227,16 +218,17 @@ func (r *StreamReader[Ref]) getBlobReader(ctx context.Context, idx Index[Ref]) (
 	return newBlobReader(r.p.Decoder, idx.First, buf[:n]), nil
 }
 
-type IndexHandler[Ref any] func(Index[Ref]) error
+type IndexHandler[T, Ref any] func(Index[T, Ref]) error
 
-type StreamWriter[Ref any] struct {
-	p StreamWriterParams[Ref]
+type StreamWriter[T, Ref any] struct {
+	p StreamWriterParams[T, Ref]
 
 	buf []byte
 	n   int
 
-	firstKey []byte
-	prevKey  []byte
+	first      T
+	prev       T
+	prevExists bool
 }
 
 type StreamWriterParams[T, Ref any] struct {
@@ -246,14 +238,15 @@ type StreamWriterParams[T, Ref any] struct {
 	MaxSize  int
 	Compare  func(a, b T) int
 	Encoder  Encoder[T]
-	OnIndex  IndexHandler[Ref]
+	OnIndex  IndexHandler[T, Ref]
+	Copy     func(dst *T, src T)
 }
 
 func NewStreamWriter[T, Ref any](params StreamWriterParams[T, Ref]) *StreamWriter[T, Ref] {
 	if params.Seed == nil {
 		params.Seed = new([16]byte)
 	}
-	w := &StreamWriter[Ref]{
+	w := &StreamWriter[T, Ref]{
 		p: params,
 
 		buf: make([]byte, params.MaxSize),
@@ -262,9 +255,9 @@ func NewStreamWriter[T, Ref any](params StreamWriterParams[T, Ref]) *StreamWrite
 	return w
 }
 
-func (w *StreamWriter[Ref]) Append(ctx context.Context, ent Entry) error {
-	if w.prevKey != nil && w.p.Compare(ent.Key, w.prevKey) <= 0 {
-		panic(fmt.Sprintf("out of order key: prev=%q key=%q", w.prevKey, ent.Key))
+func (w *StreamWriter[T, Ref]) Append(ctx context.Context, ent T) error {
+	if w.prevExists && w.p.Compare(ent, w.prev) <= 0 {
+		panic(fmt.Sprintf("out of order key: prev=%v current=%v", w.prev, ent))
 	}
 	entryLen := w.p.Encoder.EncodedLen(ent)
 	if entryLen > w.p.MaxSize {
@@ -285,11 +278,12 @@ func (w *StreamWriter[Ref]) Append(ctx context.Context, ent Entry) error {
 		return fmt.Errorf("encoder reported inaccurate entry length, claimed=%d, actual=%d", entryLen, n)
 	}
 	if offset == 0 {
-		w.firstKey = append(w.firstKey[:0], ent.Key...)
+		w.p.Copy(&w.first, ent)
 	}
 	w.n += n
 
-	w.prevKey = append(w.prevKey[:0], ent.Key...)
+	w.p.Copy(&w.prev, ent)
+	w.prevExists = true
 	// split after writing the entry
 	if w.isSplitPoint(w.buf[offset : offset+n]) {
 		if err := w.Flush(ctx); err != nil {
@@ -305,28 +299,28 @@ func (w *StreamWriter[T, Ref]) Buffered() int {
 
 func (w *StreamWriter[T, Ref]) Flush(ctx context.Context) error {
 	if w.Buffered() == 0 {
-		if len(w.firstKey) != 0 {
-			panic("StreamWriter: firstKey set for empty buffer")
-		}
 		return nil
 	}
 	ref, err := w.p.Store.Post(ctx, w.buf[:w.n])
 	if err != nil {
 		return err
 	}
-	if err := w.p.OnIndex(Index[Ref]{
-		First: w.firstKey,
+	var first T
+	w.p.Copy(&first, w.first)
+	if err := w.p.OnIndex(Index[T, Ref]{
+		First: first,
 		Ref:   ref,
 	}); err != nil {
 		return err
 	}
-	w.firstKey = w.firstKey[:0]
+	var zero T
+	w.p.Copy(&w.first, zero)
 	w.n = 0
 	w.p.Encoder.Reset()
 	return nil
 }
 
-func (w *StreamWriter[Ref]) isSplitPoint(data []byte) bool {
+func (w *StreamWriter[T, Ref]) isSplitPoint(data []byte) bool {
 	r := sum64(data, w.p.Seed)
 	prob := math.MaxUint64 / uint64(w.p.MeanSize) * uint64(len(data))
 	return r < prob

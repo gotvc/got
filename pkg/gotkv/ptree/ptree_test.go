@@ -1,11 +1,11 @@
 package ptree
 
 import (
-	"bytes"
 	"context"
 	"strconv"
 	"testing"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -15,18 +15,19 @@ func TestBuilder(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
-	b := NewBuilder(BuilderParams[cadata.ID]{
-		Store:      s,
-		MeanSize:   defaultAvgSize,
-		MaxSize:    defaultMaxSize,
-		Seed:       nil,
-		Compare:    bytes.Compare,
-		NewEncoder: NewJSONEncoder,
-		AppendRef:  appendCID,
+	b := NewBuilder(BuilderParams[Entry, cadata.ID]{
+		Store:        s,
+		MeanSize:     defaultAvgSize,
+		MaxSize:      defaultMaxSize,
+		Seed:         nil,
+		Compare:      compareEntries,
+		NewEncoder:   NewJSONEncoder,
+		ConvertIndex: convertIndex,
+		Copy:         copyEntry,
 	})
 
 	generateEntries(1e4, func(ent Entry) {
-		err := b.Put(ctx, ent.Key, ent.Value)
+		err := b.Put(ctx, ent)
 		require.NoError(t, err)
 	})
 	root, err := b.Finish(ctx)
@@ -38,19 +39,20 @@ func TestBuildIterate(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
-	b := NewBuilder(BuilderParams[cadata.ID]{
-		Store:      s,
-		MeanSize:   defaultAvgSize,
-		MaxSize:    defaultMaxSize,
-		Seed:       nil,
-		Compare:    bytes.Compare,
-		NewEncoder: NewJSONEncoder,
-		AppendRef:  appendCID,
+	b := NewBuilder(BuilderParams[Entry, cadata.ID]{
+		Store:        s,
+		MeanSize:     defaultAvgSize,
+		MaxSize:      defaultMaxSize,
+		Seed:         nil,
+		Compare:      compareEntries,
+		NewEncoder:   NewJSONEncoder,
+		ConvertIndex: convertIndex,
+		Copy:         copyEntry,
 	})
 
 	const N = 1e4
 	generateEntries(N, func(ent Entry) {
-		err := b.Put(ctx, ent.Key, ent.Value)
+		err := b.Put(ctx, ent)
 		require.NoError(t, err)
 	})
 	root, err := b.Finish(ctx)
@@ -59,20 +61,24 @@ func TestBuildIterate(t *testing.T) {
 
 	t.Logf("produced %d blobs", s.Len())
 
-	it := NewIterator(IteratorParams[cadata.ID]{
-		Store:      s,
-		Compare:    bytes.Compare,
-		NewDecoder: NewJSONDecoder,
-		ParseRef:   parseCID,
-		AppendRef:  appendCID,
-		Root:       *root,
-		Span:       Span{},
+	it := NewIterator(IteratorParams[Entry, cadata.ID]{
+		Store:        s,
+		Compare:      compareEntries,
+		NewDecoder:   NewJSONDecoder,
+		Root:         *root,
+		Span:         state.TotalSpan[Entry](),
+		ConvertEntry: convertEntry,
+		ConvertIndex: convertIndex,
+		Copy:         copyEntry,
 	})
 	var ent Entry
 	for i := 0; i < N; i++ {
 		err := it.Next(ctx, &ent)
 		require.NoError(t, err, "at %d", i)
 		require.Contains(t, string(ent.Key), strconv.Itoa(i))
+	}
+	for i := 0; i < 3; i++ {
+		require.ErrorIs(t, it.Next(ctx, &ent), EOS)
 	}
 }
 
@@ -82,18 +88,19 @@ func TestCopy(t *testing.T) {
 	maxSize := 1 << 16
 	s := cadata.NewMem(cadata.DefaultHash, maxSize)
 	ctx := context.Background()
-	b := NewBuilder(BuilderParams[cadata.ID]{
-		Store:      s,
-		MeanSize:   averageSize,
-		MaxSize:    maxSize,
-		Seed:       nil,
-		Compare:    bytes.Compare,
-		NewEncoder: NewJSONEncoder,
-		AppendRef:  appendCID,
+	b := NewBuilder(BuilderParams[Entry, cadata.ID]{
+		Store:        s,
+		MeanSize:     averageSize,
+		MaxSize:      maxSize,
+		Seed:         nil,
+		Compare:      compareEntries,
+		NewEncoder:   NewJSONEncoder,
+		ConvertIndex: convertIndex,
+		Copy:         copyEntry,
 	})
 	const N = 1e6
 	generateEntries(N, func(ent Entry) {
-		err := b.Put(ctx, ent.Key, ent.Value)
+		err := b.Put(ctx, ent)
 		require.NoError(t, err)
 	})
 	root, err := b.Finish(ctx)
@@ -101,23 +108,25 @@ func TestCopy(t *testing.T) {
 	require.NotNil(t, root)
 
 	t.Log("begin copying")
-	it := NewIterator(IteratorParams[cadata.ID]{
-		Store:      s,
-		Compare:    bytes.Compare,
-		NewDecoder: NewJSONDecoder,
-		AppendRef:  appendCID,
-		ParseRef:   parseCID,
-		Root:       *root,
-		Span:       Span{},
+	it := NewIterator(IteratorParams[Entry, cadata.ID]{
+		Store:        s,
+		Compare:      compareEntries,
+		NewDecoder:   NewJSONDecoder,
+		Root:         *root,
+		Span:         state.Span[Entry]{},
+		ConvertIndex: convertIndex,
+		ConvertEntry: convertEntry,
+		Copy:         copyEntry,
 	})
-	b2 := NewBuilder(BuilderParams[cadata.ID]{
-		Store:      s,
-		MeanSize:   averageSize,
-		MaxSize:    maxSize,
-		Seed:       nil,
-		AppendRef:  appendCID,
-		NewEncoder: NewJSONEncoder,
-		Compare:    bytes.Compare,
+	b2 := NewBuilder(BuilderParams[Entry, cadata.ID]{
+		Store:        s,
+		MeanSize:     averageSize,
+		MaxSize:      maxSize,
+		Seed:         nil,
+		NewEncoder:   NewJSONEncoder,
+		Compare:      compareEntries,
+		ConvertIndex: convertIndex,
+		Copy:         copyEntry,
 	})
 	require.NoError(t, Copy(ctx, b2, it))
 	root2, err := b2.Finish(ctx)
@@ -125,14 +134,18 @@ func TestCopy(t *testing.T) {
 	require.Equal(t, root, root2)
 }
 
-func parseCID(x []byte) (ret cadata.ID, _ error) {
-	if len(x) != len(ret) {
-		return ret, errors.New("incorrect length for Ref")
-	}
-	copy(ret[:], x)
-	return ret, nil
+func copyEntry(dst *Entry, src Entry) {
+	dst.Key = append(dst.Key[:0], src.Key...)
+	dst.Value = append(dst.Value[:0], src.Value...)
 }
 
-func appendCID(out []byte, x cadata.ID) []byte {
-	return append(out, x[:]...)
+func convertIndex(idx Index[Entry, cadata.ID]) Entry {
+	return Entry{Key: idx.First.Key, Value: idx.Ref[:]}
+}
+
+func convertEntry(ent Entry) (Index[Entry, cadata.ID], error) {
+	if len(ent.Value) != cadata.IDSize {
+		return Index[Entry, cadata.ID]{}, errors.New("ref is wrong size")
+	}
+	return Index[Entry, cadata.ID]{First: Entry{Key: ent.Key}, Ref: cadata.IDFromBytes(ent.Value)}, nil
 }

@@ -1,26 +1,21 @@
 package ptree
 
 import (
-	"bytes"
 	"context"
+	"errors"
 
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
 
-type (
-	Span  = kvstreams.Span
-	Entry = kvstreams.Entry
-)
-
 // MaxEntry returns the entry in span with the greatest (ordered last) key.
-func MaxEntry[Ref any](ctx context.Context, params ReadParams[Ref], x Root[Ref], span Span) (*Entry, error) {
-	sr := NewStreamReader(StreamReaderParams[Ref]{
+func MaxEntry[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Root[T, Ref], lt T) (*T, error) {
+	sr := NewStreamReader(StreamReaderParams[T, Ref]{
 		Store:   params.Store,
 		Compare: params.Compare,
 		Decoder: params.NewDecoder(),
-		Indexes: []Index[Ref]{rootToIndex(x)},
+		Indexes: []Index[T, Ref]{rootToIndex(x)},
 	})
-	ent, err := maxEntry(ctx, sr, span.End)
+	ent, err := maxEntry(ctx, sr, params.Compare, &lt)
 	if err != nil {
 		return nil, err
 	}
@@ -28,30 +23,40 @@ func MaxEntry[Ref any](ctx context.Context, params ReadParams[Ref], x Root[Ref],
 		return nil, nil
 	}
 	if x.Depth == 0 {
-		if span.AllGt(ent.Key) {
+		if params.Compare(lt, *ent) > 0 {
 			return nil, nil
 		}
 		return ent, nil
 	}
-	idx, err := entryToIndex(*ent, params.ParseRef)
+	idx, err := params.ConvertEntry(*ent)
 	if err != nil {
 		return nil, err
 	}
-	return MaxEntry(ctx, params, indexToRoot(idx, x.Depth-1), span)
+	return MaxEntry(ctx, params, indexToRoot(idx, x.Depth-1), lt)
 }
 
-func maxEntry[Ref any](ctx context.Context, sr *StreamReader[Ref], under []byte) (ret *Entry, _ error) {
+func maxEntry[T, Ref any](ctx context.Context, sr *StreamReader[T, Ref], cmp func(a, b T) int, under *T) (ret *T, _ error) {
 	// TODO: this can be more efficient using Peek
-	var ent Entry
-	for err := sr.Next(ctx, &ent); err != kvstreams.EOS; err = sr.Next(ctx, &ent) {
-		if err != nil {
+	var ent T
+	var found bool
+	for {
+		if err := sr.Peek(ctx, &ent); err != nil {
+			if errors.Is(err, kvstreams.EOS) {
+				break
+			}
 			return nil, err
 		}
-		if under != nil && bytes.Compare(ent.Key, under) >= 0 {
-			break
+		if under != nil && cmp(ent, *under) >= 0 {
+			break // not under
 		}
-		ent2 := ent.Clone()
-		ret = &ent2
+		if err := sr.Next(ctx, &ent); err != nil {
+			return nil, err
+		}
+		found = true
 	}
-	return ret, nil
+	if found {
+		return &ent, nil
+	} else {
+		return nil, nil
+	}
 }

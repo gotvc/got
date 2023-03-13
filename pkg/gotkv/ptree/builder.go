@@ -5,24 +5,24 @@ import (
 	"fmt"
 )
 
-type Builder[Ref any] struct {
-	p BuilderParams[Ref]
+type Builder[T, Ref any] struct {
+	p BuilderParams[T, Ref]
 
-	levels []*StreamWriter[Ref]
+	levels []*StreamWriter[T, Ref]
 	isDone bool
-	root   *Root[Ref]
-
-	ctx context.Context
+	root   *Root[T, Ref]
+	ctx    context.Context
 }
 
-type BuilderParams[Ref any] struct {
-	Store      Poster[Ref]
-	MeanSize   int
-	MaxSize    int
-	Seed       *[16]byte
-	Compare    CompareFunc
-	NewEncoder func() Encoder
-	AppendRef  func(out []byte, ref Ref) []byte
+type BuilderParams[T, Ref any] struct {
+	Store        Poster[Ref]
+	MeanSize     int
+	MaxSize      int
+	Seed         *[16]byte
+	Compare      CompareFunc[T]
+	NewEncoder   func() Encoder[T]
+	ConvertIndex func(idx Index[T, Ref]) T
+	Copy         func(dst *T, src T)
 }
 
 func NewBuilder[Ref any](params BuilderParams[Ref]) *Builder[Ref] {
@@ -39,31 +39,24 @@ func (b *Builder[Ref]) makeWriter(i int) *StreamWriter[Ref] {
 		MeanSize: b.p.MeanSize,
 		Seed:     b.p.Seed,
 		Encoder:  b.p.NewEncoder(),
+		Copy:     b.p.Copy,
 		Compare:  b.p.Compare,
-		OnIndex: func(idx Index[Ref]) error {
+		OnIndex: func(idx Index[T, Ref]) error {
 			if b.isDone && i == len(b.levels)-1 {
-				b.root = &Root[Ref]{
+				b.root = &Root[T, Ref]{
 					Ref:   idx.Ref,
-					First: append([]byte{}, idx.First...),
+					First: idx.First,
 					Depth: uint8(i),
 				}
 				return nil
 			}
-			refBytes := make([]byte, 0, 64)
-			refBytes = b.p.AppendRef(refBytes, idx.Ref)
-			if len(refBytes) > MaxRefSize {
-				return fmt.Errorf("marshaled Ref is too large. size=%d MaxRefSize=%d", len(refBytes), MaxRefSize)
-			}
-			return b.getWriter(i+1).Append(b.ctx, Entry{
-				Key:   idx.First,
-				Value: refBytes,
-			})
+			return b.getWriter(i+1).Append(b.ctx, b.p.ConvertIndex(idx))
 		},
 	}
 	return NewStreamWriter(params)
 }
 
-func (b *Builder[Ref]) getWriter(level int) *StreamWriter[Ref] {
+func (b *Builder[T, Ref]) getWriter(level int) *StreamWriter[T, Ref] {
 	for len(b.levels) <= level {
 		i := len(b.levels)
 		b.levels = append(b.levels, b.makeWriter(i))
@@ -71,11 +64,11 @@ func (b *Builder[Ref]) getWriter(level int) *StreamWriter[Ref] {
 	return b.levels[level]
 }
 
-func (b *Builder[Ref]) Put(ctx context.Context, key, value []byte) error {
-	return b.put(ctx, 0, key, value)
+func (b *Builder[T, Ref]) Put(ctx context.Context, x T) error {
+	return b.put(ctx, 0, x)
 }
 
-func (b *Builder[Ref]) put(ctx context.Context, level int, key, value []byte) error {
+func (b *Builder[T, Ref]) put(ctx context.Context, level int, x T) error {
 	b.ctx = ctx
 	defer func() { b.ctx = nil }()
 	if b.isDone {
@@ -84,17 +77,14 @@ func (b *Builder[Ref]) put(ctx context.Context, level int, key, value []byte) er
 	if b.syncLevel() < level {
 		return fmt.Errorf("cannot put at level %d", level)
 	}
-	err := b.getWriter(level).Append(ctx, Entry{
-		Key:   key,
-		Value: value,
-	})
+	err := b.getWriter(level).Append(ctx, x)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (b *Builder[Ref]) Finish(ctx context.Context) (*Root[Ref], error) {
+func (b *Builder[T, Ref]) Finish(ctx context.Context) (*Root[T, Ref], error) {
 	b.ctx = ctx
 	defer func() { b.ctx = nil }()
 
@@ -113,12 +103,12 @@ func (b *Builder[Ref]) Finish(ctx context.Context) (*Root[Ref], error) {
 		if err != nil {
 			return nil, err
 		}
-		b.root = &Root[Ref]{Ref: ref, Depth: 1}
+		b.root = &Root[T, Ref]{Ref: ref, Depth: 1}
 	}
 	return b.root, nil
 }
 
-func (b *Builder[Ref]) syncLevel() int {
+func (b *Builder[T, Ref]) syncLevel() int {
 	for i := range b.levels {
 		if b.levels[i].Buffered() > 0 {
 			return i

@@ -6,10 +6,14 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
 )
 
-var _ ptree.Encoder = &Encoder{}
+type Index = ptree.Index[kvstreams.Entry, gdat.Ref]
+
+var _ ptree.Encoder[kvstreams.Entry] = &Encoder{}
 
 // Encoder is a ptree.Encoder
 type Encoder struct {
@@ -115,8 +119,8 @@ func (d *Decoder) PeekEntry(src []byte, ent *Entry) error {
 	return err
 }
 
-func (d *Decoder) Reset(parentKey []byte) {
-	d.prevKey = append(d.prevKey[:0], parentKey...)
+func (d *Decoder) Reset(parent Index) {
+	d.prevKey = append(d.prevKey[:0], parent.First.Key...)
 	d.count = 0
 }
 

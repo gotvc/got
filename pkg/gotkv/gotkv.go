@@ -5,6 +5,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
@@ -59,6 +60,31 @@ var (
 
 var defaultReadOnlyOperator = &Operator{dop: gdat.NewOperator()}
 
+type Root struct {
+	Ref   gdat.Ref `json:"ref"`
+	Depth uint8    `json:"depth"`
+	First []byte   `json:"first,omitempty"`
+}
+
+func rootFromPtree(x *ptree.Root[Entry, Ref]) *Root {
+	if x == nil {
+		return nil
+	}
+	return &Root{
+		Ref:   x.Ref,
+		Depth: x.Depth,
+		First: x.First.Key,
+	}
+}
+
+func (r Root) toPtree() ptree.Root[Entry, Ref] {
+	return ptree.Root[kvstreams.Entry, gdat.Ref]{
+		Ref:   r.Ref,
+		Depth: r.Depth,
+		First: Entry{Key: r.First},
+	}
+}
+
 // Get is a convenience function for performing Get without creating an Operator.
 func Get(ctx context.Context, s Getter, x Root, key []byte) ([]byte, error) {
 	return defaultReadOnlyOperator.Get(ctx, s, x, key)
@@ -81,11 +107,11 @@ func CopyAll(ctx context.Context, b *Builder, it kvstreams.Iterator) error {
 
 // Sync ensures dst has all the data reachable from x.
 func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Root, entryFn func(Entry) error) error {
-	rp := ptree.ReadParams[Ref]{
-		Compare:    bytes.Compare,
+	rp := ptree.ReadParams[Entry, Ref]{
+		Compare:    compareEntries,
 		Store:      &ptreeGetter{op: &o.dop, s: src},
 		ParseRef:   gdat.ParseRef,
-		NewDecoder: func() ptree.Decoder { return &Decoder{} },
+		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 	}
 	return do(ctx, rp, x, doer{
 		CanSkip: func(r Root) (bool, error) {
@@ -101,11 +127,11 @@ func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Roo
 // Populate adds all blobs reachable from x to set.
 // If an item is in set all of the blobs reachable from it are also assumed to also be in set.
 func (o *Operator) Populate(ctx context.Context, s Store, x Root, set cadata.Set, entryFn func(ent Entry) error) error {
-	rp := ptree.ReadParams[Ref]{
-		Compare:    bytes.Compare,
+	rp := ptree.ReadParams[Entry, Ref]{
+		Compare:    compareEntries,
 		Store:      &ptreeGetter{op: &o.dop, s: s},
 		ParseRef:   gdat.ParseRef,
-		NewDecoder: func() ptree.Decoder { return &Decoder{} },
+		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 	}
 	return do(ctx, rp, x, doer{
 		CanSkip: func(r Root) (bool, error) {
@@ -128,14 +154,14 @@ type doer struct {
 	NodeFn func(r Root) error
 }
 
-func do(ctx context.Context, rp ptree.ReadParams[Ref], x Root, p doer) error {
+func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x Root, p doer) error {
 	if canSkip, err := p.CanSkip(x); err != nil {
 		return err
 	} else if canSkip {
 		return nil
 	}
 	if ptree.PointsToEntries(x.toPtree()) {
-		ents, err := ptree.ListEntries(ctx, rp, ptree.Index[Ref]{First: x.First, Ref: x.Ref})
+		ents, err := ptree.ListEntries(ctx, rp, Index{First: Entry{Key: x.First}, Ref: x.Ref})
 		if err != nil {
 			return err
 		}
@@ -153,7 +179,7 @@ func do(ctx context.Context, rp ptree.ReadParams[Ref], x Root, p doer) error {
 		for _, idx := range idxs {
 			root2 := Root{
 				Ref:   idx.Ref,
-				First: idx.First,
+				First: idx.First.Key,
 				Depth: x.Depth - 1,
 			}
 			eg.Go(func() error {
@@ -203,11 +229,45 @@ func (s *ptreeStore) MaxSize() int {
 
 // DebugTree writes human-readable debug information about the tree to w.
 func DebugTree(ctx context.Context, s cadata.Store, root Root, w io.Writer) error {
-	rp := ptree.ReadParams[Ref]{
+	rp := ptree.ReadParams[Entry, Ref]{
 		Store:      &ptreeGetter{s: s, op: &defaultReadOnlyOperator.dop},
-		Compare:    bytes.Compare,
+		Compare:    compareEntries,
 		ParseRef:   gdat.ParseRef,
-		NewDecoder: func() ptree.Decoder { return &Decoder{} },
+		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 	}
 	return ptree.DebugTree(ctx, rp, root.toPtree(), w)
+}
+
+func compareEntries(a, b Entry) int {
+	return bytes.Compare(a.Key, b.Key)
+}
+
+func copyEntry(dst *Entry, src Entry) {
+	kvstreams.CopyEntry(dst, src)
+}
+
+func convertIndex(idx Index) Entry {
+	return Entry{Key: idx.First.Key, Value: gdat.AppendRef(nil, idx.Ref)}
+}
+
+func convertEntry(x Entry) (Index, error) {
+	ref, err := gdat.ParseRef(x.Value)
+	if err != nil {
+		return Index{}, err
+	}
+	return Index{
+		First: Entry{Key: x.Key},
+		Ref:   ref,
+	}, nil
+}
+
+func convertSpan(x kvstreams.Span) state.Span[Entry] {
+	y := state.TotalSpan[Entry]()
+	if x.Begin != nil {
+		y = y.WithLowerIncl(Entry{Key: x.Begin})
+	}
+	if x.End != nil {
+		y = y.WithUpperExcl(Entry{Key: x.End})
+	}
+	return y
 }

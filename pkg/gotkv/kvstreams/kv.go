@@ -83,7 +83,7 @@ func Collect(ctx context.Context, it Iterator) ([]Entry, error) {
 }
 
 // CopyEntry copies an entry from src to dst.
-func CopyEntry(dst, src *Entry) {
+func CopyEntry(dst *Entry, src Entry) {
 	dst.Key = append(dst.Key[:0], src.Key...)
 	dst.Value = append(dst.Value[:0], src.Value...)
 }
