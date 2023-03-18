@@ -47,6 +47,7 @@ func TestStreamRW(t *testing.T) {
 	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
 	sw := NewStreamWriter(StreamWriterParams[cadata.ID]{
 		Store:    s,
+		Compare:  bytes.Compare,
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
@@ -93,6 +94,7 @@ func TestStreamWriterChunkSize(t *testing.T) {
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
+		Compare:  bytes.Compare,
 		Encoder:  &JSONEncoder{},
 		OnIndex: func(idx Index[cadata.ID]) error {
 			refs = append(refs, idx.Ref)
@@ -145,6 +147,7 @@ func BenchmarkStreamWriter(b *testing.B) {
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
 		Encoder:  &JSONEncoder{},
+		Compare:  bytes.Compare,
 		OnIndex:  func(idx Index[cadata.ID]) error { return nil },
 	})
 	generateEntries(b.N, func(ent Entry) {

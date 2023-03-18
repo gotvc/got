@@ -135,7 +135,7 @@ func NewStreamReader[Ref any](params StreamReaderParams[Ref]) *StreamReader[Ref]
 	}
 	idxs := params.Indexes
 	for i := 0; i < len(idxs)-1; i++ {
-		if bytes.Compare(idxs[i].First, idxs[i+1].First) >= 0 {
+		if params.Compare(idxs[i].First, idxs[i+1].First) >= 0 {
 			panic(fmt.Sprintf("StreamReader: unordered indexes %q >= %q", idxs[i].First, idxs[i+1].First))
 		}
 	}
@@ -256,9 +256,6 @@ type StreamWriterParams[Ref any] struct {
 func NewStreamWriter[Ref any](params StreamWriterParams[Ref]) *StreamWriter[Ref] {
 	if params.Seed == nil {
 		params.Seed = new([16]byte)
-	}
-	if params.Compare == nil {
-		params.Compare = bytes.Compare
 	}
 	w := &StreamWriter[Ref]{
 		p: params,
