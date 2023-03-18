@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
@@ -27,7 +26,6 @@ func TestPutGet(t *testing.T) {
 	value := []byte("value")
 	x, err := op.Put(ctx, s, *x, key, value)
 	require.NoError(t, err)
-	DebugTree(ctx, s, *x, os.Stderr)
 	actualValue, err := op.Get(ctx, s, *x, key)
 	require.NoError(t, err)
 	require.Equal(t, value, actualValue)
