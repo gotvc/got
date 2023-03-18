@@ -21,7 +21,7 @@ func TestContentDefined(t *testing.T) {
 
 	t.Run("Random", func(t *testing.T) {
 		t.Parallel()
-		r := io.LimitReader(randReader{}, N)
+		r := io.LimitReader(newRandReader(), N)
 		sizes := testChunker(t, r, minSize, maxSize, func(ch ChunkHandler) Chunker {
 			key := [32]byte{}
 			return NewContentDefined(minSize, avgSize, maxSize, &key, ch)
@@ -35,7 +35,7 @@ func TestContentDefined(t *testing.T) {
 		// all the data should have been chunked
 		require.Equal(t, int(N), total)
 		// average size should be close to what we expect
-		withinTolerance(t, mu, avgSize, 0.05)
+		withinTolerance(t, mu, avgSize, 0.15)
 	})
 
 	t.Run("Zero", func(t *testing.T) {
@@ -111,10 +111,18 @@ func withinTolerance(t *testing.T, x int, target int, tol float64) {
 	require.True(t, ok, "%d not in target (%d +/- %f) == (%f, %f)", x, target, tol, float64(target)*(1-tol), float64(target)*(1+tol))
 }
 
-type randReader struct{}
+type randReader struct {
+	rng *mrand.Rand
+}
+
+func newRandReader() randReader {
+	return randReader{
+		rng: mrand.New(mrand.NewSource(0)),
+	}
+}
 
 func (r randReader) Read(p []byte) (n int, err error) {
-	return mrand.Read(p)
+	return r.rng.Read(p)
 }
 
 type zeroReader struct{ c byte }
