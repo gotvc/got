@@ -29,9 +29,6 @@ func NewBuilder[Ref any](params BuilderParams[Ref]) *Builder[Ref] {
 	b := &Builder[Ref]{
 		p: params,
 	}
-	b.levels = []*StreamWriter[Ref]{
-		b.makeWriter(0),
-	}
 	return b
 }
 

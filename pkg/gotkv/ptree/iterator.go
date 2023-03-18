@@ -11,7 +11,6 @@ import (
 type Iterator[Ref any] struct {
 	p IteratorParams[Ref]
 
-	span   Span
 	levels [][]Entry
 	pos    []byte
 }
@@ -31,11 +30,10 @@ func NewIterator[Ref any](params IteratorParams[Ref]) *Iterator[Ref] {
 	it := &Iterator[Ref]{
 		p: params,
 
-		span:   kvstreams.CloneSpan(params.Span),
 		levels: make([][]Entry, params.Root.Depth+2),
 	}
 	it.levels[it.p.Root.Depth+1] = []Entry{indexToEntry(rootToIndex(it.p.Root), it.p.AppendRef)}
-	it.setPos(it.span.Begin)
+	it.setPos(params.Span.Begin)
 	return it
 }
 
@@ -138,7 +136,7 @@ func (it *Iterator[Ref]) syncLevel() int {
 	var top int
 	for i := len(it.levels) - 1; i >= 0; i-- {
 		top = i
-		if len(it.levels[i]) > 1 && (it.span.End == nil || bytes.Compare(it.levels[i][1].Key, it.span.End) < 0) {
+		if len(it.levels[i]) > 1 && (it.p.Span.End == nil || bytes.Compare(it.levels[i][1].Key, it.p.Span.End) < 0) {
 			break
 		}
 	}
@@ -168,7 +166,7 @@ func (it *Iterator[Ref]) setPos(x []byte) {
 func (it *Iterator[Ref]) getSpan() Span {
 	return Span{
 		Begin: it.pos,
-		End:   it.span.End,
+		End:   it.p.Span.End,
 	}
 }
 
