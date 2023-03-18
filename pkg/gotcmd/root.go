@@ -1,13 +1,11 @@
 package gotcmd
 
 import (
-	"os"
-
-	"github.com/spf13/cobra"
-	"golang.org/x/exp/slog"
-	"golang.org/x/net/context"
+	"context"
 
 	"github.com/brendoncarroll/stdctx/logctx"
+	"github.com/spf13/cobra"
+	"go.uber.org/zap"
 
 	"github.com/gotvc/got"
 	"github.com/gotvc/got/pkg/gotrepo"
@@ -68,7 +66,10 @@ func NewRootCmd() *cobra.Command {
 }
 
 var (
-	log       = slog.New(slog.NewTextHandler(os.Stderr))
+	log = func() *zap.Logger {
+		log, _ := zap.NewProduction()
+		return log
+	}()
 	collector = metrics.NewCollector()
 
 	ctx = func() context.Context {

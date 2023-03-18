@@ -6,7 +6,6 @@ import (
 	"crypto/rand"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,7 +15,7 @@ import (
 	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
-	"golang.org/x/exp/slog"
+	"go.uber.org/zap"
 
 	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/branches"
@@ -136,7 +135,7 @@ func Init(p string) error {
 
 func Open(p string) (*Repo, error) {
 	ctx := context.Background()
-	log := slog.New(slog.NewTextHandler(os.Stderr))
+	log, _ := zap.NewProduction()
 	ctx = logctx.NewContext(ctx, log)
 
 	repoFS := posixfs.NewDirFS(p)

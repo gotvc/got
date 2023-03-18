@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -16,11 +15,11 @@ import (
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/exp/slog"
+	"go.uber.org/zap"
 )
 
 var ctx = func() context.Context {
-	l := slog.New(slog.NewTextHandler(os.Stderr))
+	l, _ := zap.NewDevelopment()
 	return logctx.NewContext(context.Background(), l)
 }()
 

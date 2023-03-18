@@ -3,14 +3,14 @@ module github.com/gotvc/got
 go 1.19
 
 require (
-	github.com/brendoncarroll/go-p2p v0.0.0-20230311160607-9e3210bcf494
+	github.com/brendoncarroll/go-p2p v0.0.0-20230318184050-1b4145c902cf
 	github.com/brendoncarroll/go-state v0.0.0-20230114155940-0d163a3abbd6
 	github.com/brendoncarroll/go-tai64 v0.0.0-20220726191612-c9e9c0704db4
-	github.com/brendoncarroll/stdctx v0.0.0-20230114173309-0ff5de5eda5a
+	github.com/brendoncarroll/stdctx v0.0.0-20230318183431-4786d63efd50
 	github.com/dchest/siphash v1.2.3
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/golang-lru v0.5.1
-	github.com/inet256/inet256 v0.0.8-0.20230311170159-eb5c9087e95c
+	github.com/inet256/inet256 v0.0.8-0.20230318185056-003af303648f
 	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.8.1
@@ -50,6 +50,9 @@ require (
 	github.com/quic-go/qtls-go1-20 v0.1.1 // indirect
 	github.com/quic-go/quic-go v0.33.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	go.uber.org/atomic v1.7.0 // indirect
+	go.uber.org/multierr v1.6.0 // indirect
+	go.uber.org/zap v1.24.0 // indirect
 	golang.org/x/mod v0.6.0 // indirect
 	golang.org/x/sys v0.5.0 // indirect
 	golang.org/x/text v0.7.0 // indirect
