@@ -112,9 +112,7 @@ func (r *blobReader) setPrevKey(x []byte) {
 }
 
 type StreamReader[Ref any] struct {
-	s   Getter[Ref]
-	cmp CompareFunc
-	dec Decoder
+	p StreamReaderParams[Ref]
 
 	idxs      []Index[Ref]
 	nextIndex int
@@ -137,14 +135,12 @@ func NewStreamReader[Ref any](params StreamReaderParams[Ref]) *StreamReader[Ref]
 	}
 	idxs := params.Indexes
 	for i := 0; i < len(idxs)-1; i++ {
-		if bytes.Compare(idxs[i].First, idxs[i+1].First) >= 0 {
+		if params.Compare(idxs[i].First, idxs[i+1].First) >= 0 {
 			panic(fmt.Sprintf("StreamReader: unordered indexes %q >= %q", idxs[i].First, idxs[i+1].First))
 		}
 	}
 	return &StreamReader[Ref]{
-		s:   params.Store,
-		cmp: params.Compare,
-		dec: params.Decoder,
+		p: params,
 
 		idxs: idxs,
 	}
@@ -227,23 +223,18 @@ func (r *StreamReader[Ref]) withBlobReader(ctx context.Context, fn func(*blobRea
 }
 
 func (r *StreamReader[Ref]) getBlobReader(ctx context.Context, idx Index[Ref]) (*blobReader, error) {
-	buf := make([]byte, r.s.MaxSize())
-	n, err := r.s.Get(ctx, idx.Ref, buf)
+	buf := make([]byte, r.p.Store.MaxSize())
+	n, err := r.p.Store.Get(ctx, idx.Ref, buf)
 	if err != nil {
 		return nil, err
 	}
-	return newBlobReader(r.dec, idx.First, buf[:n]), nil
+	return newBlobReader(r.p.Decoder, idx.First, buf[:n]), nil
 }
 
 type IndexHandler[Ref any] func(Index[Ref]) error
 
 type StreamWriter[Ref any] struct {
-	s                 Poster[Ref]
-	enc               Encoder
-	compare           func(a, b []byte) int
-	onIndex           IndexHandler[Ref]
-	seed              *[16]byte
-	meanSize, maxSize int
+	p StreamWriterParams[Ref]
 
 	buf []byte
 	n   int
@@ -267,36 +258,30 @@ func NewStreamWriter[Ref any](params StreamWriterParams[Ref]) *StreamWriter[Ref]
 		params.Seed = new([16]byte)
 	}
 	w := &StreamWriter[Ref]{
-		s:        params.Store,
-		compare:  bytes.Compare,
-		enc:      params.Encoder,
-		onIndex:  params.OnIndex,
-		seed:     params.Seed,
-		meanSize: params.MeanSize,
-		maxSize:  params.MaxSize,
+		p: params,
 
 		buf: make([]byte, params.MaxSize),
 	}
-	w.enc.Reset()
+	w.p.Encoder.Reset()
 	return w
 }
 
 func (w *StreamWriter[Ref]) Append(ctx context.Context, ent Entry) error {
-	if w.prevKey != nil && w.compare(ent.Key, w.prevKey) <= 0 {
+	if w.prevKey != nil && w.p.Compare(ent.Key, w.prevKey) <= 0 {
 		panic(fmt.Sprintf("out of order key: prev=%q key=%q", w.prevKey, ent.Key))
 	}
-	entryLen := w.enc.EncodedLen(ent)
-	if entryLen > w.maxSize {
-		return fmt.Errorf("entry (size=%d) exceeds maximum size %d", entryLen, w.maxSize)
+	entryLen := w.p.Encoder.EncodedLen(ent)
+	if entryLen > w.p.MaxSize {
+		return fmt.Errorf("entry (size=%d) exceeds maximum size %d", entryLen, w.p.MaxSize)
 	}
-	if entryLen+w.n > w.maxSize {
+	if entryLen+w.n > w.p.MaxSize {
 		if err := w.Flush(ctx); err != nil {
 			return err
 		}
 	}
 
 	offset := w.n
-	n, err := w.enc.WriteEntry(w.buf[offset:], ent)
+	n, err := w.p.Encoder.WriteEntry(w.buf[offset:], ent)
 	if err != nil {
 		return err
 	}
@@ -329,11 +314,11 @@ func (w *StreamWriter[Ref]) Flush(ctx context.Context) error {
 		}
 		return nil
 	}
-	ref, err := w.s.Post(ctx, w.buf[:w.n])
+	ref, err := w.p.Store.Post(ctx, w.buf[:w.n])
 	if err != nil {
 		return err
 	}
-	if err := w.onIndex(Index[Ref]{
+	if err := w.p.OnIndex(Index[Ref]{
 		First: w.firstKey,
 		Ref:   ref,
 	}); err != nil {
@@ -341,13 +326,13 @@ func (w *StreamWriter[Ref]) Flush(ctx context.Context) error {
 	}
 	w.firstKey = w.firstKey[:0]
 	w.n = 0
-	w.enc.Reset()
+	w.p.Encoder.Reset()
 	return nil
 }
 
 func (w *StreamWriter[Ref]) isSplitPoint(data []byte) bool {
-	r := sum64(data, w.seed)
-	prob := math.MaxUint64 / uint64(w.meanSize) * uint64(len(data))
+	r := sum64(data, w.p.Seed)
+	prob := math.MaxUint64 / uint64(w.p.MeanSize) * uint64(len(data))
 	return r < prob
 }
 

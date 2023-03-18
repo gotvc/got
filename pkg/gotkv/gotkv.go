@@ -21,9 +21,32 @@ type (
 
 	Entry = kvstreams.Entry
 	Span  = kvstreams.Span
-
-	Root = ptree.Root[Ref]
 )
+
+type Root struct {
+	Ref   gdat.Ref `json:"ref"`
+	Depth uint8    `json:"depth"`
+	First []byte   `json:"first,omitempty"`
+}
+
+func newRoot(x *ptree.Root[gdat.Ref]) *Root {
+	if x == nil {
+		return nil
+	}
+	return &Root{
+		Ref:   x.Ref,
+		Depth: x.Depth,
+		First: x.First,
+	}
+}
+
+func (r Root) toPtree() ptree.Root[gdat.Ref] {
+	return ptree.Root[gdat.Ref]{
+		Ref:   r.Ref,
+		Depth: r.Depth,
+		First: r.First,
+	}
+}
 
 const (
 	MaxKeySize = ptree.MaxKeySize
@@ -48,8 +71,8 @@ func GetF(ctx context.Context, s Getter, x Root, key []byte, fn func([]byte) err
 
 // CopyAll copies all the entries from iterator to builder.
 func CopyAll(ctx context.Context, b *Builder, it kvstreams.Iterator) error {
-	if pti, ok := it.(*ptree.Iterator[Ref]); ok {
-		return ptree.Copy(ctx, b, pti)
+	if it, ok := it.(*Iterator); ok {
+		return ptree.Copy(ctx, &b.b, &it.it)
 	}
 	return kvstreams.ForEach(ctx, it, func(ent Entry) error {
 		return b.Put(ctx, ent.Key, ent.Value)
@@ -111,7 +134,7 @@ func do(ctx context.Context, rp ptree.ReadParams[Ref], x Root, p doer) error {
 	} else if canSkip {
 		return nil
 	}
-	if ptree.PointsToEntries(x) {
+	if ptree.PointsToEntries(x.toPtree()) {
 		ents, err := ptree.ListEntries(ctx, rp, ptree.Index[Ref]{First: x.First, Ref: x.Ref})
 		if err != nil {
 			return err
@@ -122,7 +145,7 @@ func do(ctx context.Context, rp ptree.ReadParams[Ref], x Root, p doer) error {
 			}
 		}
 	} else {
-		idxs, err := ptree.ListChildren(ctx, rp, x)
+		idxs, err := ptree.ListChildren(ctx, rp, x.toPtree())
 		if err != nil {
 			return err
 		}
@@ -186,5 +209,5 @@ func DebugTree(ctx context.Context, s cadata.Store, root Root, w io.Writer) erro
 		ParseRef:   gdat.ParseRef,
 		NewDecoder: func() ptree.Decoder { return &Decoder{} },
 	}
-	return ptree.DebugTree(ctx, rp, root, w)
+	return ptree.DebugTree(ctx, rp, root.toPtree(), w)
 }
