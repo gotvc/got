@@ -111,7 +111,7 @@ func TestStreamWriterChunkSize(t *testing.T) {
 	count := len(refs)
 	t.Log("count:", count)
 	var total int
-	buf := make([]byte, sw.maxSize)
+	buf := make([]byte, sw.p.MaxSize)
 	for _, ref := range refs {
 		n, err := s.Get(ctx, ref, buf)
 		require.NoError(t, err)

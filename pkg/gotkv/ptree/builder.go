@@ -6,11 +6,7 @@ import (
 )
 
 type Builder[Ref any] struct {
-	s                 Poster[Ref]
-	meanSize, maxSize int
-	seed              *[16]byte
-	newEncoder        func() Encoder
-	appendRef         func([]byte, Ref) []byte
+	p BuilderParams[Ref]
 
 	levels []*StreamWriter[Ref]
 	isDone bool
@@ -31,12 +27,7 @@ type BuilderParams[Ref any] struct {
 
 func NewBuilder[Ref any](params BuilderParams[Ref]) *Builder[Ref] {
 	b := &Builder[Ref]{
-		s:          params.Store,
-		meanSize:   params.MeanSize,
-		maxSize:    params.MaxSize,
-		seed:       params.Seed,
-		newEncoder: params.NewEncoder,
-		appendRef:  params.AppendRef,
+		p: params,
 	}
 	b.levels = []*StreamWriter[Ref]{
 		b.makeWriter(0),
@@ -46,11 +37,12 @@ func NewBuilder[Ref any](params BuilderParams[Ref]) *Builder[Ref] {
 
 func (b *Builder[Ref]) makeWriter(i int) *StreamWriter[Ref] {
 	params := StreamWriterParams[Ref]{
-		Store:    b.s,
-		MaxSize:  b.maxSize,
-		MeanSize: b.meanSize,
-		Seed:     b.seed,
-		Encoder:  b.newEncoder(),
+		Store:    b.p.Store,
+		MaxSize:  b.p.MaxSize,
+		MeanSize: b.p.MeanSize,
+		Seed:     b.p.Seed,
+		Encoder:  b.p.NewEncoder(),
+		Compare:  b.p.Compare,
 		OnIndex: func(idx Index[Ref]) error {
 			if b.isDone && i == len(b.levels)-1 {
 				b.root = &Root[Ref]{
@@ -61,7 +53,7 @@ func (b *Builder[Ref]) makeWriter(i int) *StreamWriter[Ref] {
 				return nil
 			}
 			refBytes := make([]byte, 0, 64)
-			refBytes = b.appendRef(refBytes, idx.Ref)
+			refBytes = b.p.AppendRef(refBytes, idx.Ref)
 			if len(refBytes) > MaxRefSize {
 				return fmt.Errorf("marshaled Ref is too large. size=%d MaxRefSize=%d", len(refBytes), MaxRefSize)
 			}
@@ -120,7 +112,7 @@ func (b *Builder[Ref]) Finish(ctx context.Context) (*Root[Ref], error) {
 	}
 	// handle empty root
 	if b.root == nil {
-		ref, err := b.s.Post(ctx, nil)
+		ref, err := b.p.Store.Post(ctx, nil)
 		if err != nil {
 			return nil, err
 		}

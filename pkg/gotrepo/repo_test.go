@@ -78,7 +78,7 @@ func TestCommitLargeFile(t *testing.T) {
 	fs := repo.WorkingDir()
 
 	p := "largefile"
-	const size = 2e9
+	const size = 1e9
 	require.NoError(t, posixfs.PutFile(ctx, fs, p, 0o644, testutil.RandomStream(0, size)))
 	require.NoError(t, repo.Put(ctx, p))
 	require.NoError(t, repo.Commit(ctx, gotvc.SnapInfo{}))

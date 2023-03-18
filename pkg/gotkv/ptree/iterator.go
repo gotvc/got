@@ -9,15 +9,9 @@ import (
 )
 
 type Iterator[Ref any] struct {
-	s          Getter[Ref]
-	newDecoder func() Decoder
-	parseRef   func([]byte) (Ref, error)
-	appendRef  func([]byte, Ref) []byte
-	compare    CompareFunc
+	p IteratorParams[Ref]
 
-	root Root[Ref]
-	span Span
-
+	span   Span
 	levels [][]Entry
 	pos    []byte
 }
@@ -35,17 +29,12 @@ type IteratorParams[Ref any] struct {
 
 func NewIterator[Ref any](params IteratorParams[Ref]) *Iterator[Ref] {
 	it := &Iterator[Ref]{
-		s:          params.Store,
-		newDecoder: params.NewDecoder,
-		parseRef:   params.ParseRef,
-		appendRef:  params.AppendRef,
-		compare:    params.Compare,
+		p: params,
 
-		root:   params.Root,
 		span:   kvstreams.CloneSpan(params.Span),
 		levels: make([][]Entry, params.Root.Depth+2),
 	}
-	it.levels[it.root.Depth+1] = []Entry{indexToEntry(rootToIndex(it.root), it.appendRef)}
+	it.levels[it.p.Root.Depth+1] = []Entry{indexToEntry(rootToIndex(it.p.Root), it.p.AppendRef)}
 	it.setPos(it.span.Begin)
 	return it
 }
@@ -59,7 +48,7 @@ func (it *Iterator[Ref]) Peek(ctx context.Context, ent *Entry) error {
 }
 
 func (it *Iterator[Ref]) Seek(ctx context.Context, gteq []byte) error {
-	it.levels[it.root.Depth+1] = []Entry{indexToEntry(rootToIndex(it.root), it.appendRef)}
+	it.levels[it.p.Root.Depth+1] = []Entry{indexToEntry(rootToIndex(it.p.Root), it.p.AppendRef)}
 	it.setPos(gteq)
 	for i := len(it.levels) - 1; i >= 0; i-- {
 		if i == 0 {
@@ -112,12 +101,12 @@ func (it *Iterator[Ref]) getEntries(ctx context.Context, level int) ([]Entry, er
 		if err != nil {
 			return nil, err
 		}
-		idx, err := entryToIndex(above[0], it.parseRef)
+		idx, err := entryToIndex(above[0], it.p.ParseRef)
 		if err != nil {
 			return nil, fmt.Errorf("converting entry to index at level %d: %w", level, err)
 		}
 		it.advanceLevel(level+1, false)
-		ents, err := ListEntries(ctx, ReadParams[Ref]{Store: it.s, Compare: it.compare, NewDecoder: it.newDecoder, ParseRef: it.parseRef}, idx)
+		ents, err := ListEntries(ctx, ReadParams[Ref]{Store: it.p.Store, Compare: it.p.Compare, NewDecoder: it.p.NewDecoder, ParseRef: it.p.ParseRef}, idx)
 		if err != nil {
 			return nil, err
 		}
