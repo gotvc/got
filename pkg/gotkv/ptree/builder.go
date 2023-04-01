@@ -8,67 +8,123 @@ import (
 type Builder[T, Ref any] struct {
 	p BuilderParams[T, Ref]
 
-	levels []*StreamWriter[T, Ref]
+	levels []builderLevel[T, Ref]
 	isDone bool
 	root   *Root[T, Ref]
 	ctx    context.Context
 }
 
-type BuilderParams[T, Ref any] struct {
-	Store        Poster[Ref]
-	MeanSize     int
-	MaxSize      int
-	Seed         *[16]byte
-	Compare      CompareFunc[T]
-	NewEncoder   func() Encoder[T]
-	ConvertIndex func(idx Index[T, Ref]) T
-	Copy         func(dst *T, src T)
+type builderLevel[T, Ref any] struct {
+	EntryWriter *StreamWriter[T, Ref]
+	IndexWriter *StreamWriter[Index[T, Ref], Ref]
 }
 
-func NewBuilder[Ref any](params BuilderParams[Ref]) *Builder[Ref] {
-	b := &Builder[Ref]{
+func (bl builderLevel[T, Ref]) Append(ctx context.Context, x dual[T, Ref]) error {
+	if bl.EntryWriter != nil {
+		return bl.EntryWriter.Append(ctx, *x.Entry)
+	} else if bl.IndexWriter != nil {
+		return bl.IndexWriter.Append(ctx, *x.Index)
+	} else {
+		panic("empty builderLevel")
+	}
+}
+
+func (bl builderLevel[T, Ref]) Buffered() (ret int) {
+	if bl.EntryWriter != nil {
+		return bl.EntryWriter.Buffered()
+	}
+	if bl.IndexWriter != nil {
+		return bl.IndexWriter.Buffered()
+	}
+	return 0
+}
+
+type BuilderParams[T, Ref any] struct {
+	Store           Poster[Ref]
+	MeanSize        int
+	MaxSize         int
+	Seed            *[16]byte
+	Compare         CompareFunc[T]
+	NewEncoder      func() Encoder[T]
+	NewIndexEncoder func() Encoder[Index[T, Ref]]
+	Copy            func(dst *T, src T)
+}
+
+func NewBuilder[T, Ref any](params BuilderParams[T, Ref]) *Builder[T, Ref] {
+	b := &Builder[T, Ref]{
 		p: params,
 	}
 	return b
 }
 
-func (b *Builder[Ref]) makeWriter(i int) *StreamWriter[Ref] {
-	params := StreamWriterParams[Ref]{
-		Store:    b.p.Store,
-		MaxSize:  b.p.MaxSize,
-		MeanSize: b.p.MeanSize,
-		Seed:     b.p.Seed,
-		Encoder:  b.p.NewEncoder(),
-		Copy:     b.p.Copy,
-		Compare:  b.p.Compare,
-		OnIndex: func(idx Index[T, Ref]) error {
-			if b.isDone && i == len(b.levels)-1 {
-				b.root = &Root[T, Ref]{
-					Ref:   idx.Ref,
-					First: idx.First,
-					Depth: uint8(i),
+func (b *Builder[T, Ref]) makeLevel(i int) builderLevel[T, Ref] {
+	if i == 0 {
+		sw := NewStreamWriter(StreamWriterParams[T, Ref]{
+			Store:    b.p.Store,
+			MaxSize:  b.p.MaxSize,
+			MeanSize: b.p.MeanSize,
+			Seed:     b.p.Seed,
+			Encoder:  b.p.NewEncoder(),
+			Copy:     b.p.Copy,
+			Compare:  b.p.Compare,
+			OnIndex: func(idx Index[T, Ref]) error {
+				if b.isDone && i == len(b.levels)-1 {
+					b.root = &Root[T, Ref]{
+						Ref:   idx.Ref,
+						Span:  idx.Span,
+						Depth: uint8(i),
+					}
+					return nil
 				}
-				return nil
-			}
-			return b.getWriter(i+1).Append(b.ctx, b.p.ConvertIndex(idx))
-		},
+				bl := b.getLevel(i + 1)
+				return bl.IndexWriter.Append(b.ctx, idx)
+			},
+		})
+		return builderLevel[T, Ref]{
+			EntryWriter: sw,
+		}
+	} else {
+		sw := NewStreamWriter(StreamWriterParams[Index[T, Ref], Ref]{
+			Store:    b.p.Store,
+			MaxSize:  b.p.MaxSize,
+			MeanSize: b.p.MeanSize,
+			Seed:     b.p.Seed,
+			Encoder:  b.p.NewIndexEncoder(),
+			Copy:     upgradeCopy[T, Ref](b.p.Copy),
+			Compare:  upgradeCompare[T, Ref](b.p.Compare),
+			OnIndex: func(idx Index[Index[T, Ref], Ref]) error {
+				idx2 := flattenIndex(idx)
+				if b.isDone && i == len(b.levels)-1 {
+					b.root = &Root[T, Ref]{
+						Ref:   idx2.Ref,
+						Span:  idx2.Span,
+						Depth: uint8(i),
+					}
+					return nil
+				}
+				bl := b.getLevel(i + 1)
+				return bl.IndexWriter.Append(b.ctx, idx2)
+			},
+		})
+		return builderLevel[T, Ref]{
+			IndexWriter: sw,
+		}
 	}
-	return NewStreamWriter(params)
 }
 
-func (b *Builder[T, Ref]) getWriter(level int) *StreamWriter[T, Ref] {
+func (b *Builder[T, Ref]) getLevel(level int) builderLevel[T, Ref] {
 	for len(b.levels) <= level {
 		i := len(b.levels)
-		b.levels = append(b.levels, b.makeWriter(i))
+		b.levels = append(b.levels, b.makeLevel(i))
 	}
 	return b.levels[level]
 }
 
 func (b *Builder[T, Ref]) Put(ctx context.Context, x T) error {
-	return b.put(ctx, 0, x)
+	return b.put(ctx, 0, dual[T, Ref]{Entry: &x})
 }
 
-func (b *Builder[T, Ref]) put(ctx context.Context, level int, x T) error {
+func (b *Builder[T, Ref]) put(ctx context.Context, level int, x dual[T, Ref]) error {
 	b.ctx = ctx
 	defer func() { b.ctx = nil }()
 	if b.isDone {
@@ -77,11 +133,7 @@ func (b *Builder[T, Ref]) put(ctx context.Context, level int, x T) error {
 	if b.syncLevel() < level {
 		return fmt.Errorf("cannot put at level %d", level)
 	}
-	err := b.getWriter(level).Append(ctx, x)
-	if err != nil {
-		return err
-	}
-	return nil
+	return b.getLevel(level).Append(ctx, x)
 }
 
 func (b *Builder[T, Ref]) Finish(ctx context.Context) (*Root[T, Ref], error) {
@@ -92,9 +144,15 @@ func (b *Builder[T, Ref]) Finish(ctx context.Context) (*Root[T, Ref], error) {
 		return nil, fmt.Errorf("builder is closed")
 	}
 	b.isDone = true
-	for _, w := range b.levels {
-		if err := w.Flush(ctx); err != nil {
-			return nil, err
+	for i, bl := range b.levels {
+		if i == 0 {
+			if err := bl.EntryWriter.Flush(ctx); err != nil {
+				return nil, err
+			}
+		} else {
+			if err := bl.IndexWriter.Flush(ctx); err != nil {
+				return nil, err
+			}
 		}
 	}
 	// handle empty root
@@ -115,4 +173,32 @@ func (b *Builder[T, Ref]) syncLevel() int {
 		}
 	}
 	return MaxTreeDepth - 1 // allow copying at any depth
+}
+
+func upgradeCompare[T, Ref any](cmp func(a, b T) int) func(a, b Index[T, Ref]) int {
+	return func(a, b Index[T, Ref]) int {
+		if bl, ok := b.Span.LowerBound(); ok {
+			if au, ok := a.Span.UpperBound(); ok {
+				// TODO: this is wrong
+				return cmp(bl, au)
+			}
+		}
+		if al, ok := a.Span.LowerBound(); ok {
+			if bu, ok := b.Span.UpperBound(); ok {
+				// TODO: this is wrong
+				return cmp(al, bu)
+			}
+		}
+		return 0
+	}
+}
+
+func upgradeCopy[T, Ref any](copy func(dst *T, src T)) func(dst *Index[T, Ref], src Index[T, Ref]) {
+	// TODO:
+	return nil
+}
+
+func flattenIndex[T, Ref any](idx Index[Index[T, Ref], Ref]) Index[T, Ref] {
+	// TODO:
+	return Index[T, Ref]{}
 }

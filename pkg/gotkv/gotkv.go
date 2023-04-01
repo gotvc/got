@@ -30,22 +30,24 @@ type Root struct {
 	First []byte   `json:"first,omitempty"`
 }
 
-func newRoot(x *ptree.Root[gdat.Ref]) *Root {
+func newRoot(x *ptree.Root[Entry, gdat.Ref]) *Root {
 	if x == nil {
 		return nil
 	}
+	first, _ := x.Span.LowerBound()
 	return &Root{
 		Ref:   x.Ref,
 		Depth: x.Depth,
-		First: x.First,
+		First: first.Key,
 	}
 }
 
-func (r Root) toPtree() ptree.Root[gdat.Ref] {
-	return ptree.Root[gdat.Ref]{
+func (r Root) toPtree() ptree.Root[Entry, Ref] {
+	span := state.TotalSpan[Entry]().WithLowerIncl(Entry{Key: r.First})
+	return ptree.Root[Entry, Ref]{
 		Ref:   r.Ref,
 		Depth: r.Depth,
-		First: r.First,
+		Span:  span,
 	}
 }
 
@@ -59,31 +61,6 @@ var (
 )
 
 var defaultReadOnlyOperator = &Operator{dop: gdat.NewOperator()}
-
-type Root struct {
-	Ref   gdat.Ref `json:"ref"`
-	Depth uint8    `json:"depth"`
-	First []byte   `json:"first,omitempty"`
-}
-
-func rootFromPtree(x *ptree.Root[Entry, Ref]) *Root {
-	if x == nil {
-		return nil
-	}
-	return &Root{
-		Ref:   x.Ref,
-		Depth: x.Depth,
-		First: x.First.Key,
-	}
-}
-
-func (r Root) toPtree() ptree.Root[Entry, Ref] {
-	return ptree.Root[kvstreams.Entry, gdat.Ref]{
-		Ref:   r.Ref,
-		Depth: r.Depth,
-		First: Entry{Key: r.First},
-	}
-}
 
 // Get is a convenience function for performing Get without creating an Operator.
 func Get(ctx context.Context, s Getter, x Root, key []byte) ([]byte, error) {
@@ -113,7 +90,7 @@ func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Roo
 		ParseRef:   gdat.ParseRef,
 		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 	}
-	return do(ctx, rp, x, doer{
+	return do(ctx, rp, x.toPtree(), doer{
 		CanSkip: func(r Root) (bool, error) {
 			return cadata.Exists(ctx, dst, r.Ref.CID)
 		},
@@ -133,7 +110,7 @@ func (o *Operator) Populate(ctx context.Context, s Store, x Root, set cadata.Set
 		ParseRef:   gdat.ParseRef,
 		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 	}
-	return do(ctx, rp, x, doer{
+	return do(ctx, rp, x.toPtree(), doer{
 		CanSkip: func(r Root) (bool, error) {
 			return set.Exists(ctx, r.Ref.CID)
 		},
@@ -154,14 +131,14 @@ type doer struct {
 	NodeFn func(r Root) error
 }
 
-func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x Root, p doer) error {
-	if canSkip, err := p.CanSkip(x); err != nil {
+func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x ptree.Root[Entry, Ref], p doer) error {
+	if canSkip, err := p.CanSkip(*(newRoot(&x))); err != nil {
 		return err
 	} else if canSkip {
 		return nil
 	}
-	if ptree.PointsToEntries(x.toPtree()) {
-		ents, err := ptree.ListEntries(ctx, rp, Index{First: Entry{Key: x.First}, Ref: x.Ref})
+	if ptree.PointsToEntries(x) {
+		ents, err := ptree.ListEntries(ctx, rp, Index{Span: x.Span, Ref: x.Ref})
 		if err != nil {
 			return err
 		}
@@ -171,15 +148,15 @@ func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x Root, p doer) er
 			}
 		}
 	} else {
-		idxs, err := ptree.ListChildren(ctx, rp, x.toPtree())
+		idxs, err := ptree.ListChildren(ctx, rp, x)
 		if err != nil {
 			return err
 		}
 		eg, ctx := errgroup.WithContext(ctx)
 		for _, idx := range idxs {
-			root2 := Root{
+			root2 := ptree.Root[Entry, Ref]{
 				Ref:   idx.Ref,
-				First: idx.First.Key,
+				Span:  idx.Span,
 				Depth: x.Depth - 1,
 			}
 			eg.Go(func() error {
@@ -190,7 +167,7 @@ func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x Root, p doer) er
 			return err
 		}
 	}
-	return p.NodeFn(x)
+	return p.NodeFn(*newRoot(&x))
 }
 
 type ptreeGetter struct {
@@ -244,21 +221,6 @@ func compareEntries(a, b Entry) int {
 
 func copyEntry(dst *Entry, src Entry) {
 	kvstreams.CopyEntry(dst, src)
-}
-
-func convertIndex(idx Index) Entry {
-	return Entry{Key: idx.First.Key, Value: gdat.AppendRef(nil, idx.Ref)}
-}
-
-func convertEntry(x Entry) (Index, error) {
-	ref, err := gdat.ParseRef(x.Value)
-	if err != nil {
-		return Index{}, err
-	}
-	return Index{
-		First: Entry{Key: x.Key},
-		Ref:   ref,
-	}, nil
 }
 
 func convertSpan(x kvstreams.Span) state.Span[Entry] {

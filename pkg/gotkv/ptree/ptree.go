@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
 
@@ -36,9 +37,9 @@ var ErrOutOfRoom = errors.New("out of room")
 var EOS = kvstreams.EOS
 
 type Encoder[T any] interface {
-	// WriteEntry encodes ent to dst and returns the number of bytes written or an error.
+	// Write encodes ent to dst and returns the number of bytes written or an error.
 	// ErrOutOfRoom should be returned to indicate that the entry will not fit in the buffer.
-	WriteEntry(dst []byte, ent T) (int, error)
+	Write(dst []byte, ent T) (int, error)
 	// EncodednLen returns the number of bytes that it would take to encode ent.
 	// Calling EncodedLen should not affect the state of the Encoder.
 	EncodedLen(ent T) int
@@ -48,9 +49,9 @@ type Encoder[T any] interface {
 
 type Decoder[T, Ref any] interface {
 	// ReadEntry parses an entry from src into ent.  It returns the number of bytes read or an error.
-	ReadEntry(src []byte, ent *T) (int, error)
+	Read(src []byte, ent *T) (int, error)
 	// PeekEntry is like ReadEntry except it should not affect the state of the Decoder
-	PeekEntry(src []byte, ent *T) error
+	Peek(src []byte, ent *T) error
 	// Reset returns the decoder to the original state for the star of a node.
 	Reset(parent Index[T, Ref])
 }
@@ -65,10 +66,11 @@ const (
 )
 
 // Root is the root of the tree
+// It contains the same information as an Index, plus the depth of the tree
 type Root[T, Ref any] struct {
-	Ref   Ref   `json:"ref"`
-	Depth uint8 `json:"depth"`
-	First T     `json:"first,omitempty"`
+	Ref   Ref
+	Span  state.Span[T]
+	Depth uint8
 }
 
 // ReadParams are parameters needed to read from a tree
@@ -82,16 +84,16 @@ type ReadParams[T, Ref any] struct {
 
 // Copy copies all the entries from it to b.
 func Copy[T, Ref any](ctx context.Context, b *Builder[T, Ref], it *Iterator[T, Ref]) error {
-	var ent T
+	var x dual[T, Ref]
 	for {
 		level := min(b.syncLevel(), it.syncLevel())
-		if err := it.next(ctx, level, &ent); err != nil {
+		if err := it.next(ctx, level, x); err != nil {
 			if err == kvstreams.EOS {
 				return nil
 			}
 			return err
 		}
-		if err := b.put(ctx, level, ent); err != nil {
+		if err := b.put(ctx, level, x); err != nil {
 			return err
 		}
 	}
@@ -177,14 +179,52 @@ func PointsToIndexes[T, Ref any](root Root[T, Ref]) bool {
 func indexToRoot[T, Ref any](idx Index[T, Ref], depth uint8) Root[T, Ref] {
 	return Root[T, Ref]{
 		Ref:   idx.Ref,
-		First: idx.First,
+		Span:  idx.Span,
 		Depth: depth,
 	}
 }
 
 func rootToIndex[T, Ref any](r Root[T, Ref]) Index[T, Ref] {
 	return Index[T, Ref]{
-		Ref:   r.Ref,
-		First: r.First,
+		Ref:  r.Ref,
+		Span: r.Span,
 	}
+}
+
+// compareSpans returns
+//
+//	 1: If all elements in a are greater than all the elements of b
+//	-1: If all elements in a are less than all the elements of b
+//	 0: If any elements in a are also in b
+func compareSpans[T any](a, b state.Span[T], fn func(a, b T) int) int {
+	return 0
+}
+
+// cloneSpan makes a clone of a span, using copy to make copies of the bounds
+func cloneSpan[T any](x state.Span[T], copy func(dst *T, src T)) (ret state.Span[T]) {
+	if lb, ok := x.LowerBound(); ok {
+		var bound T
+		copy(&bound, lb)
+		if x.IncludesLower() {
+			ret = ret.WithLowerIncl(bound)
+		} else {
+			ret = ret.WithLowerExcl(bound)
+		}
+	}
+	if ub, ok := x.UpperBound(); ok {
+		var bound T
+		copy(&bound, ub)
+		if x.IncludesUpper() {
+			ret = ret.WithUpperIncl(bound)
+		} else {
+			ret = ret.WithUpperExcl(bound)
+		}
+	}
+	return ret
+}
+
+// dual is either an Entry or an Index
+type dual[T, Ref any] struct {
+	Entry *T
+	Index *Index[T, Ref]
 }

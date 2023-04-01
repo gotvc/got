@@ -25,13 +25,13 @@ func TestEntry(t *testing.T) {
 		Key:   []byte("key1"),
 		Value: []byte("value1"),
 	}
-	enc := JSONEncoder{}
-	n, err := enc.WriteEntry(buf, expected)
+	enc := NewEntryEncoder()
+	n, err := enc.Write(buf, expected)
 	require.NoError(t, err)
 
 	var actual Entry
-	dec := JSONDecoder{}
-	n2, err := dec.ReadEntry(buf[:n], &actual)
+	dec := NewEntryDecoder()
+	n2, err := dec.Read(buf[:n], &actual)
 	require.NoError(t, err)
 
 	require.Equal(t, n, n2)
@@ -47,13 +47,12 @@ func TestStreamRW(t *testing.T) {
 	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
 	sw := NewStreamWriter(StreamWriterParams[Entry, cadata.ID]{
 		Store:    s,
-		Compare:  bytes.Compare,
+		Compare:  compareEntries,
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
-		Encoder:  &JSONEncoder{},
+		Encoder:  NewEntryEncoder(),
 		Copy:     copyEntry,
-		Compare:  compareEntries,
 		OnIndex: func(idx Index[Entry, cadata.ID]) error {
 			idxs = append(idxs, cloneIndex(idx))
 			refs = append(refs, idx.Ref)
@@ -73,7 +72,7 @@ func TestStreamRW(t *testing.T) {
 		Store:   s,
 		Compare: compareEntries,
 		Indexes: idxs,
-		Decoder: &JSONDecoder{},
+		Decoder: NewEntryDecoder(),
 	})
 	var ent Entry
 	for i := 0; i < N; i++ {
@@ -96,14 +95,13 @@ func TestStreamWriterChunkSize(t *testing.T) {
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
-		Compare:  bytes.Compare,
-		Encoder:  &JSONEncoder{},
+		Compare:  compareEntries,
+		Encoder:  NewEntryEncoder(),
 		OnIndex: func(idx Index[Entry, cadata.ID]) error {
 			refs = append(refs, idx.Ref)
 			return nil
 		},
-		Copy:    copyEntry,
-		Compare: compareEntries,
+		Copy: copyEntry,
 	})
 
 	const N = 1e5
@@ -150,7 +148,7 @@ func BenchmarkStreamWriter(b *testing.B) {
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
-		Encoder:  &JSONEncoder{},
+		Encoder:  NewEntryEncoder(),
 		OnIndex:  func(idx Index[Entry, cadata.ID]) error { return nil },
 		Copy:     copyEntry,
 		Compare:  compareEntries,
@@ -189,7 +187,7 @@ func compareEntries(a, b Entry) int {
 
 func cloneIndex(x Index[Entry, cadata.ID]) Index[Entry, cadata.ID] {
 	return Index[Entry, cadata.ID]{
-		First: x.First.Clone(),
-		Ref:   x.Ref,
+		Span: cloneSpan(x.Span, copyEntry),
+		Ref:  x.Ref,
 	}
 }

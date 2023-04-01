@@ -25,7 +25,7 @@ func DebugTree[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Roo
 			Store:   params.Store,
 			Compare: params.Compare,
 			Decoder: params.NewDecoder(),
-			Indexes: []Index[T, Ref]{{Ref: x.Ref, First: x.First}},
+			Indexes: []Index[T, Ref]{{Ref: x.Ref, Span: x.Span}},
 		})
 		fmt.Fprintf(bw, "%sTREE NODE: %v %d\n", indent, x.Ref, x.Depth)
 		if x.Depth == 0 {
@@ -52,8 +52,8 @@ func DebugTree[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Roo
 				if err != nil {
 					panic(err)
 				}
-				fmt.Fprintf(bw, "%s INDEX first=%v -> ref=%v\n", indent, idx.First, idx.Ref)
-				debugTree(Root[T, Ref]{Ref: idx.Ref, First: idx.First, Depth: x.Depth - 1})
+				fmt.Fprintf(bw, "%s INDEX span=%v -> ref=%v\n", indent, idx.Span, idx.Ref)
+				debugTree(Root[T, Ref]{Ref: idx.Ref, Span: idx.Span, Depth: x.Depth - 1})
 			}
 		}
 	}

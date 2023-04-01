@@ -15,11 +15,11 @@ import (
 // Builder is used to construct GotKV instances
 // by adding keys in lexicographical order.
 type Builder struct {
-	b ptree.Builder[Ref]
+	b ptree.Builder[Entry, Ref]
 }
 
 func (b *Builder) Put(ctx context.Context, key, value []byte) error {
-	return b.b.Put(ctx, key, value)
+	return b.b.Put(ctx, Entry{Key: key, Value: value})
 }
 
 func (b *Builder) Finish(ctx context.Context) (*Root, error) {
@@ -29,7 +29,7 @@ func (b *Builder) Finish(ctx context.Context) (*Root, error) {
 
 // Iterator is used to iterate through entries in GotKV instances.
 type Iterator struct {
-	it ptree.Iterator[Ref]
+	it ptree.Iterator[Entry, Ref]
 }
 
 func (it *Iterator) Next(ctx context.Context, dst *Entry) error {
@@ -41,7 +41,7 @@ func (it *Iterator) Peek(ctx context.Context, dst *Entry) error {
 }
 
 func (it *Iterator) Seek(ctx context.Context, gteq []byte) error {
-	return it.it.Seek(ctx, gteq)
+	return it.it.Seek(ctx, Entry{Key: gteq})
 }
 
 // Option is used to configure an Operator
@@ -207,14 +207,13 @@ func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Getter, x Root, pr
 // NewBuilder returns a Builder for constructing a GotKV instance.
 // Data will be persisted to s.
 func (o *Operator) NewBuilder(s Store) *Builder {
-	b := ptree.NewBuilder(ptree.BuilderParams[Ref]{
+	b := ptree.NewBuilder(ptree.BuilderParams[Entry, Ref]{
 		Store:      &ptreeStore{op: &o.dop, s: s},
 		MeanSize:   o.meanSize,
 		MaxSize:    o.maxSize,
 		Seed:       o.seed,
-		NewEncoder: func() ptree.Encoder { return &Encoder{} },
-		Compare:    bytes.Compare,
-		AppendRef:  gdat.AppendRef,
+		NewEncoder: func() ptree.Encoder[Entry] { return &Encoder{} },
+		Compare:    compareEntries,
 	})
 	return &Builder{b: *b}
 }
@@ -223,33 +222,15 @@ func (o *Operator) NewBuilder(s Store) *Builder {
 // will emit all keys within span in the instance.
 func (o *Operator) NewIterator(s Getter, root Root, span Span) *Iterator {
 	it := ptree.NewIterator(ptree.IteratorParams[Entry, Ref]{
-		Store:        &ptreeGetter{op: &o.dop, s: s},
-		Compare:      compareEntries,
-		NewDecoder:   func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
-		Copy:         copyEntry,
-		ConvertIndex: convertIndex,
-		ConvertEntry: convertEntry,
+		Store:      &ptreeGetter{op: &o.dop, s: s},
+		Compare:    compareEntries,
+		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
+		Copy:       copyEntry,
 
 		Root: root.toPtree(),
 		Span: convertSpan(span),
 	})
 	return &Iterator{it: *it}
-}
-
-func (o *Operator) makeBuilder(s cadata.Store) *Builder {
-	b := ptree.NewBuilder(ptree.BuilderParams[Entry, Ref]{
-		Store:    &ptreeStore{op: &o.dop, s: s},
-		MeanSize: o.meanSize,
-		MaxSize:  o.maxSize,
-		Seed:     o.seed,
-		NewEncoder: func() ptree.Encoder[Entry] {
-			return &Encoder{}
-		},
-		Compare:      compareEntries,
-		Copy:         kvstreams.CopyEntry,
-		ConvertIndex: convertIndex,
-	})
-	return &Builder{b: *b}
 }
 
 // ForEach calls fn with every entry, in the GotKV instance rooted at root, contained in span, in lexicographical order.

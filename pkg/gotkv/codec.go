@@ -21,7 +21,7 @@ type Encoder struct {
 	count   int
 }
 
-func (e *Encoder) WriteEntry(dst []byte, ent Entry) (int, error) {
+func (e *Encoder) Write(dst []byte, ent Entry) (int, error) {
 	prevKey := e.prevKey
 	if e.count == 0 {
 		prevKey = ent.Key // this will make backspace=0, suffix=""
@@ -48,6 +48,20 @@ func (e *Encoder) EncodedLen(ent Entry) int {
 func (e *Encoder) Reset() {
 	e.prevKey = e.prevKey[:0]
 	e.count = 0
+}
+
+var _ ptree.Encoder[ptree.Index[Entry, Ref]]
+
+// IndexEncoder encodes indexes
+type IndexEncoder struct {
+	Encoder
+}
+
+func (e *IndexEncoder) Write(dst []byte, x ptree.Index[Entry, Ref]) (int, error) {
+	first, _ := x.Span.LowerBound()
+	return e.Encoder.Write(dst, Entry{
+		Key: first.Key,
+	})
 }
 
 // writeLPBytes writes len(x) varint-encoded, followed by x, to buf
@@ -99,12 +113,14 @@ func varintLen(x uint64) int {
 	return binary.PutUvarint(buf[:], x)
 }
 
+var _ ptree.Decoder[Entry, Ref] = &Decoder{}
+
 type Decoder struct {
 	prevKey []byte
 	count   int
 }
 
-func (d *Decoder) ReadEntry(src []byte, ent *Entry) (int, error) {
+func (d *Decoder) Read(src []byte, ent *Entry) (int, error) {
 	n, err := readEntry(ent, src, d.prevKey)
 	if err != nil {
 		return 0, err
@@ -114,14 +130,24 @@ func (d *Decoder) ReadEntry(src []byte, ent *Entry) (int, error) {
 	return n, nil
 }
 
-func (d *Decoder) PeekEntry(src []byte, ent *Entry) error {
+func (d *Decoder) Peek(src []byte, ent *Entry) error {
 	_, err := readEntry(ent, src, d.prevKey)
 	return err
 }
 
 func (d *Decoder) Reset(parent Index) {
-	d.prevKey = append(d.prevKey[:0], parent.First.Key...)
+	if first, ok := parent.Span.LowerBound(); ok {
+		d.prevKey = append(d.prevKey[:0], first.Key...)
+	} else {
+		d.prevKey = d.prevKey[:0]
+	}
 	d.count = 0
+}
+
+var _ ptree.Decoder[Entry, Ref] = &IndexDecoder{}
+
+type IndexDecoder struct {
+	Decoder
 }
 
 // readEntry reads an entry into ent

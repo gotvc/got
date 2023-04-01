@@ -6,13 +6,14 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/dchest/siphash"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
 
 type Index[T, Ref any] struct {
-	Ref   Ref
-	First T
+	Ref  Ref
+	Span state.Span[T]
 }
 
 type blobReader[T, Ref any] struct {
@@ -80,7 +81,7 @@ func (r *blobReader[T, Ref]) Next(ctx context.Context, ent *T) error {
 }
 
 func (r *blobReader[T, Ref]) Peek(ctx context.Context, ent *T) error {
-	return r.dec.PeekEntry(r.buf[r.offset:r.len], ent)
+	return r.dec.Peek(r.buf[r.offset:r.len], ent)
 }
 
 // next reads the next entry, but does not update r.prevKey
@@ -88,7 +89,7 @@ func (r *blobReader[T, Ref]) next(ctx context.Context, ent *T) error {
 	if r.len-r.offset == 0 {
 		return EOS
 	}
-	n, err := r.dec.ReadEntry(r.buf[r.offset:r.len], ent)
+	n, err := r.dec.Read(r.buf[r.offset:r.len], ent)
 	if err != nil {
 		return err
 	}
@@ -97,11 +98,8 @@ func (r *blobReader[T, Ref]) next(ctx context.Context, ent *T) error {
 }
 
 type StreamReader[T, Ref any] struct {
-	s   Getter[Ref]
-	cmp CompareFunc[T]
-	dec Decoder[T, Ref]
+	p StreamReaderParams[T, Ref]
 
-	idxs      []Index[T, Ref]
 	nextIndex int
 	br        *blobReader[T, Ref]
 }
@@ -122,14 +120,12 @@ func NewStreamReader[T, Ref any](params StreamReaderParams[T, Ref]) *StreamReade
 	}
 	idxs := params.Indexes
 	for i := 0; i < len(idxs)-1; i++ {
-		if params.Compare(idxs[i].First, idxs[i+1].First) >= 0 {
-			panic(fmt.Sprintf("StreamReader: unordered indexes %q >= %q", idxs[i].First, idxs[i+1].First))
+		if compareSpans(params.Indexes[i].Span, params.Indexes[i+1].Span, params.Compare) >= 0 {
+			panic(fmt.Sprintf("StreamReader: unordered indexes %v >= %v", idxs[i].Span, idxs[i+1].Span))
 		}
 	}
-	return &StreamReader[Ref]{
+	return &StreamReader[T, Ref]{
 		p: params,
-
-		idxs: idxs,
 	}
 }
 
@@ -166,12 +162,13 @@ func (r *StreamReader[T, Ref]) Seek(ctx context.Context, gteq T) error {
 }
 
 func (r *StreamReader[T, Ref]) seekCommon(ctx context.Context, gteq T) error {
-	if len(r.idxs) < 1 {
+	if len(r.p.Indexes) < 1 {
 		return nil
 	}
 	var targetIndex int
-	for i := 1; i < len(r.idxs); i++ {
-		if r.cmp(r.idxs[i].First, gteq) <= 0 {
+	for i := 1; i < len(r.p.Indexes); i++ {
+		first, _ := r.p.Indexes[i].Span.LowerBound()
+		if r.p.Compare(first, gteq) <= 0 {
 			targetIndex = i
 		} else {
 			break
@@ -179,7 +176,7 @@ func (r *StreamReader[T, Ref]) seekCommon(ctx context.Context, gteq T) error {
 	}
 	if r.br == nil || r.nextIndex != targetIndex+1 {
 		var err error
-		r.br, err = r.getBlobReader(ctx, r.idxs[targetIndex])
+		r.br, err = r.getBlobReader(ctx, r.p.Indexes[targetIndex])
 		if err != nil {
 			return err
 		}
@@ -190,10 +187,10 @@ func (r *StreamReader[T, Ref]) seekCommon(ctx context.Context, gteq T) error {
 
 func (r *StreamReader[T, Ref]) withBlobReader(ctx context.Context, fn func(*blobReader[T, Ref]) error) error {
 	if r.br == nil {
-		if r.nextIndex == len(r.idxs) {
+		if r.nextIndex == len(r.p.Indexes) {
 			return kvstreams.EOS
 		}
-		idx := r.idxs[r.nextIndex]
+		idx := r.p.Indexes[r.nextIndex]
 		r.nextIndex++
 		var err error
 		r.br, err = r.getBlobReader(ctx, idx)
@@ -215,7 +212,7 @@ func (r *StreamReader[T, Ref]) getBlobReader(ctx context.Context, idx Index[T, R
 	if err != nil {
 		return nil, err
 	}
-	return newBlobReader(r.p.Decoder, idx.First, buf[:n]), nil
+	return newBlobReader(r.p.Decoder, idx, buf[:n]), nil
 }
 
 type IndexHandler[T, Ref any] func(Index[T, Ref]) error
@@ -270,7 +267,7 @@ func (w *StreamWriter[T, Ref]) Append(ctx context.Context, ent T) error {
 	}
 
 	offset := w.n
-	n, err := w.p.Encoder.WriteEntry(w.buf[offset:], ent)
+	n, err := w.p.Encoder.Write(w.buf[offset:], ent)
 	if err != nil {
 		return err
 	}
@@ -305,11 +302,12 @@ func (w *StreamWriter[T, Ref]) Flush(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	var first T
+	var first, last T
 	w.p.Copy(&first, w.first)
+	w.p.Copy(&last, w.prev)
 	if err := w.p.OnIndex(Index[T, Ref]{
-		First: first,
-		Ref:   ref,
+		Ref:  ref,
+		Span: state.TotalSpan[T]().WithLowerIncl(first).WithUpperIncl(last),
 	}); err != nil {
 		return err
 	}
