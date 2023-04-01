@@ -155,13 +155,8 @@ func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.S
 			return nil, err
 		}
 	}
-	emptyRoot, err := fsop.NewEmpty(ctx, ms)
-	if err != nil {
-		return nil, err
-	}
 	var segs []gotfs.Segment
-	err = s.ForEach(ctx, func(p string, fileOp Operation) error {
-		var pathRoot gotfs.Root
+	err := s.ForEach(ctx, func(p string, fileOp Operation) error {
 		switch {
 		case fileOp.Put != nil:
 			var err error
@@ -169,18 +164,22 @@ func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.S
 			if err != nil {
 				return err
 			}
-			pathRoot = gotfs.Root(*fileOp.Put)
+			segs = append(segs, gotfs.Segment{
+				Span: gotfs.SpanForPath(p),
+				Contents: gotfs.Expr{
+					Root:      gotfs.Root(*fileOp.Put),
+					AddPrefix: p,
+				},
+			})
 		case fileOp.Delete != nil:
-			pathRoot = *emptyRoot
+			segs = append(segs, gotfs.Segment{
+				Span: gotfs.SpanForPath(p),
+			})
 		default:
 			logctx.Warnf(ctx, "empty op for path %q", p)
 			return nil
 		}
-		segRoot := fsop.AddPrefix(pathRoot, p)
-		segs = append(segs, gotfs.Segment{
-			Root: segRoot,
-			Span: gotfs.SpanForPath(p),
-		})
+
 		return nil
 	})
 	if err != nil {

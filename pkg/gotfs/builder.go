@@ -94,11 +94,11 @@ func (b *Builder) writeExtents(ctx context.Context, exts []*Extent) error {
 	return nil
 }
 
-func (b *Builder) copyFrom(ctx context.Context, root Root, span gotkv.Span) error {
+func (b *Builder) copyFrom(ctx context.Context, root gotkv.Root, span gotkv.Span) error {
 	if err := b.b.CopyFrom(ctx, root, span); err != nil {
 		return err
 	}
-	p, info, err := b.o.MaxInfo(ctx, b.ms, root, span)
+	p, info, err := b.o.maxInfo(ctx, b.ms, root, span)
 	if err != nil {
 		return err
 	}
@@ -116,7 +116,8 @@ func (b *Builder) copyFrom(ctx context.Context, root Root, span gotkv.Span) erro
 // Finish is idempotent, and is safe to call multiple times.
 // Not calling finish is not an error, the builder does not allocate resources other than memory.
 func (b *Builder) Finish() (*Root, error) {
-	return b.b.Finish(b.ctx)
+	root, err := b.b.Finish(b.ctx)
+	return newRoot(root), err
 }
 
 func (b *Builder) IsFinished() bool {

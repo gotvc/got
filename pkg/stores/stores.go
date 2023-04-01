@@ -66,3 +66,7 @@ func NewFSStore(x posixfs.FS, maxSize int) cadata.Store {
 func NewMem() cadata.Store {
 	return cadata.NewMem(gdat.Hash, 1<<22)
 }
+
+func NewVoid() cadata.Store {
+	return cadata.NewVoid(gdat.Hash, 1<<22)
+}

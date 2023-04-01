@@ -125,7 +125,7 @@ func (o *Operator) Select(ctx context.Context, s cadata.Store, root Root, p stri
 	if err != nil {
 		return nil, err
 	}
-	x := &root
+	x := root.toGotKV()
 	k := makeInfoKey(p)
 	if x, err = o.deleteOutside(ctx, s, *x, gotkv.PrefixSpan(k)); err != nil {
 		return nil, err
@@ -134,13 +134,14 @@ func (o *Operator) Select(ctx context.Context, s cadata.Store, root Root, p stri
 	if len(k) > 1 {
 		prefix = k[:len(k)-1]
 	}
-	if x, err = o.gotkv.RemovePrefix(ctx, s, *x, prefix); err != nil {
+	y, err := o.gotkv.RemovePrefix(ctx, s, *x, prefix)
+	if err != nil {
 		return nil, err
 	}
-	return x, err
+	return newRoot(y), err
 }
 
-func (o *Operator) deleteOutside(ctx context.Context, s cadata.Store, root Root, span gotkv.Span) (*Root, error) {
+func (o *Operator) deleteOutside(ctx context.Context, s cadata.Store, root gotkv.Root, span gotkv.Span) (*gotkv.Root, error) {
 	x := &root
 	var err error
 	if x, err = o.gotkv.DeleteSpan(ctx, s, *x, gotkv.Span{Begin: nil, End: span.Begin}); err != nil {
@@ -169,7 +170,7 @@ func (o *Operator) ForEach(ctx context.Context, s cadata.Store, root Root, p str
 		return nil
 	}
 	k := makeInfoKey(p)
-	return o.gotkv.ForEach(ctx, s, root, gotkv.PrefixSpan(k), fn2)
+	return o.gotkv.ForEach(ctx, s, *root.toGotKV(), gotkv.PrefixSpan(k), fn2)
 }
 
 // ForEachLeaf calls fn with each regular file in root, beneath p.
@@ -194,32 +195,43 @@ func (o *Operator) Graft(ctx context.Context, ms, ds cadata.Store, root Root, p 
 		return nil, err
 	}
 	k := makeInfoKey(p)
-	branch2 := o.gotkv.AddPrefix(branch, k[:len(k)-1])
 	return o.Splice(ctx, ms, ds, []Segment{
 		{
 			Span: gotkv.Span{Begin: nil, End: k},
-			Root: *root2,
+			Contents: Expr{
+				Root: *root2,
+			},
 		},
 		{
 			Span: gotkv.TotalSpan(),
-			Root: branch2,
+			Contents: Expr{
+				Root:      branch,
+				AddPrefix: p,
+			},
 		},
 		{
 			Span: gotkv.Span{Begin: gotkv.PrefixEnd(k), End: nil},
-			Root: *root2,
+			Contents: Expr{
+				Root: *root2,
+			},
 		},
 	})
 }
 
-func (o *Operator) AddPrefix(root Root, p string) Root {
+func (o *Operator) addPrefix(root Root, p string) gotkv.Root {
 	p = cleanPath(p)
 	k := makeInfoKey(p)
-	return o.gotkv.AddPrefix(root, k[:len(k)-1])
+	root2 := o.gotkv.AddPrefix(*root.toGotKV(), k[:len(k)-1])
+	return root2
 }
 
 // MaxInfo returns the maximum path and the corresponding Info for the path.
 // If no Info entry can be found MaxInfo returns ("", nil, nil)
 func (o *Operator) MaxInfo(ctx context.Context, ms cadata.Store, root Root, span Span) (string, *Info, error) {
+	return o.maxInfo(ctx, ms, root.ToGotKV(), span)
+}
+
+func (o *Operator) maxInfo(ctx context.Context, ms cadata.Store, root gotkv.Root, span Span) (string, *Info, error) {
 	ent, err := o.gotkv.MaxEntry(ctx, ms, root, span)
 	if err != nil {
 		return "", nil, err
@@ -244,7 +256,7 @@ func (o *Operator) MaxInfo(ctx context.Context, ms cadata.Store, root Root, span
 		if err != nil {
 			return "", nil, err
 		}
-		info, err := o.GetInfo(ctx, ms, root, p)
+		info, err := o.getInfo(ctx, ms, root, p)
 		return p, info, err
 	default:
 		return "", nil, fmt.Errorf("gotfs: found invalid entry %v", ent)
@@ -254,7 +266,7 @@ func (o *Operator) MaxInfo(ctx context.Context, ms cadata.Store, root Root, span
 func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func(ref gdat.Ref) error) error {
 	var lastPath *string
 	var lastOffset *uint64
-	return o.gotkv.ForEach(ctx, s, root, gotkv.Span{}, func(ent gotkv.Entry) error {
+	return o.gotkv.ForEach(ctx, s, *root.toGotKV(), gotkv.Span{}, func(ent gotkv.Entry) error {
 		switch {
 		case lastPath == nil:
 			logctx.Infof(ctx, "checking root")
@@ -308,7 +320,16 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 func (o *Operator) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*Root, error) {
 	b := o.NewBuilder(ctx, ms, ds)
 	for _, seg := range segs {
-		if err := b.copyFrom(ctx, seg.Root, seg.Span); err != nil {
+		if seg.Contents.Root.Ref.IsZero() {
+			continue
+		}
+		var root gotkv.Root
+		if seg.Contents.AddPrefix != "" {
+			root = o.addPrefix(seg.Contents.Root, seg.Contents.AddPrefix)
+		} else {
+			root = seg.Contents.Root.ToGotKV()
+		}
+		if err := b.copyFrom(ctx, root, seg.Span); err != nil {
 			return nil, err
 		}
 	}

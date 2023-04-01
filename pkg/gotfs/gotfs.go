@@ -13,21 +13,63 @@ import (
 type (
 	Ref    = gotkv.Ref
 	Store  = gotkv.Store
-	Root   = gotkv.Root
 	Extent = gotlob.Extent
 	Span   = gotkv.Span
 )
+
+type Root struct {
+	Ref   Ref   `json:"ref"`
+	Depth uint8 `json:"depth"`
+}
+
+func (r Root) ToGotKV() gotkv.Root {
+	return gotkv.Root{
+		Ref:   r.Ref,
+		First: []byte("/"),
+		Depth: r.Depth,
+	}
+}
+
+func newRoot(x *gotkv.Root) *Root {
+	if x == nil {
+		return nil
+	}
+	if !bytes.Equal(x.First, []byte("/")) {
+		panic(x)
+	}
+	return &Root{
+		Ref:   x.Ref,
+		Depth: x.Depth,
+	}
+}
+
+func (r *Root) toGotKV() *gotkv.Root {
+	if r == nil {
+		return nil
+	}
+	r2 := r.ToGotKV()
+	return &r2
+}
 
 const MaxPathLen = gotkv.MaxKeySize - 2 - 8
 
 // Segment is a span of a GotFS instance.
 type Segment struct {
+	// Span is the span in the final Splice operation
 	Span gotkv.Span
-	Root Root
+	// Contents is what will go in the Span.
+	Contents Expr
 }
 
 func (s Segment) String() string {
-	return fmt.Sprintf("{ %v : %v}", s.Span, s.Root.Ref.CID)
+	return fmt.Sprintf("{ %v : %v}", s.Span, s.Contents)
+}
+
+type Expr struct {
+	// Root is the filesystem to copy from
+	Root Root
+	// AddPrefix is applied to Root before copying
+	AddPrefix string
 }
 
 // isInfoKey returns true if k can be interpretted as an info key.

@@ -53,8 +53,11 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 		return nil, err
 	}
 	changes = append(changes, gotfs.Segment{
-		Root: *emptyDir,
 		Span: gotkv.TotalSpan(),
+		Contents: gotfs.Expr{
+			Root:      *emptyDir,
+			AddPrefix: "",
+		},
 	})
 	dirents, err := posixfs.ReadDir(fsx, p)
 	if err != nil {
@@ -73,10 +76,12 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 			return nil, err
 		}
 		metrics.AddInt(ctx, "paths", 1, "paths")
-		shiftedRoot := pr.gotfs.AddPrefix(*pathRoot, dirent.Name)
 		changes = append(changes, gotfs.Segment{
-			Root: shiftedRoot,
 			Span: gotfs.SpanForPath(dirent.Name),
+			Contents: gotfs.Expr{
+				Root:      *pathRoot,
+				AddPrefix: dirent.Name,
+			},
 		})
 	}
 	return pr.gotfs.Splice(ctx, pr.ms, pr.ds, changes)
@@ -168,11 +173,7 @@ func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
 }
 
 func createEmptyDir(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store) (*gotfs.Root, error) {
-	empty, err := fsop.NewEmpty(ctx, ms)
-	if err != nil {
-		return nil, err
-	}
-	return fsop.Mkdir(ctx, ms, *empty, "")
+	return fsop.NewEmpty(ctx, ms)
 }
 
 func needsUpdate(ctx context.Context, cache Cache, p string, finfo posixfs.FileInfo) (bool, error) {
