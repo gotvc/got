@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"math"
 
 	"github.com/brendoncarroll/go-state"
@@ -33,6 +34,10 @@ func (m Maybe[T]) String() string {
 
 func Just[T any](x T) Maybe[T] {
 	return Maybe[T]{Ok: true, X: x}
+}
+
+func Nothing[T any]() Maybe[T] {
+	return Maybe[T]{}
 }
 
 type Index[T, Ref any] struct {
@@ -132,6 +137,7 @@ func (r *StreamReader[T, Ref]) Seek(ctx context.Context, gteq T) error {
 			}
 			return err
 		}
+		log.Println("compare", x, gteq, r.p.Compare(x, gteq))
 		if r.p.Compare(x, gteq) >= 0 {
 			return nil
 		}

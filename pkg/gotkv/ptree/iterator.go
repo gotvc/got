@@ -3,6 +3,7 @@ package ptree
 import (
 	"context"
 	"fmt"
+	"log"
 	"math"
 
 	"github.com/brendoncarroll/go-state"
@@ -102,8 +103,19 @@ func (it *Iterator[T, Ref]) next(ctx context.Context, level int, dst dual[T, Ref
 		return err
 	}
 	if il.entries != nil {
-		if err := il.entries.Next(ctx, dst.Entry); err != nil {
-			return err
+		for {
+			if err := il.entries.Next(ctx, dst.Entry); err != nil {
+				panic(err)
+				return err
+			}
+			log.Println("next", dst.Entry)
+			if it.span.Contains(*dst.Entry, it.p.Compare) {
+				break
+			}
+			lb, _ := it.span.LowerBound()
+			if err := it.Seek(ctx, lb); err != nil {
+				return err
+			}
 		}
 		it.setGt(*dst.Entry)
 		return nil

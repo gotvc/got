@@ -108,7 +108,7 @@ func (o *Operator) GetF(ctx context.Context, s cadata.Getter, x Root, key []byte
 	var ent Entry
 	err := it.Next(ctx, &ent)
 	if err != nil {
-		if errors.Is(err, kvstreams.EOS) {
+		if errors.Is(err, ptree.EOS) {
 			err = ErrKeyNotFound
 		}
 		return err

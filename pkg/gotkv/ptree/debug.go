@@ -37,7 +37,7 @@ func DebugTree[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Roo
 					}
 					panic(err)
 				}
-				fmt.Fprintf(w, "%s ENTRY %v\n", indent, ent)
+				fmt.Fprintf(bw, "%s ENTRY %v\n", indent, ent)
 			}
 		} else {
 			sr := NewStreamReader(StreamReaderParams[Index[T, Ref], Ref]{

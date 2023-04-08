@@ -127,6 +127,10 @@ type Decoder struct {
 	count   int
 }
 
+func newDecoder() ptree.Decoder[Entry, Ref] {
+	return &Decoder{}
+}
+
 func (d *Decoder) Read(src []byte, ent *Entry) (int, error) {
 	n, err := readEntry(ent, src, d.prevKey)
 	if err != nil {
@@ -154,9 +158,15 @@ func (d *Decoder) Reset(parent Index) {
 var _ ptree.Decoder[Index, Ref] = &IndexDecoder{}
 
 type IndexDecoder struct {
+	parentLast ptree.Maybe[Entry]
 	Decoder
 }
 
+func newIndexDecoder() ptree.Decoder[Index, Ref] {
+	return &IndexDecoder{}
+}
+
+// TODO: need to read 2 indexes to recreate Index.Last value.
 func (d *IndexDecoder) Read(src []byte, dst *Index) (int, error) {
 	var ent Entry
 	n, err := d.Decoder.Read(src, &ent)
@@ -187,6 +197,12 @@ func (d *IndexDecoder) Peek(src []byte, dst *Index) error {
 }
 
 func (d *IndexDecoder) Reset(parent ptree.Index[Index, Ref]) {
+	if parent.Last.Ok {
+		d.parentLast = parent.Last.X.Last
+	} else {
+		d.parentLast = ptree.Nothing[Entry]()
+	}
+	d.parentLast = parent.Last.X.Last
 	d.Decoder.Reset(Index{
 		Ref:   parent.Ref,
 		First: parent.First.X.First,
