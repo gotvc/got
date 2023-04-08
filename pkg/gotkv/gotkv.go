@@ -10,6 +10,7 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
+	"github.com/gotvc/got/pkg/maybe"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -45,14 +46,14 @@ func (r Root) toPtree() ptree.Root[Entry, Ref] {
 	return ptree.Root[Entry, Ref]{
 		Index: ptree.Index[Entry, Ref]{
 			Ref:   r.Ref,
-			First: ptree.Just(Entry{Key: r.First}),
+			First: maybe.Just(Entry{Key: r.First}),
 		},
 		Depth: r.Depth,
 	}
 }
 
 const (
-	MaxKeySize = ptree.MaxKeySize
+	MaxKeySize = 4096
 )
 
 var (
@@ -147,7 +148,7 @@ func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x ptree.Root[Entry
 			}
 		}
 	} else {
-		idxs, err := ptree.ListChildren(ctx, rp, x)
+		idxs, err := ptree.ListIndexes(ctx, rp, x)
 		if err != nil {
 			return err
 		}

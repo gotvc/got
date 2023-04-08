@@ -2,6 +2,7 @@ package ptree
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
@@ -92,7 +93,7 @@ func (b *Builder[T, Ref]) makeLevel(i int) builderLevel[T, Ref] {
 			Copy:     upgradeCopy[T, Ref](b.p.Copy),
 			Compare:  upgradeCompare[T, Ref](b.p.Compare),
 			OnIndex: func(idx Index[Index[T, Ref], Ref]) error {
-				idx2 := flattenIndex(idx)
+				idx2 := FlattenIndex(idx)
 				if b.isDone && i == len(b.levels)-1 {
 					root := indexToRoot(idx2, uint8(i))
 					b.root = &root
@@ -109,6 +110,9 @@ func (b *Builder[T, Ref]) makeLevel(i int) builderLevel[T, Ref] {
 }
 
 func (b *Builder[T, Ref]) getLevel(level int) builderLevel[T, Ref] {
+	if level > MaxTreeDepth {
+		panic("max tree depth exceeded")
+	}
 	for len(b.levels) <= level {
 		i := len(b.levels)
 		b.levels = append(b.levels, b.makeLevel(i))
@@ -129,6 +133,9 @@ func (b *Builder[T, Ref]) put(ctx context.Context, level int, x dual[T, Ref]) er
 	if b.syncLevel() < level {
 		return fmt.Errorf("cannot put at level %d", level)
 	}
+	if level > 0 && !x.Index.IsNatural {
+		return errors.New("cannot copy index with IsNatural=false")
+	}
 	return b.getLevel(level).Append(ctx, x)
 }
 
@@ -140,7 +147,8 @@ func (b *Builder[T, Ref]) Finish(ctx context.Context) (*Root[T, Ref], error) {
 		return nil, fmt.Errorf("builder is closed")
 	}
 	b.isDone = true
-	for i, bl := range b.levels {
+	for i := 0; i < len(b.levels); i++ {
+		bl := b.levels[i]
 		if i == 0 {
 			if err := bl.EntryWriter.Flush(ctx); err != nil {
 				return nil, err
@@ -157,7 +165,7 @@ func (b *Builder[T, Ref]) Finish(ctx context.Context) (*Root[T, Ref], error) {
 		if err != nil {
 			return nil, err
 		}
-		b.root = &Root[T, Ref]{Index: Index[T, Ref]{Ref: ref}, Depth: 1}
+		b.root = &Root[T, Ref]{Index: Index[T, Ref]{Ref: ref}, Depth: 0}
 	}
 	return b.root, nil
 }

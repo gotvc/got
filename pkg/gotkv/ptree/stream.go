@@ -5,45 +5,21 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"log"
 	"math"
 
 	"github.com/brendoncarroll/go-state"
 	"github.com/dchest/siphash"
+	"github.com/gotvc/got/pkg/maybe"
 )
-
-type Maybe[T any] struct {
-	Ok bool
-	X  T
-}
-
-func (m Maybe[T]) Map(fn func(T) T) Maybe[T] {
-	if !m.Ok {
-		return Maybe[T]{}
-	}
-	return Maybe[T]{X: fn(m.X)}
-}
-
-func (m Maybe[T]) String() string {
-	if !m.Ok {
-		return "Nothing"
-	} else {
-		return fmt.Sprintf("Just(%v)", m.X)
-	}
-}
-
-func Just[T any](x T) Maybe[T] {
-	return Maybe[T]{Ok: true, X: x}
-}
-
-func Nothing[T any]() Maybe[T] {
-	return Maybe[T]{}
-}
 
 type Index[T, Ref any] struct {
 	Ref   Ref
-	First Maybe[T]
-	Last  Maybe[T]
+	First maybe.Maybe[T]
+	Last  maybe.Maybe[T]
+
+	// IsNatural is true if this index is a natural boundary
+	// A natural boundary.
+	IsNatural bool
 }
 
 func (in Index[T, Ref]) Span() (ret state.Span[T]) {
@@ -128,6 +104,13 @@ func (r *StreamReader[T, Ref]) Peek(ctx context.Context, dst *T) error {
 	return r.p.Decoder.Peek(r.buf[r.offset:r.n], dst)
 }
 
+func (r *StreamReader[T, Ref]) PeekNoLoad(dst *T) error {
+	if r.offset >= r.n {
+		return EOS
+	}
+	return r.p.Decoder.Peek(r.buf[r.offset:r.n], dst)
+}
+
 func (r *StreamReader[T, Ref]) Seek(ctx context.Context, gteq T) error {
 	var x T
 	for {
@@ -137,7 +120,6 @@ func (r *StreamReader[T, Ref]) Seek(ctx context.Context, gteq T) error {
 			}
 			return err
 		}
-		log.Println("compare", x, gteq, r.p.Compare(x, gteq))
 		if r.p.Compare(x, gteq) >= 0 {
 			return nil
 		}
@@ -179,7 +161,7 @@ type StreamWriter[T, Ref any] struct {
 	n   int
 
 	first T
-	prev  Maybe[T]
+	prev  maybe.Maybe[T]
 }
 
 type StreamWriterParams[T, Ref any] struct {
@@ -219,7 +201,7 @@ func (w *StreamWriter[T, Ref]) Append(ctx context.Context, ent T) error {
 		return fmt.Errorf("entry (size=%d) exceeds maximum size %d", entryLen, w.p.MaxSize)
 	}
 	if entryLen+w.n > w.p.MaxSize {
-		if err := w.Flush(ctx); err != nil {
+		if err := w.flush(ctx, false); err != nil {
 			return err
 		}
 	}
@@ -241,7 +223,7 @@ func (w *StreamWriter[T, Ref]) Append(ctx context.Context, ent T) error {
 	w.prev.Ok = true
 	// split after writing the entry
 	if w.isSplitPoint(w.buf[offset : offset+n]) {
-		if err := w.Flush(ctx); err != nil {
+		if err := w.flush(ctx, true); err != nil {
 			return err
 		}
 	}
@@ -253,6 +235,10 @@ func (w *StreamWriter[T, Ref]) Buffered() int {
 }
 
 func (w *StreamWriter[T, Ref]) Flush(ctx context.Context) error {
+	return w.flush(ctx, false)
+}
+
+func (w *StreamWriter[T, Ref]) flush(ctx context.Context, isNatural bool) error {
 	if w.Buffered() == 0 {
 		return nil
 	}
@@ -261,9 +247,10 @@ func (w *StreamWriter[T, Ref]) Flush(ctx context.Context) error {
 		return err
 	}
 	if err := w.p.OnIndex(Index[T, Ref]{
-		Ref:   ref,
-		First: Just(w.first),
-		Last:  w.prev,
+		Ref:       ref,
+		First:     maybe.Just(w.first),
+		Last:      w.prev,
+		IsNatural: isNatural,
 	}); err != nil {
 		return err
 	}

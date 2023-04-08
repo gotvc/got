@@ -28,6 +28,10 @@ func (e Entry) String() string {
 // EOS signals the end of a stream
 var EOS = errors.New("end of stream")
 
+func IsEOS(err error) bool {
+	return errors.Is(err, EOS)
+}
+
 // Iterator iterates over entries
 //
 // e.g.

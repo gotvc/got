@@ -9,6 +9,7 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
+	"github.com/gotvc/got/pkg/maybe"
 )
 
 type Index = ptree.Index[kvstreams.Entry, gdat.Ref]
@@ -124,7 +125,6 @@ var _ ptree.Decoder[Entry, Ref] = &Decoder{}
 
 type Decoder struct {
 	prevKey []byte
-	count   int
 }
 
 func newDecoder() ptree.Decoder[Entry, Ref] {
@@ -137,7 +137,6 @@ func (d *Decoder) Read(src []byte, ent *Entry) (int, error) {
 		return 0, err
 	}
 	d.prevKey = append(d.prevKey[:0], ent.Key...)
-	d.count++
 	return n, nil
 }
 
@@ -152,61 +151,80 @@ func (d *Decoder) Reset(parent Index) {
 	} else {
 		d.prevKey = d.prevKey[:0]
 	}
-	d.count = 0
 }
 
 var _ ptree.Decoder[Index, Ref] = &IndexDecoder{}
 
 type IndexDecoder struct {
-	parentLast ptree.Maybe[Entry]
-	Decoder
+	parent  Index
+	prevKey []byte
 }
 
 func newIndexDecoder() ptree.Decoder[Index, Ref] {
 	return &IndexDecoder{}
 }
 
-// TODO: need to read 2 indexes to recreate Index.Last value.
 func (d *IndexDecoder) Read(src []byte, dst *Index) (int, error) {
-	var ent Entry
-	n, err := d.Decoder.Read(src, &ent)
+	n, err := d.readIndex(src, dst)
 	if err != nil {
 		return 0, err
 	}
-	dst.First = ptree.Just(Entry{Key: ent.Key})
-	ref, err := gdat.ParseRef(ent.Value)
-	if err != nil {
-		return 0, err
-	}
-	dst.Ref = ref
+	d.setPrevKey(dst.First.X.Key)
 	return n, nil
 }
 
 func (d *IndexDecoder) Peek(src []byte, dst *Index) error {
-	var ent Entry
-	if err := d.Decoder.Peek(src, &ent); err != nil {
-		return err
-	}
-	dst.First = ptree.Just(Entry{Key: ent.Key})
-	ref, err := gdat.ParseRef(ent.Value)
-	if err != nil {
-		return err
-	}
-	dst.Ref = ref
-	return nil
+	_, err := d.readIndex(src, dst)
+	return err
 }
 
 func (d *IndexDecoder) Reset(parent ptree.Index[Index, Ref]) {
-	if parent.Last.Ok {
-		d.parentLast = parent.Last.X.Last
-	} else {
-		d.parentLast = ptree.Nothing[Entry]()
+	d.parent = ptree.FlattenIndex(parent)
+	d.setPrevKey(d.parent.First.X.Key)
+}
+
+func (d *IndexDecoder) readIndex(src []byte, dst *Index) (int, error) {
+	var ent1, ent2 Entry
+	n1, n2, err := read2Entries(src, d.prevKey, &ent1, &ent2)
+	if err != nil {
+		return 0, err
 	}
-	d.parentLast = parent.Last.X.Last
-	d.Decoder.Reset(Index{
-		Ref:   parent.Ref,
-		First: parent.First.X.First,
-	})
+	dst.First = maybe.Just(Entry{Key: ent1.Key})
+	ref, err := gdat.ParseRef(ent1.Value)
+	if err != nil {
+		return 0, err
+	}
+	dst.Ref = ref
+	dst.Last = maybe.Nothing[Entry]()
+	if n2 > 0 {
+		//dst.Last = maybe.Just(Entry{Key: ent2.Key})
+		// TODO: we incorrectly assume that nodes not at the right edge of the tree are always natural
+		// They may not be in cases of an entry exceeding the maximum size
+		dst.IsNatural = false
+	} else {
+		//dst.Last = d.parent.Last.Clone(copyEntry)
+		dst.IsNatural = false
+	}
+	return n1, nil
+}
+
+func (d *IndexDecoder) setPrevKey(x []byte) {
+	d.prevKey = append(d.prevKey[:0], x...)
+}
+
+func read2Entries(src []byte, prevKey []byte, ent1, ent2 *Entry) (int, int, error) {
+	n1, err := readEntry(ent1, src, prevKey)
+	if err != nil {
+		return 0, 0, err
+	}
+	if len(src[n1:]) == 0 {
+		return n1, 0, nil
+	}
+	n2, err := readEntry(ent2, src[n1:], ent1.Key)
+	if err != nil {
+		return n1, 0, err
+	}
+	return n1, n2, nil
 }
 
 // readEntry reads an entry into ent

@@ -9,6 +9,7 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
+	"github.com/gotvc/got/pkg/maybe"
 	"github.com/stretchr/testify/require"
 )
 
@@ -233,8 +234,8 @@ func refSimilarity[Ref comparable](as, bs []Ref) int {
 
 func cloneIndex(x Index[Entry, cadata.ID]) Index[Entry, cadata.ID] {
 	return Index[Entry, cadata.ID]{
-		First: x.First.Map(func(x Entry) Entry { return x.Clone() }),
-		Last:  x.Last.Map(func(x Entry) Entry { return x.Clone() }),
+		First: maybe.Map(x.First, func(x Entry) Entry { return x.Clone() }),
+		Last:  maybe.Map(x.Last, func(x Entry) Entry { return x.Clone() }),
 		Ref:   x.Ref,
 	}
 }

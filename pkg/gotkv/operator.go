@@ -9,6 +9,7 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
+	"github.com/gotvc/got/pkg/maybe"
 	"github.com/pkg/errors"
 )
 
@@ -159,11 +160,19 @@ func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) 
 // MaxEntry returns the entry in the instance x, within span, with the greatest lexicographic value.
 func (o *Operator) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span Span) (*Entry, error) {
 	rp := ptree.ReadParams[Entry, Ref]{
-		Store:      &ptreeGetter{op: &o.dop, s: s},
-		Compare:    compareEntries,
-		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
+		Store:           &ptreeGetter{op: &o.dop, s: s},
+		Compare:         compareEntries,
+		NewIndexDecoder: newIndexDecoder,
+		NewDecoder:      newDecoder,
 	}
-	return ptree.MaxEntry(ctx, rp, x.toPtree(), Entry{Key: span.End})
+	var dst Entry
+	if err := ptree.MaxEntry(ctx, rp, x.toPtree(), maybe.Just(Entry{Key: span.End}), &dst); err != nil {
+		if ptree.IsEOS(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &dst, nil
 }
 
 func (o *Operator) HasPrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (bool, error) {
@@ -222,6 +231,9 @@ func (o *Operator) NewBuilder(s Store) *Builder {
 // NewIterator returns an iterator for the instance rooted at x, which
 // will emit all keys within span in the instance.
 func (o *Operator) NewIterator(s Getter, root Root, span Span) *Iterator {
+	if span.End != nil && bytes.Compare(span.Begin, span.End) > 0 {
+		panic(fmt.Sprintf("cannot iterate over descending span. begin=%q end=%q", span.Begin, span.End))
+	}
 	it := ptree.NewIterator(ptree.IteratorParams[Entry, Ref]{
 		Store:           &ptreeGetter{op: &o.dop, s: s},
 		Compare:         compareEntries,
@@ -254,7 +266,7 @@ func (o *Operator) ForEach(ctx context.Context, s Getter, root Root, span Span, 
 }
 
 // Mutation represents a declarative change to a Span of entries.
-// The result of applying mutation is that
+// The result of applying a Mutation is that the entire contents of the Span are replaced with Entries.
 type Mutation struct {
 	Span    Span
 	Entries []Entry

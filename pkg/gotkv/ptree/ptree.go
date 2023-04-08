@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
+	"github.com/gotvc/got/pkg/maybe"
 )
 
 // Getter is used to retrieve nodes from storage by Ref
@@ -35,6 +37,10 @@ var ErrOutOfRoom = errors.New("out of room")
 
 var EOS = kvstreams.EOS
 
+func IsEOS(err error) bool {
+	return errors.Is(err, EOS)
+}
+
 type Encoder[T any] interface {
 	// Write encodes ent to dst and returns the number of bytes written or an error.
 	// ErrOutOfRoom should be returned to indicate that the entry will not fit in the buffer.
@@ -59,8 +65,6 @@ type Decoder[T, Ref any] interface {
 type CompareFunc[T any] func(a, b T) int
 
 const (
-	MaxKeySize   = 4096
-	MaxRefSize   = 256
 	MaxTreeDepth = 255
 )
 
@@ -73,9 +77,10 @@ type Root[T, Ref any] struct {
 
 func (r *Root[T, Ref]) Index2() Index[Index[T, Ref], Ref] {
 	return Index[Index[T, Ref], Ref]{
-		Ref:   r.Ref,
-		First: Just(Index[T, Ref]{First: r.First}),
-		Last:  Just(Index[T, Ref]{Last: r.Last}),
+		Ref: r.Ref,
+
+		First: maybe.Just(Index[T, Ref]{First: r.First}),
+		Last:  maybe.Just(Index[T, Ref]{Last: r.Last}),
 	}
 }
 
@@ -96,9 +101,14 @@ func Copy[T, Ref any](ctx context.Context, b *Builder[T, Ref], it *Iterator[T, R
 		Index: &idx,
 	}
 	for {
-		level := min(b.syncLevel(), it.syncLevel())
+		bl := b.syncLevel()
+		il, err := it.syncLevel()
+		if err != nil {
+			return err
+		}
+		level := min(bl, il)
 		if err := it.next(ctx, level, x); err != nil {
-			if err == kvstreams.EOS {
+			if errors.Is(err, EOS) {
 				return nil
 			}
 			return err
@@ -109,8 +119,8 @@ func Copy[T, Ref any](ctx context.Context, b *Builder[T, Ref], it *Iterator[T, R
 	}
 }
 
-// ListChildren returns the immediate children of root if any.
-func ListChildren[T, Ref any](ctx context.Context, params ReadParams[T, Ref], root Root[T, Ref]) ([]Index[T, Ref], error) {
+// ListIndexes returns the immediate children of root if any.
+func ListIndexes[T, Ref any](ctx context.Context, params ReadParams[T, Ref], root Root[T, Ref]) ([]Index[T, Ref], error) {
 	if PointsToEntries(root) {
 		return nil, fmt.Errorf("cannot list children of root with depth=%d", root.Depth)
 	}
@@ -138,9 +148,10 @@ func ListChildren[T, Ref any](ctx context.Context, params ReadParams[T, Ref], ro
 // If idx points to other indexes directly, then ListEntries returns the entries for those indexes.
 func ListEntries[T, Ref any](ctx context.Context, params ReadParams[T, Ref], idx Index[T, Ref]) ([]T, error) {
 	sr := NewStreamReader(StreamReaderParams[T, Ref]{
-		Store:   params.Store,
-		Compare: params.Compare,
-		Decoder: params.NewDecoder(),
+		Store:     params.Store,
+		Compare:   params.Compare,
+		Decoder:   params.NewDecoder(),
+		NextIndex: NextIndexFromSlice([]Index[T, Ref]{idx}),
 	})
 	var ret []T
 	for {
@@ -217,31 +228,44 @@ func upgradeCompare[T, Ref any](cmp func(a, b T) int) func(a, b Index[T, Ref]) i
 func upgradeCopy[T, Ref any](copy func(dst *T, src T)) func(dst *Index[T, Ref], src Index[T, Ref]) {
 	return func(dst *Index[T, Ref], src Index[T, Ref]) {
 		dst.Ref = src.Ref
-		copyMaybe(&dst.First, src.First, copy)
-		copyMaybe(&dst.Last, src.Last, copy)
+		dst.IsNatural = src.IsNatural
+		dst.First = src.First.Clone(copy)
+		dst.Last = src.Last.Clone(copy)
 	}
 }
 
-func copyMaybe[T any](dst *Maybe[T], src Maybe[T], copy func(dst *T, src T)) {
-	if !src.Ok {
-		return
-	}
-	dst.Ok = true
-	copy(&dst.X, src.X)
-}
-
-func flattenIndex[T, Ref any](x Index[Index[T, Ref], Ref]) Index[T, Ref] {
-	var first Maybe[T]
-	if x.First.Ok {
-		first = x.First.X.First
-	}
-	var last Maybe[T]
-	if x.Last.Ok {
-		last = x.Last.X.Last
-	}
+func FlattenIndex[T, Ref any](x Index[Index[T, Ref], Ref]) Index[T, Ref] {
 	return Index[T, Ref]{
-		Ref:   x.Ref,
-		First: first,
-		Last:  last,
+		Ref:       x.Ref,
+		IsNatural: x.IsNatural,
+		First: maybe.FlatMap(x.First, func(x Index[T, Ref]) maybe.Maybe[T] {
+			return x.First
+		}),
+		Last: maybe.FlatMap(x.Last, func(x Index[T, Ref]) maybe.Maybe[T] {
+			return x.Last
+		}),
 	}
+}
+
+func cloneSpan[T any](src state.Span[T], cp func(dst *T, src T)) state.Span[T] {
+	span := state.TotalSpan[T]()
+	if lb, ok := src.LowerBound(); ok {
+		var lb2 T
+		cp(&lb2, lb)
+		if src.IncludesLower() {
+			span = span.WithLowerIncl(lb)
+		} else {
+			span = span.WithLowerExcl(lb)
+		}
+	}
+	if ub, ok := src.UpperBound(); ok {
+		var ub2 T
+		cp(&ub2, ub)
+		if src.IncludesUpper() {
+			span = span.WithUpperIncl(ub2)
+		} else {
+			span = span.WithUpperExcl(ub2)
+		}
+	}
+	return span
 }

@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/gotkv/ptree"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,12 +26,13 @@ func TestPutGet(t *testing.T) {
 	value := []byte("value")
 	x, err := op.Put(ctx, s, *x, key, value)
 	require.NoError(t, err)
-	ptree.DebugTree(ctx, ptree.ReadParams[Entry, Ref]{
-		Store:           &ptreeGetter{op: &op.dop, s: s},
-		Compare:         compareEntries,
-		NewDecoder:      newDecoder,
-		NewIndexDecoder: newIndexDecoder,
-	}, x.toPtree(), os.Stderr)
+	t.Log(x)
+	// ptree.DebugTree(ctx, ptree.ReadParams[Entry, Ref]{
+	// 	Store:           &ptreeGetter{op: &op.dop, s: s},
+	// 	Compare:         compareEntries,
+	// 	NewDecoder:      newDecoder,
+	// 	NewIndexDecoder: newIndexDecoder,
+	// }, x.toPtree(), os.Stderr)
 	actualValue, err := op.Get(ctx, s, *x, key)
 	require.NoError(t, err)
 	require.Equal(t, value, actualValue)
