@@ -10,10 +10,10 @@ import (
 // MaxEntry returns the entry in span with the greatest (ordered last) key.
 func MaxEntry[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Root[T, Ref], lt T) (*T, error) {
 	sr := NewStreamReader(StreamReaderParams[T, Ref]{
-		Store:   params.Store,
-		Compare: params.Compare,
-		Decoder: params.NewDecoder(),
-		Indexes: []Index[T, Ref]{rootToIndex(x)},
+		Store:     params.Store,
+		Compare:   params.Compare,
+		Decoder:   params.NewDecoder(),
+		NextIndex: NextIndexFromSlice([]Index[T, Ref]{x.Index}),
 	})
 	ent, err := maxEntry(ctx, sr, params.Compare, &lt)
 	if err != nil {
@@ -28,11 +28,13 @@ func MaxEntry[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Root
 		}
 		return ent, nil
 	}
-	idx, err := params.ConvertEntry(*ent)
-	if err != nil {
-		return nil, err
-	}
-	return MaxEntry(ctx, params, indexToRoot(idx, x.Depth-1), lt)
+	panic(*ent)
+	// idx, err := params.ConvertEntry(*ent)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// return MaxEntry(ctx, params, indexToRoot(idx, x.Depth-1), lt)
 }
 
 func maxEntry[T, Ref any](ctx context.Context, sr *StreamReader[T, Ref], cmp func(a, b T) int, under *T) (ret *T, _ error) {

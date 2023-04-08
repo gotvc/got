@@ -70,8 +70,7 @@ func (b *Builder[T, Ref]) makeLevel(i int) builderLevel[T, Ref] {
 			OnIndex: func(idx Index[T, Ref]) error {
 				if b.isDone && i == len(b.levels)-1 {
 					b.root = &Root[T, Ref]{
-						Ref:   idx.Ref,
-						Span:  idx.Span,
+						Index: idx,
 						Depth: uint8(i),
 					}
 					return nil
@@ -95,11 +94,8 @@ func (b *Builder[T, Ref]) makeLevel(i int) builderLevel[T, Ref] {
 			OnIndex: func(idx Index[Index[T, Ref], Ref]) error {
 				idx2 := flattenIndex(idx)
 				if b.isDone && i == len(b.levels)-1 {
-					b.root = &Root[T, Ref]{
-						Ref:   idx2.Ref,
-						Span:  idx2.Span,
-						Depth: uint8(i),
-					}
+					root := indexToRoot(idx2, uint8(i))
+					b.root = &root
 					return nil
 				}
 				bl := b.getLevel(i + 1)
@@ -161,7 +157,7 @@ func (b *Builder[T, Ref]) Finish(ctx context.Context) (*Root[T, Ref], error) {
 		if err != nil {
 			return nil, err
 		}
-		b.root = &Root[T, Ref]{Ref: ref, Depth: 1}
+		b.root = &Root[T, Ref]{Index: Index[T, Ref]{Ref: ref}, Depth: 1}
 	}
 	return b.root, nil
 }
@@ -173,32 +169,4 @@ func (b *Builder[T, Ref]) syncLevel() int {
 		}
 	}
 	return MaxTreeDepth - 1 // allow copying at any depth
-}
-
-func upgradeCompare[T, Ref any](cmp func(a, b T) int) func(a, b Index[T, Ref]) int {
-	return func(a, b Index[T, Ref]) int {
-		if bl, ok := b.Span.LowerBound(); ok {
-			if au, ok := a.Span.UpperBound(); ok {
-				// TODO: this is wrong
-				return cmp(bl, au)
-			}
-		}
-		if al, ok := a.Span.LowerBound(); ok {
-			if bu, ok := b.Span.UpperBound(); ok {
-				// TODO: this is wrong
-				return cmp(al, bu)
-			}
-		}
-		return 0
-	}
-}
-
-func upgradeCopy[T, Ref any](copy func(dst *T, src T)) func(dst *Index[T, Ref], src Index[T, Ref]) {
-	// TODO:
-	return nil
-}
-
-func flattenIndex[T, Ref any](idx Index[Index[T, Ref], Ref]) Index[T, Ref] {
-	// TODO:
-	return Index[T, Ref]{}
 }

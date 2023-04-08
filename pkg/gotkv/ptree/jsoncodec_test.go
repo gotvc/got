@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/brendoncarroll/go-state/cadata"
 )
@@ -12,8 +13,15 @@ type Entry struct {
 	Key, Value []byte
 }
 
+func (e Entry) String() string {
+	return fmt.Sprintf("(%q => %q)", e.Key, e.Value)
+}
+
 func (e Entry) Clone() Entry {
-	return Entry{Key: e.Key, Value: e.Value}
+	return Entry{
+		Key:   append([]byte{}, e.Key...),
+		Value: append([]byte{}, e.Value...),
+	}
 }
 
 type JSONEncoder[T any] struct{}

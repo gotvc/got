@@ -162,7 +162,6 @@ func (o *Operator) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span S
 		Store:      &ptreeGetter{op: &o.dop, s: s},
 		Compare:    compareEntries,
 		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
-		ParseRef:   gdat.ParseRef,
 	}
 	return ptree.MaxEntry(ctx, rp, x.toPtree(), Entry{Key: span.End})
 }
@@ -208,12 +207,14 @@ func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Getter, x Root, pr
 // Data will be persisted to s.
 func (o *Operator) NewBuilder(s Store) *Builder {
 	b := ptree.NewBuilder(ptree.BuilderParams[Entry, Ref]{
-		Store:      &ptreeStore{op: &o.dop, s: s},
-		MeanSize:   o.meanSize,
-		MaxSize:    o.maxSize,
-		Seed:       o.seed,
-		NewEncoder: func() ptree.Encoder[Entry] { return &Encoder{} },
-		Compare:    compareEntries,
+		Store:           &ptreeStore{op: &o.dop, s: s},
+		MeanSize:        o.meanSize,
+		MaxSize:         o.maxSize,
+		Seed:            o.seed,
+		NewEncoder:      func() ptree.Encoder[Entry] { return &Encoder{} },
+		NewIndexEncoder: func() ptree.Encoder[Index] { return &IndexEncoder{} },
+		Compare:         compareEntries,
+		Copy:            copyEntry,
 	})
 	return &Builder{b: *b}
 }
@@ -222,10 +223,11 @@ func (o *Operator) NewBuilder(s Store) *Builder {
 // will emit all keys within span in the instance.
 func (o *Operator) NewIterator(s Getter, root Root, span Span) *Iterator {
 	it := ptree.NewIterator(ptree.IteratorParams[Entry, Ref]{
-		Store:      &ptreeGetter{op: &o.dop, s: s},
-		Compare:    compareEntries,
-		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
-		Copy:       copyEntry,
+		Store:           &ptreeGetter{op: &o.dop, s: s},
+		Compare:         compareEntries,
+		NewDecoder:      func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
+		NewIndexDecoder: func() ptree.Decoder[Index, Ref] { return &IndexDecoder{} },
+		Copy:            copyEntry,
 
 		Root: root.toPtree(),
 		Span: convertSpan(span),

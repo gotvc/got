@@ -68,23 +68,34 @@ const (
 // Root is the root of the tree
 // It contains the same information as an Index, plus the depth of the tree
 type Root[T, Ref any] struct {
-	Ref   Ref
-	Span  state.Span[T]
+	Index[T, Ref]
 	Depth uint8
+}
+
+func (r *Root[T, Ref]) Index2() Index[Index[T, Ref], Ref] {
+	return Index[Index[T, Ref], Ref]{
+		Ref:   r.Ref,
+		First: Just(Index[T, Ref]{First: r.First}),
+		Last:  Just(Index[T, Ref]{Last: r.Last}),
+	}
 }
 
 // ReadParams are parameters needed to read from a tree
 type ReadParams[T, Ref any] struct {
-	Store        Getter[Ref]
-	NewDecoder   func() Decoder[T, Ref]
-	ParseRef     func([]byte) (Ref, error)
-	Compare      CompareFunc[T]
-	ConvertEntry func(T) (Index[T, Ref], error)
+	Store           Getter[Ref]
+	NewDecoder      func() Decoder[T, Ref]
+	NewIndexDecoder func() Decoder[Index[T, Ref], Ref]
+	Compare         CompareFunc[T]
 }
 
 // Copy copies all the entries from it to b.
 func Copy[T, Ref any](ctx context.Context, b *Builder[T, Ref], it *Iterator[T, Ref]) error {
-	var x dual[T, Ref]
+	var ent T
+	var idx Index[T, Ref]
+	x := dual[T, Ref]{
+		Entry: &ent,
+		Index: &idx,
+	}
 	for {
 		level := min(b.syncLevel(), it.syncLevel())
 		if err := it.next(ctx, level, x); err != nil {
@@ -104,23 +115,19 @@ func ListChildren[T, Ref any](ctx context.Context, params ReadParams[T, Ref], ro
 	if PointsToEntries(root) {
 		return nil, fmt.Errorf("cannot list children of root with depth=%d", root.Depth)
 	}
-	sr := NewStreamReader(StreamReaderParams[T, Ref]{
-		Store:   params.Store,
-		Compare: params.Compare,
-		Decoder: params.NewDecoder(),
-		Indexes: []Index[T, Ref]{rootToIndex(root)},
+	sr := NewStreamReader(StreamReaderParams[Index[T, Ref], Ref]{
+		Store:     params.Store,
+		Compare:   upgradeCompare[T, Ref](params.Compare),
+		Decoder:   params.NewIndexDecoder(),
+		NextIndex: NextIndexFromSlice([]Index[Index[T, Ref], Ref]{root.Index2()}),
 	})
 	var idxs []Index[T, Ref]
 	for {
-		var ent T
-		if err := sr.Next(ctx, &ent); err != nil {
+		var idx Index[T, Ref]
+		if err := sr.Next(ctx, &idx); err != nil {
 			if err == EOS {
 				break
 			}
-			return nil, err
-		}
-		idx, err := params.ConvertEntry(ent)
-		if err != nil {
 			return nil, err
 		}
 		idxs = append(idxs, idx)
@@ -135,7 +142,6 @@ func ListEntries[T, Ref any](ctx context.Context, params ReadParams[T, Ref], idx
 		Store:   params.Store,
 		Compare: params.Compare,
 		Decoder: params.NewDecoder(),
-		Indexes: []Index[T, Ref]{idx},
 	})
 	var ret []T
 	for {
@@ -178,16 +184,8 @@ func PointsToIndexes[T, Ref any](root Root[T, Ref]) bool {
 
 func indexToRoot[T, Ref any](idx Index[T, Ref], depth uint8) Root[T, Ref] {
 	return Root[T, Ref]{
-		Ref:   idx.Ref,
-		Span:  idx.Span,
+		Index: idx,
 		Depth: depth,
-	}
-}
-
-func rootToIndex[T, Ref any](r Root[T, Ref]) Index[T, Ref] {
-	return Index[T, Ref]{
-		Ref:  r.Ref,
-		Span: r.Span,
 	}
 }
 
@@ -227,4 +225,52 @@ func cloneSpan[T any](x state.Span[T], copy func(dst *T, src T)) (ret state.Span
 type dual[T, Ref any] struct {
 	Entry *T
 	Index *Index[T, Ref]
+}
+
+func upgradeCompare[T, Ref any](cmp func(a, b T) int) func(a, b Index[T, Ref]) int {
+	return func(a, b Index[T, Ref]) int {
+		if a.Last.Ok && b.First.Ok {
+			if cmp(a.Last.Value, b.First.Value) < 0 {
+				return -1
+			}
+		}
+		if a.First.Ok && b.Last.Ok {
+			if cmp(a.First.Value, b.Last.Value) > 0 {
+				return 1
+			}
+		}
+		return 0
+	}
+}
+
+func upgradeCopy[T, Ref any](copy func(dst *T, src T)) func(dst *Index[T, Ref], src Index[T, Ref]) {
+	return func(dst *Index[T, Ref], src Index[T, Ref]) {
+		dst.Ref = src.Ref
+		copyMaybe(&dst.First, src.First, copy)
+		copyMaybe(&dst.Last, src.Last, copy)
+	}
+}
+
+func copyMaybe[T any](dst *Maybe[T], src Maybe[T], copy func(dst *T, src T)) {
+	if !src.Ok {
+		return
+	}
+	dst.Ok = true
+	copy(&dst.Value, src.Value)
+}
+
+func flattenIndex[T, Ref any](x Index[Index[T, Ref], Ref]) Index[T, Ref] {
+	var first Maybe[T]
+	if x.First.Ok {
+		first = x.First.Value.First
+	}
+	var last Maybe[T]
+	if x.Last.Ok {
+		last = x.Last.Value.Last
+	}
+	return Index[T, Ref]{
+		Ref:   x.Ref,
+		First: first,
+		Last:  last,
+	}
 }

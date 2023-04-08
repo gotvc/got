@@ -3,112 +3,81 @@ package ptree
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 
 	"github.com/brendoncarroll/go-state"
 	"github.com/dchest/siphash"
-	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
 
+type Maybe[T any] struct {
+	Ok    bool
+	Value T
+}
+
+func (m Maybe[T]) Clone(fn func(T) T) Maybe[T] {
+	if !m.Ok {
+		return Maybe[T]{}
+	}
+	return Maybe[T]{Value: fn(m.Value)}
+}
+
+func (m Maybe[T]) String() string {
+	if !m.Ok {
+		return "Nothing"
+	} else {
+		return fmt.Sprintf("Just(%v)", m.Value)
+	}
+}
+
+func Just[T any](x T) Maybe[T] {
+	return Maybe[T]{Ok: true, Value: x}
+}
+
 type Index[T, Ref any] struct {
-	Ref  Ref
-	Span state.Span[T]
+	Ref   Ref
+	First Maybe[T]
+	Last  Maybe[T]
 }
 
-type blobReader[T, Ref any] struct {
-	dec     Decoder[T, Ref]
-	compare func(a, b T) int
-
-	buf         []byte
-	offset, len int
-}
-
-// newBlobReader reads the entries from data, using firstKey as the first key
-// firstKey and data must not be modified while using the blobReader
-func newBlobReader[T, Ref any](dec Decoder[T, Ref], parent Index[T, Ref], data []byte) *blobReader[T, Ref] {
-	dec.Reset(parent)
-	return &blobReader[T, Ref]{
-		dec: dec,
-		buf: data,
-		len: len(data), // TODO: eventually we want to reuse the buffer
+func (in Index[T, Ref]) Span() (ret state.Span[T]) {
+	if in.First.Ok {
+		ret = ret.WithLowerIncl(in.First.Value)
 	}
+	if in.Last.Ok {
+		ret = ret.WithUpperIncl(in.Last.Value)
+	}
+	return ret
 }
 
-func (r *blobReader[T, Ref]) SeekIndexes(ctx context.Context, gteq T) error {
-	var ent T
-	for {
-		// if the prevKey is already <= gteq, then don't bother with this
-		//if r.compare(r.prevKey, gteq) <= 0 {
-		//	return nil
-		//}
-		// check to see if the next key is also <= gteq
-		if err := r.Peek(ctx, &ent); err != nil {
-			return err
+// NextIndexFromSlice returns a NextIndex function for StreamReaders which will
+// iterate over the provided slice.
+func NextIndexFromSlice[T, Ref any](idxs []Index[T, Ref]) func(ctx context.Context, dst *Index[T, Ref]) error {
+	var i int
+	return func(_ context.Context, dst *Index[T, Ref]) error {
+		if i >= len(idxs) {
+			return EOS
 		}
-		if r.compare(ent, gteq) >= 0 {
-			return nil
-		}
-		if err := r.Next(ctx, &ent); err != nil {
-			return err
-		}
+		*dst = idxs[i]
+		i++
+		return nil
 	}
-}
-
-func (r *blobReader[T, Ref]) Seek(ctx context.Context, gteq T) error {
-	var ent T
-	for {
-		if err := r.Peek(ctx, &ent); err != nil {
-			if err == kvstreams.EOS {
-				return nil
-			}
-			return err
-		}
-		if r.compare(ent, gteq) >= 0 {
-			return nil
-		}
-		if err := r.Next(ctx, &ent); err != nil {
-			return err
-		}
-	}
-}
-
-func (r *blobReader[T, Ref]) Next(ctx context.Context, ent *T) error {
-	if err := r.next(ctx, ent); err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *blobReader[T, Ref]) Peek(ctx context.Context, ent *T) error {
-	return r.dec.Peek(r.buf[r.offset:r.len], ent)
-}
-
-// next reads the next entry, but does not update r.prevKey
-func (r *blobReader[T, Ref]) next(ctx context.Context, ent *T) error {
-	if r.len-r.offset == 0 {
-		return EOS
-	}
-	n, err := r.dec.Read(r.buf[r.offset:r.len], ent)
-	if err != nil {
-		return err
-	}
-	r.offset += n
-	return nil
 }
 
 type StreamReader[T, Ref any] struct {
 	p StreamReaderParams[T, Ref]
 
-	nextIndex int
-	br        *blobReader[T, Ref]
+	buf    []byte
+	offset int
+	n      int
 }
 
 type StreamReaderParams[T, Ref any] struct {
-	Store   Getter[Ref]
-	Decoder Decoder[T, Ref]
-	Compare CompareFunc[T]
-	Indexes []Index[T, Ref]
+	Store     Getter[Ref]
+	Decoder   Decoder[T, Ref]
+	Compare   CompareFunc[T]
+	NextIndex func(ctx context.Context, dst *Index[T, Ref]) error
 }
 
 func NewStreamReader[T, Ref any](params StreamReaderParams[T, Ref]) *StreamReader[T, Ref] {
@@ -118,101 +87,78 @@ func NewStreamReader[T, Ref any](params StreamReaderParams[T, Ref]) *StreamReade
 	if params.Decoder == nil {
 		panic("NewStreamReader nil Decoder")
 	}
-	idxs := params.Indexes
-	for i := 0; i < len(idxs)-1; i++ {
-		if compareSpans(params.Indexes[i].Span, params.Indexes[i+1].Span, params.Compare) >= 0 {
-			panic(fmt.Sprintf("StreamReader: unordered indexes %v >= %v", idxs[i].Span, idxs[i+1].Span))
-		}
+	if params.NextIndex == nil {
+		panic("NewStreamReader nil NextIndex")
+	}
+	if params.Compare == nil {
+		panic("NewStreamReader nil Compare")
 	}
 	return &StreamReader[T, Ref]{
 		p: params,
+
+		buf: make([]byte, params.Store.MaxSize()),
 	}
 }
 
-func (r *StreamReader[T, Ref]) Next(ctx context.Context, ent *T) error {
-	return r.withBlobReader(ctx, func(br *blobReader[T, Ref]) error {
-		return br.Next(ctx, ent)
-	})
-}
-
-func (r *StreamReader[T, Ref]) Peek(ctx context.Context, ent *T) error {
-	return r.withBlobReader(ctx, func(br *blobReader[T, Ref]) error {
-		return br.Peek(ctx, ent)
-	})
-}
-
-func (r *StreamReader[T, Ref]) SeekIndexes(ctx context.Context, gteq T) error {
-	if err := r.seekCommon(ctx, gteq); err != nil {
-		return err
-	}
-	if r.br == nil {
-		return nil
-	}
-	return r.br.SeekIndexes(ctx, gteq)
-}
-
-func (r *StreamReader[T, Ref]) Seek(ctx context.Context, gteq T) error {
-	if err := r.seekCommon(ctx, gteq); err != nil {
-		return err
-	}
-	if r.br == nil {
-		return nil
-	}
-	return r.br.Seek(ctx, gteq)
-}
-
-func (r *StreamReader[T, Ref]) seekCommon(ctx context.Context, gteq T) error {
-	if len(r.p.Indexes) < 1 {
-		return nil
-	}
-	var targetIndex int
-	for i := 1; i < len(r.p.Indexes); i++ {
-		first, _ := r.p.Indexes[i].Span.LowerBound()
-		if r.p.Compare(first, gteq) <= 0 {
-			targetIndex = i
-		} else {
-			break
-		}
-	}
-	if r.br == nil || r.nextIndex != targetIndex+1 {
-		var err error
-		r.br, err = r.getBlobReader(ctx, r.p.Indexes[targetIndex])
-		if err != nil {
+func (r *StreamReader[T, Ref]) Next(ctx context.Context, dst *T) error {
+	if r.offset >= r.n {
+		if err := r.loadNextBlob(ctx); err != nil {
 			return err
 		}
-		r.nextIndex = targetIndex + 1
 	}
+	n, err := r.p.Decoder.Read(r.buf[r.offset:r.n], dst)
+	if err != nil {
+		return err
+	}
+	r.offset += n
 	return nil
 }
 
-func (r *StreamReader[T, Ref]) withBlobReader(ctx context.Context, fn func(*blobReader[T, Ref]) error) error {
-	if r.br == nil {
-		if r.nextIndex == len(r.p.Indexes) {
-			return kvstreams.EOS
-		}
-		idx := r.p.Indexes[r.nextIndex]
-		r.nextIndex++
-		var err error
-		r.br, err = r.getBlobReader(ctx, idx)
-		if err != nil {
+func (r *StreamReader[T, Ref]) Peek(ctx context.Context, dst *T) error {
+	if r.n >= r.offset {
+		if err := r.loadNextBlob(ctx); err != nil {
 			return err
 		}
 	}
-	err := fn(r.br)
-	if err == kvstreams.EOS {
-		r.br = nil
-		return r.withBlobReader(ctx, fn)
-	}
-	return err
+	return r.p.Decoder.Peek(r.buf[r.offset:r.n], dst)
 }
 
-func (r *StreamReader[T, Ref]) getBlobReader(ctx context.Context, idx Index[T, Ref]) (*blobReader[T, Ref], error) {
-	buf := make([]byte, r.p.Store.MaxSize())
-	n, err := r.p.Store.Get(ctx, idx.Ref, buf)
-	if err != nil {
-		return nil, err
+func (r *StreamReader[T, Ref]) Seek(ctx context.Context, gteq T) error {
+	var x T
+	for {
+		if err := r.Peek(ctx, &x); err != nil {
+			if errors.Is(err, EOS) {
+				return nil
+			}
+			return err
+		}
+		if r.p.Compare(x, gteq) >= 0 {
+			return nil
+		}
+		if err := r.Next(ctx, &x); err != nil {
+			return err
+		}
 	}
-	return newBlobReader(r.p.Decoder, idx, buf[:n]), nil
+}
+
+// Buffered returns the number of bytes in the StreamReader which have not been read.
+func (r *StreamReader[T, Ref]) Buffered() int {
+	return r.n - r.offset
+}
+
+func (r *StreamReader[T, Ref]) loadNextBlob(ctx context.Context) error {
+	var idx Index[T, Ref]
+	if err := r.p.NextIndex(ctx, &idx); err != nil {
+		return err
+	}
+	n, err := r.p.Store.Get(ctx, idx.Ref, r.buf)
+	if err != nil {
+		return err
+	}
+	r.n = n
+	r.offset = 0
+	r.p.Decoder.Reset(idx)
+	return nil
 }
 
 type IndexHandler[T, Ref any] func(Index[T, Ref]) error
@@ -223,9 +169,8 @@ type StreamWriter[T, Ref any] struct {
 	buf []byte
 	n   int
 
-	first      T
-	prev       T
-	prevExists bool
+	first T
+	prev  Maybe[T]
 }
 
 type StreamWriterParams[T, Ref any] struct {
@@ -235,8 +180,9 @@ type StreamWriterParams[T, Ref any] struct {
 	MaxSize  int
 	Compare  func(a, b T) int
 	Encoder  Encoder[T]
-	OnIndex  IndexHandler[T, Ref]
-	Copy     func(dst *T, src T)
+	// OnIndex must not retain the index after the call has ended.
+	OnIndex IndexHandler[T, Ref]
+	Copy    func(dst *T, src T)
 }
 
 func NewStreamWriter[T, Ref any](params StreamWriterParams[T, Ref]) *StreamWriter[T, Ref] {
@@ -253,8 +199,8 @@ func NewStreamWriter[T, Ref any](params StreamWriterParams[T, Ref]) *StreamWrite
 }
 
 func (w *StreamWriter[T, Ref]) Append(ctx context.Context, ent T) error {
-	if w.prevExists && w.p.Compare(ent, w.prev) <= 0 {
-		panic(fmt.Sprintf("out of order key: prev=%v current=%v", w.prev, ent))
+	if w.prev.Ok && w.p.Compare(ent, w.prev.Value) <= 0 {
+		panic(fmt.Sprintf("out of order key: prev=%v current=%v", w.prev.Value, ent))
 	}
 	entryLen := w.p.Encoder.EncodedLen(ent)
 	if entryLen > w.p.MaxSize {
@@ -279,8 +225,8 @@ func (w *StreamWriter[T, Ref]) Append(ctx context.Context, ent T) error {
 	}
 	w.n += n
 
-	w.p.Copy(&w.prev, ent)
-	w.prevExists = true
+	w.p.Copy(&w.prev.Value, ent)
+	w.prev.Ok = true
 	// split after writing the entry
 	if w.isSplitPoint(w.buf[offset : offset+n]) {
 		if err := w.Flush(ctx); err != nil {
@@ -302,12 +248,10 @@ func (w *StreamWriter[T, Ref]) Flush(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	var first, last T
-	w.p.Copy(&first, w.first)
-	w.p.Copy(&last, w.prev)
 	if err := w.p.OnIndex(Index[T, Ref]{
-		Ref:  ref,
-		Span: state.TotalSpan[T]().WithLowerIncl(first).WithUpperIncl(last),
+		Ref:   ref,
+		First: Just(w.first),
+		Last:  w.prev,
 	}); err != nil {
 		return err
 	}
@@ -315,6 +259,7 @@ func (w *StreamWriter[T, Ref]) Flush(ctx context.Context) error {
 	w.p.Copy(&w.first, zero)
 	w.n = 0
 	w.p.Encoder.Reset()
+	w.prev.Ok = false
 	return nil
 }
 

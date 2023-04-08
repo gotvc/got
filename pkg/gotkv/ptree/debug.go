@@ -21,14 +21,14 @@ func DebugTree[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Roo
 		for i := 0; i < int(max-x.Depth); i++ {
 			indent += "  "
 		}
-		sr := NewStreamReader(StreamReaderParams[T, Ref]{
-			Store:   params.Store,
-			Compare: params.Compare,
-			Decoder: params.NewDecoder(),
-			Indexes: []Index[T, Ref]{{Ref: x.Ref, Span: x.Span}},
-		})
 		fmt.Fprintf(bw, "%sTREE NODE: %v %d\n", indent, x.Ref, x.Depth)
 		if x.Depth == 0 {
+			sr := NewStreamReader(StreamReaderParams[T, Ref]{
+				Store:     params.Store,
+				Compare:   params.Compare,
+				Decoder:   params.NewDecoder(),
+				NextIndex: NextIndexFromSlice([]Index[T, Ref]{x.Index}),
+			})
 			for {
 				var ent T
 				if err := sr.Next(ctx, &ent); err != nil {
@@ -40,20 +40,24 @@ func DebugTree[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Roo
 				fmt.Fprintf(w, "%s ENTRY %v\n", indent, ent)
 			}
 		} else {
-			var ent T
+			sr := NewStreamReader(StreamReaderParams[Index[T, Ref], Ref]{
+				Store:     params.Store,
+				Compare:   upgradeCompare[T, Ref](params.Compare),
+				Decoder:   params.NewIndexDecoder(),
+				NextIndex: NextIndexFromSlice([]Index[Index[T, Ref], Ref]{x.Index2()}),
+			})
+			var idx Index[T, Ref]
 			for {
-				if err := sr.Next(ctx, &ent); err != nil {
+				if err := sr.Next(ctx, &idx); err != nil {
 					if err == kvstreams.EOS {
 						break
 					}
 					panic(err)
 				}
-				idx, err := params.ConvertEntry(ent)
-				if err != nil {
-					panic(err)
-				}
-				fmt.Fprintf(bw, "%s INDEX span=%v -> ref=%v\n", indent, idx.Span, idx.Ref)
-				debugTree(Root[T, Ref]{Ref: idx.Ref, Span: idx.Span, Depth: x.Depth - 1})
+				fmt.Fprintf(bw, "%s INDEX span=%v -> ref=%v\n", indent, idx.Span(), idx.Ref)
+				root2 := x
+				root2.Depth--
+				debugTree(root2)
 			}
 		}
 	}

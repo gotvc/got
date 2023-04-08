@@ -58,9 +58,16 @@ type IndexEncoder struct {
 }
 
 func (e *IndexEncoder) Write(dst []byte, x ptree.Index[Entry, Ref]) (int, error) {
-	first, _ := x.Span.LowerBound()
 	return e.Encoder.Write(dst, Entry{
-		Key: first.Key,
+		Key:   x.First.Value.Key,
+		Value: gdat.AppendRef(nil, x.Ref),
+	})
+}
+
+func (e *IndexEncoder) EncodedLen(x Index) int {
+	return e.Encoder.EncodedLen(Entry{
+		Key:   x.First.Value.Key,
+		Value: gdat.AppendRef(nil, x.Ref),
 	})
 }
 
@@ -136,18 +143,54 @@ func (d *Decoder) Peek(src []byte, ent *Entry) error {
 }
 
 func (d *Decoder) Reset(parent Index) {
-	if first, ok := parent.Span.LowerBound(); ok {
-		d.prevKey = append(d.prevKey[:0], first.Key...)
+	if parent.First.Ok {
+		d.prevKey = append(d.prevKey[:0], parent.First.Value.Key...)
 	} else {
 		d.prevKey = d.prevKey[:0]
 	}
 	d.count = 0
 }
 
-var _ ptree.Decoder[Entry, Ref] = &IndexDecoder{}
+var _ ptree.Decoder[Index, Ref] = &IndexDecoder{}
 
 type IndexDecoder struct {
 	Decoder
+}
+
+func (d *IndexDecoder) Read(src []byte, dst *Index) (int, error) {
+	var ent Entry
+	n, err := d.Decoder.Read(src, &ent)
+	if err != nil {
+		return 0, err
+	}
+	dst.First = ptree.Just(Entry{Key: ent.Key})
+	ref, err := gdat.ParseRef(ent.Value)
+	if err != nil {
+		return 0, err
+	}
+	dst.Ref = ref
+	return n, nil
+}
+
+func (d *IndexDecoder) Peek(src []byte, dst *Index) error {
+	var ent Entry
+	if err := d.Decoder.Peek(src, &ent); err != nil {
+		return err
+	}
+	dst.First = ptree.Just(Entry{Key: ent.Key})
+	ref, err := gdat.ParseRef(ent.Value)
+	if err != nil {
+		return err
+	}
+	dst.Ref = ref
+	return nil
+}
+
+func (d *IndexDecoder) Reset(parent ptree.Index[Index, Ref]) {
+	d.Decoder.Reset(Index{
+		Ref:   parent.Ref,
+		First: parent.First.Value.First,
+	})
 }
 
 // readEntry reads an entry into ent

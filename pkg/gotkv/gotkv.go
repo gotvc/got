@@ -34,20 +34,20 @@ func newRoot(x *ptree.Root[Entry, gdat.Ref]) *Root {
 	if x == nil {
 		return nil
 	}
-	first, _ := x.Span.LowerBound()
 	return &Root{
 		Ref:   x.Ref,
 		Depth: x.Depth,
-		First: first.Key,
+		First: x.First.Value.Key,
 	}
 }
 
 func (r Root) toPtree() ptree.Root[Entry, Ref] {
-	span := state.TotalSpan[Entry]().WithLowerIncl(Entry{Key: r.First})
 	return ptree.Root[Entry, Ref]{
-		Ref:   r.Ref,
+		Index: ptree.Index[Entry, Ref]{
+			Ref:   r.Ref,
+			First: ptree.Just(Entry{Key: r.First}),
+		},
 		Depth: r.Depth,
-		Span:  span,
 	}
 }
 
@@ -85,10 +85,10 @@ func CopyAll(ctx context.Context, b *Builder, it kvstreams.Iterator) error {
 // Sync ensures dst has all the data reachable from x.
 func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Root, entryFn func(Entry) error) error {
 	rp := ptree.ReadParams[Entry, Ref]{
-		Compare:    compareEntries,
-		Store:      &ptreeGetter{op: &o.dop, s: src},
-		ParseRef:   gdat.ParseRef,
-		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
+		Compare:         compareEntries,
+		Store:           &ptreeGetter{op: &o.dop, s: src},
+		NewIndexDecoder: func() ptree.Decoder[Index, Ref] { return &IndexDecoder{} },
+		NewDecoder:      func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 	}
 	return do(ctx, rp, x.toPtree(), doer{
 		CanSkip: func(r Root) (bool, error) {
@@ -107,7 +107,6 @@ func (o *Operator) Populate(ctx context.Context, s Store, x Root, set cadata.Set
 	rp := ptree.ReadParams[Entry, Ref]{
 		Compare:    compareEntries,
 		Store:      &ptreeGetter{op: &o.dop, s: s},
-		ParseRef:   gdat.ParseRef,
 		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 	}
 	return do(ctx, rp, x.toPtree(), doer{
@@ -138,7 +137,7 @@ func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x ptree.Root[Entry
 		return nil
 	}
 	if ptree.PointsToEntries(x) {
-		ents, err := ptree.ListEntries(ctx, rp, Index{Span: x.Span, Ref: x.Ref})
+		ents, err := ptree.ListEntries(ctx, rp, x.Index)
 		if err != nil {
 			return err
 		}
@@ -155,8 +154,11 @@ func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x ptree.Root[Entry
 		eg, ctx := errgroup.WithContext(ctx)
 		for _, idx := range idxs {
 			root2 := ptree.Root[Entry, Ref]{
-				Ref:   idx.Ref,
-				Span:  idx.Span,
+				Index: ptree.Index[Entry, Ref]{
+					Ref:   idx.Ref,
+					First: idx.First,
+					Last:  idx.Last,
+				},
 				Depth: x.Depth - 1,
 			}
 			eg.Go(func() error {
@@ -207,10 +209,10 @@ func (s *ptreeStore) MaxSize() int {
 // DebugTree writes human-readable debug information about the tree to w.
 func DebugTree(ctx context.Context, s cadata.Store, root Root, w io.Writer) error {
 	rp := ptree.ReadParams[Entry, Ref]{
-		Store:      &ptreeGetter{s: s, op: &defaultReadOnlyOperator.dop},
-		Compare:    compareEntries,
-		ParseRef:   gdat.ParseRef,
-		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
+		Store:           &ptreeGetter{s: s, op: &defaultReadOnlyOperator.dop},
+		Compare:         compareEntries,
+		NewDecoder:      func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
+		NewIndexDecoder: func() ptree.Decoder[Index, Ref] { return &IndexDecoder{} },
 	}
 	return ptree.DebugTree(ctx, rp, root.toPtree(), w)
 }

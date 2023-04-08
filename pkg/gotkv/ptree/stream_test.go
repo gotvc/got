@@ -69,10 +69,10 @@ func TestStreamRW(t *testing.T) {
 	require.NoError(t, err)
 
 	sr := NewStreamReader(StreamReaderParams[Entry, cadata.ID]{
-		Store:   s,
-		Compare: compareEntries,
-		Indexes: idxs,
-		Decoder: NewEntryDecoder(),
+		Store:     s,
+		Compare:   compareEntries,
+		NextIndex: NextIndexFromSlice(idxs),
+		Decoder:   NewEntryDecoder(),
 	})
 	var ent Entry
 	for i := 0; i < N; i++ {
@@ -187,7 +187,8 @@ func compareEntries(a, b Entry) int {
 
 func cloneIndex(x Index[Entry, cadata.ID]) Index[Entry, cadata.ID] {
 	return Index[Entry, cadata.ID]{
-		Span: cloneSpan(x.Span, copyEntry),
-		Ref:  x.Ref,
+		First: x.First.Clone(func(x Entry) Entry { return x.Clone() }),
+		Last:  x.Last.Clone(func(x Entry) Entry { return x.Clone() }),
+		Ref:   x.Ref,
 	}
 }

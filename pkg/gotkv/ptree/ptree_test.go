@@ -116,13 +116,14 @@ func TestCopy(t *testing.T) {
 		Copy:            copyEntry,
 	})
 	b2 := NewBuilder(BuilderParams[Entry, cadata.ID]{
-		Store:      s,
-		MeanSize:   averageSize,
-		MaxSize:    maxSize,
-		Seed:       nil,
-		NewEncoder: NewEntryEncoder,
-		Compare:    compareEntries,
-		Copy:       copyEntry,
+		Store:           s,
+		MeanSize:        averageSize,
+		MaxSize:         maxSize,
+		Seed:            nil,
+		NewEncoder:      NewEntryEncoder,
+		NewIndexEncoder: NewIndexEncoder,
+		Compare:         compareEntries,
+		Copy:            copyEntry,
 	})
 	require.NoError(t, Copy(ctx, b2, it))
 	root2, err := b2.Finish(ctx)
