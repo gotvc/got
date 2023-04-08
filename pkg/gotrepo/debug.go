@@ -50,5 +50,5 @@ func (r *Repo) DebugKV(ctx context.Context, w io.Writer) error {
 	if x == nil {
 		return errors.Errorf("no snapshot, no root")
 	}
-	return gotkv.DebugTree(ctx, vol.FSStore, x.Root, w)
+	return gotkv.DebugTree(ctx, vol.FSStore, x.Root.ToGotKV(), w)
 }

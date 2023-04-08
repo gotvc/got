@@ -59,11 +59,16 @@ func (o *Operator) PutInfo(ctx context.Context, s Store, x Root, p string, md *I
 		return nil, err
 	}
 	k := makeInfoKey(p)
-	return o.gotkv.Put(ctx, s, x, k, md.marshal())
+	root, err := o.gotkv.Put(ctx, s, *x.toGotKV(), k, md.marshal())
+	return newRoot(root), err
 }
 
 // GetInfo retrieves the metadata at p if it exists and errors otherwise
 func (o *Operator) GetInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
+	return o.getInfo(ctx, s, x.ToGotKV(), p)
+}
+
+func (o *Operator) getInfo(ctx context.Context, s Store, x gotkv.Root, p string) (*Info, error) {
 	p = cleanPath(p)
 	var md *Info
 	err := o.gotkv.GetF(ctx, s, x, makeInfoKey(p), func(data []byte) error {

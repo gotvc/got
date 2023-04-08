@@ -7,6 +7,7 @@ import (
 
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotkv"
+	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
 )
 
@@ -17,9 +18,13 @@ type DirEnt struct {
 	Mode os.FileMode
 }
 
-// NewEmpty creates a new filesystem with nothing in it.
+// NewEmpty creates a new filesystem with an empty root directory
 func (o *Operator) NewEmpty(ctx context.Context, s Store) (*Root, error) {
-	return o.gotkv.NewEmpty(ctx, s)
+	b := o.NewBuilder(ctx, s, stores.NewVoid())
+	if err := b.Mkdir("/", 0o755); err != nil {
+		return nil, err
+	}
+	return b.Finish()
 }
 
 // Mkdir creates a directory at path p
@@ -101,7 +106,8 @@ func (o *Operator) RemoveAll(ctx context.Context, s Store, x Root, p string) (*R
 	}
 	k := makeInfoKey(p)
 	span := gotkv.PrefixSpan(k)
-	return o.gotkv.DeleteSpan(ctx, s, x, span)
+	root, err := o.gotkv.DeleteSpan(ctx, s, *x.toGotKV(), span)
+	return newRoot(root), err
 }
 
 func dirSpan(p string) gotkv.Span {
@@ -129,7 +135,7 @@ func (o *Operator) newDirIterator(ctx context.Context, s Store, x Root, p string
 		return nil, err
 	}
 	span := dirSpan(p)
-	iter := o.gotkv.NewIterator(s, x, span)
+	iter := o.gotkv.NewIterator(s, *x.toGotKV(), span)
 	if err := iter.Next(ctx, &gotkv.Entry{}); err != nil {
 		return nil, err
 	}

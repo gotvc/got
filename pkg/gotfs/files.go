@@ -66,7 +66,7 @@ func (o *Operator) CreateFile(ctx context.Context, ms, ds Store, x Root, p strin
 func (o *Operator) SizeOfFile(ctx context.Context, s Store, x Root, p string) (uint64, error) {
 	p = cleanPath(p)
 	k := makeExtentPrefix(p)
-	return o.lob.SizeOf(ctx, s, x, k)
+	return o.lob.SizeOf(ctx, s, *x.toGotKV(), k)
 }
 
 // ReadFileAt fills `buf` with data in the file at `p` starting at offset `start`
@@ -88,5 +88,5 @@ func (o *Operator) NewReader(ctx context.Context, ms, ds Store, x Root, p string
 		return nil, err
 	}
 	k := makeExtentPrefix(p)
-	return o.lob.NewReader(ctx, ms, ds, x, k)
+	return o.lob.NewReader(ctx, ms, ds, *x.toGotKV(), k)
 }

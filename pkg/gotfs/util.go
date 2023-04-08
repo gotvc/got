@@ -2,7 +2,6 @@ package gotfs
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -21,31 +20,27 @@ func ChangesOnBase(base Root, changes []Segment) []Segment {
 			baseSpan.Begin = segs[len(segs)-1].Span.End
 		}
 		baseSpan.End = changes[i].Span.Begin
-		baseSeg := Segment{Root: base, Span: baseSpan}
+		baseSeg := Segment{Span: baseSpan, Contents: Expr{Root: base}}
 
 		segs = append(segs, baseSeg)
 		segs = append(segs, changes[i])
 	}
 	if len(segs) > 0 {
 		segs = append(segs, Segment{
-			Root: base,
 			Span: gotkv.Span{
 				Begin: segs[len(segs)-1].Span.End,
 				End:   nil,
 			},
+			Contents: Expr{Root: base},
 		})
 	}
 	return segs
 }
 
-func IsEmpty(root Root) bool {
-	return len(root.First) == 0
-}
-
 func Dump(ctx context.Context, s Store, root Root, w io.Writer) error {
 	bw := bufio.NewWriter(w)
 	op := NewOperator()
-	it := op.gotkv.NewIterator(s, root, gotkv.TotalSpan())
+	it := op.gotkv.NewIterator(s, *root.toGotKV(), gotkv.TotalSpan())
 	var ent gotkv.Entry
 	for err := it.Next(ctx, &ent); err != gotkv.EOS; err = it.Next(ctx, &ent) {
 		if err != nil {
@@ -73,5 +68,5 @@ func Dump(ctx context.Context, s Store, root Root, w io.Writer) error {
 
 // Equal returns true if a and b contain equivalent data.
 func Equal(a, b Root) bool {
-	return gdat.Equal(a.Ref, b.Ref) && a.Depth == b.Depth && bytes.Equal(a.First, b.First)
+	return gdat.Equal(a.Ref, b.Ref) && a.Depth == b.Depth
 }
