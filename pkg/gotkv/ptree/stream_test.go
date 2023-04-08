@@ -1,7 +1,6 @@
 package ptree
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -125,17 +124,68 @@ func TestStreamWriterChunkSize(t *testing.T) {
 	withinTolerance(t, avgSize, defaultAvgSize, 0.1)
 }
 
+func TestStreamSeek(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	var refs []cadata.ID
+	var idxs []Index[Entry, cadata.ID]
+
+	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
+	sw := NewStreamWriter(StreamWriterParams[Entry, cadata.ID]{
+		Store:    s,
+		Compare:  compareEntries,
+		MeanSize: defaultAvgSize,
+		MaxSize:  defaultMaxSize,
+		Seed:     nil,
+		Encoder:  NewEntryEncoder(),
+		Copy:     copyEntry,
+		OnIndex: func(idx Index[Entry, cadata.ID]) error {
+			idxs = append(idxs, cloneIndex(idx))
+			refs = append(refs, idx.Ref)
+			return nil
+		},
+	})
+
+	const N = 1e4
+	generateEntries(N, func(ent Entry) {
+		err := sw.Append(ctx, ent)
+		require.NoError(t, err)
+	})
+	err := sw.Flush(ctx)
+	require.NoError(t, err)
+
+	sr := NewStreamReader(StreamReaderParams[Entry, cadata.ID]{
+		Store:     s,
+		Compare:   compareEntries,
+		NextIndex: NextIndexFromSlice(idxs),
+		Decoder:   NewEntryDecoder(),
+	})
+
+	for _, n := range []int{50, 100, 250, 500, 750, 751, 753, 5000} {
+		require.NoError(t, sr.Seek(ctx, Entry{Key: keyFromInt(n)}))
+
+		var ent Entry
+		require.NoError(t, sr.Next(ctx, &ent))
+		require.Equal(t, string(keyFromInt(n)), string(ent.Key))
+		require.Equal(t, string(valueFromInt(n)), string(ent.Value))
+	}
+}
+
 func generateEntries(n int, fn func(ent Entry)) {
 	for i := 0; i < n; i++ {
 		fn(Entry{
 			Key:   keyFromInt(i),
-			Value: []byte("test value" + strconv.Itoa(i)),
+			Value: valueFromInt(i),
 		})
 	}
 }
 
 func keyFromInt(i int) []byte {
 	return []byte(fmt.Sprintf("%010d", i))
+}
+
+func valueFromInt(i int) []byte {
+	return []byte("test value" + strconv.Itoa(i))
 }
 
 func BenchmarkStreamWriter(b *testing.B) {
@@ -181,14 +231,10 @@ func refSimilarity[Ref comparable](as, bs []Ref) int {
 	return count
 }
 
-func compareEntries(a, b Entry) int {
-	return bytes.Compare(a.Key, b.Key)
-}
-
 func cloneIndex(x Index[Entry, cadata.ID]) Index[Entry, cadata.ID] {
 	return Index[Entry, cadata.ID]{
-		First: x.First.Clone(func(x Entry) Entry { return x.Clone() }),
-		Last:  x.Last.Clone(func(x Entry) Entry { return x.Clone() }),
+		First: x.First.Map(func(x Entry) Entry { return x.Clone() }),
+		Last:  x.Last.Map(func(x Entry) Entry { return x.Clone() }),
 		Ref:   x.Ref,
 	}
 }

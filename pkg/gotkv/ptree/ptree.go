@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/brendoncarroll/go-state"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
 
@@ -189,57 +188,29 @@ func indexToRoot[T, Ref any](idx Index[T, Ref], depth uint8) Root[T, Ref] {
 	}
 }
 
-// compareSpans returns
-//
-//	 1: If all elements in a are greater than all the elements of b
-//	-1: If all elements in a are less than all the elements of b
-//	 0: If any elements in a are also in b
-func compareSpans[T any](a, b state.Span[T], fn func(a, b T) int) int {
-	return 0
-}
-
-// cloneSpan makes a clone of a span, using copy to make copies of the bounds
-func cloneSpan[T any](x state.Span[T], copy func(dst *T, src T)) (ret state.Span[T]) {
-	if lb, ok := x.LowerBound(); ok {
-		var bound T
-		copy(&bound, lb)
-		if x.IncludesLower() {
-			ret = ret.WithLowerIncl(bound)
-		} else {
-			ret = ret.WithLowerExcl(bound)
-		}
-	}
-	if ub, ok := x.UpperBound(); ok {
-		var bound T
-		copy(&bound, ub)
-		if x.IncludesUpper() {
-			ret = ret.WithUpperIncl(bound)
-		} else {
-			ret = ret.WithUpperExcl(bound)
-		}
-	}
-	return ret
-}
-
 // dual is either an Entry or an Index
 type dual[T, Ref any] struct {
 	Entry *T
 	Index *Index[T, Ref]
 }
 
+func compareIndexes[T, Ref any](a, b Index[T, Ref], cmp func(a, b T) int) (ret int) {
+	if a.Last.Ok && b.First.Ok {
+		if cmp(a.Last.X, b.First.X) < 0 {
+			return -1
+		}
+	}
+	if a.First.Ok && b.Last.Ok {
+		if cmp(a.First.X, b.Last.X) > 0 {
+			return 1
+		}
+	}
+	return 0
+}
+
 func upgradeCompare[T, Ref any](cmp func(a, b T) int) func(a, b Index[T, Ref]) int {
 	return func(a, b Index[T, Ref]) int {
-		if a.Last.Ok && b.First.Ok {
-			if cmp(a.Last.Value, b.First.Value) < 0 {
-				return -1
-			}
-		}
-		if a.First.Ok && b.Last.Ok {
-			if cmp(a.First.Value, b.Last.Value) > 0 {
-				return 1
-			}
-		}
-		return 0
+		return compareIndexes(a, b, cmp)
 	}
 }
 
@@ -256,17 +227,17 @@ func copyMaybe[T any](dst *Maybe[T], src Maybe[T], copy func(dst *T, src T)) {
 		return
 	}
 	dst.Ok = true
-	copy(&dst.Value, src.Value)
+	copy(&dst.X, src.X)
 }
 
 func flattenIndex[T, Ref any](x Index[Index[T, Ref], Ref]) Index[T, Ref] {
 	var first Maybe[T]
 	if x.First.Ok {
-		first = x.First.Value.First
+		first = x.First.X.First
 	}
 	var last Maybe[T]
 	if x.Last.Ok {
-		last = x.Last.Value.Last
+		last = x.Last.X.Last
 	}
 	return Index[T, Ref]{
 		Ref:   x.Ref,

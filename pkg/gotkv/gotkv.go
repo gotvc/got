@@ -37,7 +37,7 @@ func newRoot(x *ptree.Root[Entry, gdat.Ref]) *Root {
 	return &Root{
 		Ref:   x.Ref,
 		Depth: x.Depth,
-		First: x.First.Value.Key,
+		First: x.First.X.Key,
 	}
 }
 

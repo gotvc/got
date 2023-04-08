@@ -59,14 +59,14 @@ type IndexEncoder struct {
 
 func (e *IndexEncoder) Write(dst []byte, x ptree.Index[Entry, Ref]) (int, error) {
 	return e.Encoder.Write(dst, Entry{
-		Key:   x.First.Value.Key,
+		Key:   x.First.X.Key,
 		Value: gdat.AppendRef(nil, x.Ref),
 	})
 }
 
 func (e *IndexEncoder) EncodedLen(x Index) int {
 	return e.Encoder.EncodedLen(Entry{
-		Key:   x.First.Value.Key,
+		Key:   x.First.X.Key,
 		Value: gdat.AppendRef(nil, x.Ref),
 	})
 }
@@ -144,7 +144,7 @@ func (d *Decoder) Peek(src []byte, ent *Entry) error {
 
 func (d *Decoder) Reset(parent Index) {
 	if parent.First.Ok {
-		d.prevKey = append(d.prevKey[:0], parent.First.Value.Key...)
+		d.prevKey = append(d.prevKey[:0], parent.First.X.Key...)
 	} else {
 		d.prevKey = d.prevKey[:0]
 	}
@@ -189,7 +189,7 @@ func (d *IndexDecoder) Peek(src []byte, dst *Index) error {
 func (d *IndexDecoder) Reset(parent ptree.Index[Index, Ref]) {
 	d.Decoder.Reset(Index{
 		Ref:   parent.Ref,
-		First: parent.First.Value.First,
+		First: parent.First.X.First,
 	})
 }
 
@@ -251,10 +251,10 @@ func readKey(ent *Entry, src []byte, prevKey []byte) (nRead int, err error) {
 
 func checkVarint(n int) error {
 	if n == 0 {
-		return errors.New("buffer too small")
+		return errors.New("reading varint: buffer too small")
 	}
 	if n < 0 {
-		return errors.New("varint too big")
+		return errors.New("reading varint: varint too big")
 	}
 	return nil
 }

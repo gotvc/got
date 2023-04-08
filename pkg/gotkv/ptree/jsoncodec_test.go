@@ -82,3 +82,12 @@ func NewEntryDecoder() Decoder[Entry, cadata.ID] {
 func NewIndexDecoder() Decoder[Index[Entry, cadata.ID], cadata.ID] {
 	return &JSONDecoder[Index[Entry, cadata.ID]]{}
 }
+
+func copyEntry(dst *Entry, src Entry) {
+	dst.Key = append(dst.Key[:0], src.Key...)
+	dst.Value = append(dst.Value[:0], src.Value...)
+}
+
+func compareEntries(a, b Entry) int {
+	return bytes.Compare(a.Key, b.Key)
+}

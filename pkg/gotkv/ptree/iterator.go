@@ -2,7 +2,6 @@ package ptree
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 
@@ -80,10 +79,14 @@ func (it *Iterator[T, Ref]) Peek(ctx context.Context, dst *T) error {
 
 func (it *Iterator[T, Ref]) Seek(ctx context.Context, gteq T) error {
 	if it.span.Compare(gteq, it.p.Compare) > 0 {
-		return errors.New("cannot seek backwards")
+		return fmt.Errorf("cannot seek backwards: span=%v gteq=%v", it.span, gteq)
 	}
 	for i := len(it.levels) - 1; i >= 0; i-- {
-		if err := it.levels[i].Seek(ctx, gteq); err != nil {
+		il, err := it.getLevel(ctx, i)
+		if err != nil {
+			return err
+		}
+		if err := il.Seek(ctx, gteq); err != nil {
 			return err
 		}
 	}
@@ -98,7 +101,6 @@ func (it *Iterator[T, Ref]) next(ctx context.Context, level int, dst dual[T, Ref
 	if err != nil {
 		return err
 	}
-	// TODO: update position
 	if il.entries != nil {
 		if err := il.entries.Next(ctx, dst.Entry); err != nil {
 			return err
@@ -262,7 +264,7 @@ func (it *Iterator[T, Ref]) setGteq(x T) {
 func (it *Iterator[T, Ref]) setGt(x T) {
 	var x2 T
 	it.p.Copy(&x2, x)
-	it.span = it.span.WithLowerExcl(x)
+	it.span = it.span.WithLowerExcl(x2)
 }
 
 // func filterEntries[T any](xs []T, span state.Span[T], cmp func(a, b T) int) []T {

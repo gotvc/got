@@ -12,27 +12,27 @@ import (
 )
 
 type Maybe[T any] struct {
-	Ok    bool
-	Value T
+	Ok bool
+	X  T
 }
 
-func (m Maybe[T]) Clone(fn func(T) T) Maybe[T] {
+func (m Maybe[T]) Map(fn func(T) T) Maybe[T] {
 	if !m.Ok {
 		return Maybe[T]{}
 	}
-	return Maybe[T]{Value: fn(m.Value)}
+	return Maybe[T]{X: fn(m.X)}
 }
 
 func (m Maybe[T]) String() string {
 	if !m.Ok {
 		return "Nothing"
 	} else {
-		return fmt.Sprintf("Just(%v)", m.Value)
+		return fmt.Sprintf("Just(%v)", m.X)
 	}
 }
 
 func Just[T any](x T) Maybe[T] {
-	return Maybe[T]{Ok: true, Value: x}
+	return Maybe[T]{Ok: true, X: x}
 }
 
 type Index[T, Ref any] struct {
@@ -43,10 +43,10 @@ type Index[T, Ref any] struct {
 
 func (in Index[T, Ref]) Span() (ret state.Span[T]) {
 	if in.First.Ok {
-		ret = ret.WithLowerIncl(in.First.Value)
+		ret = ret.WithLowerIncl(in.First.X)
 	}
 	if in.Last.Ok {
-		ret = ret.WithUpperIncl(in.Last.Value)
+		ret = ret.WithUpperIncl(in.Last.X)
 	}
 	return ret
 }
@@ -115,7 +115,7 @@ func (r *StreamReader[T, Ref]) Next(ctx context.Context, dst *T) error {
 }
 
 func (r *StreamReader[T, Ref]) Peek(ctx context.Context, dst *T) error {
-	if r.n >= r.offset {
+	if r.offset >= r.n {
 		if err := r.loadNextBlob(ctx); err != nil {
 			return err
 		}
@@ -155,6 +155,9 @@ func (r *StreamReader[T, Ref]) loadNextBlob(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	if n == 0 {
+		return EOS
+	}
 	r.n = n
 	r.offset = 0
 	r.p.Decoder.Reset(idx)
@@ -189,6 +192,9 @@ func NewStreamWriter[T, Ref any](params StreamWriterParams[T, Ref]) *StreamWrite
 	if params.Seed == nil {
 		params.Seed = new([16]byte)
 	}
+	if params.Copy == nil {
+		params.Copy = func(dst *T, src T) { *dst = src }
+	}
 	w := &StreamWriter[T, Ref]{
 		p: params,
 
@@ -199,8 +205,8 @@ func NewStreamWriter[T, Ref any](params StreamWriterParams[T, Ref]) *StreamWrite
 }
 
 func (w *StreamWriter[T, Ref]) Append(ctx context.Context, ent T) error {
-	if w.prev.Ok && w.p.Compare(ent, w.prev.Value) <= 0 {
-		panic(fmt.Sprintf("out of order key: prev=%v current=%v", w.prev.Value, ent))
+	if w.prev.Ok && w.p.Compare(ent, w.prev.X) <= 0 {
+		panic(fmt.Sprintf("out of order key: prev=%v current=%v", w.prev.X, ent))
 	}
 	entryLen := w.p.Encoder.EncodedLen(ent)
 	if entryLen > w.p.MaxSize {
@@ -225,7 +231,7 @@ func (w *StreamWriter[T, Ref]) Append(ctx context.Context, ent T) error {
 	}
 	w.n += n
 
-	w.p.Copy(&w.prev.Value, ent)
+	w.p.Copy(&w.prev.X, ent)
 	w.prev.Ok = true
 	// split after writing the entry
 	if w.isSplitPoint(w.buf[offset : offset+n]) {

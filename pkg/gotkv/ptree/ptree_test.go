@@ -131,7 +131,45 @@ func TestCopy(t *testing.T) {
 	require.Equal(t, root, root2)
 }
 
-func copyEntry(dst *Entry, src Entry) {
-	dst.Key = append(dst.Key[:0], src.Key...)
-	dst.Value = append(dst.Value[:0], src.Value...)
+func TestSeek(t *testing.T) {
+	averageSize := 1 << 12
+	maxSize := 1 << 16
+	s := cadata.NewMem(cadata.DefaultHash, maxSize)
+	ctx := context.Background()
+	b := NewBuilder(BuilderParams[Entry, cadata.ID]{
+		Store:           s,
+		MeanSize:        averageSize,
+		MaxSize:         maxSize,
+		Seed:            nil,
+		Compare:         compareEntries,
+		NewEncoder:      NewEntryEncoder,
+		NewIndexEncoder: NewIndexEncoder,
+		Copy:            copyEntry,
+	})
+	const N = 1e6
+	generateEntries(N, func(ent Entry) {
+		err := b.Put(ctx, ent)
+		require.NoError(t, err)
+	})
+	root, err := b.Finish(ctx)
+	require.NoError(t, err)
+	require.NotNil(t, root)
+
+	it := NewIterator(IteratorParams[Entry, cadata.ID]{
+		Store:           s,
+		Compare:         compareEntries,
+		NewDecoder:      NewEntryDecoder,
+		NewIndexDecoder: NewIndexDecoder,
+		Root:            *root,
+		Span:            state.Span[Entry]{},
+		Copy:            copyEntry,
+	})
+	for _, n := range []int{250, 500, 750, 752, 2000, 10_000} {
+		require.NoError(t, it.Seek(ctx, Entry{Key: keyFromInt(n)}))
+
+		var ent Entry
+		require.NoError(t, it.Next(ctx, &ent))
+		require.Equal(t, string(keyFromInt(n)), string(ent.Key))
+		require.Equal(t, string(valueFromInt(n)), string(ent.Value))
+	}
 }
