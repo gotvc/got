@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -64,7 +63,6 @@ func TestCommit(t *testing.T) {
 	require.NoError(t, repo.Put(ctx, p2))
 	err = repo.Commit(ctx, gotvc.SnapInfo{})
 	require.NoError(t, err)
-	repo.DebugFS(ctx, os.Stderr)
 
 	checkNotExists(t, repo, p)
 	checkFileContent(t, repo, p2, strings.NewReader(fileContents))
