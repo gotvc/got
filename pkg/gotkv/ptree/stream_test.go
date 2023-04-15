@@ -1,7 +1,6 @@
 package ptree
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"math"
@@ -25,13 +24,13 @@ func TestEntry(t *testing.T) {
 		Key:   []byte("key1"),
 		Value: []byte("value1"),
 	}
-	enc := JSONEncoder{}
-	n, err := enc.WriteEntry(buf, expected)
+	enc := NewEntryEncoder()
+	n, err := enc.Write(buf, expected)
 	require.NoError(t, err)
 
 	var actual Entry
-	dec := JSONDecoder{}
-	n2, err := dec.ReadEntry(buf[:n], &actual)
+	dec := NewEntryDecoder()
+	n2, err := dec.Read(buf[:n], &actual)
 	require.NoError(t, err)
 
 	require.Equal(t, n, n2)
@@ -42,18 +41,19 @@ func TestStreamRW(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	var refs []cadata.ID
-	var idxs []Index[cadata.ID]
+	var idxs []Index[Entry, cadata.ID]
 
 	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
-	sw := NewStreamWriter(StreamWriterParams[cadata.ID]{
+	sw := NewStreamWriter(StreamWriterParams[Entry, cadata.ID]{
 		Store:    s,
-		Compare:  bytes.Compare,
+		Compare:  compareEntries,
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
-		Encoder:  &JSONEncoder{},
-		OnIndex: func(idx Index[cadata.ID]) error {
-			idxs = append(idxs, idx.Clone())
+		Encoder:  NewEntryEncoder(),
+		Copy:     copyEntry,
+		OnIndex: func(idx Index[Entry, cadata.ID]) error {
+			idxs = append(idxs, cloneIndex(idx))
 			refs = append(refs, idx.Ref)
 			return nil
 		},
@@ -67,11 +67,11 @@ func TestStreamRW(t *testing.T) {
 	err := sw.Flush(ctx)
 	require.NoError(t, err)
 
-	sr := NewStreamReader(StreamReaderParams[cadata.ID]{
-		Store:   s,
-		Compare: bytes.Compare,
-		Indexes: idxs,
-		Decoder: &JSONDecoder{},
+	sr := NewStreamReader(StreamReaderParams[Entry, cadata.ID]{
+		Store:     s,
+		Compare:   compareEntries,
+		NextIndex: NextIndexFromSlice(idxs),
+		Decoder:   NewEntryDecoder(),
 	})
 	var ent Entry
 	for i := 0; i < N; i++ {
@@ -89,17 +89,18 @@ func TestStreamWriterChunkSize(t *testing.T) {
 	var refs []cadata.ID
 
 	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
-	sw := NewStreamWriter(StreamWriterParams[cadata.ID]{
+	sw := NewStreamWriter(StreamWriterParams[Entry, cadata.ID]{
 		Store:    s,
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
-		Compare:  bytes.Compare,
-		Encoder:  &JSONEncoder{},
-		OnIndex: func(idx Index[cadata.ID]) error {
+		Compare:  compareEntries,
+		Encoder:  NewEntryEncoder(),
+		OnIndex: func(idx Index[Entry, cadata.ID]) error {
 			refs = append(refs, idx.Ref)
 			return nil
 		},
+		Copy: copyEntry,
 	})
 
 	const N = 1e5
@@ -123,11 +124,58 @@ func TestStreamWriterChunkSize(t *testing.T) {
 	withinTolerance(t, avgSize, defaultAvgSize, 0.1)
 }
 
+func TestStreamSeek(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	var refs []cadata.ID
+	var idxs []Index[Entry, cadata.ID]
+
+	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
+	sw := NewStreamWriter(StreamWriterParams[Entry, cadata.ID]{
+		Store:    s,
+		Compare:  compareEntries,
+		MeanSize: defaultAvgSize,
+		MaxSize:  defaultMaxSize,
+		Seed:     nil,
+		Encoder:  NewEntryEncoder(),
+		Copy:     copyEntry,
+		OnIndex: func(idx Index[Entry, cadata.ID]) error {
+			idxs = append(idxs, cloneIndex(idx))
+			refs = append(refs, idx.Ref)
+			return nil
+		},
+	})
+
+	const N = 1e4
+	generateEntries(N, func(ent Entry) {
+		err := sw.Append(ctx, ent)
+		require.NoError(t, err)
+	})
+	err := sw.Flush(ctx)
+	require.NoError(t, err)
+
+	sr := NewStreamReader(StreamReaderParams[Entry, cadata.ID]{
+		Store:     s,
+		Compare:   compareEntries,
+		NextIndex: NextIndexFromSlice(idxs),
+		Decoder:   NewEntryDecoder(),
+	})
+
+	for _, n := range []int{50, 100, 250, 500, 750, 751, 753, 5000} {
+		require.NoError(t, sr.Seek(ctx, Entry{Key: keyFromInt(n)}))
+
+		var ent Entry
+		require.NoError(t, sr.Next(ctx, &ent))
+		require.Equal(t, string(keyFromInt(n)), string(ent.Key))
+		require.Equal(t, string(valueFromInt(n)), string(ent.Value))
+	}
+}
+
 func generateEntries(n int, fn func(ent Entry)) {
 	for i := 0; i < n; i++ {
 		fn(Entry{
 			Key:   keyFromInt(i),
-			Value: []byte("test value" + strconv.Itoa(i)),
+			Value: valueFromInt(i),
 		})
 	}
 }
@@ -136,19 +184,24 @@ func keyFromInt(i int) []byte {
 	return []byte(fmt.Sprintf("%010d", i))
 }
 
+func valueFromInt(i int) []byte {
+	return []byte("test value" + strconv.Itoa(i))
+}
+
 func BenchmarkStreamWriter(b *testing.B) {
 	b.ReportAllocs()
 
 	ctx := context.Background()
 	s := cadata.NewVoid(cadata.DefaultHash, defaultMaxSize)
-	sw := NewStreamWriter(StreamWriterParams[cadata.ID]{
+	sw := NewStreamWriter(StreamWriterParams[Entry, cadata.ID]{
 		Store:    s,
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
-		Encoder:  &JSONEncoder{},
-		Compare:  bytes.Compare,
-		OnIndex:  func(idx Index[cadata.ID]) error { return nil },
+		Encoder:  NewEntryEncoder(),
+		OnIndex:  func(idx Index[Entry, cadata.ID]) error { return nil },
+		Copy:     copyEntry,
+		Compare:  compareEntries,
 	})
 	generateEntries(b.N, func(ent Entry) {
 		err := sw.Append(ctx, ent)
@@ -176,4 +229,12 @@ func refSimilarity[Ref comparable](as, bs []Ref) int {
 		}
 	}
 	return count
+}
+
+func cloneIndex(x Index[Entry, cadata.ID]) Index[Entry, cadata.ID] {
+	return Index[Entry, cadata.ID]{
+		Ref:       x.Ref,
+		IsNatural: x.IsNatural,
+		Span:      cloneSpan(x.Span, copyEntry),
+	}
 }

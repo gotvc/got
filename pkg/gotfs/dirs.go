@@ -136,9 +136,17 @@ func (o *Operator) newDirIterator(ctx context.Context, s Store, x Root, p string
 	}
 	span := dirSpan(p)
 	iter := o.gotkv.NewIterator(s, *x.toGotKV(), span)
-	if err := iter.Next(ctx, &gotkv.Entry{}); err != nil {
+	ent := &gotkv.Entry{}
+	if err := iter.Next(ctx, ent); err != nil {
 		return nil, err
 	}
+	if _, err = parseInfoKey(ent.Key); err != nil {
+		return nil, err
+	}
+	if _, err := parseInfo(ent.Value); err != nil {
+		return nil, err
+	}
+
 	return &dirIterator{
 		s:    s,
 		x:    x,
@@ -153,7 +161,7 @@ func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
 		return nil, err
 	}
 	if isExtentKey(ent.Key) {
-		return nil, errors.Errorf("got part key while iterating directory entries")
+		return nil, errors.Errorf("got extent key while iterating directory entries %q", ent.Key)
 	}
 	md, err := parseInfo(ent.Value)
 	if err != nil {

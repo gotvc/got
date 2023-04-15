@@ -203,7 +203,7 @@ func (o *Operator) Graft(ctx context.Context, ms, ds cadata.Store, root Root, p 
 			},
 		},
 		{
-			Span: gotkv.TotalSpan(),
+			Span: SpanForPath(p),
 			Contents: Expr{
 				Root:      branch,
 				AddPrefix: p,
@@ -319,15 +319,24 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 
 func (o *Operator) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*Root, error) {
 	b := o.NewBuilder(ctx, ms, ds)
-	for _, seg := range segs {
-		if seg.Contents.Root.Ref.IsZero() {
-			continue
+	for i, seg := range segs {
+		if i > 0 && bytes.Compare(segs[i-1].Span.End, segs[i].Span.Begin) > 0 {
+			return nil, fmt.Errorf("segs out of order, %d end=%q %d begin=%q", i-1, segs[i-1].Span.End, i, segs[i].Span.Begin)
 		}
+
 		var root gotkv.Root
-		if seg.Contents.AddPrefix != "" {
-			root = o.addPrefix(seg.Contents.Root, seg.Contents.AddPrefix)
+		if seg.Contents.Root.Ref.IsZero() {
+			r, err := o.gotkv.NewEmpty(ctx, ms)
+			if err != nil {
+				return nil, err
+			}
+			root = *r
 		} else {
-			root = seg.Contents.Root.ToGotKV()
+			if seg.Contents.AddPrefix != "" {
+				root = o.addPrefix(seg.Contents.Root, seg.Contents.AddPrefix)
+			} else {
+				root = seg.Contents.Root.ToGotKV()
+			}
 		}
 		if err := b.copyFrom(ctx, root, seg.Span); err != nil {
 			return nil, err

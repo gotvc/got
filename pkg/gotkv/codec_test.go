@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +14,7 @@ func TestEncoder(t *testing.T) {
 	buf := make([]byte, 1<<16)
 	ent := kvstreams.Entry{Key: []byte("aa"), Value: []byte("value1")}
 	claimedLen := e.EncodedLen(ent)
-	n, err := e.WriteEntry(buf, ent)
+	n, err := e.Write(buf, ent)
 	require.NoError(t, err)
 	require.Equal(t, claimedLen, n)
 	t.Log("encoder wrote", n, "bytes")
@@ -26,7 +27,7 @@ func TestEncoder(t *testing.T) {
 	}
 	require.Equal(t, expected, buf[:n])
 
-	n2, err := e.WriteEntry(buf[n:], kvstreams.Entry{
+	n2, err := e.Write(buf[n:], kvstreams.Entry{
 		Key:   []byte("ab"),
 		Value: []byte("value2"),
 	})
@@ -54,7 +55,7 @@ func TestEncodeDecode(t *testing.T) {
 			Value: makeValue(i),
 		}
 		claimedLen := enc.EncodedLen(ent)
-		n, err := enc.WriteEntry(buf[nwritten:], ent)
+		n, err := enc.Write(buf[nwritten:], ent)
 		require.NoError(t, err)
 		require.Equal(t, claimedLen, n)
 		t.Logf("encoded entry %v in %d bytes", ent, n)
@@ -62,11 +63,13 @@ func TestEncodeDecode(t *testing.T) {
 	}
 
 	dec := Decoder{}
-	dec.Reset(makeKey(0))
+	span := state.TotalSpan[Entry]().
+		WithLowerIncl(Entry{Key: makeKey(0)})
+	dec.Reset(Index{Span: span})
 	var nread int
 	var ent kvstreams.Entry
 	for i := 0; i < 10; i++ {
-		n, err := dec.ReadEntry(buf[nread:], &ent)
+		n, err := dec.Read(buf[nread:], &ent)
 		require.NoError(t, err)
 		nread += n
 		require.Equal(t, string(makeKey(i)), string(ent.Key), "on %d", i)

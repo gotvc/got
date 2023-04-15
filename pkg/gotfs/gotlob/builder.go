@@ -247,13 +247,16 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 	span1 := span
 	if maxExt != nil {
 		span1.End = maxExtKey
+		if bytes.Compare(span1.End, span.Begin) < 0 {
+			return nil
+		}
 	}
 	it := b.op.gotkv.NewIterator(b.ms, root, span1)
 	// copy one by one until we can fast copy
 	var ent kvstreams.Entry
 	for b.chunker.Buffered() > 0 {
 		if err := it.Next(ctx, &ent); err != nil {
-			if err == kvstreams.EOS {
+			if kvstreams.IsEOS(err) {
 				break
 			}
 			return err

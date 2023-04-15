@@ -1,6 +1,7 @@
 package gotkv
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -26,6 +27,13 @@ func TestPutGet(t *testing.T) {
 	value := []byte("value")
 	x, err := op.Put(ctx, s, *x, key, value)
 	require.NoError(t, err)
+	t.Log(x)
+	// ptree.DebugTree(ctx, ptree.ReadParams[Entry, Ref]{
+	// 	Store:           &ptreeGetter{op: &op.dop, s: s},
+	// 	Compare:         compareEntries,
+	// 	NewDecoder:      newDecoder,
+	// 	NewIndexDecoder: newIndexDecoder,
+	// }, x.toPtree(), os.Stderr)
 	actualValue, err := op.Get(ctx, s, *x, key)
 	require.NoError(t, err)
 	require.Equal(t, value, actualValue)
@@ -45,6 +53,9 @@ func TestPutGetMany(t *testing.T) {
 		key, value := makeKey(i), makeValue(i)
 		var err error
 		x, err = op.Put(ctx, s, *x, key, value)
+		if !bytes.Contains(x.First, []byte("-key")) {
+			t.Fatalf("on %d: %q", i, x.First)
+		}
 		require.NoError(t, err)
 	}
 	// ptree.DebugTree(s, *x)

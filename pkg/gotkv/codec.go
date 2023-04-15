@@ -6,10 +6,15 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/brendoncarroll/go-state"
+	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
 )
 
-var _ ptree.Encoder = &Encoder{}
+type Index = ptree.Index[kvstreams.Entry, gdat.Ref]
+
+var _ ptree.Encoder[kvstreams.Entry] = &Encoder{}
 
 // Encoder is a ptree.Encoder
 type Encoder struct {
@@ -17,7 +22,7 @@ type Encoder struct {
 	count   int
 }
 
-func (e *Encoder) WriteEntry(dst []byte, ent Entry) (int, error) {
+func (e *Encoder) Write(dst []byte, ent Entry) (int, error) {
 	prevKey := e.prevKey
 	if e.count == 0 {
 		prevKey = ent.Key // this will make backspace=0, suffix=""
@@ -44,6 +49,45 @@ func (e *Encoder) EncodedLen(ent Entry) int {
 func (e *Encoder) Reset() {
 	e.prevKey = e.prevKey[:0]
 	e.count = 0
+}
+
+var _ ptree.Encoder[ptree.Index[Entry, Ref]]
+
+// IndexEncoder encodes indexes
+type IndexEncoder struct {
+	Encoder
+}
+
+func (e *IndexEncoder) Write(dst []byte, x ptree.Index[Entry, Ref]) (int, error) {
+	lb, ok := x.Span.LowerBound()
+	if !ok {
+		panic("no lower bound")
+	}
+	if !x.Span.IncludesLower() {
+		panic("span does not include lower bound")
+	}
+	return e.Encoder.Write(dst, Entry{
+		Key:   lb.Key,
+		Value: gdat.AppendRef(nil, x.Ref),
+	})
+}
+
+func (e *IndexEncoder) EncodedLen(x Index) int {
+	lb, ok := x.Span.LowerBound()
+	if !ok {
+		panic("no lower bound")
+	}
+	if !x.Span.IncludesLower() {
+		panic("span does not include lower bound")
+	}
+	return e.Encoder.EncodedLen(Entry{
+		Key:   lb.Key,
+		Value: gdat.AppendRef(nil, x.Ref),
+	})
+}
+
+func (e *IndexEncoder) Reset() {
+	e.Encoder.Reset()
 }
 
 // writeLPBytes writes len(x) varint-encoded, followed by x, to buf
@@ -95,29 +139,121 @@ func varintLen(x uint64) int {
 	return binary.PutUvarint(buf[:], x)
 }
 
+var _ ptree.Decoder[Entry, Ref] = &Decoder{}
+
 type Decoder struct {
 	prevKey []byte
-	count   int
 }
 
-func (d *Decoder) ReadEntry(src []byte, ent *Entry) (int, error) {
+func newDecoder() ptree.Decoder[Entry, Ref] {
+	return &Decoder{}
+}
+
+func (d *Decoder) Read(src []byte, ent *Entry) (int, error) {
 	n, err := readEntry(ent, src, d.prevKey)
 	if err != nil {
 		return 0, err
 	}
 	d.prevKey = append(d.prevKey[:0], ent.Key...)
-	d.count++
 	return n, nil
 }
 
-func (d *Decoder) PeekEntry(src []byte, ent *Entry) error {
+func (d *Decoder) Peek(src []byte, ent *Entry) error {
 	_, err := readEntry(ent, src, d.prevKey)
 	return err
 }
 
-func (d *Decoder) Reset(parentKey []byte) {
-	d.prevKey = append(d.prevKey[:0], parentKey...)
-	d.count = 0
+func (d *Decoder) Reset(parent Index) {
+	lb, ok := parent.Span.LowerBound()
+	if !ok {
+		panic("index must include lower bound")
+	}
+	d.prevKey = append(d.prevKey[:0], lb.Key...)
+}
+
+var _ ptree.IndexDecoder[Entry, Ref] = &IndexDecoder{}
+
+type IndexDecoder struct {
+	parent  Index
+	prevKey []byte
+}
+
+func newIndexDecoder() ptree.IndexDecoder[Entry, Ref] {
+	return &IndexDecoder{}
+}
+
+func (d *IndexDecoder) Read(src []byte, dst *Index) (int, error) {
+	n, err := d.readIndex(src, dst)
+	if err != nil {
+		return 0, err
+	}
+	lb, ok := dst.Span.LowerBound()
+	if !ok {
+		panic(dst.Span)
+	}
+	d.setPrevKey(lb.Key)
+	return n, nil
+}
+
+func (d *IndexDecoder) Peek(src []byte, dst *Index) error {
+	_, err := d.readIndex(src, dst)
+	return err
+}
+
+func (d *IndexDecoder) Reset(parent Index) {
+	lb, ok := parent.Span.LowerBound()
+	if !ok {
+		panic("index must include lower bound")
+	}
+	d.prevKey = append(d.prevKey[:0], lb.Key...)
+}
+
+func (d *IndexDecoder) readIndex(src []byte, dst *Index) (int, error) {
+	var ent1, ent2 Entry
+	n1, n2, err := read2Entries(src, d.prevKey, &ent1, &ent2)
+	if err != nil {
+		return 0, err
+	}
+	dst.Span = state.TotalSpan[Entry]()
+	dst.Span = dst.Span.WithLowerIncl(Entry{Key: ent1.Key})
+	ref, err := gdat.ParseRef(ent1.Value)
+	if err != nil {
+		return 0, err
+	}
+	dst.Ref = ref
+	if n2 > 0 {
+		dst.Span = dst.Span.WithUpperExcl(Entry{Key: ent2.Key})
+		// TODO: we incorrectly assume that nodes not at the right edge of the tree are always natural
+		// They may not be in cases of an entry exceeding the maximum size
+		dst.IsNatural = true
+	} else {
+		if ub, ok := d.parent.Span.UpperBound(); ok {
+			dst.Span = dst.Span.WithUpperExcl(ub.Clone())
+		} else {
+			dst.Span = dst.Span.WithoutUpper()
+		}
+		dst.IsNatural = false
+	}
+	return n1, nil
+}
+
+func (d *IndexDecoder) setPrevKey(x []byte) {
+	d.prevKey = append(d.prevKey[:0], x...)
+}
+
+func read2Entries(src []byte, prevKey []byte, ent1, ent2 *Entry) (int, int, error) {
+	n1, err := readEntry(ent1, src, prevKey)
+	if err != nil {
+		return 0, 0, err
+	}
+	if len(src[n1:]) == 0 {
+		return n1, 0, nil
+	}
+	n2, err := readEntry(ent2, src[n1:], ent1.Key)
+	if err != nil {
+		return n1, 0, err
+	}
+	return n1, n2, nil
 }
 
 // readEntry reads an entry into ent
@@ -178,10 +314,10 @@ func readKey(ent *Entry, src []byte, prevKey []byte) (nRead int, err error) {
 
 func checkVarint(n int) error {
 	if n == 0 {
-		return errors.New("buffer too small")
+		return errors.New("reading varint: buffer too small")
 	}
 	if n < 0 {
-		return errors.New("varint too big")
+		return errors.New("reading varint: varint too big")
 	}
 	return nil
 }

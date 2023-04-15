@@ -9,17 +9,18 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
+	"github.com/gotvc/got/pkg/maybe"
 	"github.com/pkg/errors"
 )
 
 // Builder is used to construct GotKV instances
 // by adding keys in lexicographical order.
 type Builder struct {
-	b ptree.Builder[Ref]
+	b ptree.Builder[Entry, Ref]
 }
 
 func (b *Builder) Put(ctx context.Context, key, value []byte) error {
-	return b.b.Put(ctx, key, value)
+	return b.b.Put(ctx, Entry{Key: key, Value: value})
 }
 
 func (b *Builder) Finish(ctx context.Context) (*Root, error) {
@@ -29,7 +30,7 @@ func (b *Builder) Finish(ctx context.Context) (*Root, error) {
 
 // Iterator is used to iterate through entries in GotKV instances.
 type Iterator struct {
-	it ptree.Iterator[Ref]
+	it ptree.Iterator[Entry, Ref]
 }
 
 func (it *Iterator) Next(ctx context.Context, dst *Entry) error {
@@ -41,7 +42,7 @@ func (it *Iterator) Peek(ctx context.Context, dst *Entry) error {
 }
 
 func (it *Iterator) Seek(ctx context.Context, gteq []byte) error {
-	return it.it.Seek(ctx, gteq)
+	return it.it.Seek(ctx, Entry{Key: gteq})
 }
 
 // Option is used to configure an Operator
@@ -108,7 +109,7 @@ func (o *Operator) GetF(ctx context.Context, s cadata.Getter, x Root, key []byte
 	var ent Entry
 	err := it.Next(ctx, &ent)
 	if err != nil {
-		if errors.Is(err, kvstreams.EOS) {
+		if ptree.IsEOS(err) {
 			err = ErrKeyNotFound
 		}
 		return err
@@ -158,13 +159,20 @@ func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) 
 
 // MaxEntry returns the entry in the instance x, within span, with the greatest lexicographic value.
 func (o *Operator) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span Span) (*Entry, error) {
-	rp := ptree.ReadParams[Ref]{
-		Store:      &ptreeGetter{op: &o.dop, s: s},
-		Compare:    bytes.Compare,
-		NewDecoder: func() ptree.Decoder { return &Decoder{} },
-		ParseRef:   gdat.ParseRef,
+	rp := ptree.ReadParams[Entry, Ref]{
+		Store:           &ptreeGetter{op: &o.dop, s: s},
+		Compare:         compareEntries,
+		NewIndexDecoder: newIndexDecoder,
+		NewDecoder:      newDecoder,
 	}
-	return ptree.MaxEntry(ctx, rp, x.toPtree(), span)
+	var dst Entry
+	if err := ptree.MaxEntry(ctx, rp, x.toPtree(), maybe.Just(Entry{Key: span.End}), &dst); err != nil {
+		if ptree.IsEOS(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return &dst, nil
 }
 
 func (o *Operator) HasPrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (bool, error) {
@@ -207,14 +215,15 @@ func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Getter, x Root, pr
 // NewBuilder returns a Builder for constructing a GotKV instance.
 // Data will be persisted to s.
 func (o *Operator) NewBuilder(s Store) *Builder {
-	b := ptree.NewBuilder(ptree.BuilderParams[Ref]{
-		Store:      &ptreeStore{op: &o.dop, s: s},
-		MeanSize:   o.meanSize,
-		MaxSize:    o.maxSize,
-		Seed:       o.seed,
-		NewEncoder: func() ptree.Encoder { return &Encoder{} },
-		Compare:    bytes.Compare,
-		AppendRef:  gdat.AppendRef,
+	b := ptree.NewBuilder(ptree.BuilderParams[Entry, Ref]{
+		Store:           &ptreeStore{op: &o.dop, s: s},
+		MeanSize:        o.meanSize,
+		MaxSize:         o.maxSize,
+		Seed:            o.seed,
+		NewEncoder:      func() ptree.Encoder[Entry] { return &Encoder{} },
+		NewIndexEncoder: func() ptree.IndexEncoder[Entry, Ref] { return &IndexEncoder{} },
+		Compare:         compareEntries,
+		Copy:            copyEntry,
 	})
 	return &Builder{b: *b}
 }
@@ -222,15 +231,18 @@ func (o *Operator) NewBuilder(s Store) *Builder {
 // NewIterator returns an iterator for the instance rooted at x, which
 // will emit all keys within span in the instance.
 func (o *Operator) NewIterator(s Getter, root Root, span Span) *Iterator {
-	it := ptree.NewIterator(ptree.IteratorParams[Ref]{
-		Store:      &ptreeGetter{op: &o.dop, s: s},
-		Compare:    bytes.Compare,
-		NewDecoder: func() ptree.Decoder { return &Decoder{} },
-		ParseRef:   gdat.ParseRef,
-		AppendRef:  gdat.AppendRef,
+	if span.End != nil && bytes.Compare(span.Begin, span.End) > 0 {
+		panic(fmt.Sprintf("cannot iterate over descending span. begin=%q end=%q", span.Begin, span.End))
+	}
+	it := ptree.NewIterator(ptree.IteratorParams[Entry, Ref]{
+		Store:           &ptreeGetter{op: &o.dop, s: s},
+		Compare:         compareEntries,
+		Copy:            copyEntry,
+		NewDecoder:      newDecoder,
+		NewIndexDecoder: newIndexDecoder,
 
 		Root: root.toPtree(),
-		Span: span,
+		Span: convertSpan(span),
 	})
 	return &Iterator{it: *it}
 }
@@ -254,7 +266,7 @@ func (o *Operator) ForEach(ctx context.Context, s Getter, root Root, span Span, 
 }
 
 // Mutation represents a declarative change to a Span of entries.
-// The result of applying mutation is that
+// The result of applying a Mutation is that the entire contents of the Span are replaced with Entries.
 type Mutation struct {
 	Span    Span
 	Entries []Entry
