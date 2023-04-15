@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/brendoncarroll/go-state/streams"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
 )
@@ -42,7 +43,7 @@ func Dump(ctx context.Context, s Store, root Root, w io.Writer) error {
 	op := NewOperator()
 	it := op.gotkv.NewIterator(s, *root.toGotKV(), gotkv.TotalSpan())
 	var ent gotkv.Entry
-	for err := it.Next(ctx, &ent); err != gotkv.EOS; err = it.Next(ctx, &ent) {
+	for err := it.Next(ctx, &ent); !streams.IsEOS(err); err = it.Next(ctx, &ent) {
 		if err != nil {
 			return err
 		}

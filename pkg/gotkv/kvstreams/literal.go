@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"sort"
+
+	"github.com/brendoncarroll/go-state/streams"
 )
 
 // Literal is a stream literal, satisfying the Iterator interface.
@@ -30,7 +32,7 @@ func (s *Literal) Next(ctx context.Context, ent *Entry) error {
 
 func (s *Literal) Peek(ctx context.Context, ent *Entry) error {
 	if s.pos >= len(s.ents) {
-		return EOS
+		return streams.EOS()
 	}
 	ent.Key = append(ent.Key[:0], s.ents[s.pos].Key...)
 	ent.Value = append(ent.Value[:0], s.ents[s.pos].Value...)

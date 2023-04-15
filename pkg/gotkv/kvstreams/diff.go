@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/streams"
 )
 
 type DiffFn = func(key, leftValue, rightValue []byte) error
@@ -23,13 +24,13 @@ func Diff(ctx context.Context, s cadata.Store, leftIt, rightIt Iterator, span Sp
 	}
 	for {
 		if !leftExists {
-			if err := leftIt.Next(ctx, &leftEnt); err != nil && err != EOS {
+			if err := leftIt.Next(ctx, &leftEnt); err != nil && !streams.IsEOS(err) {
 				return err
 			}
 			leftExists = true
 		}
 		if !rightExists {
-			if err := rightIt.Next(ctx, &rightEnt); err != nil && err != EOS {
+			if err := rightIt.Next(ctx, &rightEnt); err != nil && !streams.IsEOS(err) {
 				return err
 			}
 			rightExists = true

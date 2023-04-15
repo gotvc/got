@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/brendoncarroll/go-state"
+	"github.com/brendoncarroll/go-state/streams"
 )
 
 type Iterator[T, Ref any] struct {
@@ -174,7 +175,7 @@ func (it *Iterator[T, Ref]) makeLevel(ctx context.Context, level int) (ret iterL
 			NextIndex: func(ctx context.Context, dst *Index[T, Ref]) error {
 				if level == len(it.levels)-1 {
 					if it.readRoot {
-						return EOS
+						return streams.EOS()
 					} else {
 						*dst = it.p.Root.Index
 						it.readRoot = true
@@ -198,7 +199,7 @@ func (it *Iterator[T, Ref]) makeLevel(ctx context.Context, level int) (ret iterL
 			NextIndex: func(ctx context.Context, dst *Index[Index[T, Ref], Ref]) error {
 				if level == len(it.levels)-1 {
 					if it.readRoot {
-						return EOS
+						return streams.EOS()
 					}
 					*dst = metaIndex(it.p.Root.Index)
 					it.readRoot = true
@@ -249,7 +250,7 @@ func (it *Iterator[T, Ref]) syncLevel() (int, error) {
 		if i > 0 {
 			var idx Index[T, Ref]
 			if err := it.levels[i].indexes.PeekNoLoad(&idx); err != nil {
-				if IsEOS(err) {
+				if streams.IsEOS(err) {
 					continue // we can copy if it's okay to copy from the next one.
 				}
 				return 0, err
@@ -276,7 +277,7 @@ func (it *Iterator[T, Ref]) syncLevel() (int, error) {
 
 func (it *Iterator[T, Ref]) checkEntry(x T) error {
 	if cmp := it.span.Compare(x, it.p.Compare); cmp < 0 {
-		return EOS
+		return streams.EOS()
 	} else if cmp > 0 {
 		panic(fmt.Sprintf("entry below lower bound span=%v entry=%v", it.span, x))
 	} else {

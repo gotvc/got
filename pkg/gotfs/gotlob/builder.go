@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/streams"
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
@@ -256,7 +257,7 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 	var ent kvstreams.Entry
 	for b.chunker.Buffered() > 0 {
 		if err := it.Next(ctx, &ent); err != nil {
-			if kvstreams.IsEOS(err) {
+			if streams.IsEOS(err) {
 				break
 			}
 			return err
@@ -303,7 +304,7 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 		span2 := span
 		span2.Begin = gotkv.KeyAfter(maxExtKey)
 		it2 := b.op.gotkv.NewIterator(b.ms, root, span2)
-		if err := kvstreams.ForEach(ctx, it2, func(ent kvstreams.Entry) error {
+		if err := streams.ForEach[gotkv.Entry](ctx, it2, func(ent kvstreams.Entry) error {
 			if b.op.keyFilter(ent.Key) {
 				panic(fmt.Sprintf("found extent after max extent. %q", ent.Key))
 			}

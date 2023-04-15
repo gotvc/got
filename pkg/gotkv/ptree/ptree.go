@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/gotvc/got/pkg/gotkv/kvstreams"
+	"github.com/brendoncarroll/go-state/streams"
 )
 
 // Getter is used to retrieve nodes from storage by Ref
@@ -32,12 +32,6 @@ type Store[Ref any] interface {
 
 // ErrOutOfRoom is returned when an encoder does not have enough room to write an entry.
 var ErrOutOfRoom = errors.New("out of room")
-
-var EOS = kvstreams.EOS
-
-func IsEOS(err error) bool {
-	return errors.Is(err, EOS)
-}
 
 type Encoder[T any] interface {
 	// Write encodes ent to dst and returns the number of bytes written or an error.
@@ -111,7 +105,7 @@ func Copy[T, Ref any](ctx context.Context, b *Builder[T, Ref], it *Iterator[T, R
 		}
 		level := min(bl, il)
 		if err := it.next(ctx, level, x); err != nil {
-			if IsEOS(err) {
+			if streams.IsEOS(err) {
 				return nil
 			}
 			return err
@@ -137,7 +131,7 @@ func ListIndexes[T, Ref any](ctx context.Context, params ReadParams[T, Ref], roo
 	for {
 		var idx Index[T, Ref]
 		if err := sr.Next(ctx, &idx); err != nil {
-			if IsEOS(err) {
+			if streams.IsEOS(err) {
 				break
 			}
 			return nil, err
@@ -160,7 +154,7 @@ func ListEntries[T, Ref any](ctx context.Context, params ReadParams[T, Ref], idx
 	for {
 		var ent T
 		if err := sr.Next(ctx, &ent); err != nil {
-			if IsEOS(err) {
+			if streams.IsEOS(err) {
 				break
 			}
 			return nil, err

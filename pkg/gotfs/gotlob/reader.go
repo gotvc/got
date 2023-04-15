@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/streams"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/pkg/errors"
 )
@@ -79,7 +80,7 @@ func (r *Reader) ReadAt(buf []byte, offset int64) (int, error) {
 	for n < len(buf) {
 		n2, err := r.readFromIterator(r.ctx, it, r.ds, uint64(offset), buf[n:])
 		if err != nil {
-			if errors.Is(err, gotkv.EOS) {
+			if streams.IsEOS(err) {
 				break
 			}
 			return n, err
