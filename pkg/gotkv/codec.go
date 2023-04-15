@@ -225,7 +225,7 @@ func (d *IndexDecoder) readIndex(src []byte, dst *Index) (int, error) {
 		dst.Span = dst.Span.WithUpperExcl(Entry{Key: ent2.Key})
 		// TODO: we incorrectly assume that nodes not at the right edge of the tree are always natural
 		// They may not be in cases of an entry exceeding the maximum size
-		dst.IsNatural = false
+		dst.IsNatural = true
 	} else {
 		if ub, ok := d.parent.Span.UpperBound(); ok {
 			dst.Span = dst.Span.WithUpperExcl(ub.Clone())
