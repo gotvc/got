@@ -2,10 +2,10 @@ package gotlob
 
 import (
 	"context"
-	"errors"
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/streams"
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
@@ -154,7 +154,7 @@ func (op *Operator) MinExtent(ctx context.Context, ms cadata.Store, root Root, s
 	var ent gotkv.Entry
 	for {
 		if err := it.Next(ctx, &ent); err != nil {
-			if errors.Is(err, gotkv.EOS) {
+			if streams.IsEOS(err) {
 				return nil, nil, nil
 			}
 			return nil, nil, err

@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/gotvc/got/pkg/gotkv/kvstreams"
+	"github.com/brendoncarroll/go-state/streams"
 	"github.com/stretchr/testify/require"
 )
 
@@ -80,7 +80,7 @@ func TestStreamRW(t *testing.T) {
 		require.Equal(t, string(keyFromInt(i)), string(ent.Key))
 	}
 	err = sr.Next(ctx, &ent)
-	require.Equal(t, kvstreams.EOS, err)
+	require.Equal(t, streams.EOS(), err)
 }
 
 func TestStreamWriterChunkSize(t *testing.T) {

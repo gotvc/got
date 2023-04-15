@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/gotvc/got/pkg/gotkv/kvstreams"
+	"github.com/brendoncarroll/go-state/streams"
 )
 
 func DebugTree[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Root[T, Ref], w io.Writer) error {
@@ -32,7 +32,7 @@ func DebugTree[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Roo
 			for {
 				var ent T
 				if err := sr.Next(ctx, &ent); err != nil {
-					if err == kvstreams.EOS {
+					if streams.IsEOS(err) {
 						break
 					}
 					panic(err)
@@ -49,7 +49,7 @@ func DebugTree[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Roo
 			var idx Index[T, Ref]
 			for {
 				if err := sr.Next(ctx, &idx); err != nil {
-					if err == kvstreams.EOS {
+					if streams.IsEOS(err) {
 						break
 					}
 					panic(err)

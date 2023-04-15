@@ -3,6 +3,7 @@ package ptree
 import (
 	"context"
 
+	"github.com/brendoncarroll/go-state/streams"
 	"github.com/gotvc/got/pkg/maybe"
 )
 
@@ -30,11 +31,11 @@ func MaxEntry[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Root
 				// not performing this check would be inefficient, but also correct.
 				continue
 			}
-			if err := MaxEntry(ctx, params, indexToRoot(idx, x.Depth-1), lt, dst); !IsEOS(err) {
+			if err := MaxEntry(ctx, params, indexToRoot(idx, x.Depth-1), lt, dst); !streams.IsEOS(err) {
 				return err
 			}
 		}
-		return EOS
+		return streams.EOS()
 	}
 }
 
@@ -45,7 +46,7 @@ func maxEntry[T, Ref any](ctx context.Context, sr *StreamReader[T, Ref], cmp fun
 	var found bool
 	for {
 		if err := sr.Peek(ctx, &ent); err != nil {
-			if IsEOS(err) {
+			if streams.IsEOS(err) {
 				break
 			}
 			return err
@@ -61,6 +62,6 @@ func maxEntry[T, Ref any](ctx context.Context, sr *StreamReader[T, Ref], cmp fun
 	if found {
 		return nil
 	} else {
-		return EOS
+		return streams.EOS()
 	}
 }

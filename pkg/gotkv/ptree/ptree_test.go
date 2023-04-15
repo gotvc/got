@@ -7,6 +7,7 @@ import (
 
 	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/streams"
 	"github.com/stretchr/testify/require"
 )
 
@@ -51,7 +52,7 @@ func TestBuildIterate(t *testing.T) {
 		require.Contains(t, string(ent.Key), strconv.Itoa(i))
 	}
 	for i := 0; i < 3; i++ {
-		require.ErrorIs(t, it.Next(ctx, &ent), EOS)
+		require.ErrorIs(t, it.Next(ctx, &ent), streams.EOS())
 	}
 }
 
@@ -77,7 +78,7 @@ func TestIterateEmptySpan(t *testing.T) {
 
 	var ent Entry
 	for i := 0; i < 3; i++ {
-		require.ErrorIs(t, it.Next(ctx, &ent), EOS)
+		require.ErrorIs(t, it.Next(ctx, &ent), streams.EOS())
 	}
 }
 
@@ -113,7 +114,7 @@ func TestCopy(t *testing.T) {
 		require.NoError(t, it2.Next(ctx, &ent))
 		require.Equal(t, keyFromInt(i), ent.Key)
 	}
-	require.ErrorIs(t, it2.Next(ctx, &ent), EOS)
+	require.ErrorIs(t, it2.Next(ctx, &ent), streams.EOS())
 	require.Equal(t, root, root2)
 }
 
@@ -152,7 +153,7 @@ func TestCopySpan(t *testing.T) {
 		require.NoError(t, it2.Next(ctx, &ent))
 		require.Equal(t, keyFromInt(i), ent.Key)
 	}
-	require.ErrorIs(t, it2.Next(ctx, &ent), EOS)
+	require.ErrorIs(t, it2.Next(ctx, &ent), streams.EOS())
 }
 
 func TestCopyMultiple(t *testing.T) {
@@ -189,7 +190,7 @@ func TestCopyMultiple(t *testing.T) {
 		require.NoError(t, itFinal.Next(ctx, &ent))
 		require.Equal(t, keyFromInt(i), ent.Key)
 	}
-	require.ErrorIs(t, itFinal.Next(ctx, &ent), EOS)
+	require.ErrorIs(t, itFinal.Next(ctx, &ent), streams.EOS())
 }
 
 // TestSeek checks that the iterator can Seek to entries which exist in the tree.
@@ -261,7 +262,7 @@ func TestEmpty(t *testing.T) {
 
 	it := newIterator(t, s, *root, state.TotalSpan[Entry]())
 	for i := 0; i < 10; i++ {
-		require.ErrorIs(t, it.Next(ctx, &Entry{}), EOS)
+		require.ErrorIs(t, it.Next(ctx, &Entry{}), streams.EOS())
 	}
 }
 

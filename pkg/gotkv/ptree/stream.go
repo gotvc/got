@@ -3,11 +3,11 @@ package ptree
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 	"math"
 
 	"github.com/brendoncarroll/go-state"
+	"github.com/brendoncarroll/go-state/streams"
 	"github.com/dchest/siphash"
 	"github.com/gotvc/got/pkg/maybe"
 )
@@ -18,7 +18,7 @@ func NextIndexFromSlice[T, Ref any](idxs []Index[T, Ref]) func(ctx context.Conte
 	var i int
 	return func(_ context.Context, dst *Index[T, Ref]) error {
 		if i >= len(idxs) {
-			return EOS
+			return streams.EOS()
 		}
 		*dst = idxs[i]
 		i++
@@ -86,7 +86,7 @@ func (r *StreamReader[T, Ref]) Peek(ctx context.Context, dst *T) error {
 
 func (r *StreamReader[T, Ref]) PeekNoLoad(dst *T) error {
 	if r.offset >= r.n {
-		return EOS
+		return streams.EOS()
 	}
 	return r.p.Decoder.Peek(r.buf[r.offset:r.n], dst)
 }
@@ -95,7 +95,7 @@ func (r *StreamReader[T, Ref]) Seek(ctx context.Context, gteq T) error {
 	var x T
 	for {
 		if err := r.Peek(ctx, &x); err != nil {
-			if errors.Is(err, EOS) {
+			if streams.IsEOS(err) {
 				return nil
 			}
 			return err
@@ -124,7 +124,7 @@ func (r *StreamReader[T, Ref]) loadNextBlob(ctx context.Context) error {
 		return err
 	}
 	if n == 0 {
-		return EOS
+		return streams.EOS()
 	}
 	r.n = n
 	r.offset = 0

@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/streams"
 )
 
 var _ Iterator = &Merger{}
@@ -55,7 +56,7 @@ func (sm *Merger) advancePast(ctx context.Context, key []byte) error {
 	var ent Entry
 	for _, sr := range sm.streams {
 		if err := sr.Peek(ctx, &ent); err != nil {
-			if err == EOS {
+			if streams.IsEOS(err) {
 				continue
 			}
 			return err
@@ -77,7 +78,7 @@ func (sm *Merger) selectStream(ctx context.Context) (Iterator, error) {
 	var ent Entry
 	for i, sr := range sm.streams {
 		if err := sr.Peek(ctx, &ent); err != nil {
-			if err == EOS {
+			if streams.IsEOS(err) {
 				continue
 			}
 			return nil, err

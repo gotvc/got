@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/brendoncarroll/go-state/streams"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"
@@ -82,7 +83,7 @@ func (o *Operator) ReadDir(ctx context.Context, s Store, x Root, p string, fn fu
 	}
 	for {
 		dirEnt, err := di.Next(ctx)
-		if err == gotkv.EOS {
+		if streams.IsEOS(err) {
 			break
 		}
 		if err != nil {

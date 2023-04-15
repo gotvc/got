@@ -2,10 +2,10 @@ package kvstreams
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/brendoncarroll/go-state"
+	"github.com/brendoncarroll/go-state/streams"
 )
 
 // Entry is a single entry in a stream/tree
@@ -23,13 +23,6 @@ func (e Entry) Clone() Entry {
 
 func (e Entry) String() string {
 	return fmt.Sprintf("{%q => %q}", e.Key, e.Value)
-}
-
-// EOS signals the end of a stream
-var EOS = errors.New("end of stream")
-
-func IsEOS(err error) bool {
-	return errors.Is(err, EOS)
 }
 
 // Iterator iterates over entries
@@ -64,7 +57,7 @@ func Peek(ctx context.Context, it Iterator) (*Entry, error) {
 
 func ForEach(ctx context.Context, it Iterator, fn func(ent Entry) error) error {
 	var ent Entry
-	for err := it.Next(ctx, &ent); err != EOS; err = it.Next(ctx, &ent) {
+	for err := it.Next(ctx, &ent); !streams.IsEOS(err); err = it.Next(ctx, &ent) {
 		if err != nil {
 			return err
 		}

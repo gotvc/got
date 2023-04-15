@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/streams"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
@@ -109,7 +110,7 @@ func (o *Operator) GetF(ctx context.Context, s cadata.Getter, x Root, key []byte
 	var ent Entry
 	err := it.Next(ctx, &ent)
 	if err != nil {
-		if ptree.IsEOS(err) {
+		if streams.IsEOS(err) {
 			err = ErrKeyNotFound
 		}
 		return err
@@ -167,7 +168,7 @@ func (o *Operator) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span S
 	}
 	var dst Entry
 	if err := ptree.MaxEntry(ctx, rp, x.toPtree(), maybe.Just(Entry{Key: span.End}), &dst); err != nil {
-		if ptree.IsEOS(err) {
+		if streams.IsEOS(err) {
 			return nil, nil
 		}
 		return nil, err
@@ -254,7 +255,7 @@ func (o *Operator) ForEach(ctx context.Context, s Getter, root Root, span Span, 
 	var ent Entry
 	for {
 		if err := it.Next(ctx, &ent); err != nil {
-			if err == kvstreams.EOS {
+			if streams.IsEOS(err) {
 				return nil
 			}
 			return err

@@ -62,7 +62,6 @@ const (
 
 var (
 	ErrKeyNotFound = errors.Errorf("key not found")
-	EOS            = kvstreams.EOS
 )
 
 var defaultReadOnlyOperator = &Operator{dop: gdat.NewOperator()}
