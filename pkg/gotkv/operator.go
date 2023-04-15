@@ -109,7 +109,7 @@ func (o *Operator) GetF(ctx context.Context, s cadata.Getter, x Root, key []byte
 	var ent Entry
 	err := it.Next(ctx, &ent)
 	if err != nil {
-		if errors.Is(err, ptree.EOS) {
+		if ptree.IsEOS(err) {
 			err = ErrKeyNotFound
 		}
 		return err

@@ -51,6 +51,7 @@ func FlatMap[A, B any](x Maybe[A], fn func(A) Maybe[B]) Maybe[B] {
 
 func Copy[T any](dst *Maybe[T], src Maybe[T], copy func(dst *T, src T)) {
 	if !src.Ok {
+		dst.Ok = false
 		return
 	}
 	dst.Ok = true
