@@ -42,9 +42,10 @@ func (e Entry) String() string {
 //	  // use ent here. ent will be valid until the next call to it.Next
 //	}
 type Iterator interface {
-	Next(ctx context.Context, ent *Entry) error
+	streams.Iterator[Entry]
+	streams.Peekable[Entry]
+
 	Seek(ctx context.Context, gteq []byte) error
-	Peek(ctx context.Context, ent *Entry) error
 }
 
 func Peek(ctx context.Context, it Iterator) (*Entry, error) {
@@ -53,30 +54,6 @@ func Peek(ctx context.Context, it Iterator) (*Entry, error) {
 		return nil, err
 	}
 	return &ent, nil
-}
-
-func ForEach(ctx context.Context, it Iterator, fn func(ent Entry) error) error {
-	var ent Entry
-	for err := it.Next(ctx, &ent); !streams.IsEOS(err); err = it.Next(ctx, &ent) {
-		if err != nil {
-			return err
-		}
-		if err := fn(ent); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func Collect(ctx context.Context, it Iterator) ([]Entry, error) {
-	var ents []Entry
-	if err := ForEach(ctx, it, func(ent Entry) error {
-		ents = append(ents, ent.Clone())
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return ents, nil
 }
 
 // CopyEntry copies an entry from src to dst.

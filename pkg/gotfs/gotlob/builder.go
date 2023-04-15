@@ -304,7 +304,7 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 		span2 := span
 		span2.Begin = gotkv.KeyAfter(maxExtKey)
 		it2 := b.op.gotkv.NewIterator(b.ms, root, span2)
-		if err := kvstreams.ForEach(ctx, it2, func(ent kvstreams.Entry) error {
+		if err := streams.ForEach[gotkv.Entry](ctx, it2, func(ent kvstreams.Entry) error {
 			if b.op.keyFilter(ent.Key) {
 				panic(fmt.Sprintf("found extent after max extent. %q", ent.Key))
 			}

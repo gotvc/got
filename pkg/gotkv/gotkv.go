@@ -7,6 +7,7 @@ import (
 
 	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/streams"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
@@ -81,7 +82,7 @@ func CopyAll(ctx context.Context, b *Builder, it kvstreams.Iterator) error {
 	if it, ok := it.(*Iterator); ok {
 		return ptree.Copy(ctx, &b.b, &it.it)
 	}
-	return kvstreams.ForEach(ctx, it, func(ent Entry) error {
+	return streams.ForEach[Entry](ctx, it, func(ent Entry) error {
 		return b.Put(ctx, ent.Key, ent.Value)
 	})
 }
