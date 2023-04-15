@@ -4,7 +4,7 @@ go 1.19
 
 require (
 	github.com/brendoncarroll/go-p2p v0.0.0-20230318184050-1b4145c902cf
-	github.com/brendoncarroll/go-state v0.0.0-20230114155940-0d163a3abbd6
+	github.com/brendoncarroll/go-state v0.0.0-20230415141817-2c002c7d4afe
 	github.com/brendoncarroll/go-tai64 v0.0.0-20220726191612-c9e9c0704db4
 	github.com/brendoncarroll/stdctx v0.0.0-20230318183431-4786d63efd50
 	github.com/dchest/siphash v1.2.3
@@ -62,5 +62,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.1.5 // indirect
 )
-
-replace golang.zx2c4.com/wireguard => golang.zx2c4.com/wireguard v0.0.0-20210927201915-bb745b2ea326
