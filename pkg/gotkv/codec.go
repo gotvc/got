@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
-	"github.com/gotvc/got/pkg/maybe"
 )
 
 type Index = ptree.Index[kvstreams.Entry, gdat.Ref]
@@ -59,17 +59,35 @@ type IndexEncoder struct {
 }
 
 func (e *IndexEncoder) Write(dst []byte, x ptree.Index[Entry, Ref]) (int, error) {
+	lb, ok := x.Span.LowerBound()
+	if !ok {
+		panic("no lower bound")
+	}
+	if !x.Span.IncludesLower() {
+		panic("span does not include lower bound")
+	}
 	return e.Encoder.Write(dst, Entry{
-		Key:   x.First.X.Key,
+		Key:   lb.Key,
 		Value: gdat.AppendRef(nil, x.Ref),
 	})
 }
 
 func (e *IndexEncoder) EncodedLen(x Index) int {
+	lb, ok := x.Span.LowerBound()
+	if !ok {
+		panic("no lower bound")
+	}
+	if !x.Span.IncludesLower() {
+		panic("span does not include lower bound")
+	}
 	return e.Encoder.EncodedLen(Entry{
-		Key:   x.First.X.Key,
+		Key:   lb.Key,
 		Value: gdat.AppendRef(nil, x.Ref),
 	})
+}
+
+func (e *IndexEncoder) Reset() {
+	e.Encoder.Reset()
 }
 
 // writeLPBytes writes len(x) varint-encoded, followed by x, to buf
@@ -146,21 +164,21 @@ func (d *Decoder) Peek(src []byte, ent *Entry) error {
 }
 
 func (d *Decoder) Reset(parent Index) {
-	if parent.First.Ok {
-		d.prevKey = append(d.prevKey[:0], parent.First.X.Key...)
-	} else {
-		d.prevKey = d.prevKey[:0]
+	lb, ok := parent.Span.LowerBound()
+	if !ok {
+		panic("index must include lower bound")
 	}
+	d.prevKey = append(d.prevKey[:0], lb.Key...)
 }
 
-var _ ptree.Decoder[Index, Ref] = &IndexDecoder{}
+var _ ptree.IndexDecoder[Entry, Ref] = &IndexDecoder{}
 
 type IndexDecoder struct {
 	parent  Index
 	prevKey []byte
 }
 
-func newIndexDecoder() ptree.Decoder[Index, Ref] {
+func newIndexDecoder() ptree.IndexDecoder[Entry, Ref] {
 	return &IndexDecoder{}
 }
 
@@ -169,7 +187,11 @@ func (d *IndexDecoder) Read(src []byte, dst *Index) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	d.setPrevKey(dst.First.X.Key)
+	lb, ok := dst.Span.LowerBound()
+	if !ok {
+		panic(dst.Span)
+	}
+	d.setPrevKey(lb.Key)
 	return n, nil
 }
 
@@ -178,9 +200,12 @@ func (d *IndexDecoder) Peek(src []byte, dst *Index) error {
 	return err
 }
 
-func (d *IndexDecoder) Reset(parent ptree.Index[Index, Ref]) {
-	d.parent = ptree.FlattenIndex(parent)
-	d.setPrevKey(d.parent.First.X.Key)
+func (d *IndexDecoder) Reset(parent Index) {
+	lb, ok := parent.Span.LowerBound()
+	if !ok {
+		panic("index must include lower bound")
+	}
+	d.prevKey = append(d.prevKey[:0], lb.Key...)
 }
 
 func (d *IndexDecoder) readIndex(src []byte, dst *Index) (int, error) {
@@ -189,20 +214,24 @@ func (d *IndexDecoder) readIndex(src []byte, dst *Index) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	dst.First = maybe.Just(Entry{Key: ent1.Key})
+	dst.Span = state.TotalSpan[Entry]()
+	dst.Span = dst.Span.WithLowerIncl(Entry{Key: ent1.Key})
 	ref, err := gdat.ParseRef(ent1.Value)
 	if err != nil {
 		return 0, err
 	}
 	dst.Ref = ref
-	dst.Last = maybe.Nothing[Entry]()
 	if n2 > 0 {
-		//dst.Last = maybe.Just(Entry{Key: ent2.Key})
+		dst.Span = dst.Span.WithUpperExcl(Entry{Key: ent2.Key})
 		// TODO: we incorrectly assume that nodes not at the right edge of the tree are always natural
 		// They may not be in cases of an entry exceeding the maximum size
 		dst.IsNatural = false
 	} else {
-		//dst.Last = d.parent.Last.Clone(copyEntry)
+		if ub, ok := d.parent.Span.UpperBound(); ok {
+			dst.Span = dst.Span.WithUpperExcl(ub.Clone())
+		} else {
+			dst.Span = dst.Span.WithoutUpper()
+		}
 		dst.IsNatural = false
 	}
 	return n1, nil

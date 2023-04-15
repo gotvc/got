@@ -221,7 +221,7 @@ func (o *Operator) NewBuilder(s Store) *Builder {
 		MaxSize:         o.maxSize,
 		Seed:            o.seed,
 		NewEncoder:      func() ptree.Encoder[Entry] { return &Encoder{} },
-		NewIndexEncoder: func() ptree.Encoder[Index] { return &IndexEncoder{} },
+		NewIndexEncoder: func() ptree.IndexEncoder[Entry, Ref] { return &IndexEncoder{} },
 		Compare:         compareEntries,
 		Copy:            copyEntry,
 	})
@@ -237,9 +237,9 @@ func (o *Operator) NewIterator(s Getter, root Root, span Span) *Iterator {
 	it := ptree.NewIterator(ptree.IteratorParams[Entry, Ref]{
 		Store:           &ptreeGetter{op: &o.dop, s: s},
 		Compare:         compareEntries,
-		NewDecoder:      func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
-		NewIndexDecoder: func() ptree.Decoder[Index, Ref] { return &IndexDecoder{} },
 		Copy:            copyEntry,
+		NewDecoder:      newDecoder,
+		NewIndexDecoder: newIndexDecoder,
 
 		Root: root.toPtree(),
 		Span: convertSpan(span),

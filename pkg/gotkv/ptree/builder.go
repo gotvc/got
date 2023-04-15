@@ -2,7 +2,6 @@ package ptree
 
 import (
 	"context"
-	"errors"
 	"fmt"
 )
 
@@ -47,15 +46,14 @@ type BuilderParams[T, Ref any] struct {
 	Seed            *[16]byte
 	Compare         CompareFunc[T]
 	NewEncoder      func() Encoder[T]
-	NewIndexEncoder func() Encoder[Index[T, Ref]]
+	NewIndexEncoder func() IndexEncoder[T, Ref]
 	Copy            func(dst *T, src T)
 }
 
 func NewBuilder[T, Ref any](params BuilderParams[T, Ref]) *Builder[T, Ref] {
-	b := &Builder[T, Ref]{
+	return &Builder[T, Ref]{
 		p: params,
 	}
-	return b
 }
 
 func (b *Builder[T, Ref]) makeLevel(i int) builderLevel[T, Ref] {
@@ -70,10 +68,7 @@ func (b *Builder[T, Ref]) makeLevel(i int) builderLevel[T, Ref] {
 			Compare:  b.p.Compare,
 			OnIndex: func(idx Index[T, Ref]) error {
 				if b.isDone && i == len(b.levels)-1 {
-					b.root = &Root[T, Ref]{
-						Index: idx,
-						Depth: uint8(i),
-					}
+					b.setRoot(i, idx)
 					return nil
 				}
 				bl := b.getLevel(i + 1)
@@ -93,10 +88,9 @@ func (b *Builder[T, Ref]) makeLevel(i int) builderLevel[T, Ref] {
 			Copy:     upgradeCopy[T, Ref](b.p.Copy),
 			Compare:  upgradeCompare[T, Ref](b.p.Compare),
 			OnIndex: func(idx Index[Index[T, Ref], Ref]) error {
-				idx2 := FlattenIndex(idx)
+				idx2 := flattenIndex(idx)
 				if b.isDone && i == len(b.levels)-1 {
-					root := indexToRoot(idx2, uint8(i))
-					b.root = &root
+					b.setRoot(i, idx2)
 					return nil
 				}
 				bl := b.getLevel(i + 1)
@@ -107,6 +101,11 @@ func (b *Builder[T, Ref]) makeLevel(i int) builderLevel[T, Ref] {
 			IndexWriter: sw,
 		}
 	}
+}
+
+func (b *Builder[T, Ref]) setRoot(level int, idx Index[T, Ref]) {
+	root := indexToRoot(idx.Clone(b.p.Copy), uint8(level))
+	b.root = &root
 }
 
 func (b *Builder[T, Ref]) getLevel(level int) builderLevel[T, Ref] {
@@ -134,7 +133,7 @@ func (b *Builder[T, Ref]) put(ctx context.Context, level int, x dual[T, Ref]) er
 		return fmt.Errorf("cannot put at level %d", level)
 	}
 	if level > 0 && !x.Index.IsNatural {
-		return errors.New("cannot copy index with IsNatural=false")
+		return fmt.Errorf("cannot copy index with IsNatural=false level=%d", level)
 	}
 	return b.getLevel(level).Append(ctx, x)
 }
@@ -177,4 +176,13 @@ func (b *Builder[T, Ref]) syncLevel() int {
 		}
 	}
 	return MaxTreeDepth - 1 // allow copying at any depth
+}
+
+func upgradeCopy[T, Ref any](copy func(dst *T, src T)) func(dst *Index[T, Ref], src Index[T, Ref]) {
+	return func(dst *Index[T, Ref], src Index[T, Ref]) {
+		dst.Ref = src.Ref
+		dst.Span = cloneSpan(src.Span, copy)
+		dst.IsNatural = src.IsNatural
+		dst.Count = src.Count
+	}
 }

@@ -1,6 +1,7 @@
 package gotkv
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
@@ -52,6 +53,9 @@ func TestPutGetMany(t *testing.T) {
 		key, value := makeKey(i), makeValue(i)
 		var err error
 		x, err = op.Put(ctx, s, *x, key, value)
+		if !bytes.Contains(x.First, []byte("-key")) {
+			t.Fatalf("on %d: %q", i, x.First)
+		}
 		require.NoError(t, err)
 	}
 	// ptree.DebugTree(s, *x)

@@ -2,11 +2,9 @@ package ptree
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/brendoncarroll/go-state"
-	"github.com/gotvc/got/pkg/maybe"
 )
 
 type Iterator[T, Ref any] struct {
@@ -42,7 +40,7 @@ func (il iterLevel[T, Ref]) Seek(ctx context.Context, gteq T) error {
 	}
 	if il.indexes != nil {
 		return il.indexes.Seek(ctx, Index[T, Ref]{
-			First: maybe.Just(gteq),
+			Span: state.TotalSpan[T]().WithLowerIncl(gteq),
 		})
 	}
 	return nil
@@ -51,7 +49,7 @@ func (il iterLevel[T, Ref]) Seek(ctx context.Context, gteq T) error {
 type IteratorParams[T, Ref any] struct {
 	Store           Getter[Ref]
 	NewDecoder      func() Decoder[T, Ref]
-	NewIndexDecoder func() Decoder[Index[T, Ref], Ref]
+	NewIndexDecoder func() IndexDecoder[T, Ref]
 	Compare         CompareFunc[T]
 	Copy            func(dst *T, src T)
 
@@ -60,13 +58,12 @@ type IteratorParams[T, Ref any] struct {
 }
 
 func NewIterator[T, Ref any](params IteratorParams[T, Ref]) *Iterator[T, Ref] {
-	it := &Iterator[T, Ref]{
+	return &Iterator[T, Ref]{
 		p: params,
 
 		levels: make([]iterLevel[T, Ref], params.Root.Depth+1),
 		span:   cloneSpan(params.Span, params.Copy),
 	}
-	return it
 }
 
 func (it *Iterator[T, Ref]) Next(ctx context.Context, dst *T) error {
@@ -83,6 +80,7 @@ func (it *Iterator[T, Ref]) Seek(ctx context.Context, gteq T) error {
 		lb, _ := it.span.LowerBound()
 		panic(fmt.Errorf("cannot seek backwards: last=%v gteq=%v", lb, gteq))
 	}
+	it.setGteq(gteq)
 	for i := len(it.levels) - 1; i >= 0; i-- {
 		il, err := it.getLevel(ctx, i)
 		if err != nil {
@@ -117,6 +115,13 @@ func (it *Iterator[T, Ref]) next(ctx context.Context, level int, dst dual[T, Ref
 	} else {
 		if err := il.indexes.Next(ctx, dst.Index); err != nil {
 			return err
+		}
+		if ub, ok := dst.Index.Span.UpperBound(); ok {
+			if dst.Index.Span.IncludesUpper() {
+				it.setGt(ub)
+			} else {
+				it.setGteq(ub)
+			}
 		}
 		return nil
 	}
@@ -188,14 +193,14 @@ func (it *Iterator[T, Ref]) makeLevel(ctx context.Context, level int) (ret iterL
 	case level < len(it.levels):
 		sr := NewStreamReader(StreamReaderParams[Index[T, Ref], Ref]{
 			Store:   it.p.Store,
-			Decoder: it.p.NewIndexDecoder(),
+			Decoder: metaDecoder[T, Ref]{it.p.NewIndexDecoder()},
 			Compare: upgradeCompare[T, Ref](it.p.Compare),
 			NextIndex: func(ctx context.Context, dst *Index[Index[T, Ref], Ref]) error {
 				if level == len(it.levels)-1 {
 					if it.readRoot {
 						return EOS
 					}
-					*dst = it.p.Root.Index2()
+					*dst = metaIndex(it.p.Root.Index)
 					it.readRoot = true
 					return nil
 				} else {
@@ -208,7 +213,7 @@ func (it *Iterator[T, Ref]) makeLevel(ctx context.Context, level int) (ret iterL
 						return err
 					}
 					r := indexToRoot(idx, uint8(level+1))
-					*dst = r.Index2()
+					*dst = metaIndex(r.Index)
 					return nil
 				}
 			},
@@ -244,18 +249,21 @@ func (it *Iterator[T, Ref]) syncLevel() (int, error) {
 		if i > 0 {
 			var idx Index[T, Ref]
 			if err := it.levels[i].indexes.PeekNoLoad(&idx); err != nil {
-				if !errors.Is(err, EOS) {
-					return 0, err
+				if IsEOS(err) {
+					continue // we can copy if it's okay to copy from the next one.
 				}
+				return 0, err
 			} else {
 				// if the index is not natural, then we can't copy it, we have to copy what it points to.
 				if !idx.IsNatural {
 					break
 				}
+				// if there is an index here and it is natural, then we can definitely copy from the previous level
+				bot = i - 1
 				// if the index points to things beyond the iterators span, then we cannot copy it.
 				if ub, ok := it.span.UpperBound(); ok {
 					// The indexes' span is entirely after OR includes ub.
-					if idx.Span().Compare(ub, it.p.Compare) >= 0 {
+					if idx.Span.Compare(ub, it.p.Compare) >= 0 {
 						break
 					}
 				}
@@ -286,4 +294,20 @@ func (it *Iterator[T, Ref]) setGt(x T) {
 	var x2 T
 	it.p.Copy(&x2, x)
 	it.span = it.span.WithLowerExcl(x2)
+}
+
+type metaDecoder[T, Ref any] struct {
+	inner IndexDecoder[T, Ref]
+}
+
+func (d metaDecoder[T, Ref]) Read(src []byte, dst *Index[T, Ref]) (int, error) {
+	return d.inner.Read(src, dst)
+}
+
+func (d metaDecoder[T, Ref]) Peek(src []byte, dst *Index[T, Ref]) error {
+	return d.inner.Peek(src, dst)
+}
+
+func (d metaDecoder[T, Ref]) Reset(parent Index[Index[T, Ref], Ref]) {
+	d.inner.Reset(flattenIndex(parent))
 }

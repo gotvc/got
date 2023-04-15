@@ -98,12 +98,22 @@ func TestCopy(t *testing.T) {
 	require.NotNil(t, root)
 
 	t.Log("begin copying")
+	t.Log("root", root.String())
 	it := newIterator(t, s, *root, state.Span[Entry]{})
 	b2 := newBuilder(t, s)
 
 	require.NoError(t, Copy(ctx, b2, it))
 	root2, err := b2.Finish(ctx)
 	require.NoError(t, err)
+	t.Log("root2", root2.String())
+
+	it2 := newIterator(t, s, *root2, state.Span[Entry]{})
+	var ent Entry
+	for i := 0; i < N; i++ {
+		require.NoError(t, it2.Next(ctx, &ent))
+		require.Equal(t, keyFromInt(i), ent.Key)
+	}
+	require.ErrorIs(t, it2.Next(ctx, &ent), EOS)
 	require.Equal(t, root, root2)
 }
 
@@ -143,6 +153,43 @@ func TestCopySpan(t *testing.T) {
 		require.Equal(t, keyFromInt(i), ent.Key)
 	}
 	require.ErrorIs(t, it2.Next(ctx, &ent), EOS)
+}
+
+func TestCopyMultiple(t *testing.T) {
+	t.Parallel()
+	maxSize := 1 << 16
+	s := cadata.NewMem(cadata.DefaultHash, maxSize)
+	ctx := context.Background()
+	b := newBuilder(t, s)
+
+	const N = 1e6
+	generateEntries(N, func(ent Entry) {
+		err := b.Put(ctx, ent)
+		require.NoError(t, err)
+	})
+	root, err := b.Finish(ctx)
+	require.NoError(t, err)
+
+	it1 := newIterator(t, s, *root, state.TotalSpan[Entry]().WithUpperExcl(Entry{Key: keyFromInt(int(N) * 1 / 3)}))
+	it2 := newIterator(t, s, *root, state.TotalSpan[Entry]().WithLowerIncl(Entry{Key: keyFromInt(int(N) * 2 / 3)}))
+
+	b2 := newBuilder(t, s)
+	require.NoError(t, Copy(ctx, b2, it1))
+	require.NoError(t, Copy(ctx, b2, it2))
+	root2, err := b2.Finish(ctx)
+	require.NoError(t, err)
+
+	itFinal := newIterator(t, s, *root2, state.TotalSpan[Entry]())
+	var ent Entry
+	for i := 0; i < int(N)*1/3; i++ {
+		require.NoError(t, itFinal.Next(ctx, &ent))
+		require.Equal(t, keyFromInt(i), ent.Key)
+	}
+	for i := int(N) * 2 / 3; i < N; i++ {
+		require.NoError(t, itFinal.Next(ctx, &ent))
+		require.Equal(t, keyFromInt(i), ent.Key)
+	}
+	require.ErrorIs(t, itFinal.Next(ctx, &ent), EOS)
 }
 
 // TestSeek checks that the iterator can Seek to entries which exist in the tree.

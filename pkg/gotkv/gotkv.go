@@ -10,7 +10,6 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
-	"github.com/gotvc/got/pkg/maybe"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
@@ -35,18 +34,23 @@ func newRoot(x *ptree.Root[Entry, gdat.Ref]) *Root {
 	if x == nil {
 		return nil
 	}
+	lb, _ := x.Span.LowerBound()
 	return &Root{
 		Ref:   x.Ref,
 		Depth: x.Depth,
-		First: x.First.X.Key,
+		First: lb.Key,
 	}
 }
 
 func (r Root) toPtree() ptree.Root[Entry, Ref] {
+	span := state.TotalSpan[Entry]()
+	span = span.WithLowerIncl(Entry{Key: r.First})
+
 	return ptree.Root[Entry, Ref]{
 		Index: ptree.Index[Entry, Ref]{
-			Ref:   r.Ref,
-			First: maybe.Just(Entry{Key: r.First}),
+			Ref:       r.Ref,
+			Span:      span,
+			IsNatural: false,
 		},
 		Depth: r.Depth,
 	}
@@ -88,7 +92,7 @@ func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Roo
 	rp := ptree.ReadParams[Entry, Ref]{
 		Compare:         compareEntries,
 		Store:           &ptreeGetter{op: &o.dop, s: src},
-		NewIndexDecoder: func() ptree.Decoder[Index, Ref] { return &IndexDecoder{} },
+		NewIndexDecoder: func() ptree.IndexDecoder[Entry, Ref] { return &IndexDecoder{} },
 		NewDecoder:      func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 	}
 	return do(ctx, rp, x.toPtree(), doer{
@@ -155,11 +159,7 @@ func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x ptree.Root[Entry
 		eg, ctx := errgroup.WithContext(ctx)
 		for _, idx := range idxs {
 			root2 := ptree.Root[Entry, Ref]{
-				Index: ptree.Index[Entry, Ref]{
-					Ref:   idx.Ref,
-					First: idx.First,
-					Last:  idx.Last,
-				},
+				Index: idx,
 				Depth: x.Depth - 1,
 			}
 			eg.Go(func() error {
@@ -213,7 +213,7 @@ func DebugTree(ctx context.Context, s cadata.Store, root Root, w io.Writer) erro
 		Store:           &ptreeGetter{s: s, op: &defaultReadOnlyOperator.dop},
 		Compare:         compareEntries,
 		NewDecoder:      func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
-		NewIndexDecoder: func() ptree.Decoder[Index, Ref] { return &IndexDecoder{} },
+		NewIndexDecoder: func() ptree.IndexDecoder[Entry, Ref] { return &IndexDecoder{} },
 	}
 	return ptree.DebugTree(ctx, rp, root.toPtree(), w)
 }

@@ -12,26 +12,6 @@ import (
 	"github.com/gotvc/got/pkg/maybe"
 )
 
-type Index[T, Ref any] struct {
-	Ref   Ref
-	First maybe.Maybe[T]
-	Last  maybe.Maybe[T]
-
-	// IsNatural is true if this index is a natural boundary
-	// A natural boundary.
-	IsNatural bool
-}
-
-func (in Index[T, Ref]) Span() (ret state.Span[T]) {
-	if in.First.Ok {
-		ret = ret.WithLowerIncl(in.First.X)
-	}
-	if in.Last.Ok {
-		ret = ret.WithUpperIncl(in.Last.X)
-	}
-	return ret
-}
-
 // NextIndexFromSlice returns a NextIndex function for StreamReaders which will
 // iterate over the provided slice.
 func NextIndexFromSlice[T, Ref any](idxs []Index[T, Ref]) func(ctx context.Context, dst *Index[T, Ref]) error {
@@ -162,6 +142,7 @@ type StreamWriter[T, Ref any] struct {
 
 	first T
 	prev  maybe.Maybe[T]
+	count uint
 }
 
 type StreamWriterParams[T, Ref any] struct {
@@ -214,13 +195,15 @@ func (w *StreamWriter[T, Ref]) Append(ctx context.Context, ent T) error {
 	if n != entryLen {
 		return fmt.Errorf("encoder reported inaccurate entry length, claimed=%d, actual=%d", entryLen, n)
 	}
-	if offset == 0 {
+	if w.count == 0 {
 		w.p.Copy(&w.first, ent)
 	}
 	w.n += n
 
 	w.p.Copy(&w.prev.X, ent)
 	w.prev.Ok = true
+
+	w.count++
 	// split after writing the entry
 	if w.isSplitPoint(w.buf[offset : offset+n]) {
 		if err := w.flush(ctx, true); err != nil {
@@ -246,19 +229,25 @@ func (w *StreamWriter[T, Ref]) flush(ctx context.Context, isNatural bool) error 
 	if err != nil {
 		return err
 	}
+	span := state.TotalSpan[T]()
+	span = span.WithLowerIncl(w.first)
+	span = span.WithUpperIncl(w.prev.X)
 	if err := w.p.OnIndex(Index[T, Ref]{
 		Ref:       ref,
-		First:     maybe.Just(w.first),
-		Last:      w.prev,
+		Span:      span,
 		IsNatural: isNatural,
+		Count:     w.count,
 	}); err != nil {
 		return err
 	}
 	var zero T
 	w.p.Copy(&w.first, zero)
+	w.p.Copy(&w.prev.X, zero)
+	w.prev.Ok = false
+
 	w.n = 0
 	w.p.Encoder.Reset()
-	w.prev.Ok = false
+	w.count = 0
 	return nil
 }
 

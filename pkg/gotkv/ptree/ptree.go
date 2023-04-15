@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/brendoncarroll/go-state"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
-	"github.com/gotvc/got/pkg/maybe"
 )
 
 // Getter is used to retrieve nodes from storage by Ref
@@ -52,11 +50,21 @@ type Encoder[T any] interface {
 	Reset()
 }
 
+type IndexEncoder[T, Ref any] Encoder[Index[T, Ref]]
+
 type Decoder[T, Ref any] interface {
 	// ReadEntry parses an entry from src into ent.  It returns the number of bytes read or an error.
 	Read(src []byte, ent *T) (int, error)
 	// PeekEntry is like ReadEntry except it should not affect the state of the Decoder
 	Peek(src []byte, ent *T) error
+	// Reset returns the decoder to the original state for the star of a node.
+	Reset(parent Index[T, Ref])
+}
+
+type IndexDecoder[T, Ref any] interface {
+	Read(src []byte, ent *Index[T, Ref]) (int, error)
+	// PeekEntry is like ReadEntry except it should not affect the state of the Decoder
+	Peek(src []byte, ent *Index[T, Ref]) error
 	// Reset returns the decoder to the original state for the star of a node.
 	Reset(parent Index[T, Ref])
 }
@@ -75,20 +83,15 @@ type Root[T, Ref any] struct {
 	Depth uint8
 }
 
-func (r *Root[T, Ref]) Index2() Index[Index[T, Ref], Ref] {
-	return Index[Index[T, Ref], Ref]{
-		Ref: r.Ref,
-
-		First: maybe.Just(Index[T, Ref]{First: r.First}),
-		Last:  maybe.Just(Index[T, Ref]{Last: r.Last}),
-	}
+func (r *Root[T, Ref]) String() string {
+	return fmt.Sprintf("Root{%d %v}", r.Depth, r.Index)
 }
 
 // ReadParams are parameters needed to read from a tree
 type ReadParams[T, Ref any] struct {
 	Store           Getter[Ref]
 	NewDecoder      func() Decoder[T, Ref]
-	NewIndexDecoder func() Decoder[Index[T, Ref], Ref]
+	NewIndexDecoder func() IndexDecoder[T, Ref]
 	Compare         CompareFunc[T]
 }
 
@@ -108,7 +111,7 @@ func Copy[T, Ref any](ctx context.Context, b *Builder[T, Ref], it *Iterator[T, R
 		}
 		level := min(bl, il)
 		if err := it.next(ctx, level, x); err != nil {
-			if errors.Is(err, EOS) {
+			if IsEOS(err) {
 				return nil
 			}
 			return err
@@ -127,14 +130,14 @@ func ListIndexes[T, Ref any](ctx context.Context, params ReadParams[T, Ref], roo
 	sr := NewStreamReader(StreamReaderParams[Index[T, Ref], Ref]{
 		Store:     params.Store,
 		Compare:   upgradeCompare[T, Ref](params.Compare),
-		Decoder:   params.NewIndexDecoder(),
-		NextIndex: NextIndexFromSlice([]Index[Index[T, Ref], Ref]{root.Index2()}),
+		Decoder:   metaDecoder[T, Ref]{params.NewIndexDecoder()},
+		NextIndex: NextIndexFromSlice([]Index[Index[T, Ref], Ref]{metaIndex(root.Index)}),
 	})
 	var idxs []Index[T, Ref]
 	for {
 		var idx Index[T, Ref]
 		if err := sr.Next(ctx, &idx); err != nil {
-			if err == EOS {
+			if IsEOS(err) {
 				break
 			}
 			return nil, err
@@ -157,7 +160,7 @@ func ListEntries[T, Ref any](ctx context.Context, params ReadParams[T, Ref], idx
 	for {
 		var ent T
 		if err := sr.Next(ctx, &ent); err != nil {
-			if errors.Is(err, EOS) {
+			if IsEOS(err) {
 				break
 			}
 			return nil, err
@@ -177,21 +180,6 @@ func PointsToIndexes[T, Ref any](root Root[T, Ref]) bool {
 	return root.Depth > 0
 }
 
-// func entryToIndex[Ref any](ent Entry, parseRef func([]byte) (Ref, error)) (Index[Ref], error) {
-// 	ref, err := parseRef(ent.Value)
-// 	if err != nil {
-// 		return Index[Ref]{}, err
-// 	}
-// 	return Index[Ref]{
-// 		First: append([]byte{}, ent.Key...),
-// 		Ref:   ref,
-// 	}, nil
-// }
-
-// func indexToEntry[T, Ref any](idx Index[T, Ref], marshalRef func([]byte, Ref) []byte) Entry {
-// 	return Entry{Key: idx.First, Value: marshalRef(nil, idx.Ref)}
-// }
-
 func indexToRoot[T, Ref any](idx Index[T, Ref], depth uint8) Root[T, Ref] {
 	return Root[T, Ref]{
 		Index: idx,
@@ -205,67 +193,8 @@ type dual[T, Ref any] struct {
 	Index *Index[T, Ref]
 }
 
-func compareIndexes[T, Ref any](a, b Index[T, Ref], cmp func(a, b T) int) (ret int) {
-	if a.Last.Ok && b.First.Ok {
-		if cmp(a.Last.X, b.First.X) < 0 {
-			return -1
-		}
-	}
-	if a.First.Ok && b.Last.Ok {
-		if cmp(a.First.X, b.Last.X) > 0 {
-			return 1
-		}
-	}
-	return 0
-}
-
 func upgradeCompare[T, Ref any](cmp func(a, b T) int) func(a, b Index[T, Ref]) int {
 	return func(a, b Index[T, Ref]) int {
 		return compareIndexes(a, b, cmp)
 	}
-}
-
-func upgradeCopy[T, Ref any](copy func(dst *T, src T)) func(dst *Index[T, Ref], src Index[T, Ref]) {
-	return func(dst *Index[T, Ref], src Index[T, Ref]) {
-		dst.Ref = src.Ref
-		dst.IsNatural = src.IsNatural
-		dst.First = src.First.Clone(copy)
-		dst.Last = src.Last.Clone(copy)
-	}
-}
-
-func FlattenIndex[T, Ref any](x Index[Index[T, Ref], Ref]) Index[T, Ref] {
-	return Index[T, Ref]{
-		Ref:       x.Ref,
-		IsNatural: x.IsNatural,
-		First: maybe.FlatMap(x.First, func(x Index[T, Ref]) maybe.Maybe[T] {
-			return x.First
-		}),
-		Last: maybe.FlatMap(x.Last, func(x Index[T, Ref]) maybe.Maybe[T] {
-			return x.Last
-		}),
-	}
-}
-
-func cloneSpan[T any](src state.Span[T], cp func(dst *T, src T)) state.Span[T] {
-	span := state.TotalSpan[T]()
-	if lb, ok := src.LowerBound(); ok {
-		var lb2 T
-		cp(&lb2, lb)
-		if src.IncludesLower() {
-			span = span.WithLowerIncl(lb)
-		} else {
-			span = span.WithLowerExcl(lb)
-		}
-	}
-	if ub, ok := src.UpperBound(); ok {
-		var ub2 T
-		cp(&ub2, ub)
-		if src.IncludesUpper() {
-			span = span.WithUpperIncl(ub2)
-		} else {
-			span = span.WithUpperExcl(ub2)
-		}
-	}
-	return span
 }

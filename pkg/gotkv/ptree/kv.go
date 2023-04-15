@@ -23,7 +23,7 @@ func MaxEntry[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Root
 		}
 		for i := len(idxs) - 1; i >= 0; i-- {
 			idx := idxs[i]
-			if lt.Ok && idx.Span().Compare(lt.X, params.Compare) > 0 {
+			if lt.Ok && idx.Span.Compare(lt.X, params.Compare) > 0 {
 				// the span is strictly above the less than value.
 				// we need to keep descending to find a suitable value
 				//

@@ -43,8 +43,8 @@ func DebugTree[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Roo
 			sr := NewStreamReader(StreamReaderParams[Index[T, Ref], Ref]{
 				Store:     params.Store,
 				Compare:   upgradeCompare[T, Ref](params.Compare),
-				Decoder:   params.NewIndexDecoder(),
-				NextIndex: NextIndexFromSlice([]Index[Index[T, Ref], Ref]{x.Index2()}),
+				Decoder:   metaDecoder[T, Ref]{params.NewIndexDecoder()},
+				NextIndex: NextIndexFromSlice([]Index[Index[T, Ref], Ref]{metaIndex(x.Index)}),
 			})
 			var idx Index[T, Ref]
 			for {
@@ -54,7 +54,7 @@ func DebugTree[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Roo
 					}
 					panic(err)
 				}
-				fmt.Fprintf(bw, "%s INDEX span=%v -> ref=%v\n", indent, idx.Span(), idx.Ref)
+				fmt.Fprintf(bw, "%s INDEX span=%v -> ref=%v\n", indent, idx.Span, idx.Ref)
 				root2 := x
 				root2.Depth--
 				debugTree(root2)

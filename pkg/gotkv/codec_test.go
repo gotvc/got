@@ -4,8 +4,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
-	"github.com/gotvc/got/pkg/maybe"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,7 +63,9 @@ func TestEncodeDecode(t *testing.T) {
 	}
 
 	dec := Decoder{}
-	dec.Reset(Index{First: maybe.Just(Entry{Key: makeKey(0)})})
+	span := state.TotalSpan[Entry]().
+		WithLowerIncl(Entry{Key: makeKey(0)})
+	dec.Reset(Index{Span: span})
 	var nread int
 	var ent kvstreams.Entry
 	for i := 0; i < 10; i++ {
