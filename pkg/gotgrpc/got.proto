@@ -123,7 +123,7 @@ message ReadCellRes {
 
 message CASCellReq {
     string key = 1;
-    bytes prev_hash = 2;
+    bytes prev = 2;
     bytes next = 3;
 }
 

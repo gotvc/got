@@ -14,7 +14,7 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 		t.Parallel()
 		x := newSpace(t)
 		b, err := x.Get(ctx, "test")
-		require.Equal(t, ErrNotExist, err)
+		require.ErrorIs(t, err, ErrNotExist)
 		require.Nil(t, b)
 		_, err = x.Create(ctx, "test", Metadata{})
 		require.NoError(t, err)

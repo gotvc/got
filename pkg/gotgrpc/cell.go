@@ -26,11 +26,10 @@ func (c *Cell) Read(ctx context.Context, buf []byte) (int, error) {
 }
 
 func (c *Cell) CAS(ctx context.Context, actual, prev, next []byte) (bool, int, error) {
-	prevHash := Hash(prev)
 	res, err := c.c.CASCell(ctx, &CASCellReq{
-		Key:      c.key,
-		PrevHash: prevHash[:],
-		Next:     next,
+		Key:  c.key,
+		Prev: prev[:],
+		Next: next,
 	})
 	if err != nil {
 		return false, 0, err
