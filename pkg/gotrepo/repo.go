@@ -1,7 +1,6 @@
 package gotrepo
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"fmt"
@@ -52,7 +51,6 @@ const (
 	configPath     = ".got/config"
 	privateKeyPath = ".got/private.pem"
 	specDirPath    = ".got/branches"
-	policyPath     = ".got/policy"
 	dbPath         = ".got/got.db"
 	blobsPath      = ".got/blobs"
 	storeDBPath    = ".got/stores.db"
@@ -118,10 +116,6 @@ func Init(p string) error {
 	}
 	privKey := generatePrivateKey()
 	if err := SavePrivateKey(repoDirFS, privateKeyPath, privKey); err != nil {
-		return err
-	}
-	// iam
-	if err := writeIfNotExists(repoDirFS, policyPath, 0o644, bytes.NewReader(nil)); err != nil {
 		return err
 	}
 	// stores

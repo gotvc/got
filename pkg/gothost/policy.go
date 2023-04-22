@@ -18,7 +18,6 @@ import (
 
 // GetPolicy reads a Policy from a gotfs filesystem
 func GetPolicy(ctx context.Context, op *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root) (*Policy, error) {
-	log.Println("get policy", ctx, op, ms, ds, x)
 	r, err := op.NewReader(ctx, ms, ds, x, PolicyPath)
 	if err != nil {
 		if posixfs.IsErrNotExist(err) {
@@ -35,7 +34,10 @@ func GetPolicy(ctx context.Context, op *gotfs.Operator, ms, ds cadata.Store, x g
 
 // SetPolicy writes a policy to a gotfs filesystem
 func SetPolicy(ctx context.Context, op *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root, pol Policy) (*gotfs.Root, error) {
-	return op.PutFile(ctx, ms, ds, x, PolicyPath, bytes.NewReader(MarshalPolicy(pol)))
+	log.Println("set policy", pol)
+	data := MarshalPolicy(pol)
+	log.Println(string(data))
+	return op.PutFile(ctx, ms, ds, x, PolicyPath, bytes.NewReader(data))
 }
 
 type Policy struct {

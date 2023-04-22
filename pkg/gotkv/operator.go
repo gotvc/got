@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/streams"
@@ -107,7 +106,6 @@ func (o *Operator) MaxSize() int {
 // GetF calls fn with the value corresponding to key in the instance x.
 // The value must not be used outside the callback.
 func (o *Operator) GetF(ctx context.Context, s cadata.Getter, x Root, key []byte, fn func([]byte) error) error {
-	log.Println("getF", o, ctx, s, x, key)
 	it := o.NewIterator(s, x, kvstreams.SingleItemSpan(key))
 	var ent Entry
 	err := it.Next(ctx, &ent)

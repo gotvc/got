@@ -42,7 +42,10 @@ func (e *HostEngine) Initialize(ctx context.Context) error {
 	}
 	e.fsop = branches.NewGotFS(b)
 	e.vcop = branches.NewGotVC(b)
+	return e.reloadPolicy(ctx)
+}
 
+func (e *HostEngine) reloadPolicy(ctx context.Context) error {
 	pol, err := e.GetPolicy(ctx)
 	if err != nil {
 		return err
@@ -70,6 +73,7 @@ func (e *HostEngine) GetPolicy(ctx context.Context) (*Policy, error) {
 }
 
 func (e *HostEngine) UpdatePolicy(ctx context.Context, fn func(pol Policy) Policy) error {
+	defer e.reloadPolicy(ctx)
 	return e.modifyFS(ctx, func(op *gotfs.Operator, ms cadata.Store, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
 		xPol, err := GetPolicy(ctx, op, ms, ds, x)
 		if err != nil {
@@ -115,11 +119,16 @@ func (e *HostEngine) readFS(ctx context.Context) (ms, ds cadata.Store, root *got
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	root, err = e.rootFromSnap(ctx, snap, stores.NewMem())
-	if err != nil {
-		return nil, nil, nil, err
+	if snap == nil {
+		ms := stores.NewMem()
+		ds := stores.NewMem()
+		root, err := e.fsop.NewEmpty(ctx, ms)
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		return ms, ds, root, nil
 	}
-	return b.Volume.FSStore, b.Volume.RawStore, root, nil
+	return b.Volume.FSStore, b.Volume.RawStore, &snap.Root, nil
 }
 
 func (e *HostEngine) modifyFS(ctx context.Context, fn func(op *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error)) error {
@@ -133,11 +142,17 @@ func (e *HostEngine) modifyFS(ctx context.Context, fn func(op *gotfs.Operator, m
 		VC:  stores.AddWriteLayer(b.Volume.VCStore, stores.NewMem()),
 	}
 	return branches.Apply(ctx, *b, scratch, func(snap *gotvc.Snapshot) (*gotvc.Snapshot, error) {
-		x, err := e.rootFromSnap(ctx, snap, scratch.FS)
-		if err != nil {
-			return nil, err
+		var x gotfs.Root
+		if snap != nil {
+			x = snap.Root
+		} else {
+			r, err := e.fsop.NewEmpty(ctx, scratch.FS)
+			if err != nil {
+				return nil, err
+			}
+			x = *r
 		}
-		y, err := fn(e.fsop, scratch.FS, scratch.Raw, *x)
+		y, err := fn(e.fsop, scratch.FS, scratch.Raw, x)
 		if err != nil {
 			return nil, err
 		}
@@ -147,18 +162,4 @@ func (e *HostEngine) modifyFS(ctx context.Context, fn func(op *gotfs.Operator, m
 		}
 		return e.vcop.NewSnapshot(ctx, scratch.VC, parents, *y, gotvc.SnapInfo{})
 	})
-}
-
-func (e *HostEngine) rootFromSnap(ctx context.Context, snap *gotvc.Snap, ms cadata.Store) (*gotfs.Root, error) {
-	var root gotfs.Root
-	if snap != nil {
-		root = snap.Root
-	} else {
-		r, err := e.fsop.NewEmpty(ctx, ms)
-		if err != nil {
-			return nil, err
-		}
-		root = *r
-	}
-	return &root, nil
 }
