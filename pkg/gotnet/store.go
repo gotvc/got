@@ -10,7 +10,7 @@ import (
 	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/gotiam"
+	"github.com/gotvc/got/pkg/gotauthz"
 	"github.com/pkg/errors"
 )
 
@@ -67,7 +67,7 @@ func (s *blobPullSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Messag
 	var n int
 	if err := func() error {
 		if !s.store.IsAllowed(peer) {
-			return gotiam.ErrNotAllowed{Subject: peer, Verb: "PULL"}
+			return gotauthz.ErrNotAllowed{Subject: peer, Verb: "PULL"}
 		}
 		id := cadata.IDFromBytes(msg.Payload)
 		var err error

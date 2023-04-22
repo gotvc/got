@@ -12,8 +12,8 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
+	"github.com/gotvc/got/pkg/gotauthz"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/gotvc/got/pkg/gotiam"
 	"github.com/inet256/inet256/pkg/inet256"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
@@ -152,7 +152,7 @@ func parseWireError(err WireError) error {
 		return branches.ErrExists
 	case err.Code == codes.PermissionDenied:
 		// TODO: parse the error string
-		return gotiam.ErrNotAllowed{}
+		return gotauthz.ErrNotAllowed{}
 	case err.Code == codes.InvalidArgument && strings.Contains(err.Message, cadata.ErrTooLarge.Error()):
 		return cadata.ErrTooLarge
 	default:
@@ -172,7 +172,7 @@ func makeWireError(err error) *WireError {
 			Code:    codes.AlreadyExists,
 			Message: err.Error(),
 		}
-	case errors.As(err, &gotiam.ErrNotAllowed{}):
+	case errors.As(err, &gotauthz.ErrNotAllowed{}):
 		return &WireError{
 			Code:    codes.PermissionDenied,
 			Message: err.Error(),
