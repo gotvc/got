@@ -52,14 +52,14 @@ type Operator struct {
 	salt                                        *[32]byte
 	rawCacheSize, metaCacheSize                 int
 
-	rawOp        gdat.Operator
+	rawOp        *gdat.Operator
 	gotkv        gotkv.Operator
 	chunkingSeed *[32]byte
 	lob          gotlob.Operator
 }
 
-func NewOperator(opts ...Option) Operator {
-	o := Operator{
+func NewOperator(opts ...Option) *Operator {
+	o := &Operator{
 		maxBlobSize:      DefaultMaxBlobSize,
 		minSizeData:      DefaultMinBlobSizeData,
 		meanSizeData:     DefaultMeanBlobSizeData,
@@ -69,7 +69,7 @@ func NewOperator(opts ...Option) Operator {
 		metaCacheSize:    16,
 	}
 	for _, opt := range opts {
-		opt(&o)
+		opt(o)
 	}
 
 	// data
@@ -106,7 +106,7 @@ func NewOperator(opts ...Option) Operator {
 			return isExtentKey(x)
 		}),
 	}
-	o.lob = gotlob.NewOperator(&o.gotkv, &o.rawOp, lobOpts...)
+	o.lob = gotlob.NewOperator(&o.gotkv, o.rawOp, lobOpts...)
 	return o
 }
 

@@ -49,7 +49,7 @@ func (it *Iterator) Seek(ctx context.Context, gteq []byte) error {
 // Option is used to configure an Operator
 type Option func(op *Operator)
 
-func WithDataOperator(ro gdat.Operator) Option {
+func WithDataOperator(ro *gdat.Operator) Option {
 	return func(o *Operator) {
 		o.dop = ro
 	}
@@ -70,7 +70,7 @@ func WithSeed(seed *[16]byte) Option {
 // It has nothing to do with the state of a particular gotkv instance. It is NOT analagous to a collection object.
 // It is safe for use by multiple goroutines.
 type Operator struct {
-	dop               gdat.Operator
+	dop               *gdat.Operator
 	maxSize, meanSize int
 	seed              *[16]byte
 }
@@ -161,7 +161,7 @@ func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) 
 // MaxEntry returns the entry in the instance x, within span, with the greatest lexicographic value.
 func (o *Operator) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span Span) (*Entry, error) {
 	rp := ptree.ReadParams[Entry, Ref]{
-		Store:           &ptreeGetter{op: &o.dop, s: s},
+		Store:           &ptreeGetter{op: o.dop, s: s},
 		Compare:         compareEntries,
 		NewIndexDecoder: newIndexDecoder,
 		NewDecoder:      newDecoder,
@@ -217,7 +217,7 @@ func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Getter, x Root, pr
 // Data will be persisted to s.
 func (o *Operator) NewBuilder(s Store) *Builder {
 	b := ptree.NewBuilder(ptree.BuilderParams[Entry, Ref]{
-		Store:           &ptreeStore{op: &o.dop, s: s},
+		Store:           &ptreeStore{op: o.dop, s: s},
 		MeanSize:        o.meanSize,
 		MaxSize:         o.maxSize,
 		Seed:            o.seed,
@@ -236,11 +236,11 @@ func (o *Operator) NewIterator(s Getter, root Root, span Span) *Iterator {
 		panic(fmt.Sprintf("cannot iterate over descending span. begin=%q end=%q", span.Begin, span.End))
 	}
 	it := ptree.NewIterator(ptree.IteratorParams[Entry, Ref]{
-		Store:           &ptreeGetter{op: &o.dop, s: s},
-		Compare:         compareEntries,
-		Copy:            copyEntry,
+		Store:           &ptreeGetter{op: o.dop, s: s},
 		NewDecoder:      newDecoder,
 		NewIndexDecoder: newIndexDecoder,
+		Compare:         compareEntries,
+		Copy:            copyEntry,
 
 		Root: root.toPtree(),
 		Span: convertSpan(span),

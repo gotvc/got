@@ -22,16 +22,16 @@ var _ iofs.FS = &FS{}
 // FS implements io/fs.FS
 type FS struct {
 	ctx    context.Context
-	gotvc  gotvc.Operator
-	gotfs  gotfs.Operator
+	gotvc  *gotvc.Operator
+	gotfs  *gotfs.Operator
 	branch *branches.Branch
 }
 
 func New(ctx context.Context, b *branches.Branch) *FS {
 	return &FS{
 		ctx:    ctx,
-		gotvc:  gotvc.NewOperator(),
-		gotfs:  gotfs.NewOperator(gotfs.WithMetaCacheSize(128), gotfs.WithContentCacheSize(16)),
+		gotvc:  branches.NewGotVC(b),
+		gotfs:  branches.NewGotFS(b, gotfs.WithMetaCacheSize(128), gotfs.WithContentCacheSize(16)),
 		branch: b,
 	}
 }
@@ -46,12 +46,12 @@ func (s *FS) Open(name string) (iofs.File, error) {
 	if snap == nil {
 		return nil, iofs.ErrNotExist
 	}
-	fsop := gotfs.NewOperator()
+	fsop := s.gotfs
 	ms := b.Volume.FSStore
 	if _, err := fsop.GetInfo(s.ctx, ms, snap.Root, name); err != nil {
 		return nil, convertError(err)
 	}
-	return NewFile(s.ctx, &fsop, b.Volume.FSStore, b.Volume.RawStore, snap.Root, name), nil
+	return NewFile(s.ctx, fsop, b.Volume.FSStore, b.Volume.RawStore, snap.Root, name), nil
 }
 
 var _ iofs.File = &File{}

@@ -38,13 +38,13 @@ type Operator struct {
 	pool      sync.Pool
 }
 
-func NewOperator(opts ...Option) Operator {
-	o := Operator{
+func NewOperator(opts ...Option) *Operator {
+	o := &Operator{
 		kf:        Convergent,
 		cacheSize: 32,
 	}
 	for _, opt := range opts {
-		opt(&o)
+		opt(o)
 	}
 	var err error
 	if o.cache, err = lru.NewWithEvict(o.cacheSize, o.onCacheEvict); err != nil {

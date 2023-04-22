@@ -91,7 +91,7 @@ func CopyAll(ctx context.Context, b *Builder, it kvstreams.Iterator) error {
 func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Root, entryFn func(Entry) error) error {
 	rp := ptree.ReadParams[Entry, Ref]{
 		Compare:         compareEntries,
-		Store:           &ptreeGetter{op: &o.dop, s: src},
+		Store:           &ptreeGetter{op: o.dop, s: src},
 		NewIndexDecoder: func() ptree.IndexDecoder[Entry, Ref] { return &IndexDecoder{} },
 		NewDecoder:      func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 	}
@@ -111,7 +111,7 @@ func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Roo
 func (o *Operator) Populate(ctx context.Context, s Store, x Root, set cadata.Set, entryFn func(ent Entry) error) error {
 	rp := ptree.ReadParams[Entry, Ref]{
 		Compare:    compareEntries,
-		Store:      &ptreeGetter{op: &o.dop, s: s},
+		Store:      &ptreeGetter{op: o.dop, s: s},
 		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 	}
 	return do(ctx, rp, x.toPtree(), doer{
@@ -210,7 +210,7 @@ func (s *ptreeStore) MaxSize() int {
 // DebugTree writes human-readable debug information about the tree to w.
 func DebugTree(ctx context.Context, s cadata.Store, root Root, w io.Writer) error {
 	rp := ptree.ReadParams[Entry, Ref]{
-		Store:           &ptreeGetter{s: s, op: &defaultReadOnlyOperator.dop},
+		Store:           &ptreeGetter{s: s, op: defaultReadOnlyOperator.dop},
 		Compare:         compareEntries,
 		NewDecoder:      func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 		NewIndexDecoder: func() ptree.IndexDecoder[Entry, Ref] { return &IndexDecoder{} },

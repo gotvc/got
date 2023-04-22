@@ -77,7 +77,7 @@ func (o *Operator) getInfo(ctx context.Context, s Store, x gotkv.Root, p string)
 		return err
 	})
 	if err != nil {
-		if err == gotkv.ErrKeyNotFound {
+		if errors.Is(err, gotkv.ErrKeyNotFound) {
 			err = os.ErrNotExist
 		}
 		return nil, err

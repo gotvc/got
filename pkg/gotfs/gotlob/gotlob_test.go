@@ -144,6 +144,6 @@ func TestCopyExtents(t *testing.T) {
 func newOperator(t testing.TB, opts ...Option) Operator {
 	gkv := gotkv.NewOperator(1<<13, 1<<20)
 	dop := gdat.NewOperator()
-	o := NewOperator(&gkv, &dop, opts...)
+	o := NewOperator(&gkv, dop, opts...)
 	return o
 }

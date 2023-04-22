@@ -33,8 +33,8 @@ func NewMetadata(public bool) Metadata {
 	var salt []byte
 	if !public {
 		salt = make([]byte, 32)
+		readRandom(salt)
 	}
-	readRandom(salt)
 	return Metadata{
 		Salt: salt,
 		Mode: ModeExpand,
@@ -189,14 +189,13 @@ func History(ctx context.Context, b Branch, vcop *gotvc.Operator, fn func(ref gd
 func NewGotFS(b *Branch, opts ...gotfs.Option) *gotfs.Operator {
 	opts = append(opts, gotfs.WithSalt(deriveFSSalt(b)))
 	fsop := gotfs.NewOperator(opts...)
-	return &fsop
+	return fsop
 }
 
 // NewGotVC creates a new gotvc.Operator suitable for writing to the branch
 func NewGotVC(b *Branch, opts ...gotvc.Option) *gotvc.Operator {
 	opts = append(opts, gotvc.WithSalt(deriveVCSalt(b)))
-	fsop := gotvc.NewOperator(opts...)
-	return &fsop
+	return gotvc.NewOperator(opts...)
 }
 
 func deriveFSSalt(b *Branch) *[32]byte {

@@ -55,6 +55,12 @@ func (o *Operator) CreateFile(ctx context.Context, ms, ds Store, x Root, p strin
 	if err := o.checkNoEntry(ctx, ms, x, p); err != nil {
 		return nil, err
 	}
+	return o.PutFile(ctx, ms, ds, x, p, r)
+}
+
+// PutFile creates or replaces the file at path using data from r
+func (o *Operator) PutFile(ctx context.Context, ms, ds Store, x Root, p string, r io.Reader) (*Root, error) {
+	p = cleanPath(p)
 	fileRoot, err := o.FileFromReader(ctx, ms, ds, 0o755, r)
 	if err != nil {
 		return nil, err

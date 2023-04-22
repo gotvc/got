@@ -47,7 +47,7 @@ func TestBuilderSmallFiles(t *testing.T) {
 	require.LessOrEqual(t, s.Len(), int(N))
 }
 
-func setup(t testing.TB) (context.Context, Operator, *cadata.MemStore) {
+func setup(t testing.TB) (context.Context, *Operator, *cadata.MemStore) {
 	op := NewOperator()
 	s := cadata.NewMem(cadata.DefaultHash, DefaultMaxBlobSize)
 	return context.Background(), op, s

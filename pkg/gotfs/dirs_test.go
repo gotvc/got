@@ -49,10 +49,10 @@ func TestMkdirAll(t *testing.T) {
 	x, err = op.MkdirAll(ctx, s, *x, "path/to/the/dir")
 	require.NoError(t, err)
 
-	requireChildren(t, &op, s, *x, "", []string{"path"})
-	requireChildren(t, &op, s, *x, "path", []string{"to"})
-	requireChildren(t, &op, s, *x, "path/to", []string{"the"})
-	requireChildren(t, &op, s, *x, "path/to/the", []string{"dir"})
+	requireChildren(t, op, s, *x, "", []string{"path"})
+	requireChildren(t, op, s, *x, "path", []string{"to"})
+	requireChildren(t, op, s, *x, "path/to", []string{"the"})
+	requireChildren(t, op, s, *x, "path/to/the", []string{"dir"})
 }
 
 func requireChildren(t *testing.T, op *Operator, s Store, x Root, p string, expected []string) {
