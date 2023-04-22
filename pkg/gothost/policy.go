@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"io"
-	"log"
 	"regexp"
 	"strings"
 
@@ -13,7 +12,6 @@ import (
 	"github.com/gotvc/got/pkg/gotauthz"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/pkg/errors"
-	"golang.org/x/exp/slices"
 )
 
 // GetPolicy reads a Policy from a gotfs filesystem
@@ -34,9 +32,7 @@ func GetPolicy(ctx context.Context, op *gotfs.Operator, ms, ds cadata.Store, x g
 
 // SetPolicy writes a policy to a gotfs filesystem
 func SetPolicy(ctx context.Context, op *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root, pol Policy) (*gotfs.Root, error) {
-	log.Println("set policy", pol)
 	data := MarshalPolicy(pol)
-	log.Println(string(data))
 	return op.PutFile(ctx, ms, ds, x, PolicyPath, bytes.NewReader(data))
 }
 
@@ -45,11 +41,6 @@ type Policy struct {
 }
 
 func (p Policy) CanDo(peer PeerID, verb gotauthz.Verb, name string) bool {
-	// host config
-	if name == HostConfigKey && slices.Contains([]gotauthz.Verb{gotauthz.Verb_Create, gotauthz.Verb_Delete, gotauthz.Verb_Set}, verb) {
-		return false
-	}
-
 	if IsWriteVerb(verb) {
 		if name != "" {
 			if p.CanTouch(peer, name) {

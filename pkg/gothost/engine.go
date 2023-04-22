@@ -57,7 +57,7 @@ func (e *HostEngine) reloadPolicy(ctx context.Context) error {
 }
 
 func (e *HostEngine) Open(peerID PeerID) branches.Space {
-	space := e.inner
+	space := Space{e.inner}
 	if slices.Contains(e.owners, peerID) {
 		return space
 	}

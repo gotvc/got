@@ -181,7 +181,7 @@ func Open(p string) (*Repo, error) {
 	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster, branches.NewMetadata(false)); err != nil {
 		return nil, err
 	}
-	r.hostEngine = gothost.NewHostEngine(r.space, []PeerID{peerID})
+	r.hostEngine = gothost.NewHostEngine(r.specDir, []PeerID{peerID})
 	if err := r.hostEngine.Initialize(ctx); err != nil {
 		return nil, err
 	}

@@ -17,8 +17,8 @@ func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Me
 }
 
 // CreateBranchWithSpec creates a branch using spec
-func (r *Repo) CreateBranchWithSpec(name string, spec BranchSpec) (*Branch, error) {
-	return r.specDir.CreateWithSpec(name, spec)
+func (r *Repo) CreateBranchWithSpec(ctx context.Context, name string, spec BranchSpec) (*Branch, error) {
+	return r.specDir.CreateWithSpec(ctx, name, spec)
 }
 
 // DeleteBranch deletes a branch

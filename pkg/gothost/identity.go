@@ -80,8 +80,3 @@ func FlattenIdentity(ctx context.Context, fsop *gotfs.Operator, ms cadata.Store,
 	peers := make(map[PeerID]struct{})
 	return maps.Keys(peers), nil
 }
-
-// IdentityContains returns true if group contains x
-func IdentityContains(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, root gotfs.Root, group, x string) (bool, error) {
-	return false, nil
-}
