@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/gothost"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,6 +20,7 @@ func TestSpace(t *testing.T) {
 		// have to delete the automatically created master branch to get a clean slate,
 		// which is what the test expects.
 		require.NoError(t, r.specDir.Delete(context.Background(), nameMaster))
+		require.NoError(t, r.specDir.Delete(context.Background(), gothost.HostConfigKey))
 		return r.specDir
 	})
 }

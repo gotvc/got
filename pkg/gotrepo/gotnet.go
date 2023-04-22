@@ -80,7 +80,7 @@ func (r *Repo) getQUICGotNet(spec QUICSpaceSpec) (*gotnet.Service, error) {
 func (r *Repo) makeGotNet(swarm p2p.SecureAskSwarm[PeerID, inet256.PublicKey]) *gotnet.Service {
 	return gotnet.New(gotnet.Params{
 		Open: func(peer PeerID) branches.Space {
-			return r.iamEngine.GetSpace(r.GetSpace(), peer)
+			return r.hostEngine.Open(peer)
 		},
 		Swarm: swarm,
 	})

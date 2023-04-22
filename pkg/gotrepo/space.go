@@ -51,14 +51,15 @@ func (r *branchSpecDir) Create(ctx context.Context, name string, params branches
 	if err != nil {
 		return nil, err
 	}
-	return r.CreateWithSpec(name, BranchSpec{
-		Volume:    vspec,
-		Salt:      params.Salt,
-		CreatedAt: tai64.Now().TAI64(),
+	return r.CreateWithSpec(ctx, name, BranchSpec{
+		Volume:      vspec,
+		Salt:        params.Salt,
+		CreatedAt:   tai64.Now().TAI64(),
+		Annotations: params.Annotations,
 	})
 }
 
-func (r *branchSpecDir) CreateWithSpec(name string, spec BranchSpec) (*Branch, error) {
+func (r *branchSpecDir) CreateWithSpec(ctx context.Context, name string, spec BranchSpec) (*Branch, error) {
 	if err := branches.CheckName(name); err != nil {
 		return nil, err
 	}

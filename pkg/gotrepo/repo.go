@@ -1,7 +1,6 @@
 package gotrepo
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"fmt"
@@ -21,7 +20,7 @@ import (
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/gotvc/got/pkg/gotiam"
+	"github.com/gotvc/got/pkg/gothost"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotnet"
 	"github.com/gotvc/got/pkg/gotvc"
@@ -52,7 +51,6 @@ const (
 	configPath     = ".got/config"
 	privateKeyPath = ".got/private.pem"
 	specDirPath    = ".got/branches"
-	policyPath     = ".got/policy"
 	dbPath         = ".got/got.db"
 	blobsPath      = ".got/blobs"
 	storeDBPath    = ".got/stores.db"
@@ -71,6 +69,8 @@ type (
 	Root = gotfs.Root
 
 	Snap = gotvc.Snap
+
+	PeerID = gothost.PeerID
 )
 
 type Repo struct {
@@ -85,9 +85,9 @@ type Repo struct {
 	workingDir FS // workingDir is repoFS with reserved paths filtered.
 	stage      *staging.Stage
 
-	specDir   *branchSpecDir
-	space     branches.Space
-	iamEngine *iamEngine
+	specDir    *branchSpecDir
+	space      branches.Space
+	hostEngine *gothost.HostEngine
 
 	cellManager  *cellManager
 	storeManager *storeManager
@@ -116,10 +116,6 @@ func Init(p string) error {
 	}
 	privKey := generatePrivateKey()
 	if err := SavePrivateKey(repoDirFS, privateKeyPath, privKey); err != nil {
-		return err
-	}
-	// iam
-	if err := writeIfNotExists(repoDirFS, policyPath, 0o644, bytes.NewReader(nil)); err != nil {
 		return err
 	}
 	// stores
@@ -160,6 +156,7 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
+	peerID := inet256.NewAddr(privateKey.Public())
 	fsStore := stores.NewFSStore(posixfs.NewDirFS(filepath.Join(p, blobsPath)), MaxBlobSize)
 	r := &Repo{
 		rootPath:   p,
@@ -177,14 +174,15 @@ func Open(p string) (*Repo, error) {
 		stage:        staging.New(newBoltKVStore(db, bucketStaging)),
 	}
 	r.cellManager = newCellManager(db, []string{bucketCellData})
-	if r.iamEngine, err = newIAMEngine(r.repoFS); err != nil {
-		return nil, err
-	}
 	r.specDir = newBranchSpecDir(r.makeDefaultVolume, r.MakeCell, r.MakeStore, posixfs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
 	if r.space, err = r.spaceFromSpecs(r.config.Spaces); err != nil {
 		return nil, err
 	}
 	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster, branches.NewMetadata(false)); err != nil {
+		return nil, err
+	}
+	r.hostEngine = gothost.NewHostEngine(r.specDir, []PeerID{peerID})
+	if err := r.hostEngine.Initialize(ctx); err != nil {
 		return nil, err
 	}
 	return r, nil
@@ -216,12 +214,12 @@ func (r *Repo) GetSpace() Space {
 	return r.space
 }
 
-func (r *Repo) UpdateIAMPolicy(fn func(gotiam.Policy) gotiam.Policy) error {
-	return r.iamEngine.Update(fn)
+func (r *Repo) UpdatePolicy(ctx context.Context, fn func(gothost.Policy) gothost.Policy) error {
+	return r.hostEngine.UpdatePolicy(ctx, fn)
 }
 
-func (r *Repo) GetIAMPolicy() gotiam.Policy {
-	return r.iamEngine.GetPolicy()
+func (r *Repo) GetPolicy(ctx context.Context) (*gothost.Policy, error) {
+	return r.hostEngine.GetPolicy(ctx)
 }
 
 func (r *Repo) getFSOp(b *branches.Branch) *gotfs.Operator {

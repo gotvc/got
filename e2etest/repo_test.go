@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -19,7 +18,7 @@ import (
 	"github.com/gotvc/got"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/gotvc/got/pkg/gotiam"
+	"github.com/gotvc/got/pkg/gothost"
 	"github.com/gotvc/got/pkg/gotrepo"
 	"github.com/gotvc/got/pkg/gotvc"
 )
@@ -49,11 +48,11 @@ func TestMultiRepoSync(t *testing.T) {
 		require.NoError(t, err)
 	}
 	r1, r2 := openRepo(t, p1), openRepo(t, p2)
-	err := origin.UpdateIAMPolicy(func(x gotiam.Policy) gotiam.Policy {
-		return gotiam.Policy{
-			Rules: []gotiam.Rule{
-				{Allow: true, Subject: r1.GetID(), Verb: gotiam.OpTouch, Object: regexp.MustCompile(".*")},
-				{Allow: true, Subject: r2.GetID(), Verb: gotiam.OpTouch, Object: regexp.MustCompile(".*")},
+	err := origin.UpdatePolicy(ctx, func(x gothost.Policy) gothost.Policy {
+		return gothost.Policy{
+			Rules: []gothost.Rule{
+				{Allow: true, Subject: r1.GetID(), Verb: gothost.OpTouch, Object: regexp.MustCompile(".*")},
+				{Allow: true, Subject: r2.GetID(), Verb: gothost.OpTouch, Object: regexp.MustCompile(".*")},
 			},
 		}
 	})
@@ -89,7 +88,7 @@ func openRepo(t testing.TB, p string) *got.Repo {
 }
 
 func createFile(t testing.TB, repoPath, p string, data []byte) {
-	err := ioutil.WriteFile(filepath.Join(repoPath, p), data, 0o644)
+	err := os.WriteFile(filepath.Join(repoPath, p), data, 0o644)
 	require.NoError(t, err)
 }
 
