@@ -84,9 +84,9 @@ func (e *HostEngine) UpdatePolicy(ctx context.Context, fn func(pol Policy) Polic
 	})
 }
 
-func (e *HostEngine) CreateIdentity(ctx context.Context, name string) error {
+func (e *HostEngine) CreateIdentity(ctx context.Context, name string, iden Identity) error {
 	return e.modifyFS(ctx, func(op *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
-		return CreateIdentity(ctx, op, ms, ds, x, name)
+		return CreateIdentity(ctx, op, ms, ds, x, name, iden)
 	})
 }
 
@@ -94,6 +94,14 @@ func (e *HostEngine) DeleteIdentity(ctx context.Context, name string) error {
 	return e.modifyFS(ctx, func(op *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
 		return DeleteIdentity(ctx, op, ms, x, name)
 	})
+}
+
+func (e *HostEngine) GetIdentity(ctx context.Context, name string) (*Identity, error) {
+	ms, ds, r, err := e.readFS(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return GetIdentity(ctx, e.fsop, ms, ds, *r, name)
 }
 
 func (e *HostEngine) ListIdentities(ctx context.Context) ([]string, error) {

@@ -3,6 +3,8 @@ package gothost
 import (
 	"bytes"
 	"context"
+	"encoding/json"
+	"io"
 	"path"
 	"strings"
 
@@ -33,14 +35,18 @@ func (e IdentityElement) String() string {
 	return "IdentityElement{}"
 }
 
-func CreateIdentity(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root, name string) (*gotfs.Root, error) {
+func CreateIdentity(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root, name string, iden Identity) (*gotfs.Root, error) {
 	root := &x
 	root, err := fsop.MkdirAll(ctx, ms, *root, IdentitiesPath)
 	if err != nil {
 		return nil, err
 	}
 	p := path.Join(IdentitiesPath, name)
-	return fsop.CreateFile(ctx, ms, ds, *root, p, bytes.NewReader(nil))
+	data, err := json.Marshal(iden)
+	if err != nil {
+		return nil, err
+	}
+	return fsop.CreateFile(ctx, ms, ds, *root, p, bytes.NewReader(data))
 }
 
 func DeleteIdentity(ctx context.Context, fsop *gotfs.Operator, ms cadata.Store, x gotfs.Root, name string) (*gotfs.Root, error) {
@@ -51,6 +57,23 @@ func DeleteIdentity(ctx context.Context, fsop *gotfs.Operator, ms cadata.Store, 
 	}
 	p := path.Join(IdentitiesPath, name)
 	return fsop.RemoveAll(ctx, ms, *root, p)
+}
+
+func GetIdentity(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, root gotfs.Root, name string) (*Identity, error) {
+	p := path.Join(IdentitiesPath, name)
+	r, err := fsop.NewReader(ctx, ms, ds, root, p)
+	if err != nil {
+		return nil, err
+	}
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	var ret Identity
+	if err := json.Unmarshal(data, &ret); err != nil {
+		return nil, err
+	}
+	return &ret, nil
 }
 
 func ListIdentities(ctx context.Context, fsop *gotfs.Operator, ms cadata.Store, root gotfs.Root) ([]string, error) {
