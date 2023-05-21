@@ -108,12 +108,8 @@ func (qh *QUICHub) Close() error {
 	return qh.sw.Close()
 }
 
-func (qh *QUICHub) MTU(ctx context.Context, target inet256.Addr) int {
-	addr, err := qh.pickAddr(target)
-	if err != nil {
-		return quicswarm.DefaultMTU
-	}
-	return qh.sw.MTU(ctx, *addr)
+func (qh *QUICHub) MTU() int {
+	return qh.sw.MTU()
 }
 
 func (qh *QUICHub) LocalAddrs() []inet256.Addr {
@@ -135,10 +131,6 @@ func (qh *QUICHub) LookupPublicKey(ctx context.Context, target inet256.Addr) (in
 		return nil, err
 	}
 	return mesh256.PublicKeyFromX509(pub)
-}
-
-func (qh *QUICHub) MaxIncomingSize() int {
-	return qh.sw.MaxIncomingSize()
 }
 
 func (qh *QUICHub) ParseAddr(x []byte) (inet256.Addr, error) {

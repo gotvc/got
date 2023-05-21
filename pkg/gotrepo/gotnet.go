@@ -13,7 +13,7 @@ import (
 	"github.com/gotvc/got/pkg/gotnet"
 	"github.com/gotvc/got/pkg/gotnet/quichub"
 	"github.com/gotvc/got/pkg/goturl"
-	"github.com/inet256/inet256/client/go_client/inet256client"
+	"github.com/inet256/inet256/client/go/inet256client"
 	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/inet256/inet256/pkg/p2padapter"
 	"google.golang.org/grpc"
