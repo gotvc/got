@@ -5,8 +5,8 @@ import (
 	"os"
 	"strings"
 
+	"github.com/brendoncarroll/go-exp/streams"
 	"github.com/brendoncarroll/go-state/posixfs"
-	"github.com/brendoncarroll/go-state/streams"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/pkg/errors"

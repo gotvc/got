@@ -5,7 +5,7 @@ import (
 	"context"
 	"sort"
 
-	"github.com/brendoncarroll/go-state/streams"
+	"github.com/brendoncarroll/go-exp/streams"
 )
 
 // Literal is a stream literal, satisfying the Iterator interface.

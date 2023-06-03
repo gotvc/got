@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/brendoncarroll/go-exp/streams"
 	"github.com/brendoncarroll/go-state"
-	"github.com/brendoncarroll/go-state/streams"
 )
 
 // Entry is a single entry in a stream/tree

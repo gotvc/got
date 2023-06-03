@@ -5,8 +5,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/brendoncarroll/go-exp/streams"
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/streams"
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"

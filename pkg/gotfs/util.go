@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/brendoncarroll/go-state/streams"
+	"github.com/brendoncarroll/go-exp/streams"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
 )

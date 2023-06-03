@@ -5,12 +5,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/brendoncarroll/go-exp/maybe"
+	"github.com/brendoncarroll/go-exp/streams"
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/streams"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
-	"github.com/gotvc/got/pkg/maybe"
 	"github.com/pkg/errors"
 )
 

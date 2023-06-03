@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/brendoncarroll/go-exp/streams"
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/streams"
 	"github.com/stretchr/testify/require"
 )
 
