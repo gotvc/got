@@ -6,16 +6,16 @@ import (
 	"encoding/binary"
 	"fmt"
 	"sync"
-
 	"errors"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	bolt "go.etcd.io/bbolt"
+	"github.com/dgraph-io/badger/v3"
 )
 
-const (
-	setsBucketName     = "sets"
-	refCountBucketName = "rcs"
+var (
+	setIDSequence = newTableID("setq")
+	setsTable     = newTableID("sets")
+	refCountTable = newTableID("rcs")
 )
 
 type StoreID = uint64
@@ -24,33 +24,32 @@ type storeManager struct {
 	store Store
 	locks [256]sync.RWMutex
 
-	db *bolt.DB
+	db *badger.DB
 }
 
-func newStoreManager(store Store, db *bolt.DB) *storeManager {
+func newStoreManager(store Store, db *badger.DB) *storeManager {
 	return &storeManager{
 		store: store,
 		db:    db,
 	}
 }
 
-func (sm *storeManager) Create(ctx context.Context) (ret StoreID, _ error) {
-	err := sm.db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists([]byte(setsBucketName))
+func (sm *storeManager) Create(ctx context.Context) (StoreID, error) {
+	seq, err := sm.db.GetSequence(setIDSequence[:], 1)
+	if err != nil {
+		return 0, err
+	}
+	setID, err := seq.Next()
+	if err != nil {
+		return 0, err
+	}
+	if setID == 0 {
+		setID, err = seq.Next()
 		if err != nil {
-			return err
+			return 0, err
 		}
-		ret = 0
-		for ret == 0 {
-			var err error
-			ret, err = b.NextSequence()
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	return ret, err
+	}
+	return setID, err
 }
 
 func (sm *storeManager) Drop(ctx context.Context, sid StoreID) error {
@@ -87,8 +86,8 @@ func (sm *storeManager) maybeDelete(ctx context.Context, id cadata.ID) error {
 	if id == (cadata.ID{}) {
 		panic("empty id")
 	}
-	var count int
-	if err := sm.db.View(func(tx *bolt.Tx) error {
+	var count uint64
+	if err := sm.db.View(func(tx *badger.Txn) error {
 		c, err := sm.getCount(tx, id)
 		if err != nil {
 			return err
@@ -126,7 +125,7 @@ func (sm *storeManager) post(ctx context.Context, sid StoreID, data []byte) (cad
 	id := sm.store.Hash(data)
 	sm.lock(id, false)
 	defer sm.unlock(id, false)
-	if err := sm.db.Update(func(tx *bolt.Tx) error {
+	if err := sm.db.Update(func(tx *badger.Txn) error {
 		if exists, err := sm.isInSet(tx, sid, id); err != nil {
 			return err
 		} else if exists {
@@ -145,7 +144,7 @@ func (sm *storeManager) post(ctx context.Context, sid StoreID, data []byte) (cad
 func (sm *storeManager) add(ctx context.Context, sid StoreID, id cadata.ID) error {
 	sm.lock(id, false)
 	defer sm.unlock(id, false)
-	return sm.db.Update(func(tx *bolt.Tx) error {
+	return sm.db.Update(func(tx *badger.Txn) error {
 		// check that something else has referenced it.
 		count, err := sm.getCount(tx, id)
 		if err != nil {
@@ -187,7 +186,7 @@ func (sm *storeManager) get(ctx context.Context, sid StoreID, id cadata.ID, buf 
 
 func (sm *storeManager) exists(ctx context.Context, sid StoreID, id cadata.ID) (bool, error) {
 	var exists bool
-	if err := sm.db.View(func(tx *bolt.Tx) error {
+	if err := sm.db.View(func(tx *badger.Txn) error {
 		var err error
 		exists, err = sm.isInSet(tx, sid, id)
 		return err
@@ -200,7 +199,7 @@ func (sm *storeManager) exists(ctx context.Context, sid StoreID, id cadata.ID) (
 func (sm *storeManager) delete(ctx context.Context, sid StoreID, id cadata.ID) error {
 	sm.lock(id, true)
 	defer sm.unlock(id, true)
-	if err := sm.db.Batch(func(tx *bolt.Tx) error {
+	if err := sm.db.Update(func(tx *badger.Txn) error {
 		if exists, err := sm.isInSet(tx, sid, id); err != nil {
 			return err
 		} else if !exists {
@@ -219,7 +218,7 @@ func (sm *storeManager) delete(ctx context.Context, sid StoreID, id cadata.ID) e
 func (sm *storeManager) list(ctx context.Context, sid StoreID, span cadata.Span, ids []cadata.ID) (int, error) {
 	var n int
 	stopIter := errors.New("stop")
-	err := sm.db.View(func(tx *bolt.Tx) error {
+	err := sm.db.View(func(tx *badger.Txn) error {
 		n = 0
 		return sm.forEachInSet(tx, sid, span, func(id cadata.ID) error {
 			if n >= len(ids) {
@@ -237,7 +236,7 @@ func (sm *storeManager) list(ctx context.Context, sid StoreID, span cadata.Span,
 }
 
 func (sm *storeManager) copyAll(ctx context.Context, src, dst StoreID) error {
-	return sm.db.Batch(func(tx *bolt.Tx) error {
+	return sm.db.Update(func(tx *badger.Txn) error {
 		return sm.forEachInSet(tx, src, cadata.Span{}, func(id cadata.ID) error {
 			if exists, err := sm.isInSet(tx, dst, id); err != nil {
 				return err
@@ -252,63 +251,56 @@ func (sm *storeManager) copyAll(ctx context.Context, src, dst StoreID) error {
 	})
 }
 
-func (sm *storeManager) addToSet(tx *bolt.Tx, setID StoreID, id cadata.ID) error {
-	b, err := tx.CreateBucketIfNotExists([]byte(setsBucketName))
-	if err != nil {
-		return err
-	}
-	var setIDBuf [8]byte
-	binary.BigEndian.PutUint64(setIDBuf[:], setID)
-	setBucket, err := b.CreateBucketIfNotExists(setIDBuf[:])
-	if err != nil {
-		return err
-	}
-	return setBucket.Put(id[:], nil)
+func (sm *storeManager) appendSetItemKey(key []byte, setID StoreID, id cadata.ID) []byte {
+	key = setsTable.AppendTo(key)
+	key = binary.BigEndian.AppendUint64(key, setID)
+	key = append(key, id[:]...)
+	return key
 }
 
-func (sm *storeManager) removeFromSet(tx *bolt.Tx, setID StoreID, id cadata.ID) error {
-	b, err := tx.CreateBucketIfNotExists([]byte(setsBucketName))
-	if err != nil {
-		return err
-	}
-	var setIDBuf [8]byte
-	binary.BigEndian.PutUint64(setIDBuf[:], setID)
-	setBucket, err := b.CreateBucketIfNotExists(setIDBuf[:])
-	if err != nil {
-		return err
-	}
-	return setBucket.Delete(id[:])
+func (sm *storeManager) addToSet(tx *badger.Txn, setID StoreID, id cadata.ID) error {
+	key := sm.appendSetItemKey(nil, setID, id)
+	return tx.Set(key, nil)
 }
 
-func (sm *storeManager) isInSet(tx *bolt.Tx, setID StoreID, id cadata.ID) (bool, error) {
-	b := tx.Bucket([]byte(setsBucketName))
-	if b == nil {
-		return false, nil
-	}
-	var setIDBuf [8]byte
-	binary.BigEndian.PutUint64(setIDBuf[:], setID)
-	setBucket := b.Bucket(setIDBuf[:])
-	if setBucket == nil {
-		return false, nil
-	}
-	v := setBucket.Get(id[:])
-	return v != nil, nil
+func (sm *storeManager) removeFromSet(tx *badger.Txn, setID StoreID, id cadata.ID) error {
+	key := sm.appendSetItemKey(nil, setID, id)
+	return tx.Delete(key)
 }
 
-func (sm *storeManager) forEachInSet(tx *bolt.Tx, setID StoreID, span cadata.Span, fn func(cadata.ID) error) error {
-	b := tx.Bucket([]byte(setsBucketName))
-	var setIDBuf [8]byte
-	binary.BigEndian.PutUint64(setIDBuf[:], setID)
-	setBucket := b.Bucket(setIDBuf[:])
-	if setBucket == nil {
-		return nil
+func (sm *storeManager) isInSet(tx *badger.Txn, setID StoreID, id cadata.ID) (bool, error) {
+	key := sm.appendSetItemKey(nil, setID, id)
+	_, err := tx.Get(key)
+	if err != nil {
+		if errors.Is(err, badger.ErrKeyNotFound) {
+			return false, nil
+		}
+		return false, err
 	}
-	begin := cadata.BeginFromSpan(span)
-	c := setBucket.Cursor()
-	for k, _ := c.Seek(begin[:]); k != nil; k, _ = c.Next() {
-		id := cadata.IDFromBytes(k)
+	return true, nil
+}
+
+func (sm *storeManager) forEachInSet(tx *badger.Txn, setID StoreID, span cadata.Span, fn func(cadata.ID) error) error {
+	var prefix []byte
+	prefix = setsTable.AppendTo(prefix)
+	prefix = binary.BigEndian.AppendUint64(prefix, setID)
+
+	var first []byte
+	first = append(first, prefix...)
+	if lb, ok := span.LowerBound(); ok {
+		first = append(first, lb[:]...)
+	}
+	opts := badger.DefaultIteratorOptions
+	opts.Prefix = prefix
+	iter := tx.NewIterator(opts)
+	defer iter.Close()
+	for iter.Seek(first); iter.Valid(); iter.Next() {
+		item := iter.Item()
+		k := item.Key()
+		id := cadata.IDFromBytes(k[len(prefix):])
 		if !span.Contains(id, idCompare) {
-			break
+			// TODO: change this to break
+			continue
 		}
 		if err := fn(id); err != nil {
 			return err
@@ -317,43 +309,37 @@ func (sm *storeManager) forEachInSet(tx *bolt.Tx, setID StoreID, span cadata.Spa
 	return nil
 }
 
-func (sm *storeManager) decrCount(tx *bolt.Tx, id cadata.ID) error {
-	b, err := tx.CreateBucketIfNotExists([]byte(refCountBucketName))
-	if err != nil {
-		return err
-	}
-	x, err := getUvarint(b, id[:])
+func (sm *storeManager) appendRefCountKey(out []byte, id cadata.ID) []byte {
+	out = refCountTable.AppendTo(out)
+	out = append(out, id[:]...)
+	return out
+}
+
+func (sm *storeManager) decrCount(tx *badger.Txn, id cadata.ID) error {
+	key := sm.appendRefCountKey(nil, id)
+	x, err := getUvarint(tx, key)
 	if err != nil {
 		return err
 	}
 	if x-1 == 0 {
-		return b.Delete(id[:])
+		return tx.Delete(key)
+	} else {
+		return putUvarint(tx, key, x-1)
 	}
-	return putUvarint(b, id[:], x-1)
 }
 
-func (sm *storeManager) incrCount(tx *bolt.Tx, id cadata.ID) error {
-	b, err := tx.CreateBucketIfNotExists([]byte(refCountBucketName))
+func (sm *storeManager) incrCount(tx *badger.Txn, id cadata.ID) error {
+	key := sm.appendRefCountKey(nil, id)
+	x, err := getUvarint(tx, key)
 	if err != nil {
 		return err
 	}
-	x, err := getUvarint(b, id[:])
-	if err != nil {
-		return err
-	}
-	return putUvarint(b, id[:], x+1)
+	return putUvarint(tx, key, x+1)
 }
 
-func (sm *storeManager) getCount(tx *bolt.Tx, id cadata.ID) (int, error) {
-	b := tx.Bucket([]byte(refCountBucketName))
-	if b == nil {
-		return 0, nil
-	}
-	x, err := getUvarint(b, id[:])
-	if err != nil {
-		return 0, err
-	}
-	return x, nil
+func (sm *storeManager) getCount(tx *badger.Txn, id cadata.ID) (uint64, error) {
+	key := sm.appendRefCountKey(nil, id)
+	return getUvarint(tx, key)
 }
 
 var _ interface {
@@ -412,24 +398,53 @@ func (s virtualStore) CopyAllFrom(ctx context.Context, src cadata.Store) error {
 	return s.sm.copyAll(ctx, vs2.id, s.id)
 }
 
-func putUvarint(b *bolt.Bucket, key []byte, x int) error {
+func putUvarint(tx *badger.Txn, key []byte, x uint64) error {
 	buf := [binary.MaxVarintLen64]byte{}
 	n := binary.PutUvarint(buf[:], uint64(x))
-	return b.Put(key, buf[:n])
+	return tx.Set(key, buf[:n])
 }
 
-func getUvarint(b *bolt.Bucket, key []byte) (int, error) {
-	v := b.Get(key)
-	if len(v) == 0 {
+func getUvarint(tx *badger.Txn, key []byte) (uint64, error) {
+	item, err := tx.Get(key)
+	if errors.Is(err, badger.ErrKeyNotFound) {
 		return 0, nil
+	} else if err != nil {
+		return 0, err
 	}
+<<<<<<< HEAD
 	x, n := binary.Uvarint(v)
 	if n <= 0 {
 		return 0, fmt.Errorf("could not read varint")
+=======
+	var ret uint64
+	if err := item.Value(func(v []byte) error {
+		var n int
+		ret, n = binary.Uvarint(v)
+		if n <= 0 {
+			return errors.New("invalid varint")
+		}
+		return err
+	}); err != nil {
+		return 0, err
+>>>>>>> 1f3c286 (wip)
 	}
-	return int(x), nil
+	return ret, nil
 }
 
 func idCompare(a, b cadata.ID) int {
 	return bytes.Compare(a[:], b[:])
+}
+
+func idPredecessor(x cadata.ID) cadata.ID {
+	for i := len(x) - 1; i >= 0; i-- {
+		old := x[i]
+		x[i]--
+		if x[i] < old {
+			return x
+		}
+	}
+	for i := range x {
+		x[i] = 0xff
+	}
+	return x
 }

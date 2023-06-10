@@ -9,18 +9,20 @@ import (
 	"github.com/brendoncarroll/go-state/cadata/fsstore"
 	"github.com/brendoncarroll/go-state/cadata/storetest"
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/dgraph-io/badger/v3"
 	"github.com/stretchr/testify/require"
-	bolt "go.etcd.io/bbolt"
 )
 
 func TestStore(t *testing.T) {
 	storetest.TestStore(t, func(t testing.TB) cadata.Store {
 		dirpath := t.TempDir()
-		dbPath := filepath.Join(dirpath, "bolt.db")
+		dbPath := filepath.Join(dirpath, "badger.db")
 		blobPath := filepath.Join(dirpath, "blobs")
 
 		s := fsstore.New(posixfs.NewDirFS(blobPath), cadata.DefaultHash, cadata.DefaultMaxSize)
-		db, err := bolt.Open(dbPath, 0o644, &bolt.Options{NoSync: true})
+		opts := badger.DefaultOptions(dbPath)
+		opts.Logger = nil
+		db, err := badger.Open(opts)
 		require.NoError(t, err)
 		t.Cleanup(func() {
 			require.NoError(t, db.Close())

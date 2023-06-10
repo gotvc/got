@@ -11,10 +11,11 @@ import (
 func newAddCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 	var repo *gotrepo.Repo
 	return &cobra.Command{
-		Use:     "add",
-		Short:   "adds paths to the staging area",
-		PreRunE: loadRepo(&repo, open),
-		Args:    cobra.MinimumNArgs(1),
+		Use:      "add",
+		Short:    "adds paths to the staging area",
+		PreRunE:  loadRepo(&repo, open),
+		PostRunE: closeRepo(repo),
+		Args:     cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 1 {
 				return fmt.Errorf("path argument required")
@@ -29,10 +30,11 @@ func newAddCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 func newRmCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 	var repo *gotrepo.Repo
 	return &cobra.Command{
-		Use:     "rm",
-		Short:   "stages paths for deletion",
-		PreRunE: loadRepo(&repo, open),
-		Args:    cobra.MinimumNArgs(1),
+		Use:      "rm",
+		Short:    "stages paths for deletion",
+		PreRunE:  loadRepo(&repo, open),
+		PostRunE: closeRepo(repo),
+		Args:     cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 1 {
 				return fmt.Errorf("path argument required")
@@ -47,10 +49,11 @@ func newRmCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 func newPutCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 	var repo *gotrepo.Repo
 	return &cobra.Command{
-		Use:     "put",
-		Short:   "stages paths for replacement",
-		PreRunE: loadRepo(&repo, open),
-		Args:    cobra.MinimumNArgs(1),
+		Use:      "put",
+		Short:    "stages paths for replacement",
+		PreRunE:  loadRepo(&repo, open),
+		PostRunE: closeRepo(repo),
+		Args:     cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 1 {
 				return fmt.Errorf("path argument required")
@@ -65,10 +68,11 @@ func newPutCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 func newDiscardCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 	var repo *gotrepo.Repo
 	return &cobra.Command{
-		Use:     "discard",
-		Short:   "discards any changes staged for a path",
-		PreRunE: loadRepo(&repo, open),
-		Args:    cobra.MinimumNArgs(1),
+		Use:      "discard",
+		Short:    "discards any changes staged for a path",
+		PreRunE:  loadRepo(&repo, open),
+		PostRunE: closeRepo(repo),
+		Args:     cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 1 {
 				return fmt.Errorf("path argument required")
@@ -81,10 +85,11 @@ func newDiscardCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 func newClearCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 	var repo *gotrepo.Repo
 	return &cobra.Command{
-		Use:     "clear",
-		Short:   "clears the staging area",
-		PreRunE: loadRepo(&repo, open),
-		Args:    cobra.ExactArgs(0),
+		Use:      "clear",
+		Short:    "clears the staging area",
+		PreRunE:  loadRepo(&repo, open),
+		PostRunE: closeRepo(repo),
+		Args:     cobra.ExactArgs(0),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return repo.Clear(ctx)
 		},

@@ -3,14 +3,18 @@ package gotrepo
 import (
 	"context"
 	"crypto/rand"
+	"errors"
 	"fmt"
 	"io"
+	"log"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/dgraph-io/badger/v3"
+	"github.com/dgraph-io/badger/v3/options"
 	"github.com/inet256/inet256/pkg/inet256"
 	bolt "go.etcd.io/bbolt"
 	"go.uber.org/zap"
@@ -73,11 +77,12 @@ type (
 )
 
 type Repo struct {
-	rootPath     string
-	repoFS       FS // repoFS is the directory that the repo is in
-	db, storesDB *bolt.DB
-	config       Config
-	privateKey   inet256.PrivateKey
+	rootPath   string
+	repoFS     FS // repoFS is the directory that the repo is in
+	db         *bolt.DB
+	storesDB   *badger.DB
+	config     Config
+	privateKey inet256.PrivateKey
 	// ctx is used as the background context for serving the repo
 	ctx context.Context
 
@@ -99,7 +104,7 @@ func Init(p string) error {
 	} else if err != nil {
 		return err
 	} else {
-		return fmt.Errorf("repo already exists")
+		return fmt.Errorf("repo already exists at path %s", p)
 	}
 	if err := repoDirFS.Mkdir(gotPrefix, 0o755); err != nil {
 		return err
@@ -144,10 +149,13 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	storesDB, err := bolt.Open(filepath.Join(p, storeDBPath), 0o644, &bolt.Options{
-		Timeout: time.Second,
-		NoSync:  true,
-	})
+	storesDB, err := badger.Open(func() badger.Options {
+		opts := badger.DefaultOptions(filepath.Join(p, storeDBPath))
+		opts = opts.WithCompression(options.None)
+		opts = opts.WithCompactL0OnClose(false)
+		opts.Logger = nil
+		return opts
+	}())
 	if err != nil {
 		return nil, err
 	}
@@ -187,22 +195,21 @@ func Open(p string) (*Repo, error) {
 	return r, nil
 }
 
-func (r *Repo) Close() error {
-	var errs []error
+func (r *Repo) Close() (retErr error) {
 	for _, fn := range []func() error{
 		r.db.Sync,
 		r.db.Close,
-		r.storesDB.Sync,
-		r.storesDB.Close,
+		func() error {
+			log.Println("closing storesDB")
+			defer log.Println("done closing storesDB")
+			return r.storesDB.Close()
+		},
 	} {
 		if err := fn(); err != nil {
-			errs = append(errs, err)
+			retErr = errors.Join(retErr, err)
 		}
 	}
-	if len(errs) > 0 {
-		return fmt.Errorf("errors while closing: %v", errs)
-	}
-	return nil
+	return retErr
 }
 
 func (r *Repo) WorkingDir() FS {
@@ -310,4 +317,18 @@ func bucketFromTx(tx *bolt.Tx, path []string) (*bolt.Bucket, error) {
 		path = path[1:]
 	}
 	return b, nil
+}
+
+type tableID [4]byte
+
+func newTableID(x string) (ret tableID) {
+	if len(x) > 4 {
+		panic(x)
+	}
+	copy(ret[:], x)
+	return ret
+}
+
+func (tid tableID) AppendTo(x []byte) []byte {
+	return append(x, tid[:]...)
 }
