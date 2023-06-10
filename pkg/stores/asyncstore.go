@@ -3,11 +3,11 @@ package stores
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -76,7 +76,7 @@ func (s *AsyncStore) Post(ctx context.Context, data []byte) (ID, error) {
 		return ID{}, ctx.Err()
 	case s.todo <- buf:
 	case <-s.ctx.Done():
-		return ID{}, errors.Errorf("AsyncStore is closed")
+		return ID{}, fmt.Errorf("AsyncStore is closed")
 	}
 	return id, nil
 }

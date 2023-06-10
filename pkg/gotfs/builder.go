@@ -2,12 +2,12 @@ package gotfs
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
 	"github.com/gotvc/got/pkg/gotfs/gotlob"
 	"github.com/gotvc/got/pkg/gotkv"
-	"github.com/pkg/errors"
 )
 
 // Builder manages building a filesystem.
@@ -39,7 +39,7 @@ func (b *Builder) BeginFile(p string, mode os.FileMode) error {
 		return errBuilderIsFinished()
 	}
 	if !mode.IsRegular() {
-		return errors.Errorf("mode must be for regular file")
+		return fmt.Errorf("mode must be for regular file")
 	}
 	if err := b.writeInfo(p, &Info{Mode: uint32(mode)}); err != nil {
 		return err
@@ -145,11 +145,11 @@ func parentInStack(p string, stack []string) bool {
 }
 
 func errIncompletePathToRoot(p string) error {
-	return errors.Errorf("incomplate path to root for %q", p)
+	return fmt.Errorf("incomplate path to root for %q", p)
 }
 
 func errBuilderIsFinished() error {
-	return errors.Errorf("builder is finished")
+	return fmt.Errorf("builder is finished")
 }
 
 func makeExtentPrefix(p string) []byte {

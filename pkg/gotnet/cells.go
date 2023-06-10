@@ -3,11 +3,11 @@ package gotnet
 import (
 	"bytes"
 	"context"
+	"fmt"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cells"
 	"github.com/brendoncarroll/stdctx/logctx"
-	"github.com/pkg/errors"
 )
 
 const cellSize = 1 << 16
@@ -81,7 +81,7 @@ func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[P
 			}
 
 		default:
-			return errors.Errorf("no request content")
+			return fmt.Errorf("no request content")
 		}
 		return nil
 	}(); err != nil {

@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
 )
 
@@ -20,7 +19,7 @@ func NewMultiSpace(layers []Layer) (Space, error) {
 	for i := 0; i < len(layers); i++ {
 		for j := i + 1; j < len(layers); j++ {
 			if strings.HasPrefix(layers[j].Prefix, layers[i].Prefix) {
-				return nil, errors.Errorf("layer %d prefix=%s has %d prefix=%s", j, layers[j].Prefix, i, layers[i].Prefix)
+				return nil, fmt.Errorf("layer %d prefix=%s has %d prefix=%s", j, layers[j].Prefix, i, layers[i].Prefix)
 			}
 		}
 	}
@@ -83,7 +82,7 @@ func (r layered) List(ctx context.Context, span Span, limit int) (ret []string, 
 	var err error
 	for i := range errs {
 		if errs[i] != nil {
-			err = errors.WithMessagef(errs[i], "from layer %d: %v", i, r[i])
+			err = fmt.Errorf("from layer %d: %w", i, errs[i])
 			break
 		}
 	}

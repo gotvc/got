@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"fmt"
 	"sync"
 
+	"errors"
+
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -423,7 +425,7 @@ func getUvarint(b *bolt.Bucket, key []byte) (int, error) {
 	}
 	x, n := binary.Uvarint(v)
 	if n <= 0 {
-		return 0, errors.Errorf("could not read varint")
+		return 0, fmt.Errorf("could not read varint")
 	}
 	return int(x), nil
 }

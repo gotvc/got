@@ -2,12 +2,12 @@ package gotrepo
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/pkg/errors"
 )
 
 func (r *Repo) Ls(ctx context.Context, p string, fn func(gotfs.DirEnt) error) error {
@@ -58,7 +58,7 @@ func (r *Repo) Stat(ctx context.Context, p string) (*gotfs.Info, error) {
 		return nil, err
 	}
 	if snap == nil {
-		return nil, errors.Errorf("branch is empty")
+		return nil, fmt.Errorf("branch is empty")
 	}
 	fsop := r.getFSOp(branch)
 	return fsop.GetInfo(ctx, branch.Volume.FSStore, snap.Root, p)

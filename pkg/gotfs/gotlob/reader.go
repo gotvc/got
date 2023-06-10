@@ -8,7 +8,6 @@ import (
 	"github.com/brendoncarroll/go-exp/streams"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gotkv"
-	"github.com/pkg/errors"
 )
 
 var _ io.ReadSeeker = &Reader{}
@@ -54,13 +53,13 @@ func (r *Reader) Seek(offset int64, whence int) (int64, error) {
 	case io.SeekEnd:
 		next = int64(size) - offset
 	default:
-		return r.offset, errors.Errorf("invalid value for whence %d", whence)
+		return r.offset, fmt.Errorf("invalid value for whence %d", whence)
 	}
 	if next < 0 {
-		return r.offset, errors.Errorf("seeked to negative offset: %d", next)
+		return r.offset, fmt.Errorf("seeked to negative offset: %d", next)
 	}
 	if next > int64(size) {
-		return r.offset, errors.Errorf("seeked past end of file: size=%d, offset=%d", size, next)
+		return r.offset, fmt.Errorf("seeked past end of file: size=%d, offset=%d", size, next)
 	}
 	r.offset = next
 	return r.offset, nil
@@ -117,7 +116,7 @@ func (r *Reader) readFromIterator(ctx context.Context, it *gotkv.Iterator, ds ca
 	}
 	extentStart := extentEnd - uint64(ext.Length)
 	if start < extentStart {
-		return 0, errors.Errorf("incorrect extent extentStart=%d asked for start=%d", extentStart, start)
+		return 0, fmt.Errorf("incorrect extent extentStart=%d asked for start=%d", extentStart, start)
 	}
 	var n int
 	if err := r.o.getExtentF(ctx, ds, ext, func(data []byte) error {

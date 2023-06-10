@@ -3,6 +3,7 @@ package gotkv
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/brendoncarroll/go-exp/streams"
@@ -11,7 +12,6 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
-	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -62,7 +62,7 @@ const (
 )
 
 var (
-	ErrKeyNotFound = errors.Errorf("key not found")
+	ErrKeyNotFound = fmt.Errorf("key not found")
 )
 
 var defaultReadOnlyOperator = &Operator{dop: gdat.NewOperator()}

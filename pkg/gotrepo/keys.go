@@ -7,12 +7,12 @@ import (
 	"crypto/rand"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"io"
 
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/inet256/inet256/pkg/serde"
-	"github.com/pkg/errors"
 )
 
 const pemTypePrivateKey = "PRIVATE KEY"
@@ -62,10 +62,10 @@ func marshalPEM(ty string, data []byte) []byte {
 func parsePEM(ty string, pemData []byte) ([]byte, error) {
 	b, _ := pem.Decode(pemData)
 	if b == nil {
-		return nil, errors.Errorf("no PEM block found")
+		return nil, fmt.Errorf("no PEM block found")
 	}
 	if b.Type != pemTypePrivateKey {
-		return nil, errors.Errorf("PEM block is wrong type HAVE: %s, WANT: %s", b.Type, ty)
+		return nil, fmt.Errorf("PEM block is wrong type HAVE: %s, WANT: %s", b.Type, ty)
 	}
 	return b.Bytes, nil
 }

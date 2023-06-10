@@ -2,11 +2,13 @@ package gotfs
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
+	"errors"
+
 	"github.com/gotvc/got/pkg/gotkv"
-	"github.com/pkg/errors"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -37,16 +39,16 @@ func makeInfoKey(p string) []byte {
 func parseInfoKey(k []byte) (string, error) {
 	switch len(k) {
 	case 0:
-		return "", errors.Errorf("not a valid metadata key: %q", k)
+		return "", fmt.Errorf("not a valid metadata key: %q", k)
 	case 1:
 		p := string(k)
 		if p[0] == Sep {
 			return p, nil
 		}
-		return "", errors.Errorf("not a valid metadata key: %q", k)
+		return "", fmt.Errorf("not a valid metadata key: %q", k)
 	default:
 		if k[0] != Sep || k[len(k)-1] != Sep {
-			return "", errors.Errorf("not a valid metadata key: %q", k)
+			return "", fmt.Errorf("not a valid metadata key: %q", k)
 		}
 		return string(k[1 : len(k)-1]), nil
 	}
@@ -92,7 +94,7 @@ func (o *Operator) GetDirInfo(ctx context.Context, s Store, x Root, p string) (*
 		return nil, err
 	}
 	if !os.FileMode(md.Mode).IsDir() {
-		return nil, errors.Errorf("%s is not a directory", p)
+		return nil, fmt.Errorf("%s is not a directory", p)
 	}
 	return md, nil
 }
@@ -104,7 +106,7 @@ func (o *Operator) GetFileInfo(ctx context.Context, s Store, x Root, p string) (
 		return nil, err
 	}
 	if !os.FileMode(md.Mode).IsRegular() {
-		return nil, errors.Errorf("%s is not a regular file", p)
+		return nil, fmt.Errorf("%s is not a regular file", p)
 	}
 	return md, nil
 }
@@ -123,10 +125,10 @@ func (o *Operator) checkNoEntry(ctx context.Context, s Store, x Root, p string) 
 
 func checkPath(p string) error {
 	if len(p) > MaxPathLen {
-		return errors.Errorf("path too long: %q", p)
+		return fmt.Errorf("path too long: %q", p)
 	}
 	if strings.ContainsAny(p, "\x00") {
-		return errors.Errorf("path cannot contain null")
+		return fmt.Errorf("path cannot contain null")
 	}
 	return nil
 }

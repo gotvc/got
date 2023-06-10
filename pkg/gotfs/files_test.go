@@ -2,6 +2,7 @@ package gotfs
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	mrand "math/rand"
 	"os"
@@ -9,7 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
@@ -84,7 +84,7 @@ func TestLargeFiles(t *testing.T) {
 				return err
 			}
 			if n != size {
-				return errors.Errorf("reader returned wrong number of bytes HAVE: %d WANT: %d", n, uint64(size))
+				return fmt.Errorf("reader returned wrong number of bytes HAVE: %d WANT: %d", n, uint64(size))
 			}
 			return nil
 		})

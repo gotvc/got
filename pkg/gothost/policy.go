@@ -3,6 +3,7 @@ package gothost
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotauthz"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/pkg/errors"
 )
 
 // GetPolicy reads a Policy from a gotfs filesystem
@@ -167,7 +167,7 @@ func ParsePolicy(data []byte) (*Policy, error) {
 		}
 		r, err := ParseRule(line)
 		if err != nil {
-			return nil, errors.Wrapf(err, "error parsing line %d", i)
+			return nil, fmt.Errorf("%w while parsing line %d", err, i)
 		}
 		rules = append(rules, *r)
 	}
@@ -185,10 +185,10 @@ func MarshalPolicy(p Policy) []byte {
 func ParseRule(data []byte) (*Rule, error) {
 	parts := bytes.Fields(data)
 	if len(parts) < 4 {
-		return nil, errors.Errorf("too few fields")
+		return nil, fmt.Errorf("too few fields")
 	}
 	if len(parts) > 4 {
-		return nil, errors.Errorf("too many fields")
+		return nil, fmt.Errorf("too many fields")
 	}
 	r := Rule{}
 	// Allow/Deny
@@ -198,7 +198,7 @@ func ParseRule(data []byte) (*Rule, error) {
 	case "DENY":
 		r.Allow = false
 	default:
-		return nil, errors.Errorf("rule must start with ALLOW or DENY")
+		return nil, fmt.Errorf("rule must start with ALLOW or DENY")
 	}
 	// Subject
 	id := PeerID{}
@@ -211,7 +211,7 @@ func ParseRule(data []byte) (*Rule, error) {
 	case OpLook, OpTouch:
 		r.Verb = string(parts[2])
 	default:
-		return nil, errors.Errorf("invalid method %s", string(parts[0]))
+		return nil, fmt.Errorf("invalid method %s", string(parts[0]))
 	}
 	// Object
 	re, err := regexp.Compile(string(parts[3]))

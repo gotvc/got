@@ -4,8 +4,9 @@ import (
 	"bytes"
 	"context"
 
+	"errors"
+
 	"github.com/brendoncarroll/go-state"
-	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 	"golang.org/x/exp/slices"
 )

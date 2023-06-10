@@ -3,11 +3,11 @@ package branches
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cells"
 	"github.com/brendoncarroll/stdctx/logctx"
-	"github.com/pkg/errors"
 
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
@@ -45,7 +45,7 @@ func SyncVolumes(ctx context.Context, src, dst Volume, force bool) error {
 			return nil, nil
 		case goal == nil:
 			if !force {
-				return nil, errors.Errorf("cannot clear volume without force=true")
+				return nil, fmt.Errorf("cannot clear volume without force=true")
 			}
 		case x == nil:
 		case goal.Equals(*x):
@@ -55,7 +55,7 @@ func SyncVolumes(ctx context.Context, src, dst Volume, force bool) error {
 				return nil, err
 			}
 			if !force && !hasAncestor {
-				return nil, errors.Errorf("cannot CAS, dst ref is not parent of src ref")
+				return nil, fmt.Errorf("cannot CAS, dst ref is not parent of src ref")
 			}
 		}
 		if err := syncStores(ctx, src.StoreTriple(), dst.StoreTriple(), *goal); err != nil {

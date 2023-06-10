@@ -5,10 +5,10 @@ import (
 	"context"
 	"crypto/hmac"
 	"encoding/base64"
+	"fmt"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/metrics"
-	"github.com/pkg/errors"
 )
 
 const (
@@ -38,18 +38,18 @@ func (r Ref) MarshalText() ([]byte, error) {
 func (r *Ref) UnmarshalText(data []byte) error {
 	parts := bytes.SplitN(data, []byte("#"), 2)
 	if len(parts) != 2 {
-		return errors.Errorf("invalid ref")
+		return fmt.Errorf("invalid ref")
 	}
 	cid, dek := parts[0], parts[1]
 	if n, err := codec.Decode(r.CID[:], cid); err != nil {
 		return err
 	} else if n != len(r.CID) {
-		return errors.Errorf("wrong length for CID")
+		return fmt.Errorf("wrong length for CID")
 	}
 	if n, err := codec.Decode(r.DEK[:], dek); err != nil {
 		return err
 	} else if n != len(r.DEK) {
-		return errors.Errorf("wrong length for DEK")
+		return fmt.Errorf("wrong length for DEK")
 	}
 	return nil
 }
@@ -63,7 +63,7 @@ func (r Ref) MarshalBinary() ([]byte, error) {
 
 func (ref *Ref) UnmarshalBinary(x []byte) error {
 	if len(x) != len(ref.CID)+len(ref.DEK) {
-		return errors.Errorf("wrong length for ref %d %q", len(x), x)
+		return fmt.Errorf("wrong length for ref %d %q", len(x), x)
 	}
 	copy(ref.CID[:], x[:len(ref.CID)])
 	copy(ref.DEK[:], x[len(ref.CID):])

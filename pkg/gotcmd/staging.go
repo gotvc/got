@@ -1,9 +1,10 @@
 package gotcmd
 
 import (
+	"fmt"
+
 	"github.com/gotvc/got/pkg/gotrepo"
 	"github.com/gotvc/got/pkg/metrics"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -16,7 +17,7 @@ func newAddCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		Args:    cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 1 {
-				return errors.Errorf("path argument required")
+				return fmt.Errorf("path argument required")
 			}
 			r := metrics.NewTTYRenderer(collector, cmd.OutOrStdout())
 			defer r.Close()
@@ -34,7 +35,7 @@ func newRmCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		Args:    cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 1 {
-				return errors.Errorf("path argument required")
+				return fmt.Errorf("path argument required")
 			}
 			r := metrics.NewTTYRenderer(collector, cmd.OutOrStdout())
 			defer r.Close()
@@ -52,7 +53,7 @@ func newPutCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		Args:    cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 1 {
-				return errors.Errorf("path argument required")
+				return fmt.Errorf("path argument required")
 			}
 			r := metrics.NewTTYRenderer(collector, cmd.OutOrStdout())
 			defer r.Close()
@@ -70,7 +71,7 @@ func newDiscardCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		Args:    cobra.MinimumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 1 {
-				return errors.Errorf("path argument required")
+				return fmt.Errorf("path argument required")
 			}
 			return repo.Discard(ctx, args...)
 		},

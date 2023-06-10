@@ -3,10 +3,10 @@ package serde
 import (
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
-	"github.com/pkg/errors"
 )
 
 func MarshalPEM(x interface{}) ([]byte, error) {
@@ -28,7 +28,7 @@ func getPEMType(x interface{}) (string, error) {
 	case gotvc.Snap, *gotvc.Snap:
 		return "GOT SNAPSHOT", nil
 	default:
-		return "", errors.Errorf("unknown type %T", x)
+		return "", fmt.Errorf("unknown type %T", x)
 	}
 }
 

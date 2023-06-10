@@ -2,10 +2,10 @@ package gotrepo
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/brendoncarroll/go-state/posixfs"
-	"github.com/pkg/errors"
 
 	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/branches"
@@ -99,7 +99,7 @@ func (r *Repo) Rm(ctx context.Context, paths ...string) error {
 	stage := r.getStage()
 	for _, target := range paths {
 		if snap == nil {
-			return errors.Errorf("path %q not found", target)
+			return fmt.Errorf("path %q not found", target)
 		}
 		if err := fsop.ForEachLeaf(ctx, branch.Volume.FSStore, snap.Root, target, func(p string, _ *gotfs.Info) error {
 			return stage.Delete(ctx, p)

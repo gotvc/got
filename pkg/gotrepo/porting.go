@@ -5,11 +5,12 @@ import (
 	"encoding/binary"
 	"encoding/json"
 
+	"errors"
+
 	"github.com/brendoncarroll/go-state"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/porting"
-	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
 

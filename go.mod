@@ -12,7 +12,6 @@ require (
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/golang-lru v0.5.1
 	github.com/inet256/inet256 v0.0.8-0.20230603164405-67b6a7a91980
-	github.com/pkg/errors v0.9.1
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.8.4
 	go.etcd.io/bbolt v1.3.5
@@ -42,6 +41,7 @@ require (
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/onsi/ginkgo/v2 v2.2.0 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.11.1 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect

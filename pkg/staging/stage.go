@@ -4,13 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"path"
 	"strings"
+
+	"errors"
 
 	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/stdctx/logctx"
-	"github.com/pkg/errors"
 
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/metrics"
@@ -83,7 +85,7 @@ func (s *Stage) Get(ctx context.Context, p string) (*Operation, error) {
 	}
 	var op Operation
 	if err := json.Unmarshal(data, &op); err != nil {
-		return nil, errors.Wrapf(err, "parsing staging operation: %q", data)
+		return nil, fmt.Errorf("%w while parsing staging operation: %q", err, data)
 	}
 	return &op, nil
 }
@@ -96,7 +98,7 @@ func (s *Stage) ForEach(ctx context.Context, fn func(p string, op Operation) err
 		}
 		var fo Operation
 		if err := json.Unmarshal(v, &fo); err != nil {
-			return errors.Wrapf(err, "parsing staging operation: %q", v)
+			return fmt.Errorf("%w while parsing staging operation: %q", err, v)
 		}
 		p := string(k)
 		return fn(p, fo)
@@ -105,7 +107,7 @@ func (s *Stage) ForEach(ctx context.Context, fn func(p string, op Operation) err
 
 func (s *Stage) CheckConflict(ctx context.Context, p string) error {
 	newError := func(p, conflictPath string) error {
-		return errors.Errorf("cannot add %q to stage. conflicts with entry for %q", p, conflictPath)
+		return fmt.Errorf("cannot add %q to stage. conflicts with entry for %q", p, conflictPath)
 	}
 	p = cleanPath(p)
 	// check for ancestors

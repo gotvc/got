@@ -6,10 +6,11 @@ import (
 	"regexp"
 	"sync"
 
+	"errors"
+
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/cells"
 	"github.com/brendoncarroll/go-tai64"
-	"github.com/pkg/errors"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )

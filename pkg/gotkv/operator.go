@@ -11,7 +11,6 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
-	"github.com/pkg/errors"
 )
 
 // Builder is used to construct GotKV instances
@@ -203,7 +202,7 @@ func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Getter, x Root, pr
 	if yes, err := o.HasPrefix(ctx, s, x, prefix); err != nil {
 		return nil, err
 	} else if yes {
-		return nil, errors.Errorf("tree does not have prefix %q", prefix)
+		return nil, fmt.Errorf("tree does not have prefix %q", prefix)
 	}
 	y := Root{
 		First: append([]byte{}, x.First[len(prefix):]...),
@@ -283,7 +282,7 @@ func (o *Operator) Mutate(ctx context.Context, s cadata.Store, x Root, mutations
 		}
 		if i > 0 {
 			if bytes.Compare(mut.Span.Begin, mutations[i-1].Span.End) < 0 {
-				return nil, errors.Errorf("spans out of order %d start: %q < %d end: %q", i, mut.Span.Begin, i-1, mut.Span.End)
+				return nil, fmt.Errorf("spans out of order %d start: %q < %d end: %q", i, mut.Span.Begin, i-1, mut.Span.End)
 			}
 		}
 		beforeIter := o.NewIterator(s, x, Span{
@@ -304,7 +303,7 @@ func (o *Operator) Mutate(ctx context.Context, s cadata.Store, x Root, mutations
 func checkMutation(mut Mutation) error {
 	for _, ent := range mut.Entries {
 		if !mut.Span.Contains(ent.Key) {
-			return errors.Errorf("mutation span %v does not contain entry key %q", mut.Span, ent.Key)
+			return fmt.Errorf("mutation span %v does not contain entry key %q", mut.Span, ent.Key)
 		}
 	}
 	return nil

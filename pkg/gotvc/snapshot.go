@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/brendoncarroll/stdctx/logctx"
-	"github.com/pkg/errors"
 
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
@@ -123,13 +123,13 @@ func (op *Operator) GetSnapshot(ctx context.Context, s Store, ref Ref) (*Snapsho
 // It preserves the latest version of the data, but destroys versioning granularity
 func (op *Operator) Squash(ctx context.Context, s Store, x Snapshot, n int) (*Snapshot, error) {
 	if n < 1 {
-		return nil, errors.Errorf("cannot squash single commit")
+		return nil, fmt.Errorf("cannot squash single commit")
 	}
 	if len(x.Parents) < 1 {
-		return nil, errors.Errorf("cannot squash no parent")
+		return nil, fmt.Errorf("cannot squash no parent")
 	}
 	if len(x.Parents) > 1 {
-		return nil, errors.Errorf("cannot rebase > 1 parents")
+		return nil, fmt.Errorf("cannot rebase > 1 parents")
 	}
 	parent, err := op.GetSnapshot(ctx, s, x.Parents[0])
 	if err != nil {
@@ -188,7 +188,7 @@ func (o *Operator) Check(ctx context.Context, s cadata.Store, snap Snapshot, che
 	}
 	for i := 0; i < len(snap.Parents)-1; i++ {
 		if bytes.Compare(snap.Parents[i].CID[:], snap.Parents[i+1].CID[:]) < 0 {
-			return errors.Errorf("unsorted parents")
+			return fmt.Errorf("unsorted parents")
 		}
 	}
 	for _, parentRef := range snap.Parents {

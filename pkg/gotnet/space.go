@@ -3,13 +3,15 @@ package gotnet
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"time"
+
+	"errors"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-tai64"
-	"github.com/pkg/errors"
 
 	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/branches"
@@ -106,7 +108,7 @@ func (s *spaceSrv) Exists(ctx context.Context, bid BranchID) (bool, error) {
 		return false, parseWireError(*resp.Error)
 	}
 	if resp.Exists == nil {
-		return false, errors.Errorf("empty response")
+		return false, fmt.Errorf("empty response")
 	}
 	return *resp.Exists, nil
 }
@@ -125,10 +127,10 @@ func (s *spaceSrv) List(ctx context.Context, peer PeerID, first string, limit in
 		return nil, parseWireError(*resp.Error)
 	}
 	if !sort.StringsAreSorted(resp.Names) {
-		return nil, errors.Errorf("branch names are unsorted")
+		return nil, fmt.Errorf("branch names are unsorted")
 	}
 	if len(resp.Names) > 0 && resp.Names[0] < first {
-		return nil, errors.Errorf("bad branch listing: %s < %s", resp.Names[0], first)
+		return nil, fmt.Errorf("bad branch listing: %s < %s", resp.Names[0], first)
 	}
 	return resp.Names, nil
 }
@@ -155,7 +157,7 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[P
 		case opList:
 			return s.handleList(ctx, peer, req.Name, req.Limit)
 		default:
-			return nil, errors.Errorf("unrecognized operation %s", req.Op)
+			return nil, fmt.Errorf("unrecognized operation %s", req.Op)
 		}
 	}()
 	if err != nil {

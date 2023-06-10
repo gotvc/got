@@ -8,7 +8,6 @@ import (
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotkv"
-	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 )
 
@@ -32,7 +31,7 @@ func (r *Repo) DebugFS(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	if x == nil {
-		return errors.Errorf("no snapshot, no root")
+		return fmt.Errorf("no snapshot, no root")
 	}
 	return gotfs.Dump(ctx, vol.FSStore, x.Root, w)
 }
@@ -48,7 +47,7 @@ func (r *Repo) DebugKV(ctx context.Context, w io.Writer) error {
 		return err
 	}
 	if x == nil {
-		return errors.Errorf("no snapshot, no root")
+		return fmt.Errorf("no snapshot, no root")
 	}
 	return gotkv.DebugTree(ctx, vol.FSStore, x.Root.ToGotKV(), w)
 }

@@ -9,7 +9,6 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/stdctx/logctx"
-	"github.com/pkg/errors"
 
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"
@@ -272,7 +271,7 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 			logctx.Infof(ctx, "checking root")
 			if !bytes.Equal(ent.Key, []byte{Sep}) {
 				logctx.Infof(ctx, "first key: %q", ent.Key)
-				return errors.Errorf("filesystem is missing root")
+				return fmt.Errorf("filesystem is missing root")
 			}
 			p := ""
 			lastPath = &p
@@ -287,7 +286,7 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 			}
 			logctx.Infof(ctx, "checking %q", p)
 			if !strings.HasPrefix(*lastPath, parentPath(p)) {
-				return errors.Errorf("path %s did not have parent", p)
+				return fmt.Errorf("path %s did not have parent", p)
 			}
 			lastPath = &p
 			lastOffset = nil
@@ -302,10 +301,10 @@ func (o *Operator) Check(ctx context.Context, s Store, root Root, checkData func
 			}
 			if *lastPath != p {
 				logctx.Errorf(ctx, "path=%v offset=%v ext=%v", p, off, ext)
-				return errors.Errorf("part not proceeded by metadata")
+				return fmt.Errorf("part not proceeded by metadata")
 			}
 			if lastOffset != nil && off <= *lastOffset {
-				return errors.Errorf("part offsets not monotonic")
+				return fmt.Errorf("part offsets not monotonic")
 			}
 			if err := checkData(ext.Ref); err != nil {
 				return err

@@ -5,12 +5,13 @@ import (
 	"context"
 	"fmt"
 
+	"errors"
+
 	"github.com/brendoncarroll/go-exp/streams"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
-	"github.com/pkg/errors"
 )
 
 // Builder chunks large objects, stores them, and then writes extents to a gotkv instance.
@@ -69,7 +70,7 @@ func (b *Builder) SetPrefix(prefix []byte) error {
 		return err
 	}
 	if bytes.Compare(prefix, b.lastKey) < 0 {
-		return errors.Errorf("prefix < last key: %q < %q", prefix, b.lastKey)
+		return fmt.Errorf("prefix < last key: %q < %q", prefix, b.lastKey)
 	}
 	if err := b.checkKey(prefix); err != nil {
 		return err
@@ -334,7 +335,7 @@ func (b *Builder) copyExtentAt(ctx context.Context, key []byte, ext *Extent) err
 
 func (b *Builder) checkKey(key []byte) error {
 	if cmp := bytes.Compare(key, b.lastKey); cmp <= 0 {
-		return errors.Errorf("%q <= %q", key, b.lastKey)
+		return fmt.Errorf("%q <= %q", key, b.lastKey)
 	}
 	return nil
 }

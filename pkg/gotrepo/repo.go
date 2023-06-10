@@ -12,7 +12,6 @@ import (
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/inet256/inet256/pkg/inet256"
-	"github.com/pkg/errors"
 	bolt "go.etcd.io/bbolt"
 	"go.uber.org/zap"
 
@@ -100,7 +99,7 @@ func Init(p string) error {
 	} else if err != nil {
 		return err
 	} else {
-		return errors.Errorf("repo already exists")
+		return fmt.Errorf("repo already exists")
 	}
 	if err := repoDirFS.Mkdir(gotPrefix, 0o755); err != nil {
 		return err

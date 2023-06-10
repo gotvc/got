@@ -13,7 +13,6 @@ import (
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/gotgrpc"
 	"github.com/inet256/inet256/pkg/inet256"
-	"github.com/pkg/errors"
 )
 
 type StoreSpec struct {
@@ -30,7 +29,7 @@ func (r *Repo) MakeStore(spec StoreSpec) (Store, error) {
 	case spec.Local != nil:
 		return r.storeManager.Open(*spec.Local), nil
 	default:
-		return nil, errors.Errorf("empty store spec")
+		return nil, fmt.Errorf("empty store spec")
 	}
 }
 
@@ -129,7 +128,7 @@ func (r *Repo) MakeCell(spec CellSpec) (Cell, error) {
 		return cells.NewEncrypted(inner, secret), nil
 
 	default:
-		return nil, errors.Errorf("empty cell spec")
+		return nil, fmt.Errorf("empty cell spec")
 	}
 }
 
@@ -207,7 +206,7 @@ func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 		}
 		return branches.NewPrefixSpace(inner, spec.Prefix.Prefix), nil
 	default:
-		return nil, errors.Errorf("empty SpaceSpec")
+		return nil, fmt.Errorf("empty SpaceSpec")
 	}
 }
 

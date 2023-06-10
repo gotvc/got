@@ -2,12 +2,12 @@ package gotcmd
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotrepo"
 	"github.com/gotvc/got/pkg/serde"
-	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
@@ -20,7 +20,7 @@ func newSlurpCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		PostRunE: closeRepo(repo),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) < 1 {
-				return errors.Errorf("must provide target to ingest")
+				return fmt.Errorf("must provide target to ingest")
 			}
 			p := args[0]
 			f, err := os.Open(p)

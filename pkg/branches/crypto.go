@@ -8,7 +8,6 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/pkg/errors"
 	"golang.org/x/crypto/chacha20poly1305"
 	"golang.org/x/exp/slices"
 
@@ -131,7 +130,7 @@ func (r *CryptoSpace) encryptName(x string) string {
 func (r *CryptoSpace) decryptName(x string) (string, error) {
 	parts := bytes.SplitN([]byte(x), []byte{'.'}, 2)
 	if len(parts) < 2 {
-		return "", errors.Errorf("missing nonce")
+		return "", fmt.Errorf("missing nonce")
 	}
 	var nonce [24]byte
 	if _, err := codec.Decode(nonce[:], parts[0]); err != nil {
@@ -189,7 +188,7 @@ func (r *CryptoSpace) decryptSalt(x []byte) ([]byte, error) {
 	var secret [32]byte
 	deriveKey(secret[:], r.secret, "got/space/branch-params")
 	if len(x) < 24 {
-		return nil, errors.Errorf("salt ctext not long enough to contain nonce len=%d", len(x))
+		return nil, fmt.Errorf("salt ctext not long enough to contain nonce len=%d", len(x))
 	}
 	nonce := x[:24]
 	ctext := x[24:]
@@ -231,12 +230,12 @@ func padBytes(x []byte, blockSize int) []byte {
 
 func unpadBytes(x []byte, blockSize int) ([]byte, error) {
 	if len(x) < 1 {
-		return nil, errors.Errorf("bytes len=%d is not padded", len(x))
+		return nil, fmt.Errorf("bytes len=%d is not padded", len(x))
 	}
 	extra := int(x[len(x)-1])
 	end := len(x) - extra
 	if end < 0 {
-		return nil, errors.Errorf("bytes incorrectly padded")
+		return nil, fmt.Errorf("bytes incorrectly padded")
 	}
 	return x[:end], nil
 }

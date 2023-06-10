@@ -3,6 +3,7 @@ package gotnet
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/brendoncarroll/go-p2p"
@@ -11,7 +12,6 @@ import (
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotauthz"
-	"github.com/pkg/errors"
 )
 
 type StoreID struct {
@@ -91,7 +91,7 @@ func checkPullReply(id cadata.ID, peer PeerID, reply []byte) error {
 		return cadata.ErrNotFound
 	}
 	if err := cadata.Check(gdat.Hash, id, reply); err != nil {
-		return errors.Wrapf(err, "from peer %v", peer)
+		return fmt.Errorf("%w from peer %v", err, peer)
 	}
 	return nil
 }
@@ -125,7 +125,7 @@ func (s *blobMainSrv) PushTo(ctx context.Context, sid StoreID, ids []cadata.ID) 
 	if resp.Affected != nil && len(resp.Affected) == len(ids) {
 		return nil
 	}
-	return errors.Errorf("problem pushing, affected count does not match requested id count")
+	return fmt.Errorf("problem pushing, affected count does not match requested id count")
 }
 
 func (s *blobMainSrv) Get(ctx context.Context, sid StoreID, id cadata.ID, buf []byte) (int, error) {
@@ -219,7 +219,7 @@ func (s *blobMainSrv) handleAsk(ctx context.Context, respBuf []byte, msg p2p.Mes
 			case opPost:
 				return s.handlePost(ctx, peer, req)
 			default:
-				return nil, errors.Errorf("invalid op: %q", req.Op)
+				return nil, fmt.Errorf("invalid op: %q", req.Op)
 			}
 		}()
 		if err != nil {
@@ -238,7 +238,7 @@ func (s *blobMainSrv) handleAsk(ctx context.Context, respBuf []byte, msg p2p.Mes
 func (s *blobMainSrv) handleGet(ctx context.Context, peer PeerID, req BlobReq, buf []byte) (ret int, retErr error) {
 	space := s.open(peer)
 	if len(req.IDs) != 1 {
-		return 0, errors.Errorf("must request exactly one blob at a time")
+		return 0, fmt.Errorf("must request exactly one blob at a time")
 	}
 	id := req.IDs[0]
 	b, err := space.Get(ctx, req.Branch)
@@ -362,7 +362,7 @@ func getStoreFromVolume(vol branches.Volume, st StoreType) (cadata.Store, error)
 	case Type_RAW:
 		store = vol.RawStore
 	default:
-		return nil, errors.Errorf("unrecognized store")
+		return nil, fmt.Errorf("unrecognized store")
 	}
 	return store, nil
 }

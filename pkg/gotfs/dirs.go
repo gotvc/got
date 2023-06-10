@@ -2,6 +2,7 @@ package gotfs
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/stores"
-	"github.com/pkg/errors"
 )
 
 const Sep = '/'
@@ -162,7 +162,7 @@ func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
 		return nil, err
 	}
 	if isExtentKey(ent.Key) {
-		return nil, errors.Errorf("got extent key while iterating directory entries %q", ent.Key)
+		return nil, fmt.Errorf("got extent key while iterating directory entries %q", ent.Key)
 	}
 	md, err := parseInfo(ent.Value)
 	if err != nil {

@@ -9,7 +9,6 @@ import (
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/pkg/errors"
 )
 
 type Entry struct {
@@ -40,7 +39,7 @@ func (pr *Exporter) ExportFile(ctx context.Context, ms, ds cadata.Store, root go
 	}
 	mode := posixfs.FileMode(md.Mode)
 	if !mode.IsRegular() {
-		return errors.Errorf("ExportFile called for non-regular file %q: %v", p, mode)
+		return fmt.Errorf("ExportFile called for non-regular file %q: %v", p, mode)
 	}
 	// check if a file exists
 	if finfo, err := pr.fsx.Stat(p); err != nil && !posixfs.IsErrNotExist(err) {

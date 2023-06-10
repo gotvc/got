@@ -3,9 +3,12 @@ package porting
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"path"
 	"runtime"
+
+	"errors"
 
 	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
@@ -16,7 +19,6 @@ import (
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/metrics"
 	"github.com/gotvc/got/pkg/units"
-	"github.com/pkg/errors"
 	"golang.org/x/exp/slices"
 )
 
@@ -98,7 +100,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 		return nil, err
 	}
 	if !finfo.Mode().IsRegular() {
-		return nil, errors.Errorf("ImportFile called for non-regular file at path %q", p)
+		return nil, fmt.Errorf("ImportFile called for non-regular file at path %q", p)
 	}
 	if ent, err := pr.cache.Get(ctx, p); err == nil && ent.ModifiedAt == tai64.FromGoTime(finfo.ModTime()) {
 		logctx.Infof(ctx, "using cache entry for path %q. skipped import", p)
@@ -153,7 +155,7 @@ func importFileConcurrent(ctx context.Context, fsop *gotfs.Operator, ms, ds cada
 		if n, err := f.Seek(start, io.SeekStart); err != nil {
 			return nil, err
 		} else if n != start {
-			return nil, errors.Errorf("file seeked to wrong place HAVE: %d WANT: %d", n, start)
+			return nil, fmt.Errorf("file seeked to wrong place HAVE: %d WANT: %d", n, start)
 		}
 		rs[i] = io.LimitReader(f, end-start)
 	}
