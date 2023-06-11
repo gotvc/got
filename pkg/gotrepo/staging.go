@@ -253,6 +253,6 @@ func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) er
 }
 
 func (r *Repo) getStage() *staging.Stage {
-	storage := newBoltKVStore(r.db, bucketStaging)
+	storage := newBoltKVStore(r.localDB, bucketStaging)
 	return staging.New(storage)
 }

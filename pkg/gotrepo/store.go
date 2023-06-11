@@ -4,38 +4,45 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
-	"fmt"
-	"sync"
 	"errors"
+	"math"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/dgraph-io/badger/v3"
+	"golang.org/x/sync/semaphore"
+
+	"github.com/gotvc/got/pkg/gotrepo/repodb"
 )
 
 var (
-	setIDSequence = newTableID("setq")
-	setsTable     = newTableID("sets")
-	refCountTable = newTableID("rcs")
+	setIDSequence = repodb.IDFromString("setq")
+	setsTable     = repodb.IDFromString("sets")
+	refCountTable = repodb.IDFromString("rcs")
 )
 
 type StoreID = uint64
 
 type storeManager struct {
 	store Store
-	locks [256]sync.RWMutex
+	locks [256]*semaphore.Weighted
 
 	db *badger.DB
 }
 
 func newStoreManager(store Store, db *badger.DB) *storeManager {
+	var locks [256]*semaphore.Weighted
+	for i := range locks {
+		locks[i] = semaphore.NewWeighted(math.MaxInt64)
+	}
 	return &storeManager{
 		store: store,
 		db:    db,
+		locks: locks,
 	}
 }
 
 func (sm *storeManager) Create(ctx context.Context) (StoreID, error) {
-	seq, err := sm.db.GetSequence(setIDSequence[:], 1)
+	seq, err := sm.db.GetSequence(setIDSequence.Bytes(), 1)
 	if err != nil {
 		return 0, err
 	}
@@ -103,27 +110,29 @@ func (sm *storeManager) maybeDelete(ctx context.Context, id cadata.ID) error {
 	return sm.store.Delete(ctx, id)
 }
 
-func (sm *storeManager) lock(id cadata.ID, deleteMode bool) {
-	l := &sm.locks[id[0]]
+func (sm *storeManager) lock(ctx context.Context, id cadata.ID, deleteMode bool) error {
+	l := sm.locks[id[0]]
 	if deleteMode {
-		l.Lock()
+		return l.Acquire(ctx, math.MaxInt64)
 	} else {
-		l.RLock()
+		return l.Acquire(ctx, 1)
 	}
 }
 
 func (sm *storeManager) unlock(id cadata.ID, deleteMode bool) {
-	l := &sm.locks[id[0]]
+	l := sm.locks[id[0]]
 	if deleteMode {
-		l.Unlock()
+		l.Release(math.MaxInt64)
 	} else {
-		l.RUnlock()
+		l.Release(1)
 	}
 }
 
 func (sm *storeManager) post(ctx context.Context, sid StoreID, data []byte) (cadata.ID, error) {
 	id := sm.store.Hash(data)
-	sm.lock(id, false)
+	if err := sm.lock(ctx, id, false); err != nil {
+		return cadata.ID{}, err
+	}
 	defer sm.unlock(id, false)
 	if err := sm.db.Update(func(tx *badger.Txn) error {
 		if exists, err := sm.isInSet(tx, sid, id); err != nil {
@@ -142,7 +151,9 @@ func (sm *storeManager) post(ctx context.Context, sid StoreID, data []byte) (cad
 }
 
 func (sm *storeManager) add(ctx context.Context, sid StoreID, id cadata.ID) error {
-	sm.lock(id, false)
+	if err := sm.lock(ctx, id, false); err != nil {
+		return err
+	}
 	defer sm.unlock(id, false)
 	return sm.db.Update(func(tx *badger.Txn) error {
 		// check that something else has referenced it.
@@ -172,7 +183,9 @@ func (sm *storeManager) add(ctx context.Context, sid StoreID, id cadata.ID) erro
 }
 
 func (sm *storeManager) get(ctx context.Context, sid StoreID, id cadata.ID, buf []byte) (int, error) {
-	sm.lock(id, false)
+	if err := sm.lock(ctx, id, false); err != nil {
+		return 0, err
+	}
 	defer sm.unlock(id, false)
 	exists, err := sm.exists(ctx, sid, id)
 	if err != nil {
@@ -197,7 +210,9 @@ func (sm *storeManager) exists(ctx context.Context, sid StoreID, id cadata.ID) (
 }
 
 func (sm *storeManager) delete(ctx context.Context, sid StoreID, id cadata.ID) error {
-	sm.lock(id, true)
+	if err := sm.lock(ctx, id, true); err != nil {
+		return err
+	}
 	defer sm.unlock(id, true)
 	if err := sm.db.Update(func(tx *badger.Txn) error {
 		if exists, err := sm.isInSet(tx, sid, id); err != nil {
@@ -251,11 +266,11 @@ func (sm *storeManager) copyAll(ctx context.Context, src, dst StoreID) error {
 	})
 }
 
-func (sm *storeManager) appendSetItemKey(key []byte, setID StoreID, id cadata.ID) []byte {
-	key = setsTable.AppendTo(key)
-	key = binary.BigEndian.AppendUint64(key, setID)
-	key = append(key, id[:]...)
-	return key
+func (sm *storeManager) appendSetItemKey(out []byte, setID StoreID, id cadata.ID) []byte {
+	out = repodb.Key(out, setsTable, nil)
+	out = binary.BigEndian.AppendUint64(out, setID)
+	out = append(out, id[:]...)
+	return out
 }
 
 func (sm *storeManager) addToSet(tx *badger.Txn, setID StoreID, id cadata.ID) error {
@@ -310,9 +325,7 @@ func (sm *storeManager) forEachInSet(tx *badger.Txn, setID StoreID, span cadata.
 }
 
 func (sm *storeManager) appendRefCountKey(out []byte, id cadata.ID) []byte {
-	out = refCountTable.AppendTo(out)
-	out = append(out, id[:]...)
-	return out
+	return repodb.Key(out, refCountTable, id[:])
 }
 
 func (sm *storeManager) decrCount(tx *badger.Txn, id cadata.ID) error {
@@ -411,11 +424,6 @@ func getUvarint(tx *badger.Txn, key []byte) (uint64, error) {
 	} else if err != nil {
 		return 0, err
 	}
-<<<<<<< HEAD
-	x, n := binary.Uvarint(v)
-	if n <= 0 {
-		return 0, fmt.Errorf("could not read varint")
-=======
 	var ret uint64
 	if err := item.Value(func(v []byte) error {
 		var n int
@@ -426,25 +434,10 @@ func getUvarint(tx *badger.Txn, key []byte) (uint64, error) {
 		return err
 	}); err != nil {
 		return 0, err
->>>>>>> 1f3c286 (wip)
 	}
 	return ret, nil
 }
 
 func idCompare(a, b cadata.ID) int {
 	return bytes.Compare(a[:], b[:])
-}
-
-func idPredecessor(x cadata.ID) cadata.ID {
-	for i := len(x) - 1; i >= 0; i-- {
-		old := x[i]
-		x[i]--
-		if x[i] < old {
-			return x
-		}
-	}
-	for i := range x {
-		x[i] = 0xff
-	}
-	return x
 }

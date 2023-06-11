@@ -31,7 +31,7 @@ func (r *Repo) getImporter(ctx context.Context, b *branches.Branch) (*porting.Im
 		return nil, err
 	}
 	fsop := r.getFSOp(b)
-	cache := newPortingCache(r.db, saltHash)
+	cache := newPortingCache(r.localDB, saltHash)
 	return porting.NewImporter(fsop, cache, st.FS, st.Raw), nil
 }
 
@@ -39,7 +39,7 @@ func (r *Repo) getExporter(b *branches.Branch) *porting.Exporter {
 	fsop := r.getFSOp(b)
 	salt := saltFromBytes(b.Salt)
 	saltHash := gdat.Hash(salt[:])
-	cache := newPortingCache(r.db, saltHash)
+	cache := newPortingCache(r.localDB, saltHash)
 	return porting.NewExporter(fsop, cache, r.workingDir)
 }
 
@@ -47,7 +47,7 @@ func (r *Repo) getImportTriple(ctx context.Context, b *branches.Branch) (ret *br
 	salt := saltFromBytes(b.Salt)
 	saltHash := gdat.Hash(salt[:])
 	ids := [3]uint64{}
-	err := r.db.Update(func(tx *bolt.Tx) error {
+	err := r.localDB.Update(func(tx *bolt.Tx) error {
 		ids = [3]uint64{}
 		b, err := tx.CreateBucketIfNotExists([]byte(bucketImportStores))
 		if err != nil {

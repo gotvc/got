@@ -12,7 +12,7 @@ import (
 )
 
 func (r *Repo) DebugDB(ctx context.Context, w io.Writer) error {
-	return r.db.View(func(tx *bolt.Tx) error {
+	return r.localDB.View(func(tx *bolt.Tx) error {
 		return tx.ForEach(func(name []byte, b *bolt.Bucket) error {
 			fmt.Fprintf(w, "BUCKET: %q\n", name)
 			return dumpBucket(w, b)

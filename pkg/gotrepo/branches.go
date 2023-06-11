@@ -71,12 +71,12 @@ func (r *Repo) SetActiveBranch(ctx context.Context, name string) error {
 			return fmt.Errorf("staging must be empty to change to a branch with a different salt")
 		}
 	}
-	return setActiveBranch(r.db, name)
+	return setActiveBranch(r.localDB, name)
 }
 
 // GetActiveBranch returns the name of the active branch, and the branch
 func (r *Repo) GetActiveBranch(ctx context.Context) (string, *Branch, error) {
-	name, err := getActiveBranch(r.db)
+	name, err := getActiveBranch(r.localDB)
 	if err != nil {
 		return "", nil, err
 	}

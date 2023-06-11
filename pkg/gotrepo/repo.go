@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"path/filepath"
 	"strings"
 	"time"
@@ -38,7 +37,6 @@ const (
 
 const (
 	bucketDefault      = "default"
-	bucketCellData     = "cells"
 	bucketStaging      = "staging"
 	bucketPorter       = "porter"
 	bucketImportStores = "import_stores"
@@ -54,9 +52,13 @@ const (
 	configPath     = ".got/config"
 	privateKeyPath = ".got/private.pem"
 	specDirPath    = ".got/branches"
-	dbPath         = ".got/got.db"
-	blobsPath      = ".got/blobs"
-	storeDBPath    = ".got/stores.db"
+
+	localDBPath = ".got/local.db"
+
+	blobsPath   = ".got/blobs"
+	storeDBPath = ".got/stores.db"
+
+	cellDBPath = ".got/cells.db"
 )
 
 type (
@@ -77,10 +79,13 @@ type (
 )
 
 type Repo struct {
-	rootPath   string
-	repoFS     FS // repoFS is the directory that the repo is in
-	db         *bolt.DB
-	storesDB   *badger.DB
+	rootPath string
+	repoFS   FS // repoFS is the directory that the repo is in
+
+	localDB  *bolt.DB
+	storesDB *badger.DB
+	cellsDB  *badger.DB
+
 	config     Config
 	privateKey inet256.PrivateKey
 	// ctx is used as the background context for serving the repo
@@ -143,7 +148,7 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	db, err := bolt.Open(filepath.Join(p, dbPath), 0o644, &bolt.Options{
+	localDB, err := bolt.Open(filepath.Join(p, localDBPath), 0o644, &bolt.Options{
 		Timeout: time.Second,
 	})
 	if err != nil {
@@ -154,6 +159,18 @@ func Open(p string) (*Repo, error) {
 		opts = opts.WithCompression(options.None)
 		opts = opts.WithCompactL0OnClose(false)
 		opts.Logger = nil
+		return opts
+	}())
+	if err != nil {
+		return nil, err
+	}
+	cellsDB, err := badger.Open(func() badger.Options {
+		opts := badger.DefaultOptions(filepath.Join(p, cellDBPath))
+		opts = opts.WithCompression(options.None)
+		opts = opts.WithCompactL0OnClose(false)
+		opts.Logger = nil
+
+		opts.SyncWrites = true
 		return opts
 	}())
 	if err != nil {
@@ -170,17 +187,18 @@ func Open(p string) (*Repo, error) {
 		repoFS:     repoFS,
 		config:     *config,
 		privateKey: privateKey,
-		db:         db,
+		localDB:    localDB,
 		storesDB:   storesDB,
+		cellsDB:    cellsDB,
 		ctx:        ctx,
 
 		workingDir: posixfs.NewFiltered(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
 		storeManager: newStoreManager(fsStore, storesDB),
-		stage:        staging.New(newBoltKVStore(db, bucketStaging)),
+		cellManager:  newCellManager(cellsDB),
+		stage:        staging.New(newBoltKVStore(localDB, bucketStaging)),
 	}
-	r.cellManager = newCellManager(db, []string{bucketCellData})
 	r.specDir = newBranchSpecDir(r.makeDefaultVolume, r.MakeCell, r.MakeStore, posixfs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
 	if r.space, err = r.spaceFromSpecs(r.config.Spaces); err != nil {
 		return nil, err
@@ -197,13 +215,10 @@ func Open(p string) (*Repo, error) {
 
 func (r *Repo) Close() (retErr error) {
 	for _, fn := range []func() error{
-		r.db.Sync,
-		r.db.Close,
-		func() error {
-			log.Println("closing storesDB")
-			defer log.Println("done closing storesDB")
-			return r.storesDB.Close()
-		},
+		r.localDB.Sync,
+		r.localDB.Close,
+		r.cellsDB.Close,
+		r.storesDB.Close,
 	} {
 		if err := fn(); err != nil {
 			retErr = errors.Join(retErr, err)
@@ -284,51 +299,4 @@ func generateSecret(n int) []byte {
 		panic(err)
 	}
 	return x
-}
-
-func bucketFromTx(tx *bolt.Tx, path []string) (*bolt.Bucket, error) {
-	type bucketer interface {
-		Bucket([]byte) *bolt.Bucket
-		CreateBucketIfNotExists([]byte) (*bolt.Bucket, error)
-	}
-	getBucket := func(b bucketer, key string) (*bolt.Bucket, error) {
-		if tx.Writable() {
-			return b.CreateBucketIfNotExists([]byte(key))
-		} else {
-			return tx.Bucket([]byte(key)), nil
-		}
-	}
-	b, err := getBucket(tx, path[0])
-	if err != nil {
-		return nil, err
-	}
-	if b == nil {
-		return b, nil
-	}
-	path = path[1:]
-	for len(path) > 0 {
-		b, err = getBucket(b, path[0])
-		if err != nil {
-			return nil, err
-		}
-		if b == nil {
-			return b, nil
-		}
-		path = path[1:]
-	}
-	return b, nil
-}
-
-type tableID [4]byte
-
-func newTableID(x string) (ret tableID) {
-	if len(x) > 4 {
-		panic(x)
-	}
-	copy(ret[:], x)
-	return ret
-}
-
-func (tid tableID) AppendTo(x []byte) []byte {
-	return append(x, tid[:]...)
 }
