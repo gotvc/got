@@ -4,12 +4,13 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 
 	"github.com/dgraph-io/badger/v3"
+
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/gotrepo/repodb"
-	"github.com/pkg/errors"
 )
 
 const (

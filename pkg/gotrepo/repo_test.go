@@ -11,11 +11,12 @@ import (
 
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/brendoncarroll/stdctx/logctx"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/zap"
+
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/testutil"
-	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 )
 
 var ctx = func() context.Context {

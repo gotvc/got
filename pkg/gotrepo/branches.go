@@ -3,9 +3,10 @@ package gotrepo
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 
-	bolt "go.etcd.io/bbolt"
+	"github.com/brendoncarroll/go-state"
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/metrics"
@@ -71,12 +72,12 @@ func (r *Repo) SetActiveBranch(ctx context.Context, name string) error {
 			return fmt.Errorf("staging must be empty to change to a branch with a different salt")
 		}
 	}
-	return setActiveBranch(r.localDB, name)
+	return r.setActiveBranch(ctx, name)
 }
 
 // GetActiveBranch returns the name of the active branch, and the branch
 func (r *Repo) GetActiveBranch(ctx context.Context) (string, *Branch, error) {
-	name, err := getActiveBranch(r.localDB)
+	name, err := r.getActiveBranch(ctx)
 	if err != nil {
 		return "", nil, err
 	}
@@ -152,30 +153,16 @@ func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
 	return nil
 }
 
-func getActiveBranch(db *bolt.DB) (string, error) {
-	var name string
-	if err := db.View(func(tx *bolt.Tx) error {
-		b := tx.Bucket([]byte(bucketDefault))
-		if b == nil {
-			return nil
-		}
-		v := b.Get([]byte(keyActive))
-		if len(v) > 0 {
-			name = string(v)
-		}
-		return nil
-	}); err != nil {
+func (r *Repo) getActiveBranch(ctx context.Context) (string, error) {
+	s := r.getKVStore(tableDefault)
+	v, err := s.Get(ctx, []byte(keyActive))
+	if err != nil && !errors.Is(err, state.ErrNotFound) {
 		return "", err
 	}
-	return name, nil
+	return string(v), nil
 }
 
-func setActiveBranch(db *bolt.DB, name string) error {
-	return db.Update(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists([]byte(bucketDefault))
-		if err != nil {
-			return err
-		}
-		return b.Put([]byte(keyActive), []byte(name))
-	})
+func (r *Repo) setActiveBranch(ctx context.Context, name string) error {
+	s := r.getKVStore(tableDefault)
+	return s.Put(ctx, []byte(keyActive), []byte(name))
 }

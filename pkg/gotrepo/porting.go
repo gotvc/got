@@ -4,14 +4,13 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-
 	"errors"
 
 	"github.com/brendoncarroll/go-state"
+	"github.com/dgraph-io/badger/v3"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/porting"
-	bolt "go.etcd.io/bbolt"
 )
 
 // GetImportStores returns a store triple for importing the branch.
@@ -47,38 +46,30 @@ func (r *Repo) getImportTriple(ctx context.Context, b *branches.Branch) (ret *br
 	salt := saltFromBytes(b.Salt)
 	saltHash := gdat.Hash(salt[:])
 	ids := [3]uint64{}
-	err := r.localDB.Update(func(tx *bolt.Tx) error {
-		ids = [3]uint64{}
-		b, err := tx.CreateBucketIfNotExists([]byte(bucketImportStores))
-		if err != nil {
-			return err
-		}
-		v := b.Get(saltHash[:])
-		if v == nil {
+	s := r.getKVStore(tableImportStores)
+	v, err := s.Get(ctx, saltHash[:])
+	if err != nil {
+		if errors.Is(err, state.ErrNotFound) {
 			v = make([]byte, 8*3)
 			for i := 0; i < 3; i++ {
-				// TODO: maybe don't do this in a transaction.
-				// It is a different database, so it won't deadlock.
 				id, err := r.storeManager.Create(ctx)
 				if err != nil {
-					return err
+					return nil, err
 				}
 				binary.BigEndian.PutUint64(v[8*i:], id)
 			}
-			if err := b.Put(saltHash[:], v); err != nil {
-				return err
+			if err := s.Put(ctx, saltHash[:], v); err != nil {
+				return nil, err
 			}
+		} else {
+			return nil, err
 		}
-		if len(v) != 8*3 {
-			return errors.New("bad length for staging store triple")
-		}
-		for i := 0; i < 3; i++ {
-			ids[i] = binary.BigEndian.Uint64(v[8*i:])
-		}
-		return nil
-	})
-	if err != nil {
-		return nil, err
+	}
+	if len(v) != 8*3 {
+		return nil, errors.New("bad length for staging store triple")
+	}
+	for i := 0; i < 3; i++ {
+		ids[i] = binary.BigEndian.Uint64(v[8*i:])
 	}
 	return &branches.StoreTriple{
 		Raw: r.storeManager.Open(ids[0]),
@@ -91,7 +82,7 @@ type portingCache struct {
 	saltHash [32]byte
 }
 
-func newPortingCache(db *bolt.DB, saltHash [32]byte) *portingCache {
+func newPortingCache(db *badger.DB, saltHash [32]byte) *portingCache {
 	return &portingCache{
 		saltHash: saltHash,
 	}

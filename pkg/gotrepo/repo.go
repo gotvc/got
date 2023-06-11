@@ -8,23 +8,23 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
-	"time"
 
+	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
+	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/dgraph-io/badger/v3/options"
 	"github.com/inet256/inet256/pkg/inet256"
-	bolt "go.etcd.io/bbolt"
 	"go.uber.org/zap"
 
-	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gothost"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotnet"
+	"github.com/gotvc/got/pkg/gotrepo/repodb"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/staging"
 	"github.com/gotvc/got/pkg/stores"
@@ -36,12 +36,14 @@ const (
 )
 
 const (
-	bucketDefault      = "default"
-	bucketStaging      = "staging"
-	bucketPorter       = "porter"
-	bucketImportStores = "import_stores"
-	bucketImportCaches = "import_caches"
+	tableDefault      = repodb.TableID(1)
+	tableStaging      = repodb.TableID(2)
+	tablePorter       = repodb.TableID(3)
+	tableImportStores = repodb.TableID(4)
+	tableImportCaches = repodb.TableID(5)
+)
 
+const (
 	keyActive  = "ACTIVE"
 	nameMaster = "master"
 )
@@ -82,7 +84,7 @@ type Repo struct {
 	rootPath string
 	repoFS   FS // repoFS is the directory that the repo is in
 
-	localDB  *bolt.DB
+	localDB  *badger.DB
 	storesDB *badger.DB
 	cellsDB  *badger.DB
 
@@ -148,9 +150,13 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	localDB, err := bolt.Open(filepath.Join(p, localDBPath), 0o644, &bolt.Options{
-		Timeout: time.Second,
-	})
+	localDB, err := badger.Open(func() badger.Options {
+		opts := badger.DefaultOptions(filepath.Join(p, localDBPath))
+		opts = opts.WithCompression(options.None)
+		opts = opts.WithCompactL0OnClose(false)
+		opts.Logger = nil
+		return opts
+	}())
 	if err != nil {
 		return nil, err
 	}
@@ -197,7 +203,7 @@ func Open(p string) (*Repo, error) {
 		}),
 		storeManager: newStoreManager(fsStore, storesDB),
 		cellManager:  newCellManager(cellsDB),
-		stage:        staging.New(newBoltKVStore(localDB, bucketStaging)),
+		stage:        staging.New(repodb.NewKVStore(localDB, tableStaging)),
 	}
 	r.specDir = newBranchSpecDir(r.makeDefaultVolume, r.MakeCell, r.MakeStore, posixfs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
 	if r.space, err = r.spaceFromSpecs(r.config.Spaces); err != nil {
@@ -217,7 +223,9 @@ func (r *Repo) Close() (retErr error) {
 	for _, fn := range []func() error{
 		r.localDB.Sync,
 		r.localDB.Close,
+		r.cellsDB.Sync,
 		r.cellsDB.Close,
+		r.storesDB.Sync,
 		r.storesDB.Close,
 	} {
 		if err := fn(); err != nil {
@@ -251,17 +259,24 @@ func (r *Repo) getVCOp(b *branches.Branch) *gotvc.Operator {
 	return branches.NewGotVC(b)
 }
 
+func (r *Repo) getKVStore(tid repodb.TableID) state.KVStore[[]byte, []byte] {
+	return repodb.NewKVStore(r.localDB, tid)
+}
+
 func (r *Repo) UnionStore() cadata.Store {
 	return stores.AssertReadOnly(r.storeManager.store)
 }
 
-func dumpBucket(w io.Writer, b *bolt.Bucket) error {
-	c := b.Cursor()
-	for k, v := c.First(); k != nil; k, v = c.Next() {
-		fmt.Fprintf(w, "%q -> %q\n", k, v)
+func dumpStore(ctx context.Context, w io.Writer, s state.KVStore[[]byte, []byte]) error {
+	if err := state.ForEach[[]byte](ctx, s, state.TotalSpan[[]byte](), func(k []byte) error {
+		v, _ := s.Get(ctx, k)
+		_, err := fmt.Fprintf(w, "%q -> %q\n", k, v)
+		return err
+	}); err != nil {
+		return err
 	}
-	fmt.Fprintln(w)
-	return nil
+	_, err := fmt.Fprintln(w)
+	return err
 }
 
 func (r *Repo) makeDefaultVolume(ctx context.Context) (VolumeSpec, error) {

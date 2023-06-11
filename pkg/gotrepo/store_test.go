@@ -9,8 +9,9 @@ import (
 	"github.com/brendoncarroll/go-state/cadata/fsstore"
 	"github.com/brendoncarroll/go-state/cadata/storetest"
 	"github.com/brendoncarroll/go-state/posixfs"
-	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
+
+	"github.com/gotvc/got/pkg/testutil"
 )
 
 func TestStore(t *testing.T) {

@@ -8,16 +8,17 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-p2p/p/mbapp"
 	"github.com/brendoncarroll/stdctx/logctx"
-	"github.com/gotvc/got/pkg/branches"
-	"github.com/gotvc/got/pkg/gotgrpc"
-	"github.com/gotvc/got/pkg/gotnet"
-	"github.com/gotvc/got/pkg/gotnet/quichub"
-	"github.com/gotvc/got/pkg/goturl"
 	"github.com/inet256/inet256/client/go/inet256client"
 	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/inet256/inet256/pkg/p2padapter"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+
+	"github.com/gotvc/got/pkg/branches"
+	"github.com/gotvc/got/pkg/gotgrpc"
+	"github.com/gotvc/got/pkg/gotnet"
+	"github.com/gotvc/got/pkg/gotnet/quichub"
+	"github.com/gotvc/got/pkg/goturl"
 )
 
 // Server serves cells, and blobs to the network.
