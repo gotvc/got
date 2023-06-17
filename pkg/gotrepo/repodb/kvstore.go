@@ -3,11 +3,11 @@ package repodb
 import (
 	"bytes"
 	"context"
+	"errors"
 
 	"github.com/brendoncarroll/go-state"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
-	"github.com/pkg/errors"
 )
 
 type badgerKVStore struct {
