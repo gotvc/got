@@ -15,7 +15,6 @@ require (
 	github.com/inet256/inet256 v0.0.8-0.20230603164405-67b6a7a91980
 	github.com/spf13/cobra v0.0.5
 	github.com/stretchr/testify v1.8.4
-	go.etcd.io/bbolt v1.3.5
 	go.uber.org/zap v1.24.0
 	goftp.io/server/v2 v2.0.1-0.20210902054531-841529b15085
 	golang.org/x/crypto v0.9.0
