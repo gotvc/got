@@ -10,7 +10,7 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
-	"github.com/gotvc/got/pkg/gotauthz"
+	"github.com/gotvc/got/pkg/branches/branchintc"
 	"github.com/gotvc/got/pkg/gotfs"
 )
 
@@ -40,90 +40,28 @@ type Policy struct {
 	Rules []Rule
 }
 
-func (p Policy) CanDo(peer PeerID, verb gotauthz.Verb, name string) bool {
-	if IsWriteVerb(verb) {
-		if name != "" {
-			if p.CanTouch(peer, name) {
-				return true
-			}
-		} else {
-			if p.CanTouchAny(peer) {
-				return true
-			}
-		}
-	} else {
-		if name != "" {
-			if p.CanLook(peer, name) || p.CanTouch(peer, name) {
-				return true
-			}
-		} else {
-			if p.CanLookAny(peer) || p.CanTouchAny(peer) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-func (p Policy) CanTouchAny(peerID PeerID) (ret bool) {
-	// can cas any cell
-	for _, r := range p.Rules {
-		ret = ret || (r.Subject == peerID && r.Verb == OpTouch)
-	}
-	return ret
-}
-
-func (p Policy) CanLookAny(peerID PeerID) (ret bool) {
-	// can get any cell
-	for _, r := range p.Rules {
-		ret = ret || (r.Subject == peerID && r.Verb == OpLook)
-	}
-	return ret
-}
-
-func (p Policy) CanTouch(peerID PeerID, name string) (ret bool) {
-	return p.canDo(peerID, OpTouch, name)
-}
-
-func (p Policy) CanLook(peerID PeerID, name string) (ret bool) {
-	return p.canDo(peerID, OpLook, name)
-}
-
-func (p Policy) canDo(peerID PeerID, method, object string) (ret bool) {
-	ret = false
-	for _, r := range p.Rules {
-		if r.Allows(peerID, method, object) {
-			ret = true
-		}
-		if r.Denies(peerID, method, object) {
-			return false
-		}
-	}
-	return ret
-}
-
 func (p Policy) Clone() Policy {
 	return Policy{Rules: append([]Rule{}, p.Rules...)}
 }
 
-func IsWriteVerb(v gotauthz.Verb) bool {
+func IsWriteVerb(v branchintc.Verb) bool {
 	switch v {
 	// Branches
-	case gotauthz.Verb_Create, gotauthz.Verb_Delete, gotauthz.Verb_Set:
+	case branchintc.Verb_Create, branchintc.Verb_Delete, branchintc.Verb_Set:
 		return true
-	case gotauthz.Verb_Get, gotauthz.Verb_List:
+	case branchintc.Verb_Get, branchintc.Verb_List:
 		return false
 
 	// Cells
-	case gotauthz.Verb_CASCell:
+	case branchintc.Verb_CASCell:
 		return true
-	case gotauthz.Verb_ReadCell:
+	case branchintc.Verb_ReadCell:
 		return false
 
 	// Stores
-	case gotauthz.Verb_PostBlob, gotauthz.Verb_DeleteBlob:
+	case branchintc.Verb_PostBlob, branchintc.Verb_DeleteBlob:
 		return true
-	case gotauthz.Verb_GetBlob, gotauthz.Verb_ExistsBlob, gotauthz.Verb_ListBlob:
+	case branchintc.Verb_GetBlob, branchintc.Verb_ExistsBlob, branchintc.Verb_ListBlob:
 		return false
 
 	default:
@@ -138,23 +76,13 @@ const (
 
 type Rule struct {
 	Allow   bool
-	Subject PeerID
+	Subject IdentityElement
 	Verb    string
 	Object  *regexp.Regexp
 }
 
-func (r Rule) Matches(sub PeerID, method, obj string) bool {
-	return sub == r.Subject &&
-		method == r.Verb &&
-		r.Object.MatchString(obj)
-}
-
-func (r Rule) Allows(sub PeerID, method, obj string) bool {
-	return r.Matches(sub, method, obj) && r.Allow
-}
-
-func (r Rule) Denies(sub PeerID, method, obj string) bool {
-	return r.Matches(sub, method, obj) && !r.Allow
+func NewRule(allow bool, sub IdentityElement, verb string, obj *regexp.Regexp) Rule {
+	return Rule{allow, sub, verb, obj}
 }
 
 func ParsePolicy(data []byte) (*Policy, error) {
@@ -200,12 +128,11 @@ func ParseRule(data []byte) (*Rule, error) {
 	default:
 		return nil, fmt.Errorf("rule must start with ALLOW or DENY")
 	}
-	// Subject
-	id := PeerID{}
-	if err := id.UnmarshalText(parts[1]); err != nil {
+	iden, err := ParseIDElement(parts[1])
+	if err != nil {
 		return nil, err
 	}
-	r.Subject = id
+	r.Subject = iden
 	// Verb
 	switch string(parts[2]) {
 	case OpLook, OpTouch:

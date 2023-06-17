@@ -16,12 +16,12 @@ func newIAMCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		PreRunE:  loadRepo(&repo, open),
 		PostRunE: closeRepo(repo),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			pol, err := repo.GetPolicy(ctx)
+			cfg, err := repo.GetHostConfig(ctx)
 			if err != nil {
 				return err
 			}
 			w := bufio.NewWriter(cmd.OutOrStdout())
-			for _, rule := range pol.Rules {
+			for _, rule := range cfg.Policy.Rules {
 				var allow string
 				if rule.Allow {
 					allow = "ALLOW"

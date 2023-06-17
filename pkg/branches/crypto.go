@@ -34,10 +34,17 @@ func WithDecryptFailureHandler(fn func(string, error)) CryptoSpaceOption {
 	}
 }
 
+func WithPassthrough(branches []string) CryptoSpaceOption {
+	return func(cs *CryptoSpace) {
+		cs.passthrough = append([]string{}, branches...)
+	}
+}
+
 type CryptoSpace struct {
 	inner         Space
 	secret        *[32]byte
 	onDecryptFail func(string, error)
+	passthrough   []string
 }
 
 func NewCryptoSpace(inner Space, secret *[32]byte, opts ...CryptoSpaceOption) Space {
@@ -53,18 +60,27 @@ func NewCryptoSpace(inner Space, secret *[32]byte, opts ...CryptoSpaceOption) Sp
 }
 
 func (r *CryptoSpace) Create(ctx context.Context, name string, md Metadata) (*Branch, error) {
+	if r.shouldPassthrough(name) {
+		return r.inner.Create(ctx, name, md)
+	}
 	nameCtext := r.encryptName(name)
 	mdCtext := r.encryptMetadata(md)
 	return r.inner.Create(ctx, nameCtext, mdCtext)
 }
 
 func (r *CryptoSpace) Set(ctx context.Context, name string, md Metadata) error {
+	if r.shouldPassthrough(name) {
+		return r.inner.Set(ctx, name, md)
+	}
 	nameCtext := r.encryptName(name)
 	mdCtext := r.encryptMetadata(md)
 	return r.inner.Set(ctx, nameCtext, mdCtext)
 }
 
 func (r *CryptoSpace) Get(ctx context.Context, name string) (*Branch, error) {
+	if r.shouldPassthrough(name) {
+		return r.inner.Get(ctx, name)
+	}
 	nameCtext := r.encryptName(name)
 	branch, err := r.inner.Get(ctx, nameCtext)
 	if err != nil {
@@ -80,12 +96,19 @@ func (r *CryptoSpace) Get(ctx context.Context, name string) (*Branch, error) {
 }
 
 func (r *CryptoSpace) Delete(ctx context.Context, name string) error {
+	if r.shouldPassthrough(name) {
+		return r.inner.Delete(ctx, name)
+	}
 	nameCtext := r.encryptName(name)
 	return r.inner.Delete(ctx, nameCtext)
 }
 
 func (r *CryptoSpace) List(ctx context.Context, span Span, limit int) (ret []string, _ error) {
 	err := ForEach(ctx, r.inner, TotalSpan(), func(x string) error {
+		if r.shouldPassthrough(x) {
+			ret = append(ret, x)
+			return nil
+		}
 		y, err := r.decryptName(x)
 		if err != nil {
 			r.onDecryptFail(x, err)
@@ -205,6 +228,10 @@ func (r *CryptoSpace) wrapVolume(name string, x Volume) Volume {
 		VCStore:  x.VCStore,
 		RawStore: x.RawStore,
 	}
+}
+
+func (r *CryptoSpace) shouldPassthrough(name string) bool {
+	return slices.Contains(r.passthrough, name)
 }
 
 func deriveKey(out []byte, secret *[32]byte, purpose string) {

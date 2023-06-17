@@ -4,25 +4,62 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"path"
-	"strings"
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/inet256/inet256/pkg/inet256"
-	"golang.org/x/exp/maps"
 )
 
+// Identity is 2 groups of peers.
+// - Members are the set of peers that are part of the identity.
+// - Owners are the set of peers that are allowed to modify the identity.
 type Identity struct {
-	Owners []IdentityElement `json:"owners"`
-	Actors []IdentityElement `json:"actors"`
+	Owners  []IdentityElement `json:"owners"`
+	Members []IdentityElement `json:"members"`
 }
 
+// IdentityElement is a single element of an Identity, it can either refer to:
+// - A single PeerID
+// - Another Identity by name
+// - Anyone
 type IdentityElement struct {
-	Peer *PeerID
-	Name *string
+	Peer   *PeerID   `json:"peer,omitempty"`
+	Name   *string   `json:"name,omitempty"`
+	Anyone *struct{} `json:"anyone,omitempty"`
+}
+
+// NewPeer returns a single PeerID element.
+func NewPeer(peer PeerID) IdentityElement {
+	return IdentityElement{Peer: &peer}
+}
+
+// NewNamed returns a reference to another identity.
+func NewNamed(name string) IdentityElement {
+	return IdentityElement{Name: &name}
+}
+
+// Anyone returns an element that includes anyone
+func Anyone() IdentityElement {
+	return IdentityElement{Anyone: new(struct{})}
+}
+
+// ParseIDElement parses an IdentityElement from it's text representation.
+func ParseIDElement(x []byte) (IdentityElement, error) {
+	switch {
+	case bytes.Equal(x, []byte("ANYONE")):
+		return Anyone(), nil
+	case bytes.HasPrefix(x, []byte("@")):
+		return NewNamed(string(bytes.TrimPrefix(x, []byte("@")))), nil
+	default:
+		if addr, err := inet256.ParseAddrBase64(x); err == nil {
+			return NewPeer(addr), nil
+		}
+		return IdentityElement{}, fmt.Errorf("could not parse identity element from %q", x)
+	}
 }
 
 func (e IdentityElement) String() string {
@@ -32,7 +69,10 @@ func (e IdentityElement) String() string {
 	if e.Name != nil {
 		return "@" + *e.Name
 	}
-	return "IdentityElement{}"
+	if e.Anyone != nil {
+		return "ANYONE"
+	}
+	return "NOONE"
 }
 
 func CreateIdentity(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root, name string, iden Identity) (*gotfs.Root, error) {
@@ -90,16 +130,37 @@ func ListIdentities(ctx context.Context, fsop *gotfs.Operator, ms cadata.Store, 
 	return ret, nil
 }
 
-// FlattenIdentity lists the elements of an identity
-func FlattenIdentity(ctx context.Context, fsop *gotfs.Operator, ms cadata.Store, root gotfs.Root, iden string) ([]PeerID, error) {
-	if !strings.HasPrefix(iden, "@") {
-		peer, err := inet256.ParseAddrBase64([]byte(iden))
+type IDEntry struct {
+	Name     string
+	Identity Identity
+}
+
+func ListIdentitiesFull(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, root gotfs.Root) ([]IDEntry, error) {
+	var ret []IDEntry
+	if err := fsop.ReadDir(ctx, ms, root, IdentitiesPath, func(ent gotfs.DirEnt) error {
+		r, err := fsop.NewReader(ctx, ms, ds, root, path.Join(IdentitiesPath, ent.Name))
 		if err != nil {
-			return nil, err
+			return err
 		}
-		return []PeerID{peer}, nil
+		// TODO: need maximum size
+		data, err := io.ReadAll(r)
+		if err != nil {
+			return err
+		}
+		var iden Identity
+		if err := json.Unmarshal(data, &iden); err != nil {
+			return err
+		}
+		ret = append(ret, IDEntry{
+			Name:     ent.Name,
+			Identity: iden,
+		})
+		return nil
+	}); err != nil {
+		if posixfs.IsErrNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
 	}
-	// TODO: recursively list elements
-	peers := make(map[PeerID]struct{})
-	return maps.Keys(peers), nil
+	return ret, nil
 }

@@ -150,8 +150,9 @@ type GRPCSpaceSpec struct {
 }
 
 type CryptoSpaceSpec struct {
-	Inner  SpaceSpec `json:"inner"`
-	Secret []byte    `json:"secret"`
+	Inner       SpaceSpec `json:"inner"`
+	Secret      []byte    `json:"secret"`
+	Passthrough []string  `json:"passthrough,omitempty"`
 }
 
 type PrefixSpaceSpec struct {
@@ -198,7 +199,11 @@ func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 		if err != nil {
 			return nil, err
 		}
-		return branches.NewCryptoSpace(inner, (*[32]byte)(secret)), nil
+		var opts []branches.CryptoSpaceOption
+		if spec.Crypto.Passthrough != nil {
+			opts = append(opts, branches.WithPassthrough(spec.Crypto.Passthrough))
+		}
+		return branches.NewCryptoSpace(inner, (*[32]byte)(secret), opts...), nil
 	case spec.Prefix != nil:
 		inner, err := r.MakeSpace(spec.Prefix.Inner)
 		if err != nil {

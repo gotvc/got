@@ -48,11 +48,11 @@ func TestMultiRepoSync(t *testing.T) {
 		require.NoError(t, err)
 	}
 	r1, r2 := openRepo(t, p1), openRepo(t, p2)
-	err := origin.UpdatePolicy(ctx, func(x gothost.Policy) gothost.Policy {
+	err := origin.ModifyPolicy(ctx, func(x gothost.Policy) gothost.Policy {
 		return gothost.Policy{
 			Rules: []gothost.Rule{
-				{Allow: true, Subject: r1.GetID(), Verb: gothost.OpTouch, Object: regexp.MustCompile(".*")},
-				{Allow: true, Subject: r2.GetID(), Verb: gothost.OpTouch, Object: regexp.MustCompile(".*")},
+				{Allow: true, Subject: gothost.NewPeer(r1.GetID()), Verb: gothost.OpTouch, Object: regexp.MustCompile(".*")},
+				{Allow: true, Subject: gothost.NewPeer(r2.GetID()), Verb: gothost.OpTouch, Object: regexp.MustCompile(".*")},
 			},
 		}
 	})
