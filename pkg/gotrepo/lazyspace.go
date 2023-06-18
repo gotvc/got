@@ -20,7 +20,7 @@ func newLazySpace(fn func(ctx context.Context) (branches.Space, error)) *lazySpa
 	return &lazySpace{newSpace: fn}
 }
 
-func (ls lazySpace) Create(ctx context.Context, name string, params branches.Metadata) (*branches.Branch, error) {
+func (ls *lazySpace) Create(ctx context.Context, name string, params branches.Metadata) (*branches.Branch, error) {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -28,7 +28,7 @@ func (ls lazySpace) Create(ctx context.Context, name string, params branches.Met
 	return space.Create(ctx, name, params)
 }
 
-func (ls lazySpace) Get(ctx context.Context, name string) (*branches.Branch, error) {
+func (ls *lazySpace) Get(ctx context.Context, name string) (*branches.Branch, error) {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -36,7 +36,7 @@ func (ls lazySpace) Get(ctx context.Context, name string) (*branches.Branch, err
 	return space.Get(ctx, name)
 }
 
-func (ls lazySpace) Set(ctx context.Context, name string, md branches.Metadata) error {
+func (ls *lazySpace) Set(ctx context.Context, name string, md branches.Metadata) error {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return err
@@ -44,7 +44,7 @@ func (ls lazySpace) Set(ctx context.Context, name string, md branches.Metadata) 
 	return space.Set(ctx, name, md)
 }
 
-func (ls lazySpace) Delete(ctx context.Context, name string) error {
+func (ls *lazySpace) Delete(ctx context.Context, name string) error {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return err
@@ -52,7 +52,7 @@ func (ls lazySpace) Delete(ctx context.Context, name string) error {
 	return space.Delete(ctx, name)
 }
 
-func (ls lazySpace) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {
+func (ls *lazySpace) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -60,7 +60,7 @@ func (ls lazySpace) List(ctx context.Context, span branches.Span, limit int) ([]
 	return space.List(ctx, span, limit)
 }
 
-func (ls lazySpace) getSpace(ctx context.Context) (branches.Space, error) {
+func (ls *lazySpace) getSpace(ctx context.Context) (branches.Space, error) {
 	ls.once.Do(func() {
 		ls.space, ls.err = ls.newSpace(ctx)
 	})

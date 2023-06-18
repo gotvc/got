@@ -4,57 +4,58 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
+	"io"
+
+	"github.com/dgraph-io/badger/v3"
 
 	"github.com/gotvc/got/pkg/cells"
-	bolt "go.etcd.io/bbolt"
+	"github.com/gotvc/got/pkg/gotrepo/repodb"
+)
+
+const (
+	cellIDSeq = repodb.TableID(0)
 )
 
 type CellID = uint64
 
 type cellManager struct {
-	db         *bolt.DB
-	bucketPath []string
+	db *badger.DB
 }
 
-func newCellManager(db *bolt.DB, bucketPath []string) *cellManager {
+func newCellManager(db *badger.DB) *cellManager {
 	return &cellManager{
-		db:         db,
-		bucketPath: bucketPath,
+		db: db,
 	}
 }
 
 func (cm *cellManager) Create(ctx context.Context) (ret CellID, _ error) {
-	err := cm.db.Update(func(tx *bolt.Tx) error {
-		b, err := bucketFromTx(tx, cm.bucketPath)
+	seq, err := cm.db.GetSequence(cellIDSeq.Bytes(), 1)
+	if err != nil {
+		return 0, err
+	}
+	cellID, err := seq.Next()
+	if err != nil {
+		return 0, err
+	}
+	if cellID == 0 {
+		cellID, err = seq.Next()
 		if err != nil {
-			return err
+			return 0, err
 		}
-		ret = 0
-		for ret == 0 {
-			var err error
-			ret, err = b.NextSequence()
-			if err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	return ret, err
+	}
+	return cellID, nil
 }
 
 func (cm *cellManager) Open(id CellID) Cell {
 	key := cm.keyFromID(id)
-	return newBoltCell(cm.db, cm.bucketPath, key)
+	return newBadgerCell(cm.db, key)
 }
 
 func (cm *cellManager) Drop(ctx context.Context, id CellID) error {
 	key := cm.keyFromID(id)
-	return cm.db.Update(func(tx *bolt.Tx) error {
-		b, err := bucketFromTx(tx, cm.bucketPath)
-		if err != nil {
-			return err
-		}
-		return b.Delete(key)
+	return cm.db.Update(func(tx *badger.Txn) error {
+		return tx.Delete(key)
 	})
 }
 
@@ -64,90 +65,77 @@ func (cm *cellManager) keyFromID(id CellID) []byte {
 	return key[:]
 }
 
-type boltCell struct {
-	db         *bolt.DB
-	bucketPath []string
-	key        []byte
+type badgerCell struct {
+	db  *badger.DB
+	key []byte
 }
 
-func newBoltCell(db *bolt.DB, bucketPath []string, key []byte) Cell {
-	if len(bucketPath) < 1 {
-		panic("len(path) must be >= 1")
-	}
-	return &boltCell{
-		db:         db,
-		bucketPath: bucketPath,
-		key:        key,
+func newBadgerCell(db *badger.DB, key []byte) Cell {
+	return &badgerCell{
+		db:  db,
+		key: key,
 	}
 }
 
-func (c *boltCell) CAS(ctx context.Context, actual, prev, next []byte) (bool, int, error) {
+func (c *badgerCell) CAS(ctx context.Context, actual, prev, next []byte) (bool, int, error) {
 	if len(next) > c.MaxSize() {
 		return false, 0, cells.ErrTooLarge{}
 	}
-	path := c.bucketPath
 	var swapped bool
 	var n int
-	// have to be careful to always assign to swapped and actual every time this function is called, unless it errors
-	err := c.db.Batch(func(tx *bolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists([]byte(path[0]))
-		if err != nil {
+	if err := c.db.Update(func(tx *badger.Txn) error {
+		var current []byte
+		item, err := tx.Get(c.key)
+		if errors.Is(err, badger.ErrKeyNotFound) {
+		} else if err != nil {
 			return err
-		}
-		path = path[1:]
-		for len(path) > 0 {
-			b, err = tx.CreateBucketIfNotExists([]byte(path[0]))
+		} else {
+			var err error
+			current, err = item.ValueCopy(current)
 			if err != nil {
 				return err
 			}
-			path = path[1:]
 		}
-		key := c.key
-		v := b.Get([]byte(key))
-		if !bytes.Equal(v, prev) {
-			swapped = false
-			n = copy(actual, v)
-		} else {
-			if err := b.Put(key, next); err != nil {
+		if bytes.Equal(prev, current) {
+			if err := tx.Set(c.key, next); err != nil {
 				return err
 			}
 			swapped = true
 			n = copy(actual, next)
+		} else {
+			swapped = false
+			n = copy(actual, current)
 		}
 		return nil
-	})
-	if err != nil {
+	}); err != nil {
 		return false, 0, err
 	}
 	return swapped, n, nil
 }
 
-func (c *boltCell) Read(ctx context.Context, buf []byte) (int, error) {
+func (c *badgerCell) Read(ctx context.Context, buf []byte) (int, error) {
 	var n int
-	if err := c.db.View(func(tx *bolt.Tx) error {
-		path := c.bucketPath
-		b := tx.Bucket([]byte(path[0]))
-		if b == nil {
-			return nil
-		}
-		path = path[1:]
-		for len(path) > 0 {
-			b = b.Bucket([]byte(path[0]))
-			if b == nil {
-				return nil
-			}
-			path = path[1:]
-		}
+	if err := c.db.View(func(tx *badger.Txn) error {
 		key := c.key
-		v := b.Get(key)
-		n = copy(buf, v)
-		return nil
+		item, err := tx.Get(key)
+		if errors.Is(err, badger.ErrKeyNotFound) {
+			return nil
+		} else if err != nil {
+			return err
+		}
+		return item.Value(func(v []byte) error {
+			if len(buf) < len(v) {
+				return io.ErrShortBuffer
+			}
+			n = copy(buf, v)
+			return nil
+		})
 	}); err != nil {
 		return 0, err
 	}
 	return n, nil
 }
 
-func (c *boltCell) MaxSize() int {
+func (c *badgerCell) MaxSize() int {
 	return MaxCellSize
 }

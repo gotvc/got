@@ -5,19 +5,30 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/brendoncarroll/stdctx/logctx"
+	"go.uber.org/zap"
+
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotkv"
-	bolt "go.etcd.io/bbolt"
+	"github.com/gotvc/got/pkg/gotrepo/repodb"
 )
 
 func (r *Repo) DebugDB(ctx context.Context, w io.Writer) error {
-	return r.db.View(func(tx *bolt.Tx) error {
-		return tx.ForEach(func(name []byte, b *bolt.Bucket) error {
-			fmt.Fprintf(w, "BUCKET: %q\n", name)
-			return dumpBucket(w, b)
-		})
-	})
+	for _, tid := range []repodb.TableID{
+		tableDefault,
+		tableStaging,
+		tablePorter,
+		tableImportCaches,
+		tableImportStores,
+	} {
+		s := r.getKVStore(tid)
+		fmt.Fprintf(w, "TABLE: %q\n", tid)
+		if err := dumpStore(ctx, w, s); err != nil {
+			logctx.Error(ctx, "dumping store", zap.Error(err))
+		}
+	}
+	return nil
 }
 
 func (r *Repo) DebugFS(ctx context.Context, w io.Writer) error {

@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/inet256/inet256/pkg/inet256"
+
 	"github.com/gotvc/got/pkg/gotnet/quichub"
 	"github.com/gotvc/got/pkg/goturl"
-	"github.com/inet256/inet256/pkg/inet256"
 )
 
 // Clone creates a new Repo at dirPath with origin mapping to the space at URL.

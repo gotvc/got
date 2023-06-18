@@ -8,11 +8,11 @@ import (
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cells/httpcell"
 	"github.com/brendoncarroll/go-tai64"
+	"github.com/inet256/inet256/pkg/inet256"
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/gotgrpc"
-	"github.com/inet256/inet256/pkg/inet256"
 )
 
 type StoreSpec struct {

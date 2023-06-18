@@ -6,8 +6,8 @@ import (
 	"os"
 
 	"github.com/brendoncarroll/go-state/posixfs"
-
 	"github.com/brendoncarroll/stdctx/logctx"
+
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
@@ -253,6 +253,5 @@ func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) er
 }
 
 func (r *Repo) getStage() *staging.Stage {
-	storage := newBoltKVStore(r.db, bucketStaging)
-	return staging.New(storage)
+	return r.stage
 }
