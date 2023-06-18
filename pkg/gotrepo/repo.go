@@ -186,7 +186,6 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	peerID := inet256.NewAddr(privateKey.Public())
 	fsStore := stores.NewFSStore(posixfs.NewDirFS(filepath.Join(p, blobsPath)), MaxBlobSize)
 	r := &Repo{
 		rootPath:   p,
@@ -212,7 +211,7 @@ func Open(p string) (*Repo, error) {
 	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster, branches.NewMetadata(false)); err != nil {
 		return nil, err
 	}
-	r.hostEngine = gothost.NewHostEngine(r.specDir, []PeerID{peerID})
+	r.hostEngine = gothost.NewHostEngine(r.specDir)
 	if err := r.hostEngine.Initialize(ctx); err != nil {
 		return nil, err
 	}
@@ -243,12 +242,8 @@ func (r *Repo) GetSpace() Space {
 	return r.space
 }
 
-func (r *Repo) UpdatePolicy(ctx context.Context, fn func(gothost.Policy) gothost.Policy) error {
-	return r.hostEngine.UpdatePolicy(ctx, fn)
-}
-
-func (r *Repo) GetPolicy(ctx context.Context) (*gothost.Policy, error) {
-	return r.hostEngine.GetPolicy(ctx)
+func (r *Repo) GetHostEngine() *gothost.HostEngine {
+	return r.hostEngine
 }
 
 func (r *Repo) getFSOp(b *branches.Branch) *gotfs.Operator {

@@ -2,6 +2,7 @@ package gotfs
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -95,4 +96,25 @@ func (o *Operator) NewReader(ctx context.Context, ms, ds Store, x Root, p string
 	}
 	k := makeExtentPrefix(p)
 	return o.lob.NewReader(ctx, ms, ds, *x.toGotKV(), k)
+}
+
+func (o *Operator) ReadFile(ctx context.Context, ms, ds Store, x Root, p string, max int) ([]byte, error) {
+	r, err := o.NewReader(ctx, ms, ds, x, p)
+	if err != nil {
+		return nil, err
+	}
+	var n int
+	buf := make([]byte, max)
+	for n < len(buf) {
+		n2, err := r.Read(buf[n:])
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				n += n2
+				return buf[:n], nil
+			}
+			return nil, err
+		}
+		n += n2
+	}
+	return nil, fmt.Errorf("file %q too big. exceeds max of %d", p, max)
 }
