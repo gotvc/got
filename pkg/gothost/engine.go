@@ -3,7 +3,6 @@ package gothost
 import (
 	"context"
 	"fmt"
-	"log"
 	"sync/atomic"
 
 	"github.com/brendoncarroll/go-state/cadata"
@@ -63,7 +62,6 @@ func (e *HostEngine) reload(ctx context.Context) error {
 func (e *HostEngine) Open(peerID PeerID) branches.Space {
 	return branchintc.New(e.inner, func(verb branchintc.Verb, obj string, next func() error) error {
 		pol := e.cachedPolicy.Load()
-		log.Println(verb, obj, "checking against", pol)
 		if err := gotauthz.Check(pol, peerID, verb, obj); err != nil {
 			return err
 		}
@@ -72,13 +70,8 @@ func (e *HostEngine) Open(peerID PeerID) branches.Space {
 			case branchintc.Verb_Create, branchintc.Verb_Delete, branchintc.Verb_Set:
 				return newConfigBranchErr()
 			case branchintc.Verb_CASCell:
-				log.Println("invalidating")
 				// TODO: need to invalidate policy
-				defer func() {
-					if err := e.reload(context.TODO()); err != nil {
-						log.Println(err)
-					}
-				}()
+				e.reload(context.TODO())
 			}
 		}
 		return next()
@@ -123,18 +116,14 @@ func (e *HostEngine) GetPolicy(ctx context.Context) (*Policy, error) {
 }
 
 func (e *HostEngine) ModifyPolicy(ctx context.Context, fn func(pol Policy) Policy) error {
-	return e.Modify(ctx, func(x State) (*State, error) {
-		x.Policy = fn(x.Policy)
-		return &x, nil
+	return e.modifyFS(ctx, func(op *gotfs.Operator, ms cadata.Store, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
+		xPol, err := GetPolicy(ctx, op, ms, ds, x)
+		if err != nil {
+			return nil, err
+		}
+		yPol := fn(*xPol)
+		return SetPolicy(ctx, op, ms, ds, x, yPol)
 	})
-	// return e.modifyFS(ctx, func(op *gotfs.Operator, ms cadata.Store, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
-	// 	xPol, err := GetPolicy(ctx, op, ms, ds, x)
-	// 	if err != nil {
-	// 		return nil, err
-	// 	}
-	// 	yPol := fn(*xPol)
-	// 	return SetPolicy(ctx, op, ms, ds, x, yPol)
-	//})
 }
 
 func (e *HostEngine) SetPolicy(ctx context.Context, pol Policy) error {
