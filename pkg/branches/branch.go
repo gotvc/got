@@ -2,7 +2,6 @@ package branches
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -52,22 +51,8 @@ func (md Metadata) Clone() Metadata {
 
 // Annotation annotates a branch
 type Annotation struct {
-	Key   string
-	Value string
-}
-
-func (a *Annotation) MarshalJSON() ([]byte, error) {
-	p := [2]string{a.Key, a.Value}
-	return json.Marshal(p)
-}
-
-func (a *Annotation) UnmarshalJSON(data []byte) error {
-	p := [2]string{}
-	if err := json.Unmarshal(data, &p); err != nil {
-		return err
-	}
-	a.Key, a.Value = p[0], p[1]
-	return nil
+	Key   string `json:"k"`
+	Value string `json:"v"`
 }
 
 func SortAnnotations(s []Annotation) {
