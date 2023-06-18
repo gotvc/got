@@ -48,7 +48,10 @@ func TestMultiRepoSync(t *testing.T) {
 		require.NoError(t, err)
 	}
 	r1, r2 := openRepo(t, p1), openRepo(t, p2)
-	err := origin.ModifyPolicy(ctx, func(x gothost.Policy) gothost.Policy {
+
+	// IAM setup
+	e := origin.GetHostEngine()
+	err := e.ModifyPolicy(ctx, func(x gothost.Policy) gothost.Policy {
 		return gothost.Policy{
 			Rules: []gothost.Rule{
 				{Allow: true, Subject: gothost.NewPeer(r1.GetID()), Verb: gothost.OpTouch, Object: regexp.MustCompile(".*")},
@@ -57,6 +60,10 @@ func TestMultiRepoSync(t *testing.T) {
 		}
 	})
 	require.NoError(t, err)
+	hostConfig, err := e.View(ctx)
+	require.NoError(t, err)
+	t.Log("RULES", hostConfig.Policy.Rules)
+
 	go origin.Serve(ctx)
 	createBranch(t, r1, "origin/master")
 	createBranch(t, r1, "origin/mybranch")

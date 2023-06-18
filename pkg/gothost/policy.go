@@ -85,6 +85,10 @@ func NewRule(allow bool, sub IdentityElement, verb string, obj *regexp.Regexp) R
 	return Rule{allow, sub, verb, obj}
 }
 
+func (r Rule) String() string {
+	return string(MarshalRule(r))
+}
+
 func ParsePolicy(data []byte) (*Policy, error) {
 	lines := bytes.Split(data, []byte("\n"))
 	var rules []Rule

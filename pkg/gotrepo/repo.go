@@ -242,13 +242,17 @@ func (r *Repo) GetSpace() Space {
 	return r.space
 }
 
-func (r *Repo) ModifyPolicy(ctx context.Context, fn func(gothost.Policy) gothost.Policy) error {
-	return r.hostEngine.ModifyPolicy(ctx, fn)
+func (r *Repo) GetHostEngine() *gothost.HostEngine {
+	return r.hostEngine
 }
 
-func (r *Repo) GetHostConfig(ctx context.Context) (*gothost.State, error) {
-	return r.hostEngine.View(ctx)
-}
+// func (r *Repo) ModifyHostConfig(ctx context.Context, fn func(gothost.State) (*gothost.State, error)) error {
+// 	return r.hostEngine.Modify(ctx, fn)
+// }
+
+// func (r *Repo) GetHostConfig(ctx context.Context) (*gothost.State, error) {
+// 	return r.hostEngine.View(ctx)
+// }
 
 func (r *Repo) getFSOp(b *branches.Branch) *gotfs.Operator {
 	return branches.NewGotFS(b)
