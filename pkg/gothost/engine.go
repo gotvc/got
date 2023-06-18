@@ -71,7 +71,7 @@ func (e *HostEngine) Open(peerID PeerID) branches.Space {
 				return newConfigBranchErr()
 			case branchintc.Verb_CASCell:
 				// TODO: need to invalidate policy
-				e.reload(context.TODO())
+				defer e.reload(context.TODO())
 			}
 		}
 		return next()
