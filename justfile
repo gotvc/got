@@ -21,6 +21,9 @@ build: protobuf
 	GOOS=linux GOARCH=amd64 ./etc/build_go_binary.sh out/got_linux-amd64_$(TAG) ./cmd/got
 	GOOS=windows GOARCH=amd64 ./etc/build_go_binary.sh out/got_windows-amd64_$(TAG) ./cmd/got
 
+docker:
+	docker build -t got:local .
+
 add-replace:
 	go mod edit -replace=github.com/brendoncarroll/go-state=../../brendoncarroll/go-state
 	go mod edit -replace=github.com/brendoncarroll/go-p2p=../../brendoncarroll/go-p2p
