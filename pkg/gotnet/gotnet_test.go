@@ -1,7 +1,6 @@
 package gotnet
 
 import (
-	"context"
 	"testing"
 
 	"github.com/brendoncarroll/go-p2p"
@@ -18,12 +17,12 @@ import (
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/stores"
+	"github.com/gotvc/got/pkg/testutil"
 )
-
-var ctx = context.Background()
 
 func TestSpace(t *testing.T) {
 	branches.TestSpace(t, func(t testing.TB) branches.Space {
+		ctx := testutil.Context(t)
 		s1, s2 := newTestPair(t)
 		go s1.srv.Serve(ctx)
 		go s2.srv.Serve(ctx)
@@ -33,8 +32,10 @@ func TestSpace(t *testing.T) {
 }
 
 func TestStore(t *testing.T) {
-	t.Skip() // TODO
+	// TODO: MaxSize occasionally hangs during PullFrom
+	t.Skip()
 	storetest.TestStore(t, func(t testing.TB) cadata.Store {
+		ctx := testutil.Context(t)
 		s1, s2 := newTestPair(t)
 		go s1.srv.Serve(ctx)
 		go s2.srv.Serve(ctx)
@@ -46,6 +47,7 @@ func TestStore(t *testing.T) {
 
 func TestCell(t *testing.T) {
 	celltest.CellTestSuite(t, func(t testing.TB) cells.Cell {
+		ctx := testutil.Context(t)
 		s1, s2 := newTestPair(t)
 		go s1.srv.Serve(ctx)
 		go s2.srv.Serve(ctx)
@@ -57,7 +59,7 @@ func TestCell(t *testing.T) {
 
 func createCell(t testing.TB, space branches.Space) cells.Cell {
 	name := "test"
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	_, err := space.Create(ctx, name, branches.Metadata{})
 	require.NoError(t, err)
 	branch, err := space.Get(ctx, name)
@@ -67,7 +69,7 @@ func createCell(t testing.TB, space branches.Space) cells.Cell {
 
 func createStore(t testing.TB, space branches.Space) cadata.Store {
 	name := "test"
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	_, err := space.Create(ctx, name, branches.Metadata{})
 	require.NoError(t, err)
 	branch, err := space.Get(ctx, name)
@@ -82,7 +84,7 @@ type side struct {
 }
 
 func newTestPair(t testing.TB) (s1, s2 *side) {
-	srv := inet256mem.New(inet256mem.WithQueueLen(4))
+	srv := inet256mem.New(inet256mem.WithQueueLen(10))
 	key1 := inet256test.NewPrivateKey(t, 0)
 	key2 := inet256test.NewPrivateKey(t, 1)
 	s1 = newTestSide(t, srv, key1)
@@ -91,7 +93,8 @@ func newTestPair(t testing.TB) (s1, s2 *side) {
 }
 
 func newTestSide(t testing.TB, inetSrv inet256.Service, privKey inet256.PrivateKey) *side {
-	node, err := inetSrv.Open(context.Background(), privKey)
+	ctx := testutil.Context(t)
+	node, err := inetSrv.Open(ctx, privKey)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, node.Close())

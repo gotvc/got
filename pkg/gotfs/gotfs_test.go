@@ -1,7 +1,6 @@
 package gotfs
 
 import (
-	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"io"
@@ -10,14 +9,15 @@ import (
 
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
+	"github.com/gotvc/got/pkg/testutil"
 )
 
 func BenchmarkWrite(b *testing.B) {
-	ctx := context.Background()
 	s := cadata.NewVoid(gdat.Hash, DefaultMaxBlobSize)
 	op := NewOperator()
 
 	b.Run("1-1GB", func(b *testing.B) {
+		ctx := testutil.Context(b)
 		const size = int64(1e9)
 		b.SetBytes(size)
 		b.ReportAllocs()
@@ -39,6 +39,7 @@ func BenchmarkWrite(b *testing.B) {
 		}
 	})
 	b.Run("10k-10B", func(b *testing.B) {
+		ctx := testutil.Context(b)
 		const numFiles = 10e3
 		const size = 10
 

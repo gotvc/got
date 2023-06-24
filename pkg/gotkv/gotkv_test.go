@@ -8,11 +8,12 @@ import (
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewEmpty(t *testing.T) {
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	op := newTestOperator(t)
 	x, err := op.NewEmpty(ctx, s)
@@ -68,7 +69,7 @@ func TestPutGetMany(t *testing.T) {
 }
 
 func testSetup(t *testing.T) (context.Context, cadata.Store, *Root) {
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	op := newTestOperator(t)
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	x, err := op.NewEmpty(ctx, s)
@@ -81,7 +82,7 @@ func newTestOperator(t testing.TB) Operator {
 }
 
 func BenchmarkPut(b *testing.B) {
-	ctx := context.Background()
+	ctx := testutil.Context(b)
 	s := cadata.NewVoid(cadata.DefaultHash, cadata.DefaultMaxSize)
 	op := newTestOperator(b)
 	const M = 100

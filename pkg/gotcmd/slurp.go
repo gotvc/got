@@ -1,7 +1,6 @@
 package gotcmd
 
 import (
-	"context"
 	"fmt"
 	"os"
 
@@ -29,7 +28,7 @@ func newSlurpCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 			}
 			defer f.Close()
 
-			st, err := repo.GetImportStores(context.Background(), "")
+			st, err := repo.GetImportStores(ctx, "")
 			if err != nil {
 				return err
 			}

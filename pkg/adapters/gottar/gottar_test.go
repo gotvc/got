@@ -2,7 +2,6 @@ package gottar
 
 import (
 	"archive/tar"
-	"context"
 	"fmt"
 	"io"
 	"io/fs"
@@ -10,13 +9,13 @@ import (
 
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/stores"
+	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
-var ctx = context.Background()
-
 func TestRead(t *testing.T) {
+	ctx := testutil.Context(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
 	fsop := gotfs.NewOperator()
 	err := WithPipe(func(w io.Writer) error {

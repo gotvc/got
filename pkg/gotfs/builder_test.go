@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -50,5 +51,5 @@ func TestBuilderSmallFiles(t *testing.T) {
 func setup(t testing.TB) (context.Context, *Operator, *cadata.MemStore) {
 	op := NewOperator()
 	s := cadata.NewMem(cadata.DefaultHash, DefaultMaxBlobSize)
-	return context.Background(), op, s
+	return testutil.Context(t), op, s
 }

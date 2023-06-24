@@ -1,19 +1,19 @@
 package ptree
 
 import (
-	"context"
 	"strconv"
 	"testing"
 
 	"github.com/brendoncarroll/go-exp/streams"
 	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestBuilder(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	b := newBuilder(t, s)
 
@@ -28,7 +28,7 @@ func TestBuilder(t *testing.T) {
 
 func TestBuildIterate(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	b := newBuilder(t, s)
 
@@ -58,7 +58,7 @@ func TestBuildIterate(t *testing.T) {
 
 func TestIterateEmptySpan(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	b := newBuilder(t, s)
 
@@ -84,9 +84,9 @@ func TestIterateEmptySpan(t *testing.T) {
 
 func TestCopy(t *testing.T) {
 	t.Parallel()
+	ctx := testutil.Context(t)
 	maxSize := 1 << 16
 	s := cadata.NewMem(cadata.DefaultHash, maxSize)
-	ctx := context.Background()
 	b := newBuilder(t, s)
 
 	const N = 1e6
@@ -120,9 +120,9 @@ func TestCopy(t *testing.T) {
 
 func TestCopySpan(t *testing.T) {
 	t.Parallel()
+	ctx := testutil.Context(t)
 	maxSize := 1 << 16
 	s := cadata.NewMem(cadata.DefaultHash, maxSize)
-	ctx := context.Background()
 	b := newBuilder(t, s)
 
 	const N = 1e6
@@ -158,9 +158,9 @@ func TestCopySpan(t *testing.T) {
 
 func TestCopyMultiple(t *testing.T) {
 	t.Parallel()
+	ctx := testutil.Context(t)
 	maxSize := 1 << 16
 	s := cadata.NewMem(cadata.DefaultHash, maxSize)
-	ctx := context.Background()
 	b := newBuilder(t, s)
 
 	const N = 1e6
@@ -195,9 +195,10 @@ func TestCopyMultiple(t *testing.T) {
 
 // TestSeek checks that the iterator can Seek to entries which exist in the tree.
 func TestSeek(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t)
 	maxSize := 1 << 16
 	s := cadata.NewMem(cadata.DefaultHash, maxSize)
-	ctx := context.Background()
 	b := newBuilder(t, s)
 
 	const N = 1e6
@@ -223,9 +224,10 @@ func TestSeek(t *testing.T) {
 // TestSeekNotExists checks that seeking to an entry that does not exist
 // advances the iterator to the entry immediately after the non-existant entry.
 func TestSeekNonExist(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t)
 	maxSize := 1 << 16
 	s := cadata.NewMem(cadata.DefaultHash, maxSize)
-	ctx := context.Background()
 	b := newBuilder(t, s)
 
 	const N = 1e6
@@ -251,9 +253,10 @@ func TestSeekNonExist(t *testing.T) {
 }
 
 func TestEmpty(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t)
 	maxSize := 1 << 16
 	s := cadata.NewMem(cadata.DefaultHash, maxSize)
-	ctx := context.Background()
 	b := newBuilder(t, s)
 
 	root, err := b.Finish(ctx)

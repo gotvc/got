@@ -2,10 +2,10 @@ package gotfs
 
 import (
 	"bytes"
-	"context"
 	"path"
 	"testing"
 
+	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -56,7 +56,7 @@ func TestMkdirAll(t *testing.T) {
 }
 
 func requireChildren(t *testing.T, op *Operator, s Store, x Root, p string, expected []string) {
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	var actual []string
 	err := op.ReadDir(ctx, s, x, p, func(e DirEnt) error {
 		actual = append(actual, e.Name)

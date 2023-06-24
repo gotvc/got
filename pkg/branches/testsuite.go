@@ -1,17 +1,17 @@
 package branches
 
 import (
-	"context"
 	"strconv"
 	"testing"
 
+	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
-	ctx := context.Background()
 	t.Run("CreateGet", func(t *testing.T) {
 		t.Parallel()
+		ctx := testutil.Context(t)
 		x := newSpace(t)
 		b, err := x.Get(ctx, "test")
 		require.ErrorIs(t, err, ErrNotExist)
@@ -24,6 +24,7 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 	})
 	t.Run("List", func(t *testing.T) {
 		t.Parallel()
+		ctx := testutil.Context(t)
 		x := newSpace(t)
 		const N = 100
 		for i := 0; i < N; i++ {
@@ -36,6 +37,7 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 	})
 	t.Run("Delete", func(t *testing.T) {
 		t.Parallel()
+		ctx := testutil.Context(t)
 		x := newSpace(t)
 		var err error
 		_, err = x.Create(ctx, "test1", Metadata{})

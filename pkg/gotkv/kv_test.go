@@ -2,18 +2,18 @@ package gotkv
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"strconv"
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAddPrefix(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	s := cadata.NewMem(cadata.DefaultHash, 1<<16)
 	op := NewOperator(1<<13, 1<<16)
 	b := op.NewBuilder(s)

@@ -1,7 +1,6 @@
 package gotrepo
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"path"
@@ -10,22 +9,16 @@ import (
 	"testing"
 
 	"github.com/brendoncarroll/go-state/posixfs"
-	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
 	"github.com/gotvc/got/pkg/testutil"
 )
 
-var ctx = func() context.Context {
-	l, _ := zap.NewDevelopment()
-	return logctx.NewContext(context.Background(), l)
-}()
-
 func TestRepoInit(t *testing.T) {
 	t.Parallel()
+	ctx := testutil.Context(t)
 	dirpath := t.TempDir()
 	t.Log("testing in", dirpath)
 	require.NoError(t, Init(dirpath))
@@ -41,6 +34,7 @@ func TestRepoInit(t *testing.T) {
 
 func TestCommit(t *testing.T) {
 	t.Parallel()
+	ctx := testutil.Context(t)
 	repo := newTestRepo(t)
 	fs := repo.WorkingDir()
 	p := "test.txt"
@@ -74,6 +68,7 @@ func TestCommit(t *testing.T) {
 func TestCommitLargeFile(t *testing.T) {
 	t.Skip() // TODO
 	t.Parallel()
+	ctx := testutil.Context(t)
 	repo := newTestRepo(t)
 	fs := repo.WorkingDir()
 
@@ -88,6 +83,7 @@ func TestCommitLargeFile(t *testing.T) {
 
 func TestCommitDir(t *testing.T) {
 	t.Parallel()
+	ctx := testutil.Context(t)
 	repo := newTestRepo(t)
 	fs := repo.WorkingDir()
 
@@ -117,6 +113,7 @@ func TestCommitDir(t *testing.T) {
 
 func TestFork(t *testing.T) {
 	t.Parallel()
+	ctx := testutil.Context(t)
 	repo := newTestRepo(t)
 	fs := repo.WorkingDir()
 
@@ -147,7 +144,7 @@ func newTestRepo(t testing.TB) *Repo {
 }
 
 func checkFileContent(t testing.TB, repo *Repo, p string, r io.Reader) {
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	pr, pw := io.Pipe()
 	go func() {
 		err := repo.Cat(ctx, p, pw)
@@ -161,7 +158,7 @@ func checkFileContent(t testing.TB, repo *Repo, p string, r io.Reader) {
 }
 
 func exists(t testing.TB, repo *Repo, p string) bool {
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	var found bool
 	err := repo.Ls(ctx, path.Dir(p), func(ent gotfs.DirEnt) error {
 		found = found || ent.Name == path.Base(p)
@@ -184,6 +181,7 @@ func checkNotExists(t testing.TB, repo *Repo, p string) {
 }
 
 func countCommits(t testing.TB, repo *Repo, branchName string) int {
+	ctx := testutil.Context(t)
 	var count int
 	repo.History(ctx, branchName, func(_ Ref, _ Snap) error {
 		count++

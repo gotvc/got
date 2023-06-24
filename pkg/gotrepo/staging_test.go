@@ -1,9 +1,9 @@
 package gotrepo
 
 import (
-	"context"
 	"testing"
 
+	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -15,7 +15,7 @@ func TestStaging(t *testing.T) {
 }
 
 func listStaging(t testing.TB, x *Repo) (ret []FileOperation) {
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	err := x.ForEachStaging(ctx, func(p string, op FileOperation) error {
 		ret = append(ret, op)
 		return nil

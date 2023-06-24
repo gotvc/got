@@ -1,7 +1,6 @@
 package ptree
 
 import (
-	"context"
 	"fmt"
 	"math"
 	"strconv"
@@ -9,6 +8,7 @@ import (
 
 	"github.com/brendoncarroll/go-exp/streams"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,7 +39,7 @@ func TestEntry(t *testing.T) {
 
 func TestStreamRW(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	var refs []cadata.ID
 	var idxs []Index[Entry, cadata.ID]
 
@@ -85,7 +85,7 @@ func TestStreamRW(t *testing.T) {
 
 func TestStreamWriterChunkSize(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	var refs []cadata.ID
 
 	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
@@ -126,7 +126,7 @@ func TestStreamWriterChunkSize(t *testing.T) {
 
 func TestStreamSeek(t *testing.T) {
 	t.Parallel()
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	var refs []cadata.ID
 	var idxs []Index[Entry, cadata.ID]
 
@@ -190,8 +190,7 @@ func valueFromInt(i int) []byte {
 
 func BenchmarkStreamWriter(b *testing.B) {
 	b.ReportAllocs()
-
-	ctx := context.Background()
+	ctx := testutil.Context(b)
 	s := cadata.NewVoid(cadata.DefaultHash, defaultMaxSize)
 	sw := NewStreamWriter(StreamWriterParams[Entry, cadata.ID]{
 		Store:    s,

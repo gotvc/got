@@ -136,7 +136,7 @@ func (s *spaceSrv) List(ctx context.Context, peer PeerID, first string, limit in
 }
 
 func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[PeerID]) int {
-	ctx, cf := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cf := context.WithTimeout(ctx, time.Minute)
 	defer cf()
 	res, err := func() (*SpaceRes, error) {
 		peer := msg.Src

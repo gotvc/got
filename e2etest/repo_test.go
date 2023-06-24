@@ -21,10 +21,12 @@ import (
 	"github.com/gotvc/got/pkg/gothost"
 	"github.com/gotvc/got/pkg/gotrepo"
 	"github.com/gotvc/got/pkg/gotvc"
+	"github.com/gotvc/got/pkg/testutil"
 )
 
 func TestMultiRepoSync(t *testing.T) {
-	ctx, cf := context.WithCancel(context.Background())
+	ctx := testutil.Context(t)
+	ctx, cf := context.WithCancel(ctx)
 	t.Cleanup(cf)
 	secretKey := [32]byte{}
 	p1, p2, pOrigin := initRepo(t), initRepo(t), initRepo(t)
@@ -100,27 +102,30 @@ func createFile(t testing.TB, repoPath, p string, data []byte) {
 }
 
 func createBranch(t testing.TB, r *got.Repo, name string) {
-	_, err := r.CreateBranch(context.TODO(), name, branches.Metadata{})
+	ctx := testutil.Context(t)
+	_, err := r.CreateBranch(ctx, name, branches.Metadata{})
 	require.NoError(t, err)
 }
 
 func commit(t testing.TB, r *got.Repo) {
-	err := r.Commit(context.TODO(), gotvc.SnapInfo{})
+	ctx := testutil.Context(t)
+	err := r.Commit(ctx, gotvc.SnapInfo{})
 	require.NoError(t, err)
 }
 
 func sync(t testing.TB, r *got.Repo, src, dst string) {
-	err := r.Sync(context.TODO(), src, dst, false)
+	ctx := testutil.Context(t)
+	err := r.Sync(ctx, src, dst, false)
 	require.NoError(t, err)
 }
 
 func add(t testing.TB, r *got.Repo, p string) {
-	err := r.Add(context.TODO(), p)
+	err := r.Add(testutil.Context(t), p)
 	require.NoError(t, err)
 }
 
 func ls(t testing.TB, r *got.Repo, p string) (ret []string) {
-	err := r.Ls(context.TODO(), p, func(de gotfs.DirEnt) error {
+	err := r.Ls(testutil.Context(t), p, func(de gotfs.DirEnt) error {
 		ret = append(ret, de.Name)
 		return nil
 	})

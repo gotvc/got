@@ -3,6 +3,7 @@ package gotnet
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -87,8 +88,17 @@ func (s *blobPullSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Messag
 }
 
 func checkPullReply(id cadata.ID, peer PeerID, reply []byte) error {
-	if bytes.Equal(reply, id[:]) {
-		return cadata.ErrNotFound
+	if bytes.HasPrefix(reply, id[:]) {
+		if len(reply) == len(id) {
+			return cadata.ErrNotFound
+		} else {
+			errdata := reply[len(id):]
+			var we WireError
+			if err := json.Unmarshal(errdata, &we); err == nil {
+				return we
+			}
+			return fmt.Errorf("unrecognized error %q", errdata)
+		}
 	}
 	if err := cadata.Check(gdat.Hash, id, reply); err != nil {
 		return fmt.Errorf("%w from peer %v", err, peer)
@@ -444,7 +454,7 @@ func (ts *tempStore) Release(x uint64) {
 	ts.blobRCs[id]--
 	if ts.blobRCs[id] == 0 {
 		delete(ts.blobRCs, id)
-		if err := ts.store.Delete(context.Background(), id); err != nil {
+		if err := ts.store.Delete(context.TODO(), id); err != nil {
 			panic(err)
 		}
 	}

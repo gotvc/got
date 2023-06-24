@@ -48,7 +48,7 @@ func (r *Repo) GotNetClient() (*gotnet.Service, error) {
 }
 
 func (r *Repo) getGotNet() (*gotnet.Service, error) {
-	ctx := context.Background()
+	ctx := r.ctx
 	if r.gotNet != nil {
 		return r.gotNet, nil
 	}
@@ -64,7 +64,7 @@ func (r *Repo) getGotNet() (*gotnet.Service, error) {
 	swarm := mbapp.New(p2padapter.SwarmFromNode(node), gotnet.MaxMessageSize)
 	srv := r.makeGotNet(swarm)
 	r.gotNet = srv
-	go r.gotNet.Serve(r.ctx)
+	go r.gotNet.Serve(ctx)
 	return srv, nil
 }
 
@@ -88,7 +88,7 @@ func (r *Repo) makeGotNet(swarm p2p.SecureAskSwarm[PeerID, inet256.PublicKey]) *
 }
 
 func (r *Repo) getGRPCClient(endpoint string, headers map[string]string) (gotgrpc.SpaceClient, error) {
-	ctx := context.Background()
+	ctx := r.ctx
 	opts := []grpc.DialOption{}
 	if strings.HasPrefix(endpoint, "http://") {
 		endpoint = strings.TrimPrefix(endpoint, "http://")

@@ -1,15 +1,12 @@
 package gotlob
 
 import (
-	"context"
 	"fmt"
 	"io"
 	"strconv"
 	"testing"
 
-	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/stretchr/testify/require"
-	"go.uber.org/zap"
 
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
@@ -17,13 +14,9 @@ import (
 	"github.com/gotvc/got/pkg/testutil"
 )
 
-var ctx = func() context.Context {
-	l, _ := zap.NewDevelopment()
-	return logctx.NewContext(context.Background(), l)
-}()
-
 func TestWrite(t *testing.T) {
 	t.Parallel()
+	ctx := testutil.Context(t)
 	op := newOperator(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
 	const N = 10
@@ -53,6 +46,7 @@ func TestWrite(t *testing.T) {
 
 func TestSetPrefix(t *testing.T) {
 	t.Parallel()
+	ctx := testutil.Context(t)
 	op := newOperator(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
 	b := op.NewBuilder(ctx, ms, ds)
@@ -67,6 +61,7 @@ func TestSetPrefix(t *testing.T) {
 
 func TestCopyFrom(t *testing.T) {
 	t.Parallel()
+	ctx := testutil.Context(t)
 	op := newOperator(t, WithFilter(func(x []byte) bool {
 		return len(x) >= 9
 	}))
@@ -111,6 +106,7 @@ func TestCopyFrom(t *testing.T) {
 
 func TestCopyExtents(t *testing.T) {
 	t.Parallel()
+	ctx := testutil.Context(t)
 	op := newOperator(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
 	b := op.NewBuilder(ctx, ms, ds)

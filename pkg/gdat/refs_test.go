@@ -1,16 +1,16 @@
 package gdat
 
 import (
-	"context"
 	"fmt"
 	"testing"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestMarshalUnmarshal(t *testing.T) {
-	ctx := context.Background()
+	ctx := testutil.Context(t)
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	op := NewOperator()
 	x, err := op.Post(ctx, s, []byte("test data"))
