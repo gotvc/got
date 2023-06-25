@@ -23,7 +23,7 @@ func NewSpace(c SpaceClient) Space {
 	return Space{c}
 }
 
-func (s Space) Create(ctx context.Context, key string, md branches.Metadata) (*branches.Branch, error) {
+func (s Space) Create(ctx context.Context, key string, md branches.Config) (*branches.Info, error) {
 	res, err := s.c.CreateBranch(ctx, &CreateBranchReq{
 		Key:  key,
 		Salt: md.Salt,
@@ -45,7 +45,7 @@ func (s Space) Delete(ctx context.Context, key string) error {
 	return err
 }
 
-func (s Space) Get(ctx context.Context, key string) (*branches.Branch, error) {
+func (s Space) Get(ctx context.Context, key string) (*branches.Info, error) {
 	res, err := s.c.GetBranch(ctx, &GetBranchReq{
 		Key: key,
 	})
@@ -61,7 +61,7 @@ func (s Space) Get(ctx context.Context, key string) (*branches.Branch, error) {
 	return s.makeBranch(key, res), nil
 }
 
-func (s Space) Set(ctx context.Context, key string, md branches.Metadata) error {
+func (s Space) Set(ctx context.Context, key string, md branches.Config) error {
 	_, err := s.c.SetBranch(ctx, &SetBranchReq{
 		Key: key,
 
@@ -85,27 +85,24 @@ func (s Space) List(ctx context.Context, span branches.Span, limit int) ([]strin
 	return res.Keys, nil
 }
 
-func (s Space) makeBranch(key string, bi *BranchInfo) *branches.Branch {
-	createdAt, _ := tai64.Parse(bi.CreatedAt)
-	return &branches.Branch{
-		Volume: s.makeVolume(key),
-		Metadata: branches.Metadata{
-			Salt: bi.Salt,
-			Mode: branches.Mode(bi.Mode),
-			Annotations: mapSlice(bi.Annotations, func(x *Annotation) branches.Annotation {
-				return branches.Annotation{Key: x.Key, Value: x.Value}
-			}),
-		},
-		CreatedAt: createdAt,
-	}
-}
-
-func (s Space) makeVolume(key string) branches.Volume {
-	return branches.Volume{
+func (s Space) Open(ctx context.Context, key string) (*branches.Volume, error) {
+	return &branches.Volume{
 		Cell:     s.makeCell(key),
 		VCStore:  s.makeStore(key, StoreType_VC),
 		FSStore:  s.makeStore(key, StoreType_FS),
 		RawStore: s.makeStore(key, StoreType_RAW),
+	}, nil
+}
+
+func (s Space) makeBranch(key string, bi *BranchInfo) *branches.Info {
+	createdAt, _ := tai64.Parse(bi.CreatedAt)
+	return &branches.Info{
+		Salt: bi.Salt,
+		Mode: branches.Mode(bi.Mode),
+		Annotations: mapSlice(bi.Annotations, func(x *Annotation) branches.Annotation {
+			return branches.Annotation{Key: x.Key, Value: x.Value}
+		}),
+		CreatedAt: createdAt,
 	}
 }
 

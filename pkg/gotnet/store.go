@@ -251,11 +251,11 @@ func (s *blobMainSrv) handleGet(ctx context.Context, peer PeerID, req BlobReq, b
 		return 0, fmt.Errorf("must request exactly one blob at a time")
 	}
 	id := req.IDs[0]
-	b, err := space.Get(ctx, req.Branch)
+	vol, err := space.Open(ctx, req.Branch)
 	if err != nil {
 		return 0, err
 	}
-	store, err := getStoreFromVolume(b.Volume, req.StoreType)
+	store, err := getStoreFromVolume(*vol, req.StoreType)
 	if err != nil {
 		return 0, err
 	}
@@ -264,12 +264,11 @@ func (s *blobMainSrv) handleGet(ctx context.Context, peer PeerID, req BlobReq, b
 
 func (s *blobMainSrv) handlePost(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
 	space := s.open(peer)
-	branch, err := space.Get(ctx, req.Branch)
+	vol, err := space.Open(ctx, req.Branch)
 	if err != nil {
 		return nil, err
 	}
-	vol := branch.Volume
-	store, err := getStoreFromVolume(vol, req.StoreType)
+	store, err := getStoreFromVolume(*vol, req.StoreType)
 	if err != nil {
 		return nil, err
 	}
@@ -298,11 +297,11 @@ func (s *blobMainSrv) handlePost(ctx context.Context, peer PeerID, req BlobReq) 
 
 func (s *blobMainSrv) handleExists(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
 	space := s.open(peer)
-	branch, err := space.Get(ctx, req.Branch)
+	vol, err := space.Open(ctx, req.Branch)
 	if err != nil {
 		return nil, err
 	}
-	store, err := getStoreFromVolume(branch.Volume, req.StoreType)
+	store, err := getStoreFromVolume(*vol, req.StoreType)
 	if err != nil {
 		return nil, err
 	}
@@ -321,11 +320,11 @@ func (s *blobMainSrv) handleExists(ctx context.Context, peer PeerID, req BlobReq
 
 func (s *blobMainSrv) handleDelete(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
 	space := s.open(peer)
-	branch, err := space.Get(ctx, req.Branch)
+	vol, err := space.Open(ctx, req.Branch)
 	if err != nil {
 		return nil, err
 	}
-	store, err := getStoreFromVolume(branch.Volume, req.StoreType)
+	store, err := getStoreFromVolume(*vol, req.StoreType)
 	if err != nil {
 		return nil, err
 	}
@@ -343,11 +342,11 @@ func (s *blobMainSrv) handleDelete(ctx context.Context, peer PeerID, req BlobReq
 
 func (s *blobMainSrv) handleList(ctx context.Context, peer PeerID, req BlobReq) (*BlobResp, error) {
 	space := s.open(peer)
-	branch, err := space.Get(ctx, req.Branch)
+	vol, err := space.Open(ctx, req.Branch)
 	if err != nil {
 		return nil, err
 	}
-	store, err := getStoreFromVolume(branch.Volume, req.StoreType)
+	store, err := getStoreFromVolume(*vol, req.StoreType)
 	if err != nil {
 		return nil, err
 	}

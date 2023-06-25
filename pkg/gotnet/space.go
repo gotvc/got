@@ -11,7 +11,6 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-tai64"
 
 	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/branches"
@@ -39,11 +38,11 @@ func (srv *spaceSrv) Serve(ctx context.Context) error {
 	return serveAsks(ctx, srv.swarm, srv.handleAsk)
 }
 
-func (s *spaceSrv) Create(ctx context.Context, bid BranchID, md branches.Metadata) (*BranchInfo, error) {
+func (s *spaceSrv) Create(ctx context.Context, bid BranchID, cfg branches.Config) (*branches.Info, error) {
 	req := SpaceReq{
-		Op:       opCreate,
-		Name:     bid.Name,
-		Metadata: md,
+		Op:     opCreate,
+		Name:   bid.Name,
+		Config: cfg,
 	}
 	var resp SpaceRes
 	if err := askJson(ctx, s.swarm, bid.Peer, &resp, &req); err != nil {
@@ -73,11 +72,11 @@ func (s *spaceSrv) Delete(ctx context.Context, bid BranchID) error {
 	return nil
 }
 
-func (s *spaceSrv) Set(ctx context.Context, bid BranchID, md branches.Metadata) error {
+func (s *spaceSrv) Set(ctx context.Context, bid BranchID, md branches.Config) error {
 	return errors.New("gotnet: setting branch metadata not yet supported ")
 }
 
-func (s *spaceSrv) Get(ctx context.Context, bid BranchID) (*BranchInfo, error) {
+func (s *spaceSrv) Get(ctx context.Context, bid BranchID) (*branches.Info, error) {
 	req := SpaceReq{
 		Op:   opGet,
 		Name: bid.Name,
@@ -147,7 +146,7 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[P
 		logctx.Infof(ctx, "%s from %v", req.Op, peer)
 		switch req.Op {
 		case opCreate:
-			return s.handleCreate(ctx, peer, req.Name, req.Metadata)
+			return s.handleCreate(ctx, peer, req.Name, req.Config)
 		case opDelete:
 			return s.handleDelete(ctx, peer, req.Name)
 		case opGet:
@@ -170,14 +169,14 @@ func (s *spaceSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[P
 	return copy(resp, data)
 }
 
-func (s *spaceSrv) handleCreate(ctx context.Context, peer PeerID, name string, params branches.Metadata) (*SpaceRes, error) {
+func (s *spaceSrv) handleCreate(ctx context.Context, peer PeerID, name string, params branches.Config) (*SpaceRes, error) {
 	space := s.open(peer)
-	b, err := space.Create(ctx, name, params)
+	info, err := space.Create(ctx, name, params)
 	if err != nil {
 		return nil, err
 	}
 	return &SpaceRes{
-		Info: infoFromBranch(*b),
+		Info: info,
 	}, nil
 }
 
@@ -191,12 +190,12 @@ func (s *spaceSrv) handleDelete(ctx context.Context, peer PeerID, name string) (
 
 func (s *spaceSrv) handleGet(ctx context.Context, peer PeerID, name string) (*SpaceRes, error) {
 	space := s.open(peer)
-	b, err := space.Get(ctx, name)
+	info, err := space.Get(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 	return &SpaceRes{
-		Info: infoFromBranch(*b),
+		Info: info,
 	}, nil
 }
 
@@ -223,23 +222,17 @@ func (s *spaceSrv) handleList(ctx context.Context, peer PeerID, first string, li
 }
 
 type SpaceReq struct {
-	Op       string            `json:"op"`
-	Name     string            `json:"name"`
-	Limit    int               `json:"limit,omitempty"`
-	Metadata branches.Metadata `json:"metadata,omitempty"`
+	Op     string          `json:"op"`
+	Name   string          `json:"name"`
+	Limit  int             `json:"limit,omitempty"`
+	Config branches.Config `json:"config,omitempty"`
 }
 
 type SpaceRes struct {
-	Error  *WireError  `json:"error,omitempty"`
-	Exists *bool       `json:"exists,omitempty"`
-	Names  []string    `json:"list,omitempty"`
-	Info   *BranchInfo `json:"info,omitempty"`
-}
-
-type BranchInfo struct {
-	Salt        []byte                `json:"salt"`
-	Annotations []branches.Annotation `json:"annotations"`
-	CreatedAt   tai64.TAI64           `json:"created_at"`
+	Error  *WireError     `json:"error,omitempty"`
+	Exists *bool          `json:"exists,omitempty"`
+	Names  []string       `json:"list,omitempty"`
+	Info   *branches.Info `json:"info,omitempty"`
 }
 
 var _ branches.Space = &space{}
@@ -260,42 +253,25 @@ func newSpace(srv *spaceSrv, peer PeerID, newCell func(CellID) cells.Cell, newSt
 	}
 }
 
-func (r *space) Create(ctx context.Context, name string, params branches.Metadata) (*branches.Branch, error) {
-	info, err := r.srv.Create(ctx, BranchID{Peer: r.peer, Name: name}, params)
-	if err != nil {
-		return nil, err
-	}
-	b := r.makeBranch(name, *info)
-	return &b, nil
+func (r *space) Create(ctx context.Context, name string, cfg branches.Config) (*branches.Info, error) {
+	return r.srv.Create(ctx, BranchID{Peer: r.peer, Name: name}, cfg)
 }
 
-func (r *space) Get(ctx context.Context, name string) (*branches.Branch, error) {
-	info, err := r.srv.Get(ctx, BranchID{Peer: r.peer, Name: name})
-	if err != nil {
-		return nil, err
-	}
-	b := r.makeBranch(name, *info)
-	return &b, nil
+func (r *space) Get(ctx context.Context, name string) (*branches.Info, error) {
+	return r.srv.Get(ctx, BranchID{Peer: r.peer, Name: name})
 }
 
-func (r *space) Set(ctx context.Context, name string, md branches.Metadata) error {
+func (r *space) Set(ctx context.Context, name string, md branches.Config) error {
 	return r.srv.Set(ctx, BranchID{Peer: r.peer, Name: name}, md)
 }
 
-func (r *space) makeBranch(name string, info BranchInfo) branches.Branch {
-	return branches.Branch{
-		Volume: branches.Volume{
-			Cell:     r.newCell(CellID{Peer: r.peer, Name: name}),
-			VCStore:  r.newStore(StoreID{Peer: r.peer, Branch: name, Type: Type_VC}),
-			FSStore:  r.newStore(StoreID{Peer: r.peer, Branch: name, Type: Type_FS}),
-			RawStore: r.newStore(StoreID{Peer: r.peer, Branch: name, Type: Type_RAW}),
-		},
-		Metadata: branches.Metadata{
-			Salt:        info.Salt,
-			Annotations: info.Annotations,
-		},
-		CreatedAt: info.CreatedAt,
-	}
+func (r *space) Open(ctx context.Context, name string) (*branches.Volume, error) {
+	return &branches.Volume{
+		Cell:     r.newCell(CellID{Peer: r.peer, Name: name}),
+		VCStore:  r.newStore(StoreID{Peer: r.peer, Branch: name, Type: Type_VC}),
+		FSStore:  r.newStore(StoreID{Peer: r.peer, Branch: name, Type: Type_FS}),
+		RawStore: r.newStore(StoreID{Peer: r.peer, Branch: name, Type: Type_RAW}),
+	}, nil
 }
 
 func (r *space) Delete(ctx context.Context, name string) error {
@@ -314,12 +290,4 @@ func (r *space) List(ctx context.Context, span branches.Span, limit int) ([]stri
 		}
 	}
 	return names, nil
-}
-
-func infoFromBranch(b branches.Branch) *BranchInfo {
-	return &BranchInfo{
-		Annotations: b.Annotations,
-		CreatedAt:   b.CreatedAt,
-		Salt:        b.Salt,
-	}
 }

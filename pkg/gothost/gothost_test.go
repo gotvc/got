@@ -19,7 +19,7 @@ func TestConfigureDefaults(t *testing.T) {
 	require.NoError(t, e.Modify(ctx, ConfigureDefaults([]PeerID{newID(t, 0)})))
 
 	s2 := e.Open(newID(t, 0))
-	_, err := s2.Create(ctx, "test", branches.NewMetadata(false))
+	_, err := s2.Create(ctx, "test", branches.NewConfig(false))
 	require.NoError(t, err)
 }
 

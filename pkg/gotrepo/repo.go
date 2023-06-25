@@ -69,7 +69,6 @@ type (
 	Cell   = cells.Cell
 	Space  = branches.Space
 	Volume = branches.Volume
-	Branch = branches.Branch
 	Store  = cadata.Store
 
 	Ref  = gotkv.Ref
@@ -208,7 +207,7 @@ func Open(p string) (*Repo, error) {
 	if r.space, err = r.spaceFromSpecs(r.config.Spaces); err != nil {
 		return nil, err
 	}
-	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster, branches.NewMetadata(false)); err != nil {
+	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster, branches.NewConfig(false)); err != nil {
 		return nil, err
 	}
 	r.hostEngine = gothost.NewHostEngine(r.specDir)
@@ -246,11 +245,11 @@ func (r *Repo) GetHostEngine() *gothost.HostEngine {
 	return r.hostEngine
 }
 
-func (r *Repo) getFSOp(b *branches.Branch) *gotfs.Operator {
+func (r *Repo) getFSOp(b *branches.Info) *gotfs.Operator {
 	return branches.NewGotFS(b)
 }
 
-func (r *Repo) getVCOp(b *branches.Branch) *gotvc.Operator {
+func (r *Repo) getVCOp(b *branches.Info) *gotvc.Operator {
 	return branches.NewGotVC(b)
 }
 

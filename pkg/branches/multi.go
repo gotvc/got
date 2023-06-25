@@ -26,13 +26,13 @@ func NewMultiSpace(layers []Layer) (Space, error) {
 	return layered(layers), nil
 }
 
-func (r layered) Create(ctx context.Context, k string, md Metadata) (*Branch, error) {
+func (r layered) Create(ctx context.Context, k string, cfg Config) (*Info, error) {
 	layer, err := r.find(k)
 	if err != nil {
 		return nil, err
 	}
 	l := len(layer.Prefix)
-	return layer.Target.Create(ctx, k[l:], md)
+	return layer.Target.Create(ctx, k[l:], cfg)
 }
 
 func (r layered) Delete(ctx context.Context, k string) error {
@@ -44,16 +44,16 @@ func (r layered) Delete(ctx context.Context, k string) error {
 	return layer.Target.Delete(ctx, k[l:])
 }
 
-func (r layered) Set(ctx context.Context, k string, md Metadata) error {
+func (r layered) Set(ctx context.Context, k string, cfg Config) error {
 	layer, err := r.find(k)
 	if err != nil {
 		return err
 	}
 	l := len(layer.Prefix)
-	return layer.Target.Set(ctx, k[l:], md)
+	return layer.Target.Set(ctx, k[l:], cfg)
 }
 
-func (r layered) Get(ctx context.Context, k string) (*Branch, error) {
+func (r layered) Get(ctx context.Context, k string) (*Info, error) {
 	layer, err := r.find(k)
 	if err != nil {
 		return nil, ErrNotExist
@@ -87,6 +87,15 @@ func (r layered) List(ctx context.Context, span Span, limit int) (ret []string, 
 		}
 	}
 	return ret, err
+}
+
+func (s layered) Open(ctx context.Context, k string) (*Volume, error) {
+	layer, err := s.find(k)
+	if err != nil {
+		return nil, err
+	}
+	l := len(layer.Prefix)
+	return layer.Target.Open(ctx, k[l:])
 }
 
 func (r layered) find(k string) (Layer, error) {

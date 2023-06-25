@@ -7,7 +7,6 @@ import (
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cells/httpcell"
-	"github.com/brendoncarroll/go-tai64"
 	"github.com/inet256/inet256/pkg/inet256"
 
 	"github.com/gotvc/got/pkg/branches"
@@ -34,10 +33,8 @@ func (r *Repo) MakeStore(spec StoreSpec) (Store, error) {
 }
 
 type BranchSpec struct {
-	Volume      VolumeSpec            `json:"volume"`
-	Salt        []byte                `json:"salt"`
-	Annotations []branches.Annotation `json:"annotations"`
-	CreatedAt   tai64.TAI64           `json:"created_at"`
+	Volume VolumeSpec `json:"volume"`
+	branches.Info
 }
 
 type VolumeSpec struct {

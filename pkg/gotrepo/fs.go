@@ -15,14 +15,14 @@ func (r *Repo) Ls(ctx context.Context, p string, fn func(gotfs.DirEnt) error) er
 	if err != nil {
 		return err
 	}
-	snap, err := branches.GetHead(ctx, *branch)
+	snap, err := branches.GetHead(ctx, branch.Volume)
 	if err != nil {
 		return err
 	}
 	if snap == nil {
 		return nil
 	}
-	return r.getFSOp(branch).ReadDir(ctx, branch.Volume.FSStore, snap.Root, p, fn)
+	return r.getFSOp(&branch.Info).ReadDir(ctx, branch.Volume.FSStore, snap.Root, p, fn)
 }
 
 func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
@@ -31,7 +31,7 @@ func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
 		return err
 	}
 	vol := branch.Volume
-	snap, err := branches.GetHead(ctx, *branch)
+	snap, err := branches.GetHead(ctx, branch.Volume)
 	if err != nil {
 		return err
 	}
@@ -40,7 +40,7 @@ func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
 	}
 	ctx, cf := context.WithCancel(ctx)
 	defer cf()
-	fr, err := r.getFSOp(branch).NewReader(ctx, vol.FSStore, vol.RawStore, snap.Root, p)
+	fr, err := r.getFSOp(&branch.Info).NewReader(ctx, vol.FSStore, vol.RawStore, snap.Root, p)
 	if err != nil {
 		return err
 	}
@@ -53,14 +53,14 @@ func (r *Repo) Stat(ctx context.Context, p string) (*gotfs.Info, error) {
 	if err != nil {
 		return nil, err
 	}
-	snap, err := branches.GetHead(ctx, *branch)
+	snap, err := branches.GetHead(ctx, branch.Volume)
 	if err != nil {
 		return nil, err
 	}
 	if snap == nil {
 		return nil, fmt.Errorf("branch is empty")
 	}
-	fsop := r.getFSOp(branch)
+	fsop := r.getFSOp(&branch.Info)
 	return fsop.GetInfo(ctx, branch.Volume.FSStore, snap.Root, p)
 }
 
@@ -70,16 +70,16 @@ func (r *Repo) Check(ctx context.Context) error {
 		return err
 	}
 	vol := branch.Volume
-	snap, err := branches.GetHead(ctx, *branch)
+	snap, err := branches.GetHead(ctx, vol)
 	if err != nil {
 		return err
 	}
 	if snap == nil {
 		return nil
 	}
-	vcop := r.getVCOp(branch)
+	vcop := r.getVCOp(&branch.Info)
 	return vcop.Check(ctx, vol.VCStore, *snap, func(root gotfs.Root) error {
-		return r.getFSOp(branch).Check(ctx, vol.FSStore, root, func(ref gdat.Ref) error {
+		return r.getFSOp(&branch.Info).Check(ctx, vol.FSStore, root, func(ref gdat.Ref) error {
 			return nil
 		})
 	})

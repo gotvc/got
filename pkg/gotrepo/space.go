@@ -47,20 +47,22 @@ func (r *branchSpecDir) List(ctx context.Context, span branches.Span, limit int)
 	return ret, nil
 }
 
-func (r *branchSpecDir) Create(ctx context.Context, name string, params branches.Metadata) (*Branch, error) {
+func (r *branchSpecDir) Create(ctx context.Context, name string, params branches.Config) (*branches.Info, error) {
 	vspec, err := r.makeDefault(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return r.CreateWithSpec(ctx, name, BranchSpec{
-		Volume:      vspec,
-		Salt:        params.Salt,
-		CreatedAt:   tai64.Now().TAI64(),
-		Annotations: params.Annotations,
+		Volume: vspec,
+		Info: branches.Info{
+			Salt:        params.Salt,
+			CreatedAt:   tai64.Now().TAI64(),
+			Annotations: params.Annotations,
+		},
 	})
 }
 
-func (r *branchSpecDir) CreateWithSpec(ctx context.Context, name string, spec BranchSpec) (*Branch, error) {
+func (r *branchSpecDir) CreateWithSpec(ctx context.Context, name string, spec BranchSpec) (*branches.Info, error) {
 	if err := branches.CheckName(name); err != nil {
 		return nil, err
 	}
@@ -75,14 +77,41 @@ func (r *branchSpecDir) CreateWithSpec(ctx context.Context, name string, spec Br
 	if err := writeIfNotExists(r.fs, name, 0o644, bytes.NewReader(data)); err != nil {
 		return nil, err
 	}
-	return r.Get(context.TODO(), name)
+	return r.Get(ctx, name)
 }
 
 func (r *branchSpecDir) Delete(ctx context.Context, k string) error {
 	return r.fs.Remove(k)
 }
 
-func (r *branchSpecDir) Get(ctx context.Context, k string) (*Branch, error) {
+func (r *branchSpecDir) Get(ctx context.Context, k string) (*branches.Info, error) {
+	spec, err := r.loadSpec(ctx, k)
+	if err != nil {
+		return nil, err
+	}
+	return &spec.Info, nil
+}
+
+func (r *branchSpecDir) Set(ctx context.Context, k string, cfg branches.Config) error {
+	spec, err := r.loadSpec(ctx, k)
+	if err != nil {
+		return err
+	}
+	spec.Mode = cfg.Mode
+	spec.Salt = cfg.Salt
+	spec.Annotations = cfg.Annotations
+	return r.saveSpec(ctx, k, *spec)
+}
+
+func (r *branchSpecDir) Open(ctx context.Context, name string) (*branches.Volume, error) {
+	spec, err := r.loadSpec(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return r.makeVol(name, spec.Volume)
+}
+
+func (r *branchSpecDir) loadSpec(ctx context.Context, k string) (*BranchSpec, error) {
 	data, err := posixfs.ReadFile(ctx, r.fs, k)
 	if err != nil {
 		if posixfs.IsErrNotExist(err) {
@@ -94,43 +123,15 @@ func (r *branchSpecDir) Get(ctx context.Context, k string) (*Branch, error) {
 	if err := json.Unmarshal(data, &spec); err != nil {
 		return nil, err
 	}
-	return r.makeBranch(k, spec)
+	return &spec, nil
 }
 
-func (r *branchSpecDir) Set(ctx context.Context, k string, md branches.Metadata) error {
-	data, err := posixfs.ReadFile(ctx, r.fs, k)
-	if err != nil {
-		if posixfs.IsErrNotExist(err) {
-			return branches.ErrNotExist
-		}
-		return err
-	}
-	spec := BranchSpec{}
-	if err := json.Unmarshal(data, &spec); err != nil {
-		return err
-	}
-	spec.Salt = md.Salt
-	spec.Annotations = md.Annotations
-	data, err = json.Marshal(spec)
+func (r *branchSpecDir) saveSpec(ctx context.Context, k string, spec BranchSpec) error {
+	data, err := json.Marshal(spec)
 	if err != nil {
 		return err
 	}
 	return posixfs.PutFile(ctx, r.fs, k, 0o644, bytes.NewReader(data))
-}
-
-func (r *branchSpecDir) makeBranch(k string, spec BranchSpec) (*Branch, error) {
-	vol, err := r.makeVol(k, spec.Volume)
-	if err != nil {
-		return nil, err
-	}
-	return &Branch{
-		Volume: *vol,
-		Metadata: branches.Metadata{
-			Salt:        spec.Salt,
-			Annotations: spec.Annotations,
-		},
-		CreatedAt: spec.CreatedAt,
-	}, nil
 }
 
 func (r *branchSpecDir) makeVol(k string, spec VolumeSpec) (*Volume, error) {
