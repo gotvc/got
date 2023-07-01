@@ -166,6 +166,11 @@ func (e *HostEngine) ListIdentitiesFull(ctx context.Context) ([]IDEntry, error) 
 	return ListIdentitiesFull(ctx, e.fsop, ms, ds, *r)
 }
 
+func (e *HostEngine) CanDo(sub PeerID, verb branchintc.Verb, obj string) bool {
+	ap := e.cachedPolicy.Load()
+	return ap.CanDo(sub, verb, obj)
+}
+
 func (e *HostEngine) readFS(ctx context.Context) (ms, ds cadata.Store, root *gotfs.Root, _ error) {
 	v, err := e.inner.Open(ctx, HostConfigKey)
 	if err != nil {

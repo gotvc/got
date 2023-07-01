@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/brendoncarroll/go-exp/slices2"
 	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-tai64"
 	"google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
 
@@ -37,7 +37,7 @@ func (s Space) Create(ctx context.Context, key string, md branches.Config) (*bra
 		}
 		return nil, err
 	}
-	return s.makeBranch(key, res), nil
+	return res.ToInfo(), nil
 }
 
 func (s Space) Delete(ctx context.Context, key string) error {
@@ -58,7 +58,7 @@ func (s Space) Get(ctx context.Context, key string) (*branches.Info, error) {
 		}
 		return nil, err
 	}
-	return s.makeBranch(key, res), nil
+	return res.ToInfo(), nil
 }
 
 func (s Space) Set(ctx context.Context, key string, md branches.Config) error {
@@ -67,7 +67,7 @@ func (s Space) Set(ctx context.Context, key string, md branches.Config) error {
 
 		Salt: md.Salt,
 		Mode: Mode(md.Mode),
-		Annotations: mapSlice(md.Annotations, func(x branches.Annotation) *Annotation {
+		Annotations: slices2.Map(md.Annotations, func(x branches.Annotation) *Annotation {
 			return &Annotation{Key: x.Key, Value: x.Value}
 		}),
 	})
@@ -94,18 +94,6 @@ func (s Space) Open(ctx context.Context, key string) (*branches.Volume, error) {
 	}, nil
 }
 
-func (s Space) makeBranch(key string, bi *BranchInfo) *branches.Info {
-	createdAt, _ := tai64.Parse(bi.CreatedAt)
-	return &branches.Info{
-		Salt: bi.Salt,
-		Mode: branches.Mode(bi.Mode),
-		Annotations: mapSlice(bi.Annotations, func(x *Annotation) branches.Annotation {
-			return branches.Annotation{Key: x.Key, Value: x.Value}
-		}),
-		CreatedAt: createdAt,
-	}
-}
-
 func (s Space) makeStore(key string, st StoreType) cadata.Store {
 	return &Store{c: s.c, key: key, st: st}
 }
@@ -116,12 +104,4 @@ func (s Space) makeCell(key string) cells.Cell {
 
 func errorMsgContains(err error, sub string) bool {
 	return strings.Contains(strings.ToLower(err.Error()), sub)
-}
-
-func mapSlice[X, Y any, S ~[]X](xs S, fn func(X) Y) []Y {
-	ys := make([]Y, len(xs))
-	for i := range xs {
-		ys[i] = fn(xs[i])
-	}
-	return ys
 }
