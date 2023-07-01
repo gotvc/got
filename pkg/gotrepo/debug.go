@@ -32,33 +32,31 @@ func (r *Repo) DebugDB(ctx context.Context, w io.Writer) error {
 }
 
 func (r *Repo) DebugFS(ctx context.Context, w io.Writer) error {
-	_, branch, err := r.GetActiveBranch(ctx)
+	_, b, err := r.GetActiveBranch(ctx)
 	if err != nil {
 		return err
 	}
-	vol := branch.Volume
-	x, err := branches.GetHead(ctx, *branch)
+	x, err := branches.GetHead(ctx, b.Volume)
 	if err != nil {
 		return err
 	}
 	if x == nil {
 		return fmt.Errorf("no snapshot, no root")
 	}
-	return gotfs.Dump(ctx, vol.FSStore, x.Root, w)
+	return gotfs.Dump(ctx, b.Volume.FSStore, x.Root, w)
 }
 
 func (r *Repo) DebugKV(ctx context.Context, w io.Writer) error {
-	_, branch, err := r.GetActiveBranch(ctx)
+	_, b, err := r.GetActiveBranch(ctx)
 	if err != nil {
 		return err
 	}
-	vol := branch.Volume
-	x, err := branches.GetHead(ctx, *branch)
+	x, err := branches.GetHead(ctx, b.Volume)
 	if err != nil {
 		return err
 	}
 	if x == nil {
 		return fmt.Errorf("no snapshot, no root")
 	}
-	return gotkv.DebugTree(ctx, vol.FSStore, x.Root.ToGotKV(), w)
+	return gotkv.DebugTree(ctx, b.Volume.FSStore, x.Root.ToGotKV(), w)
 }

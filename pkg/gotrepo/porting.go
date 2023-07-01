@@ -19,10 +19,10 @@ func (r *Repo) GetImportStores(ctx context.Context, branchName string) (*branche
 	if err != nil {
 		return nil, err
 	}
-	return r.getImportTriple(ctx, b)
+	return r.getImportTriple(ctx, &b.Info)
 }
 
-func (r *Repo) getImporter(ctx context.Context, b *branches.Branch) (*porting.Importer, error) {
+func (r *Repo) getImporter(ctx context.Context, b *branches.Info) (*porting.Importer, error) {
 	salt := saltFromBytes(b.Salt)
 	saltHash := gdat.Hash(salt[:])
 	st, err := r.getImportTriple(ctx, b)
@@ -34,7 +34,7 @@ func (r *Repo) getImporter(ctx context.Context, b *branches.Branch) (*porting.Im
 	return porting.NewImporter(fsop, cache, st.FS, st.Raw), nil
 }
 
-func (r *Repo) getExporter(b *branches.Branch) *porting.Exporter {
+func (r *Repo) getExporter(b *branches.Info) *porting.Exporter {
 	fsop := r.getFSOp(b)
 	salt := saltFromBytes(b.Salt)
 	saltHash := gdat.Hash(salt[:])
@@ -42,7 +42,7 @@ func (r *Repo) getExporter(b *branches.Branch) *porting.Exporter {
 	return porting.NewExporter(fsop, cache, r.workingDir)
 }
 
-func (r *Repo) getImportTriple(ctx context.Context, b *branches.Branch) (ret *branches.StoreTriple, _ error) {
+func (r *Repo) getImportTriple(ctx context.Context, b *branches.Info) (ret *branches.StoreTriple, _ error) {
 	salt := saltFromBytes(b.Salt)
 	saltHash := gdat.Hash(salt[:])
 	ids := [3]uint64{}

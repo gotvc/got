@@ -60,21 +60,21 @@ func TestCell(t *testing.T) {
 func createCell(t testing.TB, space branches.Space) cells.Cell {
 	name := "test"
 	ctx := testutil.Context(t)
-	_, err := space.Create(ctx, name, branches.Metadata{})
+	_, err := space.Create(ctx, name, branches.Config{})
 	require.NoError(t, err)
-	branch, err := space.Get(ctx, name)
+	v, err := space.Open(ctx, name)
 	require.NoError(t, err)
-	return branch.Volume.Cell
+	return v.Cell
 }
 
 func createStore(t testing.TB, space branches.Space) cadata.Store {
 	name := "test"
 	ctx := testutil.Context(t)
-	_, err := space.Create(ctx, name, branches.Metadata{})
+	_, err := space.Create(ctx, name, branches.Config{})
 	require.NoError(t, err)
-	branch, err := space.Get(ctx, name)
+	v, err := space.Open(ctx, name)
 	require.NoError(t, err)
-	return branch.Volume.RawStore
+	return v.RawStore
 }
 
 type side struct {

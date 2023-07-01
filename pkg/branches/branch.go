@@ -12,40 +12,54 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-// Branch is a Volume plus additional metadata
-type Branch struct {
-	Volume Volume
-	Metadata
+type Info struct {
+	Mode        Mode         `json:"mode"`
+	Salt        []byte       `json:"salt"`
+	Annotations []Annotation `json:"annotations"`
 
 	CreatedAt tai64.TAI64 `json:"created_at"`
 }
 
-// Metadata is non-volume, user-modifiable information associated with a branch.
-type Metadata struct {
-	Mode Mode   `json:"mode"`
-	Salt []byte `json:"salt"`
+func (i Info) Clone() Info {
+	i2 := i
+	i2.Salt = slices.Clone(i2.Salt)
+	i2.Annotations = slices.Clone(i2.Annotations)
+	return i2
+}
 
+func (i Info) AsConfig() Config {
+	return Config{Mode: i.Mode, Salt: i.Salt, Annotations: i.Annotations}
+}
+
+// Config is non-volume, user-modifiable information associated with a branch.
+type Config struct {
+	Mode        Mode         `json:"mode"`
+	Salt        []byte       `json:"salt"`
 	Annotations []Annotation `json:"annotations"`
 }
 
-func NewMetadata(public bool) Metadata {
+func (c Config) AsInfo() Info {
+	return Info{Mode: c.Mode, Salt: c.Salt, Annotations: c.Annotations}
+}
+
+func NewConfig(public bool) Config {
 	var salt []byte
 	if !public {
 		salt = make([]byte, 32)
 		readRandom(salt)
 	}
-	return Metadata{
+	return Config{
 		Salt: salt,
 		Mode: ModeExpand,
 	}
 }
 
 // Clone returns a deep copy of md
-func (md Metadata) Clone() Metadata {
-	return Metadata{
-		Salt:        slices.Clone(md.Salt),
-		Annotations: slices.Clone(md.Annotations),
-		Mode:        md.Mode,
+func (c Config) Clone() Config {
+	return Config{
+		Salt:        slices.Clone(c.Salt),
+		Annotations: slices.Clone(c.Annotations),
+		Mode:        c.Mode,
 	}
 }
 
@@ -123,9 +137,9 @@ func (m Mode) String() string {
 }
 
 // SetHead forcibly sets the head of the branch.
-func SetHead(ctx context.Context, b Branch, src StoreTriple, snap Snap) error {
-	dst := b.Volume.StoreTriple()
-	return applySnapshot(ctx, b.Volume.Cell, func(s *Snap) (*Snap, error) {
+func SetHead(ctx context.Context, v Volume, src StoreTriple, snap Snap) error {
+	dst := v.StoreTriple()
+	return applySnapshot(ctx, v.Cell, func(s *Snap) (*Snap, error) {
 		if err := syncStores(ctx, src, dst, snap); err != nil {
 			return nil, err
 		}
@@ -134,14 +148,14 @@ func SetHead(ctx context.Context, b Branch, src StoreTriple, snap Snap) error {
 }
 
 // GetHead returns the branch head
-func GetHead(ctx context.Context, b Branch) (*Snap, error) {
-	return getSnapshot(ctx, b.Volume.Cell)
+func GetHead(ctx context.Context, v Volume) (*Snap, error) {
+	return getSnapshot(ctx, v.Cell)
 }
 
 // Apply applies fn to branch, any missing data will be pulled from scratch
-func Apply(ctx context.Context, b Branch, src StoreTriple, fn func(*Snap) (*Snap, error)) error {
-	dst := b.Volume.StoreTriple()
-	return applySnapshot(ctx, b.Volume.Cell, func(x *Snap) (*Snap, error) {
+func Apply(ctx context.Context, v Volume, src StoreTriple, fn func(*Snap) (*Snap, error)) error {
+	dst := v.StoreTriple()
+	return applySnapshot(ctx, v.Cell, func(x *Snap) (*Snap, error) {
 		y, err := fn(x)
 		if err != nil {
 			return nil, err
@@ -155,41 +169,41 @@ func Apply(ctx context.Context, b Branch, src StoreTriple, fn func(*Snap) (*Snap
 	})
 }
 
-func History(ctx context.Context, b Branch, vcop *gotvc.Operator, fn func(ref gdat.Ref, snap Snap) error) error {
-	snap, err := GetHead(ctx, b)
+func History(ctx context.Context, v Volume, vcop *gotvc.Operator, fn func(ref gdat.Ref, snap Snap) error) error {
+	snap, err := GetHead(ctx, v)
 	if err != nil {
 		return err
 	}
 	if snap == nil {
 		return nil
 	}
-	ref := vcop.RefFromSnapshot(*snap, b.Volume.VCStore)
+	ref := vcop.RefFromSnapshot(*snap, v.VCStore)
 	if err := fn(ref, *snap); err != nil {
 		return err
 	}
-	return gotvc.ForEach(ctx, b.Volume.VCStore, snap.Parents, fn)
+	return gotvc.ForEach(ctx, v.VCStore, snap.Parents, fn)
 }
 
 // NewGotFS creates a new gotfs.Operator suitable for writing to the branch
-func NewGotFS(b *Branch, opts ...gotfs.Option) *gotfs.Operator {
+func NewGotFS(b *Info, opts ...gotfs.Option) *gotfs.Operator {
 	opts = append(opts, gotfs.WithSalt(deriveFSSalt(b)))
 	fsop := gotfs.NewOperator(opts...)
 	return fsop
 }
 
 // NewGotVC creates a new gotvc.Operator suitable for writing to the branch
-func NewGotVC(b *Branch, opts ...gotvc.Option) *gotvc.Operator {
+func NewGotVC(b *Info, opts ...gotvc.Option) *gotvc.Operator {
 	opts = append(opts, gotvc.WithSalt(deriveVCSalt(b)))
 	return gotvc.NewOperator(opts...)
 }
 
-func deriveFSSalt(b *Branch) *[32]byte {
+func deriveFSSalt(b *Info) *[32]byte {
 	var out [32]byte
 	gdat.DeriveKey(out[:], saltFromBytes(b.Salt), []byte("gotfs"))
 	return &out
 }
 
-func deriveVCSalt(b *Branch) *[32]byte {
+func deriveVCSalt(b *Info) *[32]byte {
 	var out [32]byte
 	gdat.DeriveKey(out[:], saltFromBytes(b.Salt), []byte("gotvc"))
 	return &out

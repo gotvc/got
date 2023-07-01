@@ -25,7 +25,7 @@ func (r *Repo) Add(ctx context.Context, paths ...string) error {
 	if err != nil {
 		return err
 	}
-	porter, err := r.getImporter(ctx, branch)
+	porter, err := r.getImporter(ctx, &branch.Info)
 	if err != nil {
 		return err
 	}
@@ -57,7 +57,7 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 	if err != nil {
 		return err
 	}
-	porter, err := r.getImporter(ctx, branch)
+	porter, err := r.getImporter(ctx, &branch.Info)
 	if err != nil {
 		return err
 	}
@@ -87,21 +87,22 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 
 // Rm deletes a path known to version control.
 func (r *Repo) Rm(ctx context.Context, paths ...string) error {
-	branch, err := r.GetBranch(ctx, "")
+	b, err := r.GetBranch(ctx, "")
 	if err != nil {
 		return err
 	}
-	snap, err := branches.GetHead(ctx, *branch)
+	vol := b.Volume
+	snap, err := branches.GetHead(ctx, vol)
 	if err != nil {
 		return err
 	}
-	fsop := r.getFSOp(branch)
+	fsop := r.getFSOp(&b.Info)
 	stage := r.getStage()
 	for _, target := range paths {
 		if snap == nil {
 			return fmt.Errorf("path %q not found", target)
 		}
-		if err := fsop.ForEachLeaf(ctx, branch.Volume.FSStore, snap.Root, target, func(p string, _ *gotfs.Info) error {
+		if err := fsop.ForEachLeaf(ctx, vol.FSStore, snap.Root, target, func(p string, _ *gotfs.Info) error {
 			return stage.Delete(ctx, p)
 		}); err != nil {
 			return err
@@ -137,8 +138,9 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 	if err != nil {
 		return err
 	}
-	fsop := r.getFSOp(branch)
-	snap, err := branches.GetHead(ctx, *branch)
+	vol := branch.Volume
+	fsop := r.getFSOp(&branch.Info)
+	snap, err := branches.GetHead(ctx, vol)
 	if err != nil {
 		return err
 	}
@@ -146,7 +148,7 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 	if snap != nil {
 		root = snap.Root
 	} else {
-		rootPtr, err := fsop.NewEmpty(ctx, branch.Volume.FSStore)
+		rootPtr, err := fsop.NewEmpty(ctx, vol.FSStore)
 		if err != nil {
 			return err
 		}
@@ -158,7 +160,7 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 		case sop.Delete != nil:
 			op.Delete = sop.Delete
 		case sop.Put != nil:
-			md, err := fsop.GetInfo(ctx, branch.Volume.FSStore, root, p)
+			md, err := fsop.GetInfo(ctx, vol.FSStore, root, p)
 			if err != nil && !posixfs.IsErrNotExist(err) {
 				return err
 			}
@@ -183,24 +185,25 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 	if err != nil {
 		return err
 	}
+	vol := branch.Volume
 	snapInfo.Creator = r.GetID().String()
 	snapInfo.Authors = append(snapInfo.Authors, r.GetID().String())
-	src, err := r.getImportTriple(ctx, branch)
+	src, err := r.getImportTriple(ctx, &branch.Info)
 	if err != nil {
 		return err
 	}
-	dst := branch.Volume.StoreTriple()
+	dst := vol.StoreTriple()
 	// writes go to src, but reads from src should fallback to dst
 	src = &branches.StoreTriple{
 		Raw: stores.AddWriteLayer(dst.Raw, src.Raw),
 		FS:  stores.AddWriteLayer(dst.FS, src.FS),
 		VC:  stores.AddWriteLayer(dst.VC, src.VC),
 	}
-	fsop := r.getFSOp(branch)
-	vcop := r.getVCOp(branch)
+	fsop := r.getFSOp(&branch.Info)
+	vcop := r.getVCOp(&branch.Info)
 	ctx, cf := metrics.Child(ctx, "applying changes")
 	defer cf()
-	if err := branches.Apply(ctx, *branch, *src, func(x *Snap) (*Snap, error) {
+	if err := branches.Apply(ctx, branch.Volume, *src, func(x *Snap) (*Snap, error) {
 		var root *Root
 		if x != nil {
 			root = &x.Root
@@ -228,11 +231,11 @@ func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) er
 	if err != nil {
 		return err
 	}
-	snap, err := branches.GetHead(ctx, *b)
+	snap, err := branches.GetHead(ctx, b.Volume)
 	if err != nil {
 		return err
 	}
-	fsop := r.getFSOp(b)
+	fsop := r.getFSOp(&b.Info)
 	return posixfs.WalkLeaves(ctx, r.workingDir, "", func(p string, ent posixfs.DirEnt) error {
 		// filter staging
 		if op, err := r.stage.Get(ctx, p); err != nil {

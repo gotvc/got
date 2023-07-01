@@ -24,7 +24,7 @@ func newBranchCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		Args:     cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			branchName := args[0]
-			_, err := repo.CreateBranch(ctx, branchName, branches.NewMetadata(false))
+			_, err := repo.CreateBranch(ctx, branchName, branches.NewConfig(false))
 			return err
 		},
 	}
@@ -82,7 +82,7 @@ func newBranchCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return prettyPrintJSON(cmd.OutOrStdout(), branch.Metadata)
+			return prettyPrintJSON(cmd.OutOrStdout(), branch.Info)
 		},
 	}
 	var cpSaltCmd = &cobra.Command{
@@ -93,17 +93,17 @@ func newBranchCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		Args:     cobra.ExactArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			src, dst := args[0], args[1]
-			srcb, err := repo.GetBranch(ctx, src)
+			srcInfo, err := repo.GetBranch(ctx, src)
 			if err != nil {
 				return err
 			}
-			dstb, err := repo.GetBranch(ctx, dst)
+			dstInfo, err := repo.GetBranch(ctx, dst)
 			if err != nil {
 				return err
 			}
-			md := dstb.Metadata
-			md.Salt = srcb.Salt
-			return repo.SetBranch(ctx, dst, md)
+			cfg := dstInfo.AsConfig()
+			cfg.Salt = srcInfo.Salt
+			return repo.SetBranch(ctx, dst, cfg)
 		},
 	}
 	for _, c := range []*cobra.Command{

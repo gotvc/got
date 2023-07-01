@@ -17,15 +17,15 @@ var _ ftpserver.Driver = &Driver{}
 
 type Driver struct {
 	ctx   context.Context
-	b     branches.Branch
+	v     branches.Volume
 	gotfs gotfs.Operator
 }
 
-func NewDriver(ctx context.Context, b branches.Branch) *Driver {
+func NewDriver(ctx context.Context, info branches.Info, v branches.Volume) *Driver {
 	return &Driver{
 		ctx:   ctx,
-		b:     b,
-		gotfs: *branches.NewGotFS(&b),
+		v:     v,
+		gotfs: *branches.NewGotFS(&info),
 	}
 }
 
@@ -34,7 +34,7 @@ func (d *Driver) Stat(ctx *ftpserver.Context, p string) (iofs.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return gotiofs.Stat(d.ctx, &d.gotfs, d.b.Volume.FSStore, *root, p)
+	return gotiofs.Stat(d.ctx, &d.gotfs, d.v.FSStore, *root, p)
 }
 
 func (d *Driver) GetFile(ctx *ftpserver.Context, p string, off int64) (int64, io.ReadCloser, error) {
@@ -42,11 +42,11 @@ func (d *Driver) GetFile(ctx *ftpserver.Context, p string, off int64) (int64, io
 	if err != nil {
 		return 0, nil, err
 	}
-	size, err := d.gotfs.SizeOfFile(d.ctx, d.b.Volume.FSStore, *root, p)
+	size, err := d.gotfs.SizeOfFile(d.ctx, d.v.FSStore, *root, p)
 	if err != nil {
 		return 0, nil, err
 	}
-	f := gotiofs.NewFile(d.ctx, &d.gotfs, d.b.Volume.FSStore, d.b.Volume.RawStore, *root, p)
+	f := gotiofs.NewFile(d.ctx, &d.gotfs, d.v.FSStore, d.v.RawStore, *root, p)
 	off2, err := f.Seek(off, io.SeekStart)
 	if err != nil {
 		return 0, nil, err
@@ -67,7 +67,7 @@ func (d *Driver) ListDir(ctx *ftpserver.Context, p string, fn func(iofs.FileInfo
 	if err != nil {
 		return err
 	}
-	ms := d.b.Volume.FSStore
+	ms := d.v.FSStore
 	return d.gotfs.ReadDir(d.ctx, ms, *root, p, func(de gotfs.DirEnt) error {
 		p2 := path.Join(p, de.Name)
 		finfo, err := gotiofs.Stat(d.ctx, &d.gotfs, ms, *root, p2)
@@ -91,7 +91,7 @@ func (d *Driver) Rename(ctx *ftpserver.Context, oldpath, newpath string) error {
 }
 
 func (d *Driver) getRoot() (*gotfs.Root, error) {
-	snap, err := branches.GetHead(d.ctx, d.b)
+	snap, err := branches.GetHead(d.ctx, d.v)
 	if err != nil {
 		return nil, err
 	}

@@ -59,40 +59,34 @@ func NewCryptoSpace(inner Space, secret *[32]byte, opts ...CryptoSpaceOption) Sp
 	return s
 }
 
-func (r *CryptoSpace) Create(ctx context.Context, name string, md Metadata) (*Branch, error) {
+func (r *CryptoSpace) Create(ctx context.Context, name string, cfg Config) (*Info, error) {
 	if r.shouldPassthrough(name) {
-		return r.inner.Create(ctx, name, md)
+		return r.inner.Create(ctx, name, cfg)
 	}
 	nameCtext := r.encryptName(name)
-	mdCtext := r.encryptMetadata(md)
-	return r.inner.Create(ctx, nameCtext, mdCtext)
+	info2 := r.encryptInfo(cfg.AsInfo())
+	return r.inner.Create(ctx, nameCtext, info2.AsConfig())
 }
 
-func (r *CryptoSpace) Set(ctx context.Context, name string, md Metadata) error {
+func (r *CryptoSpace) Set(ctx context.Context, name string, cfg Config) error {
 	if r.shouldPassthrough(name) {
-		return r.inner.Set(ctx, name, md)
+		return r.inner.Set(ctx, name, cfg)
 	}
 	nameCtext := r.encryptName(name)
-	mdCtext := r.encryptMetadata(md)
-	return r.inner.Set(ctx, nameCtext, mdCtext)
+	infoCtext := r.encryptInfo(cfg.AsInfo())
+	return r.inner.Set(ctx, nameCtext, infoCtext.AsConfig())
 }
 
-func (r *CryptoSpace) Get(ctx context.Context, name string) (*Branch, error) {
+func (r *CryptoSpace) Get(ctx context.Context, name string) (*Info, error) {
 	if r.shouldPassthrough(name) {
 		return r.inner.Get(ctx, name)
 	}
 	nameCtext := r.encryptName(name)
-	branch, err := r.inner.Get(ctx, nameCtext)
+	info, err := r.inner.Get(ctx, nameCtext)
 	if err != nil {
 		return nil, err
 	}
-	md, err := r.decryptMetadata(branch.Metadata)
-	if err != nil {
-		return nil, err
-	}
-	branch.Volume = r.wrapVolume(name, branch.Volume)
-	branch.Metadata = md
-	return branch, nil
+	return r.decryptInfo(*info)
 }
 
 func (r *CryptoSpace) Delete(ctx context.Context, name string) error {
@@ -128,6 +122,14 @@ func (r *CryptoSpace) List(ctx context.Context, span Span, limit int) (ret []str
 		return nil, err
 	}
 	return ret, nil
+}
+
+func (r *CryptoSpace) Open(ctx context.Context, name string) (*Volume, error) {
+	v, err := r.inner.Open(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return r.wrapVolume(name, v), nil
 }
 
 func (r *CryptoSpace) getAEAD(secret []byte) cipher.AEAD {
@@ -178,21 +180,21 @@ func (r *CryptoSpace) decryptName(x string) (string, error) {
 	return string(name), nil
 }
 
-func (r *CryptoSpace) encryptMetadata(x Metadata) Metadata {
-	md2 := Metadata{
+func (r *CryptoSpace) encryptInfo(x Info) Info {
+	y := Info{
 		Salt: r.encryptSalt(x.Salt),
 		Mode: x.Mode,
 	}
-	SortAnnotations(md2.Annotations)
-	return md2
+	SortAnnotations(y.Annotations)
+	return y
 }
 
-func (r *CryptoSpace) decryptMetadata(x Metadata) (Metadata, error) {
+func (r *CryptoSpace) decryptInfo(x Info) (*Info, error) {
 	salt, err := r.decryptSalt(x.Salt)
 	if err != nil {
-		return Metadata{}, err
+		return nil, err
 	}
-	return Metadata{
+	return &Info{
 		Salt: salt,
 		Mode: x.Mode,
 	}, nil
@@ -218,11 +220,11 @@ func (r *CryptoSpace) decryptSalt(x []byte) ([]byte, error) {
 	return r.getAEAD(secret[:]).Open(nil, nonce, ctext, nil)
 }
 
-func (r *CryptoSpace) wrapVolume(name string, x Volume) Volume {
+func (r *CryptoSpace) wrapVolume(name string, x *Volume) *Volume {
 	var secret [32]byte
 	deriveKey(secret[:], r.secret, "got/space/cells/"+name)
 	yCell := cells.NewEncrypted(x.Cell, &secret)
-	return Volume{
+	return &Volume{
 		Cell:     yCell,
 		FSStore:  x.FSStore,
 		VCStore:  x.VCStore,

@@ -21,25 +21,24 @@ var _ iofs.FS = &FS{}
 
 // FS implements io/fs.FS
 type FS struct {
-	ctx    context.Context
-	gotvc  *gotvc.Operator
-	gotfs  *gotfs.Operator
-	branch *branches.Branch
+	ctx   context.Context
+	gotvc *gotvc.Operator
+	gotfs *gotfs.Operator
+	vol   *branches.Volume
 }
 
-func New(ctx context.Context, b *branches.Branch) *FS {
+func New(ctx context.Context, info branches.Info, v *branches.Volume) *FS {
 	return &FS{
-		ctx:    ctx,
-		gotvc:  branches.NewGotVC(b),
-		gotfs:  branches.NewGotFS(b, gotfs.WithMetaCacheSize(128), gotfs.WithContentCacheSize(16)),
-		branch: b,
+		ctx:   ctx,
+		gotvc: branches.NewGotVC(&info),
+		gotfs: branches.NewGotFS(&info, gotfs.WithMetaCacheSize(128), gotfs.WithContentCacheSize(16)),
+		vol:   v,
 	}
 }
 
 func (s *FS) Open(name string) (iofs.File, error) {
 	logctx.Infof(s.ctx, "open %q", name)
-	b := s.branch
-	snap, err := branches.GetHead(s.ctx, *b)
+	snap, err := branches.GetHead(s.ctx, *s.vol)
 	if err != nil {
 		return nil, err
 	}
@@ -47,11 +46,11 @@ func (s *FS) Open(name string) (iofs.File, error) {
 		return nil, iofs.ErrNotExist
 	}
 	fsop := s.gotfs
-	ms := b.Volume.FSStore
+	ms := s.vol.FSStore
 	if _, err := fsop.GetInfo(s.ctx, ms, snap.Root, name); err != nil {
 		return nil, convertError(err)
 	}
-	return NewFile(s.ctx, fsop, b.Volume.FSStore, b.Volume.RawStore, snap.Root, name), nil
+	return NewFile(s.ctx, fsop, s.vol.FSStore, s.vol.RawStore, snap.Root, name), nil
 }
 
 var _ iofs.File = &File{}

@@ -93,22 +93,22 @@ func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[P
 
 func (cs *cellSrv) handleCAS(ctx context.Context, peer PeerID, name string, actual, prev, next []byte) (int, error) {
 	space := cs.open(peer)
-	branch, err := space.Get(ctx, name)
+	v, err := space.Open(ctx, name)
 	if err != nil {
 		return 0, err
 	}
-	cell := branch.Volume.Cell
+	cell := v.Cell
 	_, n, err := cell.CAS(ctx, actual, prev, next)
 	return n, err
 }
 
 func (cs *cellSrv) handleRead(ctx context.Context, peer PeerID, name string, buf []byte) (int, error) {
 	space := cs.open(peer)
-	branch, err := space.Get(ctx, name)
+	v, err := space.Open(ctx, name)
 	if err != nil {
 		return 0, err
 	}
-	cell := branch.Volume.Cell
+	cell := v.Cell
 	return cell.Read(ctx, buf)
 }
 

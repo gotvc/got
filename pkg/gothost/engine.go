@@ -25,19 +25,17 @@ type HostEngine struct {
 }
 
 func NewHostEngine(inner branches.Space) *HostEngine {
-	b := &branches.Branch{
-		Metadata: branches.NewMetadata(true),
-	}
+	info := branches.NewConfig(true).AsInfo()
 	return &HostEngine{
 		inner: inner,
-		fsop:  branches.NewGotFS(b),
-		vcop:  branches.NewGotVC(b),
+		fsop:  branches.NewGotFS(&info),
+		vcop:  branches.NewGotVC(&info),
 	}
 }
 
 // Initialize creates the host config branch if it does not exist.
 func (e *HostEngine) Initialize(ctx context.Context) error {
-	md := branches.NewMetadata(true)
+	md := branches.NewConfig(true)
 	md.Annotations = append(md.Annotations, branches.Annotation{Key: "protocol", Value: "gothost@v0"})
 	_, err := branches.CreateIfNotExists(ctx, e.inner, HostConfigKey, md)
 	if err != nil {
@@ -168,12 +166,17 @@ func (e *HostEngine) ListIdentitiesFull(ctx context.Context) ([]IDEntry, error) 
 	return ListIdentitiesFull(ctx, e.fsop, ms, ds, *r)
 }
 
+func (e *HostEngine) CanDo(sub PeerID, verb branchintc.Verb, obj string) bool {
+	ap := e.cachedPolicy.Load()
+	return ap.CanDo(sub, verb, obj)
+}
+
 func (e *HostEngine) readFS(ctx context.Context) (ms, ds cadata.Store, root *gotfs.Root, _ error) {
-	b, err := e.inner.Get(ctx, HostConfigKey)
+	v, err := e.inner.Open(ctx, HostConfigKey)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	snap, err := branches.GetHead(ctx, *b)
+	snap, err := branches.GetHead(ctx, *v)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -186,21 +189,21 @@ func (e *HostEngine) readFS(ctx context.Context) (ms, ds cadata.Store, root *got
 		}
 		return ms, ds, root, nil
 	}
-	return b.Volume.FSStore, b.Volume.RawStore, &snap.Root, nil
+	return v.FSStore, v.RawStore, &snap.Root, nil
 }
 
 func (e *HostEngine) modifyFS(ctx context.Context, fn func(op *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error)) error {
 	defer e.reload(ctx)
-	b, err := e.inner.Get(ctx, HostConfigKey)
+	v, err := e.inner.Open(ctx, HostConfigKey)
 	if err != nil {
 		return err
 	}
 	scratch := branches.StoreTriple{
-		Raw: stores.AddWriteLayer(b.Volume.RawStore, stores.NewMem()),
-		FS:  stores.AddWriteLayer(b.Volume.FSStore, stores.NewMem()),
-		VC:  stores.AddWriteLayer(b.Volume.VCStore, stores.NewMem()),
+		Raw: stores.AddWriteLayer(v.RawStore, stores.NewMem()),
+		FS:  stores.AddWriteLayer(v.FSStore, stores.NewMem()),
+		VC:  stores.AddWriteLayer(v.VCStore, stores.NewMem()),
 	}
-	return branches.Apply(ctx, *b, scratch, func(snap *gotvc.Snapshot) (*gotvc.Snapshot, error) {
+	return branches.Apply(ctx, *v, scratch, func(snap *gotvc.Snapshot) (*gotvc.Snapshot, error) {
 		var x gotfs.Root
 		if snap != nil {
 			x = snap.Root

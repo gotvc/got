@@ -4,15 +4,8 @@ import (
 	"context"
 	"fmt"
 	"regexp"
-	"sync"
 
 	"errors"
-
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/cells"
-	"github.com/brendoncarroll/go-tai64"
-	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 )
 
 var (
@@ -72,18 +65,21 @@ func (s Span) Contains(x string) bool {
 
 // A Space holds named branches.
 type Space interface {
-	Create(ctx context.Context, name string, md Metadata) (*Branch, error)
-	Get(ctx context.Context, name string) (*Branch, error)
-	Set(ctx context.Context, name string, md Metadata) error
+	Create(ctx context.Context, name string, cfg Config) (*Info, error)
+	Get(ctx context.Context, name string) (*Info, error)
+	Set(ctx context.Context, name string, cfg Config) error
 	Delete(ctx context.Context, name string) error
 	List(ctx context.Context, span Span, limit int) ([]string, error)
+
+	// Open returns a volume for viewing and modifying the branch contents.
+	Open(ctx context.Context, name string) (*Volume, error)
 }
 
-func CreateIfNotExists(ctx context.Context, r Space, k string, md Metadata) (*Branch, error) {
+func CreateIfNotExists(ctx context.Context, r Space, k string, cfg Config) (*Info, error) {
 	branch, err := r.Get(ctx, k)
 	if err != nil {
 		if IsNotExist(err) {
-			return r.Create(ctx, k, md)
+			return r.Create(ctx, k, cfg)
 		}
 		return nil, err
 	}
@@ -109,89 +105,4 @@ func ForEach(ctx context.Context, s Space, span Span, fn func(string) error) (re
 		span.Begin = names[len(names)-1] + "\x00"
 	}
 	return retErr
-}
-
-type MemSpace struct {
-	newStore func() cadata.Store
-	newCell  func() cells.Cell
-
-	mu       sync.RWMutex
-	branches map[string]Branch
-}
-
-func NewMem(newStore func() cadata.Store, newCell func() cells.Cell) Space {
-	return &MemSpace{
-		newStore: newStore,
-		newCell:  newCell,
-		branches: map[string]Branch{},
-	}
-}
-
-func (r *MemSpace) Get(ctx context.Context, name string) (*Branch, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	branch, exists := r.branches[name]
-	branch.Metadata = branch.Metadata.Clone()
-	if !exists {
-		return nil, ErrNotExist
-	}
-	return &branch, nil
-}
-
-func (r *MemSpace) Create(ctx context.Context, name string, md Metadata) (*Branch, error) {
-	if err := CheckName(name); err != nil {
-		return nil, err
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, exists := r.branches[name]; exists {
-		return nil, ErrExists
-	}
-	r.branches[name] = Branch{
-		Volume: Volume{
-			Cell:     r.newCell(),
-			VCStore:  r.newStore(),
-			FSStore:  r.newStore(),
-			RawStore: r.newStore(),
-		},
-		Metadata:  md.Clone(),
-		CreatedAt: tai64.Now().TAI64(),
-	}
-	branch := r.branches[name]
-	return &branch, nil
-}
-
-func (r *MemSpace) Set(ctx context.Context, name string, md Metadata) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, exists := r.branches[name]; !exists {
-		return ErrNotExist
-	}
-	b := r.branches[name]
-	b.Metadata = md.Clone()
-	r.branches[name] = b
-	return nil
-}
-
-func (r *MemSpace) Delete(ctx context.Context, name string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	delete(r.branches, name)
-	return nil
-}
-
-func (r *MemSpace) List(ctx context.Context, span Span, limit int) (ret []string, _ error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	keys := maps.Keys(r.branches)
-	slices.Sort(keys)
-	for _, name := range keys {
-		if limit > 0 && len(ret) >= limit {
-			break
-		}
-		if span.Contains(name) {
-			ret = append(ret, name)
-		}
-	}
-	return ret, nil
 }

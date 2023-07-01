@@ -103,7 +103,7 @@ func createFile(t testing.TB, repoPath, p string, data []byte) {
 
 func createBranch(t testing.TB, r *got.Repo, name string) {
 	ctx := testutil.Context(t)
-	_, err := r.CreateBranch(ctx, name, branches.Metadata{})
+	_, err := r.CreateBranch(ctx, name, branches.Config{})
 	require.NoError(t, err)
 }
 

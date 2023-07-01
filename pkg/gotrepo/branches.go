@@ -12,13 +12,20 @@ import (
 	"github.com/gotvc/got/pkg/metrics"
 )
 
+type BranchInfo = branches.Info
+
+type Branch struct {
+	branches.Info
+	branches.Volume
+}
+
 // CreateBranch creates a branch using the default spec.
-func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Metadata) (*Branch, error) {
+func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Config) (*BranchInfo, error) {
 	return r.space.Create(ctx, name, params)
 }
 
 // CreateBranchWithSpec creates a branch using spec
-func (r *Repo) CreateBranchWithSpec(ctx context.Context, name string, spec BranchSpec) (*Branch, error) {
+func (r *Repo) CreateBranchWithSpec(ctx context.Context, name string, spec BranchSpec) (*BranchInfo, error) {
 	return r.specDir.CreateWithSpec(ctx, name, spec)
 }
 
@@ -33,11 +40,19 @@ func (r *Repo) GetBranch(ctx context.Context, name string) (*Branch, error) {
 		_, branch, err := r.GetActiveBranch(ctx)
 		return branch, err
 	}
-	return r.space.Get(ctx, name)
+	info, err := r.space.Get(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	vol, err := r.space.Open(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return &Branch{Info: *info, Volume: *vol}, nil
 }
 
 // SetBranch sets branch metadata
-func (r *Repo) SetBranch(ctx context.Context, name string, md branches.Metadata) error {
+func (r *Repo) SetBranch(ctx context.Context, name string, md branches.Config) error {
 	if name == "" {
 		name2, _, err := r.GetActiveBranch(ctx)
 		if err != nil {
@@ -84,11 +99,15 @@ func (r *Repo) GetActiveBranch(ctx context.Context) (string, *Branch, error) {
 	if name == "" {
 		name = nameMaster
 	}
-	branch, err := r.GetSpace().Get(ctx, name)
+	info, err := r.GetSpace().Get(ctx, name)
 	if err != nil {
 		return "", nil, err
 	}
-	return name, branch, nil
+	v, err := r.GetSpace().Open(ctx, name)
+	if err != nil {
+		return "", nil, err
+	}
+	return name, &Branch{Info: *info, Volume: *v}, nil
 }
 
 // SetBranchHead
@@ -97,19 +116,19 @@ func (r *Repo) SetBranchHead(ctx context.Context, name string, snap Snap) error 
 	if err != nil {
 		return err
 	}
-	st, err := r.getImportTriple(ctx, branch)
+	st, err := r.getImportTriple(ctx, &branch.Info)
 	if err != nil {
 		return err
 	}
-	return branches.SetHead(ctx, *branch, *st, snap)
+	return branches.SetHead(ctx, branch.Volume, *st, snap)
 }
 
 func (r *Repo) GetBranchHead(ctx context.Context, name string) (*Snap, error) {
-	branch, err := r.GetBranch(ctx, name)
+	b, err := r.GetBranch(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	return branches.GetHead(ctx, *branch)
+	return branches.GetHead(ctx, b.Volume)
 }
 
 // Fork creates a new branch called next and sets its head to match base's
@@ -118,9 +137,13 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	if err != nil {
 		return err
 	}
-	nextBranch, err := r.CreateBranch(ctx, next, branches.Metadata{
+	_, err = r.CreateBranch(ctx, next, branches.Config{
 		Salt: baseBranch.Salt,
 	})
+	if err != nil {
+		return err
+	}
+	nextBranch, err := r.GetBranch(ctx, next)
 	if err != nil {
 		return err
 	}
@@ -137,17 +160,17 @@ func (r *Repo) History(ctx context.Context, name string, fn func(ref Ref, s Snap
 	if err != nil {
 		return err
 	}
-	return branches.History(ctx, *branch, r.getVCOp(branch), fn)
+	return branches.History(ctx, branch.Volume, r.getVCOp(&branch.Info), fn)
 }
 
 func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
-	branch, err := r.GetBranch(ctx, name)
+	b, err := r.GetBranch(ctx, name)
 	if err != nil {
 		return err
 	}
 	ctx, cf := metrics.Child(ctx, "cleanup volume")
 	defer cf()
-	if err := branches.CleanupVolume(ctx, branch.Volume); err != nil {
+	if err := branches.CleanupVolume(ctx, b.Volume); err != nil {
 		return err
 	}
 	return nil
