@@ -12,6 +12,7 @@ import (
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/inet256/inet256/pkg/inet256"
+	"golang.org/x/exp/slices"
 )
 
 // Identity is 2 groups of peers.
@@ -20,6 +21,10 @@ import (
 type Identity struct {
 	Owners  []IdentityElement `json:"owners"`
 	Members []IdentityElement `json:"members"`
+}
+
+func (i Identity) Equals(j Identity) bool {
+	return slices.Equal(i.Owners, j.Owners) && slices.Equal(i.Members, j.Members)
 }
 
 // IdentityElement is a single element of an Identity, it can either refer to:

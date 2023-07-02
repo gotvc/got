@@ -2,6 +2,8 @@
 package branchintc
 
 import (
+	"context"
+
 	"github.com/inet256/inet256/pkg/inet256"
 )
 
@@ -53,4 +55,4 @@ func (v Verb) IsBranch() bool {
 	}
 }
 
-type Hook func(verb Verb, obj string, next func() error) error
+type Hook func(ctx context.Context, verb Verb, obj string, next func(ctx context.Context) error) error
