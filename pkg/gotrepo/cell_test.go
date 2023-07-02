@@ -9,7 +9,7 @@ import (
 )
 
 func TestCell(t *testing.T) {
-	celltest.CellTestSuite(t, func(t testing.TB) cells.Cell {
+	celltest.TestBytesCell(t, func(t testing.TB) cells.BytesCell {
 		db := testutil.NewTestBadger(t)
 		return newBadgerCell(db, []byte(t.TempDir()))
 	})

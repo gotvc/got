@@ -13,14 +13,14 @@ import (
 
 type MemSpace struct {
 	newStore func() cadata.Store
-	newCell  func() cells.Cell
+	newCell  func() cells.BytesCell
 
 	mu      sync.RWMutex
 	infos   map[string]Info
 	volumes map[string]Volume
 }
 
-func NewMem(newStore func() cadata.Store, newCell func() cells.Cell) Space {
+func NewMem(newStore func() cadata.Store, newCell func() cells.BytesCell) Space {
 	return &MemSpace{
 		newStore: newStore,
 		newCell:  newCell,

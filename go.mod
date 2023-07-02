@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/brendoncarroll/go-exp v0.0.0-20230603162556-069bd4cbec7a
 	github.com/brendoncarroll/go-p2p v0.0.0-20230603163636-96d6516de644
-	github.com/brendoncarroll/go-state v0.0.0-20230603163727-234f9bec78f5
+	github.com/brendoncarroll/go-state v0.0.0-20230702152702-b477043587a8
 	github.com/brendoncarroll/go-tai64 v0.0.0-20220726191612-c9e9c0704db4
 	github.com/brendoncarroll/stdctx v0.0.0-20230325181752-a8a6ba46e3c1
 	github.com/dchest/siphash v1.2.3
@@ -42,6 +42,7 @@ require (
 	github.com/golang/snappy v0.0.3 // indirect
 	github.com/google/btree v1.1.2 // indirect
 	github.com/google/flatbuffers v1.12.1 // indirect
+	github.com/google/gofuzz v1.2.0 // indirect
 	github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/klauspost/compress v1.12.3 // indirect

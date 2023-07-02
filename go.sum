@@ -18,8 +18,10 @@ github.com/brendoncarroll/go-exp v0.0.0-20230603162556-069bd4cbec7a h1:Q2G00nAN/
 github.com/brendoncarroll/go-exp v0.0.0-20230603162556-069bd4cbec7a/go.mod h1:BPjzn0WdcldzxIbDJORj8sDsUlHI7KB7bwGFq4aN6Fk=
 github.com/brendoncarroll/go-p2p v0.0.0-20230603163636-96d6516de644 h1:PJj8CDm3Dorj4NhqZFjYF1BDLHmQcF8JGzSWWlIAyyY=
 github.com/brendoncarroll/go-p2p v0.0.0-20230603163636-96d6516de644/go.mod h1:ALB6+VI2g6lQWGuFEJ9ffGQAu/1iSxfvT78sOIUnb5c=
-github.com/brendoncarroll/go-state v0.0.0-20230603163727-234f9bec78f5 h1:Cg9py22FQuYwIKoWyGw0BSf5J9WiZVPH3PPtW31KcN4=
-github.com/brendoncarroll/go-state v0.0.0-20230603163727-234f9bec78f5/go.mod h1:WXHBIIgecO9a1ofTqA/NXNRi02p7aIDTBsmdOju04/4=
+github.com/brendoncarroll/go-state v0.0.0-20230624204830-c900e378c465 h1:IHq/+cQnHRjj9w7n9IlMJeNtjb8yf3PgB0o/4j9Ovrg=
+github.com/brendoncarroll/go-state v0.0.0-20230624204830-c900e378c465/go.mod h1:XpGdS51Yh78JfqVcsT5PNviv3LPUfNnt5JnWuvdzl+Y=
+github.com/brendoncarroll/go-state v0.0.0-20230702152702-b477043587a8 h1:bxx1b3sOXNotF4/VfB1weKNO9wvpitJuc0eSSp+GWXw=
+github.com/brendoncarroll/go-state v0.0.0-20230702152702-b477043587a8/go.mod h1:XpGdS51Yh78JfqVcsT5PNviv3LPUfNnt5JnWuvdzl+Y=
 github.com/brendoncarroll/go-tai64 v0.0.0-20220726191612-c9e9c0704db4 h1:yw9nUqzIq1Tj0txVls6R0KQnrWXW67nZja/q0TFYWaw=
 github.com/brendoncarroll/go-tai64 v0.0.0-20220726191612-c9e9c0704db4/go.mod h1:E9+Qr3YRBlU8HsajHzdoyHAm8XRqITZrtsh1gZSzu+4=
 github.com/brendoncarroll/stdctx v0.0.0-20230325181752-a8a6ba46e3c1 h1:E0YZnMY5eYKg2e1F71ePVBkZz3gkpb2RVmykwQGc9C4=
@@ -110,6 +112,8 @@ github.com/google/go-cmp v0.5.4/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/
 github.com/google/go-cmp v0.5.5/go.mod h1:v8dTdLbMG2kIc/vJvl+f65V22dbkXbowE6jgT/gNBxE=
 github.com/google/go-cmp v0.5.8 h1:e6P7q2lk1O+qJJb4BtCQXlK8vWEO8V1ZeuEdJNOqZyg=
 github.com/google/gofuzz v1.0.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
+github.com/google/gofuzz v1.2.0 h1:xRy4A+RhZaiKjJ1bPfwQ8sedCA+YS2YcCHW6ec7JMi0=
+github.com/google/gofuzz v1.2.0/go.mod h1:dBl0BpW6vV/+mYPU4Po3pmUjxk6FQPldtuIdl/M65Eg=
 github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38 h1:yAJXTCF9TqKcTiHJAE8dj7HMvPfh66eeA2JYW7eFpSE=
 github.com/google/pprof v0.0.0-20210407192527-94a9f03dee38/go.mod h1:kpwsk12EmLew5upagYY7GY0pfYCcupk39gWOCRROcvE=
 github.com/google/uuid v1.1.2/go.mod h1:TIyPZe4MgqvfeYDBFedMoGGpEw/LqOeaOT+nhxU+yHo=
@@ -218,6 +222,7 @@ github.com/spf13/pflag v1.0.5/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An
 github.com/spf13/viper v1.3.2/go.mod h1:ZiWeW+zYFKm7srdB9IoDzzZXaJaI5eL9QjNiN/DMA2s=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
+github.com/stretchr/objx v0.5.0/go.mod h1:Yh+to48EsGEfYuaHDzXPcE3xhTkx73EhmCGUpEOglKo=
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
