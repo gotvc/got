@@ -22,7 +22,7 @@ type Snap = gotvc.Snap
 // Volume is a Cell and a set of stores
 type Volume struct {
 	RawStore, FSStore, VCStore cadata.Store
-	Cell                       cells.Cell
+	Cell                       cells.BytesCell
 }
 
 func (v Volume) StoreTriple() StoreTriple {
@@ -65,14 +65,11 @@ func SyncVolumes(ctx context.Context, src, dst Volume, force bool) error {
 	})
 }
 
-func getSnapshot(ctx context.Context, c cells.Cell) (*Snap, error) {
-	const maxSnapshotSize = 4096
-	buf := [maxSnapshotSize]byte{}
-	n, err := c.Read(ctx, buf[:])
+func getSnapshot(ctx context.Context, c cells.BytesCell) (*Snap, error) {
+	data, err := cells.Load[[]byte](ctx, c)
 	if err != nil {
 		return nil, err
 	}
-	data := buf[:n]
 	if len(data) == 0 {
 		return nil, nil
 	}
@@ -83,8 +80,8 @@ func getSnapshot(ctx context.Context, c cells.Cell) (*Snap, error) {
 	return &x, nil
 }
 
-func applySnapshot(ctx context.Context, c cells.Cell, fn func(*Snap) (*Snap, error)) error {
-	return cells.Apply(ctx, c, maxRetries, func(xData []byte) ([]byte, error) {
+func applySnapshot(ctx context.Context, c cells.BytesCell, fn func(*Snap) (*Snap, error)) error {
+	return cells.Apply[[]byte](ctx, c, maxRetries, func(xData []byte) ([]byte, error) {
 		var xSnap *Snap
 		if len(xData) > 0 {
 			xSnap = &Snap{}

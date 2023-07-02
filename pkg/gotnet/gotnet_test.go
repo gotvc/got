@@ -46,7 +46,7 @@ func TestStore(t *testing.T) {
 }
 
 func TestCell(t *testing.T) {
-	celltest.CellTestSuite(t, func(t testing.TB) cells.Cell {
+	celltest.TestBytesCell(t, func(t testing.TB) cells.Cell {
 		ctx := testutil.Context(t)
 		s1, s2 := newTestPair(t)
 		go s1.srv.Serve(ctx)

@@ -34,9 +34,9 @@ func (cs *cellSrv) Serve(ctx context.Context) error {
 	return serveAsks(ctx, cs.swarm, cs.handleAsk)
 }
 
-func (cs *cellSrv) CAS(ctx context.Context, cid CellID, actual, prev, next []byte) (int, error) {
+func (cs *cellSrv) CAS(ctx context.Context, cid CellID, actual *[]byte, prev, next []byte) (bool, error) {
 	if len(next) > cellSize {
-		return 0, cells.ErrTooLarge{}
+		return false, cells.ErrTooLarge{}
 	}
 	req := CellReq{
 		CAS: &CASReq{
@@ -46,17 +46,33 @@ func (cs *cellSrv) CAS(ctx context.Context, cid CellID, actual, prev, next []byt
 		},
 	}
 	reqData := marshal(req)
-	return cs.swarm.Ask(ctx, actual, cid.Peer, p2p.IOVec{reqData})
+	// TODO: reuse actual
+	resp := make([]byte, cellSize)
+	n, err := cs.swarm.Ask(ctx, resp, cid.Peer, p2p.IOVec{reqData})
+	if err != nil {
+		return false, err
+	}
+	swapped := bytes.Equal(resp[:n], next)
+	cells.CopyBytes(actual, resp[:n])
+	return swapped, nil
 }
 
-func (cs *cellSrv) Read(ctx context.Context, cid CellID, buf []byte) (int, error) {
+func (cs *cellSrv) Load(ctx context.Context, cid CellID, dst *[]byte) error {
 	req := CellReq{
 		Read: &ReadReq{
 			Name: cid.Name,
 		},
 	}
 	reqData := marshal(req)
-	return cs.swarm.Ask(ctx, buf, cid.Peer, p2p.IOVec{reqData})
+	if len(*dst) < cellSize {
+		*dst = make([]byte, cellSize)
+	}
+	n, err := cs.swarm.Ask(ctx, *dst, cid.Peer, p2p.IOVec{reqData})
+	if err != nil {
+		return err
+	}
+	*dst = (*dst)[:n]
+	return nil
 }
 
 func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[PeerID]) int {
@@ -75,7 +91,7 @@ func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[P
 			}
 
 		case req.CAS != nil:
-			n, err = cs.handleCAS(ctx, msg.Src, req.CAS.Name, resp, req.CAS.Prev[:], req.CAS.Next)
+			n, err = cs.handleCAS(ctx, msg.Src, req.CAS.Name, resp, req.CAS.Prev, req.CAS.Next)
 			if err != nil {
 				return err
 			}
@@ -91,15 +107,16 @@ func (cs *cellSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Message[P
 	return n
 }
 
-func (cs *cellSrv) handleCAS(ctx context.Context, peer PeerID, name string, actual, prev, next []byte) (int, error) {
+func (cs *cellSrv) handleCAS(ctx context.Context, peer PeerID, name string, actual []byte, prev, next []byte) (int, error) {
 	space := cs.open(peer)
 	v, err := space.Open(ctx, name)
 	if err != nil {
 		return 0, err
 	}
 	cell := v.Cell
-	_, n, err := cell.CAS(ctx, actual, prev, next)
-	return n, err
+	var actual2 []byte
+	_, err = cell.CAS(ctx, &actual2, prev, next)
+	return copy(actual, actual2), err
 }
 
 func (cs *cellSrv) handleRead(ctx context.Context, peer PeerID, name string, buf []byte) (int, error) {
@@ -109,7 +126,11 @@ func (cs *cellSrv) handleRead(ctx context.Context, peer PeerID, name string, buf
 		return 0, err
 	}
 	cell := v.Cell
-	return cell.Read(ctx, buf)
+	var buf2 []byte
+	if err := cell.Load(ctx, &buf2); err != nil {
+		return 0, err
+	}
+	return copy(buf, buf2), err
 }
 
 type CellReq struct {
@@ -131,7 +152,7 @@ type ReadReq struct {
 	Name string `json:"name"`
 }
 
-var _ cells.Cell = &cell{}
+var _ cells.BytesCell = &cell{}
 
 type cell struct {
 	srv *cellSrv
@@ -145,19 +166,22 @@ func newCell(srv *cellSrv, cid CellID) *cell {
 	}
 }
 
-func (c *cell) CAS(ctx context.Context, actual, prev, next []byte) (bool, int, error) {
-	n, err := c.srv.CAS(ctx, c.cid, actual, prev, next)
-	if err != nil {
-		return false, 0, err
-	}
-	success := bytes.Equal(next, actual[:n])
-	return success, n, nil
+func (c *cell) CAS(ctx context.Context, actual *[]byte, prev, next []byte) (bool, error) {
+	return c.srv.CAS(ctx, c.cid, actual, prev, next)
 }
 
-func (c *cell) Read(ctx context.Context, buf []byte) (int, error) {
-	return c.srv.Read(ctx, c.cid, buf)
+func (c *cell) Load(ctx context.Context, dst *[]byte) error {
+	return c.srv.Load(ctx, c.cid, dst)
 }
 
 func (c *cell) MaxSize() int {
 	return cellSize
+}
+
+func (c *cell) Copy(dst *[]byte, src []byte) {
+	cells.CopyBytes(dst, src)
+}
+
+func (c *cell) Equals(a, b []byte) bool {
+	return bytes.Equal(a, b)
 }

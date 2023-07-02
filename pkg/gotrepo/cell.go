@@ -5,11 +5,10 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
-	"io"
 
+	"github.com/brendoncarroll/go-state/cells"
 	"github.com/dgraph-io/badger/v3"
 
-	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/gotrepo/repodb"
 )
 
@@ -68,72 +67,68 @@ func (cm *cellManager) keyFromID(id CellID) []byte {
 type badgerCell struct {
 	db  *badger.DB
 	key []byte
+	cells.BytesCellBase
 }
 
-func newBadgerCell(db *badger.DB, key []byte) Cell {
+func newBadgerCell(db *badger.DB, key []byte) cells.BytesCell {
 	return &badgerCell{
 		db:  db,
 		key: key,
 	}
 }
 
-func (c *badgerCell) CAS(ctx context.Context, actual, prev, next []byte) (bool, int, error) {
+func (c *badgerCell) CAS(ctx context.Context, actual *[]byte, prev, next []byte) (bool, error) {
 	if len(next) > c.MaxSize() {
-		return false, 0, cells.ErrTooLarge{}
+		return false, cells.ErrTooLarge{}
 	}
 	var swapped bool
-	var n int
 	if err := c.db.Update(func(tx *badger.Txn) error {
 		var current []byte
 		item, err := tx.Get(c.key)
-		if errors.Is(err, badger.ErrKeyNotFound) {
-		} else if err != nil {
-			return err
-		} else {
+		if err == nil {
 			var err error
 			current, err = item.ValueCopy(current)
 			if err != nil {
 				return err
 			}
+		} else if !errors.Is(err, badger.ErrKeyNotFound) {
+			return err
 		}
-		if bytes.Equal(prev, current) {
+		if bytes.Equal(current, prev) {
 			if err := tx.Set(c.key, next); err != nil {
 				return err
 			}
 			swapped = true
-			n = copy(actual, next)
+			cells.CopyBytes(actual, next)
 		} else {
 			swapped = false
-			n = copy(actual, current)
+			cells.CopyBytes(actual, current)
 		}
 		return nil
 	}); err != nil {
-		return false, 0, err
+		return false, err
 	}
-	return swapped, n, nil
+	return swapped, nil
 }
 
-func (c *badgerCell) Read(ctx context.Context, buf []byte) (int, error) {
-	var n int
+func (c *badgerCell) Load(ctx context.Context, dst *[]byte) error {
 	if err := c.db.View(func(tx *badger.Txn) error {
 		key := c.key
 		item, err := tx.Get(key)
 		if errors.Is(err, badger.ErrKeyNotFound) {
+			cells.CopyBytes(dst, nil)
 			return nil
 		} else if err != nil {
 			return err
 		}
 		return item.Value(func(v []byte) error {
-			if len(buf) < len(v) {
-				return io.ErrShortBuffer
-			}
-			n = copy(buf, v)
+			cells.CopyBytes(dst, v)
 			return nil
 		})
 	}); err != nil {
-		return 0, err
+		return err
 	}
-	return n, nil
+	return nil
 }
 
 func (c *badgerCell) MaxSize() int {
