@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/brendoncarroll/go-p2p"
 	"github.com/brendoncarroll/go-state/cells"
@@ -116,8 +115,7 @@ func (cs *cellSrv) handleCAS(ctx context.Context, peer PeerID, name string, actu
 	}
 	cell := v.Cell
 	var actual2 []byte
-	swapped, err := cell.CAS(ctx, &actual2, prev, next)
-	log.Println("handleCAS", actual2, prev, next, swapped)
+	_, err = cell.CAS(ctx, &actual2, prev, next)
 	return copy(actual, actual2), err
 }
 
