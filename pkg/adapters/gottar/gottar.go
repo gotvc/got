@@ -28,7 +28,7 @@ func WriteTAR(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, ro
 			Typeflag: typeFlagFromMode(mode),
 			Name:     p,
 			Mode:     int64(mode),
-			Xattrs:   info.Labels,
+			Xattrs:   convertAttrs(info.Attrs),
 			Size:     size,
 		}); err != nil {
 			return err
@@ -85,4 +85,12 @@ func typeFlagFromMode(mode posixfs.FileMode) byte {
 	default:
 		return 0
 	}
+}
+
+func convertAttrs(x map[string][]byte) map[string]string {
+	y := make(map[string]string)
+	for k, v := range x {
+		y[k] = string(v)
+	}
+	return y
 }

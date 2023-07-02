@@ -6,7 +6,7 @@ package got.gotfs;
 
 message Info {
    uint32 mode = 1;
-   map<string, string> labels = 2;
+   map<string, bytes> attrs = 2;
    
    bool nonempty = 127;
 };

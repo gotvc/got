@@ -61,7 +61,7 @@ func Dump(ctx context.Context, s Store, root Root, w io.Writer) error {
 				fmt.Fprintf(bw, "METADATA (INVALID):\t%q\t%q\n", ent.Key, ent.Value)
 				continue
 			}
-			fmt.Fprintf(bw, "METADATA\t%q\tmode=%o,labels=%v\n", ent.Key, md.Mode, md.Labels)
+			fmt.Fprintf(bw, "METADATA\t%q\tmode=%o,attrs=%v\n", ent.Key, md.Mode, md.Attrs)
 		}
 	}
 	return bw.Flush()
