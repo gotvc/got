@@ -2,10 +2,13 @@ package gothost
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sync/atomic"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/cells"
+	"golang.org/x/sync/semaphore"
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/branches/branchintc"
@@ -21,19 +24,25 @@ type HostEngine struct {
 	vcop *gotvc.Operator
 	fsop *gotfs.Operator
 
-	cachedPolicy atomic.Pointer[authzPolicy]
+	initDone   atomic.Bool
+	initSem    *semaphore.Weighted
+	cachedCell *cells.Cached[[]byte]
+	stateCell  *cells.Derived[[]byte, State]
+	policyCell *cells.Derived[State, *authzPolicy]
 }
 
 func NewHostEngine(inner branches.Space) *HostEngine {
 	info := branches.NewConfig(true).AsInfo()
 	return &HostEngine{
-		inner: inner,
-		fsop:  branches.NewGotFS(&info),
-		vcop:  branches.NewGotVC(&info),
+		inner:   inner,
+		fsop:    branches.NewGotFS(&info),
+		vcop:    branches.NewGotVC(&info),
+		initSem: semaphore.NewWeighted(1),
 	}
 }
 
 // Initialize creates the host config branch if it does not exist.
+// Initialize only needs to be called on the host.
 func (e *HostEngine) Initialize(ctx context.Context) error {
 	md := branches.NewConfig(true)
 	md.Annotations = append(md.Annotations, branches.Annotation{Key: "protocol", Value: "gothost@v0"})
@@ -41,25 +50,69 @@ func (e *HostEngine) Initialize(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return e.reload(ctx)
+	return e.ensureInit(ctx)
 }
 
-func (e *HostEngine) reload(ctx context.Context) error {
-	s, err := e.View(ctx)
+// ensureInit should be called before reading from any internal cells.
+func (e *HostEngine) ensureInit(ctx context.Context) error {
+	if e.initDone.Load() {
+		return nil
+	}
+	if err := e.initSem.Acquire(ctx, 1); err != nil {
+		return err
+	}
+	defer e.initSem.Release(1)
+	if e.initDone.Load() {
+		return nil
+	}
+	v, err := e.inner.Open(ctx, HostConfigKey)
 	if err != nil {
 		return err
 	}
-	ap, err := newAuthzPolicy(*s)
-	if err != nil {
-		return err
-	}
-	e.cachedPolicy.Store(ap)
+	e.cachedCell = cells.NewCached[[]byte](v.Cell)
+	e.stateCell = cells.NewDerived[[]byte, State](cells.DerivedParams[[]byte, State]{
+		Inner: e.cachedCell,
+		Forward: func(ctx context.Context, dst *State, src []byte) error {
+			if len(src) == 0 {
+				*dst = State{}
+				return nil
+			}
+			var snap gotvc.Snapshot
+			if err := json.Unmarshal(src, &snap); err != nil {
+				return err
+			}
+			return dst.Load(ctx, e.fsop, v.FSStore, v.RawStore, snap.Root)
+		},
+		Inverse: nil,
+		Copy:    cells.DefaultCopy[State],
+		Equals: func(a, b State) bool {
+			return a.Equals(b)
+		},
+	})
+	e.policyCell = cells.NewDerived[State, *authzPolicy](cells.DerivedParams[State, *authzPolicy]{
+		Inner: e.stateCell,
+		Forward: func(ctx context.Context, dst **authzPolicy, src State) error {
+			ap, err := newAuthzPolicy(src)
+			*dst = ap
+			return err
+		},
+		Inverse: nil,
+		Copy:    cells.DefaultCopy[*authzPolicy],
+		Equals:  cells.DefaultEquals[*authzPolicy],
+	})
+	e.initDone.Store(true)
 	return nil
 }
 
 func (e *HostEngine) Open(peerID PeerID) branches.Space {
-	return branchintc.New(e.inner, func(verb branchintc.Verb, obj string, next func() error) error {
-		pol := e.cachedPolicy.Load()
+	return branchintc.New(e.inner, func(ctx context.Context, verb branchintc.Verb, obj string, next func(context.Context) error) error {
+		if err := e.ensureInit(ctx); err != nil {
+			return err
+		}
+		pol, err := cells.Load[*authzPolicy](ctx, e.policyCell)
+		if err != nil {
+			return err
+		}
 		if err := gotauthz.Check(pol, peerID, verb, obj); err != nil {
 			return err
 		}
@@ -68,11 +121,10 @@ func (e *HostEngine) Open(peerID PeerID) branches.Space {
 			case branchintc.Verb_Create, branchintc.Verb_Delete, branchintc.Verb_Set:
 				return newConfigBranchErr()
 			case branchintc.Verb_CASCell:
-				// TODO: need to invalidate policy
-				defer e.reload(context.TODO())
+				defer e.cachedCell.Invalidate()
 			}
 		}
-		return next()
+		return next(ctx)
 	})
 }
 
@@ -166,12 +218,19 @@ func (e *HostEngine) ListIdentitiesFull(ctx context.Context) ([]IDEntry, error) 
 	return ListIdentitiesFull(ctx, e.fsop, ms, ds, *r)
 }
 
-func (e *HostEngine) CanDo(sub PeerID, verb branchintc.Verb, obj string) bool {
-	ap := e.cachedPolicy.Load()
-	return ap.CanDo(sub, verb, obj)
+func (e *HostEngine) CanDo(ctx context.Context, sub PeerID, verb branchintc.Verb, obj string) (bool, error) {
+	if err := e.ensureInit(ctx); err != nil {
+		return false, err
+	}
+	ap, err := cells.Load[*authzPolicy](ctx, e.policyCell)
+	if err != nil {
+		return false, err
+	}
+	return ap.CanDo(sub, verb, obj), nil
 }
 
 func (e *HostEngine) readFS(ctx context.Context) (ms, ds cadata.Store, root *gotfs.Root, _ error) {
+	defer e.cachedCell.Invalidate()
 	v, err := e.inner.Open(ctx, HostConfigKey)
 	if err != nil {
 		return nil, nil, nil, err
@@ -193,7 +252,7 @@ func (e *HostEngine) readFS(ctx context.Context) (ms, ds cadata.Store, root *got
 }
 
 func (e *HostEngine) modifyFS(ctx context.Context, fn func(op *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error)) error {
-	defer e.reload(ctx)
+	defer e.cachedCell.Invalidate()
 	v, err := e.inner.Open(ctx, HostConfigKey)
 	if err != nil {
 		return err

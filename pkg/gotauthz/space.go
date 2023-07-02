@@ -1,6 +1,7 @@
 package gotauthz
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/gotvc/got/pkg/branches"
@@ -25,11 +26,11 @@ func (pf PolicyFunc) CanDo(sub PeerID, verb Verb, obj string) bool {
 }
 
 func NewSpace(x branches.Space, pol Policy, sub PeerID) branches.Space {
-	return branchintc.New(x, func(verb Verb, obj string, next func() error) error {
+	return branchintc.New(x, func(ctx context.Context, verb Verb, obj string, next func(context.Context) error) error {
 		if err := Check(pol, sub, verb, obj); err != nil {
 			return err
 		}
-		return next()
+		return next(ctx)
 	})
 }
 

@@ -5,7 +5,7 @@ go 1.19
 require (
 	github.com/brendoncarroll/go-exp v0.0.0-20230603162556-069bd4cbec7a
 	github.com/brendoncarroll/go-p2p v0.0.0-20230603163636-96d6516de644
-	github.com/brendoncarroll/go-state v0.0.0-20230702153520-0628f1df6903
+	github.com/brendoncarroll/go-state v0.0.0-20230702181554-3c1656d923be
 	github.com/brendoncarroll/go-tai64 v0.0.0-20220726191612-c9e9c0704db4
 	github.com/brendoncarroll/stdctx v0.0.0-20230325181752-a8a6ba46e3c1
 	github.com/dchest/siphash v1.2.3

@@ -12,6 +12,7 @@ import (
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/branches/branchintc"
 	"github.com/gotvc/got/pkg/gotfs"
+	"golang.org/x/exp/slices"
 )
 
 // GetPolicy reads a Policy from a gotfs filesystem
@@ -38,6 +39,10 @@ func SetPolicy(ctx context.Context, op *gotfs.Operator, ms, ds cadata.Store, x g
 
 type Policy struct {
 	Rules []Rule
+}
+
+func (p Policy) Equals(q Policy) bool {
+	return slices.Equal(p.Rules, q.Rules)
 }
 
 func (p Policy) Clone() Policy {

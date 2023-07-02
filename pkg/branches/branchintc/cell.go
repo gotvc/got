@@ -6,7 +6,7 @@ import (
 	"github.com/brendoncarroll/go-state/cells"
 )
 
-type cellHook = func(verb Verb, next func() error) error
+type cellHook = func(ctx context.Context, verb Verb, next func(ctx context.Context) error) error
 
 var _ cells.BytesCell = &Cell{}
 
@@ -21,7 +21,7 @@ func newCell(x cells.BytesCell, hook cellHook) *Cell {
 }
 
 func (c *Cell) CAS(ctx context.Context, actual *[]byte, prev, next []byte) (swapped bool, err error) {
-	err = c.hook(Verb_CASCell, func() error {
+	err = c.hook(ctx, Verb_CASCell, func(ctx context.Context) error {
 		var err error
 		swapped, err = c.inner.CAS(ctx, actual, prev, next)
 		return err
@@ -30,7 +30,7 @@ func (c *Cell) CAS(ctx context.Context, actual *[]byte, prev, next []byte) (swap
 }
 
 func (c *Cell) Load(ctx context.Context, dst *[]byte) (err error) {
-	err = c.hook(Verb_ReadCell, func() error {
+	err = c.hook(ctx, Verb_ReadCell, func(ctx context.Context) error {
 		err := c.inner.Load(ctx, dst)
 		return err
 	})

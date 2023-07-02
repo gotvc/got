@@ -120,6 +120,12 @@ func (s *State) Validate() error {
 	return nil
 }
 
+func (s *State) Equals(s2 State) bool {
+	return maps.EqualFunc(s.Identities, s2.Identities, func(v1, v2 Identity) bool {
+		return v1.Equals(v2)
+	}) && s.Policy.Equals(s2.Policy)
+}
+
 func ConfigureDefaults(admins []inet256.Addr) func(x State) (*State, error) {
 	return func(x State) (*State, error) {
 		x.Identities = map[string]Identity{
