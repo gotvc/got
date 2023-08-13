@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/brendoncarroll/go-state"
+	"github.com/brendoncarroll/go-state/kv"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 )
@@ -15,7 +16,7 @@ type badgerKVStore struct {
 	tid TableID
 }
 
-func NewKVStore(db *badger.DB, tid TableID) state.KVStore[[]byte, []byte] {
+func NewKVStore(db *badger.DB, tid TableID) kv.Store[[]byte, []byte] {
 	return badgerKVStore{
 		db:  db,
 		tid: tid,
@@ -29,9 +30,8 @@ func (s badgerKVStore) Put(ctx context.Context, k, v []byte) error {
 	})
 }
 
-func (s badgerKVStore) Get(ctx context.Context, k []byte) ([]byte, error) {
-	var ret []byte
-	if err := s.db.View(func(tx *badger.Txn) error {
+func (s badgerKVStore) Get(ctx context.Context, k []byte, dst *[]byte) error {
+	return s.db.View(func(tx *badger.Txn) error {
 		item, err := tx.Get(Key(nil, s.tid, k))
 		if err != nil {
 			if errors.Is(err, badger.ErrKeyNotFound) {
@@ -40,12 +40,13 @@ func (s badgerKVStore) Get(ctx context.Context, k []byte) ([]byte, error) {
 			return err
 		}
 
-		ret, err = item.ValueCopy(ret)
+		*dst, err = item.ValueCopy(*dst)
 		return err
-	}); err != nil {
-		return nil, err
-	}
-	return ret, nil
+	})
+}
+
+func (s badgerKVStore) Exists(ctx context.Context, k []byte) (bool, error) {
+	return kv.ExistsUsingList(ctx, s, k)
 }
 
 func (s badgerKVStore) List(ctx context.Context, span state.Span[[]byte], ks [][]byte) (int, error) {

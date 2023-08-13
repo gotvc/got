@@ -90,7 +90,7 @@ func (s *AsyncStore) Delete(ctx context.Context, id ID) error {
 }
 
 func (s *AsyncStore) Exists(ctx context.Context, id ID) (bool, error) {
-	return cadata.Exists(ctx, s.target, id)
+	return s.target.Exists(ctx, id)
 }
 
 func (s *AsyncStore) List(ctx context.Context, span cadata.Span, ids []ID) (int, error) {

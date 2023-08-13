@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/brendoncarroll/go-state"
+	"github.com/brendoncarroll/go-state/kv"
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/metrics"
@@ -178,7 +179,7 @@ func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
 
 func (r *Repo) getActiveBranch(ctx context.Context) (string, error) {
 	s := r.getKVStore(tableDefault)
-	v, err := s.Get(ctx, []byte(keyActive))
+	v, err := kv.Get(ctx, s, []byte(keyActive))
 	if err != nil && !errors.Is(err, state.ErrNotFound) {
 		return "", err
 	}

@@ -79,7 +79,7 @@ func (sm *storeManager) Flush(ctx context.Context) error {
 }
 
 func (sm *storeManager) maybePost(ctx context.Context, id cadata.ID, data []byte) (cadata.ID, error) {
-	exists, err := cadata.Exists(ctx, sm.store, id)
+	exists, err := sm.store.Exists(ctx, id)
 	if err != nil {
 		return cadata.ID{}, err
 	}
@@ -165,7 +165,7 @@ func (sm *storeManager) add(ctx context.Context, sid StoreID, id cadata.ID) erro
 			return cadata.ErrNotFound
 		}
 		// and that it's in the store
-		if exists, err := cadata.Exists(ctx, sm.store, id); err != nil {
+		if exists, err := sm.store.Exists(ctx, id); err != nil {
 			return err
 		} else if !exists {
 			return cadata.ErrNotFound

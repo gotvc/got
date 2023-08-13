@@ -275,7 +275,7 @@ func (s *blobMainSrv) handlePost(ctx context.Context, peer PeerID, req BlobReq) 
 	affected := make([]bool, len(req.IDs))
 	buf := make([]byte, MaxMessageSize)
 	for i, id := range req.IDs {
-		if exists, err := cadata.Exists(ctx, store, id); err != nil {
+		if exists, err := store.Exists(ctx, id); err != nil {
 			return nil, err
 		} else if exists {
 			affected[i] = false
@@ -307,7 +307,7 @@ func (s *blobMainSrv) handleExists(ctx context.Context, peer PeerID, req BlobReq
 	}
 	affected := make([]bool, len(req.IDs))
 	for i := range req.IDs {
-		exists, err := cadata.Exists(ctx, store, req.IDs[i])
+		exists, err := store.Exists(ctx, req.IDs[i])
 		if err != nil {
 			return nil, err
 		}

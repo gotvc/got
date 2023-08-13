@@ -46,7 +46,7 @@ func (s *Store) Get(ctx context.Context, id cadata.ID, buf []byte) (n int, err e
 func (s *Store) Exists(ctx context.Context, id cadata.ID) (ret bool, err error) {
 	err = s.hook(ctx, Verb_ExistsBlob, func(ctx context.Context) error {
 		var err error
-		ret, err = cadata.Exists(ctx, s.inner, id)
+		ret, err = s.inner.Exists(ctx, id)
 		return err
 	})
 	return ret, err

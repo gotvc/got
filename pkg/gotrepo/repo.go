@@ -11,6 +11,7 @@ import (
 
 	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/kv"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/dgraph-io/badger/v3"
@@ -253,7 +254,7 @@ func (r *Repo) getVCOp(b *branches.Info) *gotvc.Operator {
 	return branches.NewGotVC(b)
 }
 
-func (r *Repo) getKVStore(tid repodb.TableID) state.KVStore[[]byte, []byte] {
+func (r *Repo) getKVStore(tid repodb.TableID) kv.Store[[]byte, []byte] {
 	return repodb.NewKVStore(r.localDB, tid)
 }
 
@@ -261,9 +262,9 @@ func (r *Repo) UnionStore() cadata.Store {
 	return stores.AssertReadOnly(r.storeManager.store)
 }
 
-func dumpStore(ctx context.Context, w io.Writer, s state.KVStore[[]byte, []byte]) error {
-	if err := state.ForEach[[]byte](ctx, s, state.TotalSpan[[]byte](), func(k []byte) error {
-		v, _ := s.Get(ctx, k)
+func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) error {
+	if err := kv.ForEach[[]byte](ctx, s, state.TotalSpan[[]byte](), func(k []byte) error {
+		v, _ := kv.Get(ctx, s, k)
 		_, err := fmt.Fprintf(w, "%q -> %q\n", k, v)
 		return err
 	}); err != nil {

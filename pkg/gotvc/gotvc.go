@@ -105,7 +105,7 @@ func Sync(ctx context.Context, src cadata.Store, dst cadata.Store, snap Snapshot
 	sync = func(snap Snapshot) error {
 		for _, parentRef := range snap.Parents {
 			// Skip if the parent is already copieda.
-			if exists, err := cadata.Exists(ctx, dst, parentRef.CID); err != nil {
+			if exists, err := dst.Exists(ctx, parentRef.CID); err != nil {
 				return err
 			} else if !exists {
 				parent, err := op.GetSnapshot(ctx, src, parentRef)

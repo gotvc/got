@@ -12,6 +12,7 @@ import (
 
 	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/kv"
 	"github.com/brendoncarroll/stdctx/logctx"
 
 	"github.com/gotvc/got/pkg/gotfs"
@@ -19,7 +20,7 @@ import (
 )
 
 type Storage interface {
-	state.KVStore[[]byte, []byte]
+	kv.Store[[]byte, []byte]
 }
 
 type Operation struct {
@@ -76,7 +77,7 @@ func (s *Stage) Discard(ctx context.Context, p string) error {
 // If there is no operation staged Get returns (nil, nil)
 func (s *Stage) Get(ctx context.Context, p string) (*Operation, error) {
 	p = cleanPath(p)
-	data, err := s.storage.Get(ctx, []byte(p))
+	data, err := kv.Get(ctx, s.storage, []byte(p))
 	if err != nil {
 		if errors.Is(err, state.ErrNotFound) {
 			return nil, nil
@@ -91,8 +92,8 @@ func (s *Stage) Get(ctx context.Context, p string) (*Operation, error) {
 }
 
 func (s *Stage) ForEach(ctx context.Context, fn func(p string, op Operation) error) error {
-	return state.ForEach[[]byte](ctx, s.storage, state.TotalSpan[[]byte](), func(k []byte) error {
-		v, err := s.storage.Get(ctx, k)
+	return kv.ForEach[[]byte](ctx, s.storage, state.TotalSpan[[]byte](), func(k []byte) error {
+		v, err := kv.Get(ctx, s.storage, k)
 		if err != nil {
 			return err
 		}
@@ -114,7 +115,7 @@ func (s *Stage) CheckConflict(ctx context.Context, p string) error {
 	parts := strings.Split(p, "/")
 	for i := len(parts) - 1; i > 0; i-- {
 		conflictPath := strings.Join(parts[:i], "/")
-		data, err := s.storage.Get(ctx, []byte(cleanPath(conflictPath)))
+		data, err := kv.Get(ctx, s.storage, []byte(cleanPath(conflictPath)))
 		if err != nil && !errors.Is(err, state.ErrNotFound) {
 			return err
 		}
@@ -123,7 +124,7 @@ func (s *Stage) CheckConflict(ctx context.Context, p string) error {
 		}
 	}
 	// check for descendents
-	if err := state.ForEach[[]byte](ctx, s.storage, state.TotalSpan[[]byte](), func(k []byte) error {
+	if err := kv.ForEach[[]byte](ctx, s.storage, state.TotalSpan[[]byte](), func(k []byte) error {
 		if bytes.HasPrefix(k, []byte(p+"/")) {
 			return newError(p, string(k))
 		}
@@ -135,7 +136,7 @@ func (s *Stage) CheckConflict(ctx context.Context, p string) error {
 }
 
 func (s *Stage) Reset(ctx context.Context) error {
-	return state.ForEach[[]byte](ctx, s.storage, state.TotalSpan[[]byte](), func(k []byte) error {
+	return kv.ForEach[[]byte](ctx, s.storage, state.TotalSpan[[]byte](), func(k []byte) error {
 		return s.storage.Delete(ctx, k)
 	})
 }

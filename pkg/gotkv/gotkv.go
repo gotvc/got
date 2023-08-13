@@ -97,7 +97,7 @@ func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Roo
 	}
 	return do(ctx, rp, x.toPtree(), doer{
 		CanSkip: func(r Root) (bool, error) {
-			return cadata.Exists(ctx, dst, r.Ref.CID)
+			return dst.Exists(ctx, r.Ref.CID)
 		},
 		EntryFn: entryFn,
 		NodeFn: func(r Root) error {

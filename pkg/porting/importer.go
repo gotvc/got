@@ -12,6 +12,7 @@ import (
 
 	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/kv"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/brendoncarroll/stdctx/logctx"
@@ -24,12 +25,12 @@ import (
 
 type Importer struct {
 	gotfs *gotfs.Operator
-	cache state.KVStore[string, Entry]
+	cache kv.Store[string, Entry]
 
 	ms, ds cadata.Store
 }
 
-func NewImporter(fsop *gotfs.Operator, cache state.KVStore[string, Entry], ms, ds cadata.Store) *Importer {
+func NewImporter(fsop *gotfs.Operator, cache kv.Store[string, Entry], ms, ds cadata.Store) *Importer {
 	return &Importer{
 		gotfs: fsop,
 		cache: cache,
@@ -102,7 +103,8 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 	if !finfo.Mode().IsRegular() {
 		return nil, fmt.Errorf("ImportFile called for non-regular file at path %q", p)
 	}
-	if ent, err := pr.cache.Get(ctx, p); err == nil && ent.ModifiedAt == tai64.FromGoTime(finfo.ModTime()) {
+	var ent Entry
+	if err := pr.cache.Get(ctx, p, &ent); err == nil && ent.ModifiedAt == tai64.FromGoTime(finfo.ModTime()) {
 		logctx.Infof(ctx, "using cache entry for path %q. skipped import", p)
 		return &ent.Root, nil
 	}
@@ -179,7 +181,8 @@ func createEmptyDir(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Sto
 }
 
 func needsUpdate(ctx context.Context, cache Cache, p string, finfo posixfs.FileInfo) (bool, error) {
-	ent, err := cache.Get(ctx, p)
+	var ent Entry
+	err := cache.Get(ctx, p, &ent)
 	if errors.Is(err, state.ErrNotFound) {
 		return true, nil
 	}

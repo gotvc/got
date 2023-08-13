@@ -7,6 +7,7 @@ import (
 	"io"
 
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/kv"
 	"github.com/brendoncarroll/stdctx/logctx"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -59,6 +60,10 @@ func (s Store) Get(ctx context.Context, id cadata.ID, buf []byte) (int, error) {
 		return 0, io.ErrShortBuffer
 	}
 	return copy(buf, res.Data), nil
+}
+
+func (s Store) Exists(ctx context.Context, id cadata.ID) (bool, error) {
+	return kv.ExistsUsingList(ctx, s, id)
 }
 
 func (s Store) Delete(ctx context.Context, id cadata.ID) error {

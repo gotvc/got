@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/brendoncarroll/go-state"
+	"github.com/brendoncarroll/go-state/kv"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gdat"
@@ -47,7 +48,7 @@ func (r *Repo) getImportTriple(ctx context.Context, b *branches.Info) (ret *bran
 	saltHash := gdat.Hash(salt[:])
 	ids := [3]uint64{}
 	s := r.getKVStore(tableImportStores)
-	v, err := s.Get(ctx, saltHash[:])
+	v, err := kv.Get(ctx, s, saltHash[:])
 	if err != nil {
 		if errors.Is(err, state.ErrNotFound) {
 			v = make([]byte, 8*3)
@@ -88,8 +89,12 @@ func newPortingCache(db *badger.DB, saltHash [32]byte) *portingCache {
 	}
 }
 
-func (c *portingCache) Get(ctx context.Context, p string) (porting.Entry, error) {
-	return porting.Entry{}, state.ErrNotFound
+func (c *portingCache) Get(ctx context.Context, p string, dst *porting.Entry) error {
+	return state.ErrNotFound
+}
+
+func (c *portingCache) Exists(ctx context.Context, p string) (bool, error) {
+	return kv.ExistsUsingList(ctx, c, p)
 }
 
 func (c *portingCache) Put(ctx context.Context, p string, ent porting.Entry) error {

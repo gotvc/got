@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/brendoncarroll/go-state"
 	"github.com/brendoncarroll/go-state/cadata"
+	"github.com/brendoncarroll/go-state/kv"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/gotfs"
@@ -16,7 +16,7 @@ type Entry struct {
 	Root       gotfs.Root   `json:"root"`
 }
 
-type Cache = state.KVStore[string, Entry]
+type Cache = kv.Store[string, Entry]
 
 type Exporter struct {
 	gotfs *gotfs.Operator
