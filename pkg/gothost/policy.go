@@ -36,7 +36,7 @@ func SetPolicy(ctx context.Context, op *gotfs.Operator, ms, ds cadata.Store, x g
 }
 
 type Policy struct {
-	Rules []Rule
+	Rules []Rule `json:"rules"`
 }
 
 func (p Policy) Equals(other Policy) bool {
@@ -50,27 +50,19 @@ func (p Policy) Clone() Policy {
 }
 
 func ParsePolicy(data []byte) (*Policy, error) {
-	dec := json.NewDecoder(bytes.NewReader(data))
 	var ret Policy
-	for dec.More() {
-		var r Rule
-		if err := dec.Decode(&r); err != nil {
-			return nil, err
-		}
-		ret.Rules = append(ret.Rules, r)
+	if err := json.Unmarshal(data, &ret); err != nil {
+		return nil, err
 	}
 	return &ret, nil
 }
 
 func MarshalPolicy(p Policy) []byte {
-	var buf bytes.Buffer
-	enc := json.NewEncoder(&buf)
-	for _, r := range p.Rules {
-		if err := enc.Encode(r); err != nil {
-			panic(err)
-		}
+	data, err := json.Marshal(p)
+	if err != nil {
+		panic(err)
 	}
-	return buf.Bytes()
+	return data
 }
 
 // Rules joins an Identity to a Role
