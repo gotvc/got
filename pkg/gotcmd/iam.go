@@ -72,7 +72,7 @@ func newIAMCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 				if _, exists := x.Identities[name]; exists {
 					return nil, fmt.Errorf("an identity with name %q already exists", name)
 				}
-				x.Identities[name] = gothost.NewNamedIden(name)
+				x.Identities[name] = gothost.Identity{}
 				return &x, nil
 			})
 		},
@@ -92,7 +92,7 @@ func newIAMCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 	addMember := &cobra.Command{
 		Use:   "add-mem",
 		Short: "adds a member to an identity",
-		Args:  cobra.MinimumNArgs(1),
+		Args:  cobra.MinimumNArgs(2),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			name := args[0]
 			idenElems, err := parseIdenElems(args[1:])

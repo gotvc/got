@@ -230,7 +230,6 @@ func (e *HostEngine) CanDo(ctx context.Context, sub PeerID, verb branchintc.Verb
 }
 
 func (e *HostEngine) readFS(ctx context.Context) (ms, ds cadata.Store, root *gotfs.Root, _ error) {
-	defer e.cachedCell.Invalidate()
 	v, err := e.inner.Open(ctx, HostConfigKey)
 	if err != nil {
 		return nil, nil, nil, err
@@ -252,7 +251,11 @@ func (e *HostEngine) readFS(ctx context.Context) (ms, ds cadata.Store, root *got
 }
 
 func (e *HostEngine) modifyFS(ctx context.Context, fn func(op *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error)) error {
-	defer e.cachedCell.Invalidate()
+	defer func() {
+		if e.cachedCell != nil {
+			e.cachedCell.Invalidate()
+		}
+	}()
 	v, err := e.inner.Open(ctx, HostConfigKey)
 	if err != nil {
 		return err
@@ -357,6 +360,8 @@ func (p *authzPolicy) roleContains(role Role, a Action) (ret bool) {
 			return false
 		}
 		return p.roleContains(role2, a)
+	case role.Everything != nil:
+		return true
 	default:
 		return false
 	}

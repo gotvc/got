@@ -28,10 +28,16 @@ type Identity struct {
 
 func (i Identity) Add(xs ...Identity) Identity {
 	switch {
+	case i.Peer != nil:
+		return NewUnionIden(append(xs, i)...)
+	case i.Name != nil:
+		return NewUnionIden(append(xs, i)...)
+	case i.Anyone != nil:
+		return i
 	case i.Union != nil:
 		return NewUnionIden(append(xs, i.Union...)...)
 	default:
-		return NewUnionIden(append(xs, i)...)
+		return NewUnionIden(xs...)
 	}
 }
 
@@ -54,6 +60,22 @@ func (i Identity) Equals(j Identity) bool {
 	return reflect.DeepEqual(i, j)
 }
 
+func (e Identity) String() string {
+	if e.Peer != nil {
+		return e.Peer.Base64String()
+	}
+	if e.Name != nil {
+		return "@" + *e.Name
+	}
+	if e.Anyone != nil {
+		return "ANYONE"
+	}
+	if e.Union != nil {
+		return "[" + strings.Join(slices2.Map(e.Union, func(x Identity) string { return x.String() }), ", ") + "]"
+	}
+	return "NOONE"
+}
+
 // NewPeer returns a single PeerID element.
 func NewPeer(peer PeerID) Identity {
 	return Identity{Peer: &peer}
@@ -70,10 +92,17 @@ func Anyone() Identity {
 }
 
 func NewUnionIden(idens ...Identity) Identity {
+	if len(idens) == 0 {
+		return Identity{}
+	}
+	if len(idens) == 1 {
+		return idens[0]
+	}
 	idens = slices.Clone(idens)
 	slices.SortFunc(idens, func(a, b Identity) int {
 		return strings.Compare(a.String(), b.String())
 	})
+	// TODO dedup
 	return Identity{Union: idens}
 }
 
@@ -90,19 +119,6 @@ func ParseIDElement(x []byte) (Identity, error) {
 		}
 		return Identity{}, fmt.Errorf("could not parse identity element from %q", x)
 	}
-}
-
-func (e Identity) String() string {
-	if e.Peer != nil {
-		return e.Peer.Base64String()
-	}
-	if e.Name != nil {
-		return "@" + *e.Name
-	}
-	if e.Anyone != nil {
-		return "ANYONE"
-	}
-	return "NOONE"
 }
 
 func CreateIdentity(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root, name string, iden Identity) (*gotfs.Root, error) {

@@ -11,11 +11,12 @@ import (
 
 // Role is a set of Actions
 type Role struct {
-	Single   *Action       `json:"single,omitempty"`
-	Regexp   *RegexpRole   `json:"regexp,omitempty"`
-	Named    *string       `json:"named,omitempty"`
-	Union    []Role        `json:"union,omitempty"`
-	Subtract *SubtractRole `json:"subtract,omitempty"`
+	Single     *Action       `json:"single,omitempty"`
+	Regexp     *RegexpRole   `json:"regexp,omitempty"`
+	Everything *struct{}     `json:"everything,omitempty"`
+	Named      *string       `json:"named,omitempty"`
+	Union      []Role        `json:"union,omitempty"`
+	Subtract   *SubtractRole `json:"subtract,omitempty"`
 }
 
 func (r Role) String() string {
@@ -24,6 +25,8 @@ func (r Role) String() string {
 		return fmt.Sprintf("{single: %v}", *r.Single)
 	case r.Regexp != nil:
 		return fmt.Sprintf("{regexp: %v}", *r.Regexp)
+	case r.Everything != nil:
+		return "{everything}"
 	case r.Named != nil:
 		return fmt.Sprintf("{named: %v}", *r.Named)
 	case r.Union != nil:
@@ -58,6 +61,10 @@ func NewNamedRole(name string) Role {
 
 func NewSubtractRole(a, b Role) Role {
 	return Role{Subtract: &SubtractRole{L: a, R: b}}
+}
+
+func Everything() Role {
+	return Role{Everything: &struct{}{}}
 }
 
 // Subtract is L - R

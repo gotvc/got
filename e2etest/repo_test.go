@@ -6,7 +6,6 @@ import (
 	"crypto/ed25519"
 	"os"
 	"path/filepath"
-	"regexp"
 	"testing"
 
 	"github.com/inet256/inet256/networks/beaconnet"
@@ -58,11 +57,11 @@ func TestMultiRepoSync(t *testing.T) {
 			Rules: []gothost.Rule{
 				{
 					Identity: gothost.NewPeer(r1.GetID()),
-					Role:     gothost.NewRegexpRole(regexp.MustCompile(".*"), regexp.MustCompile(".*")),
+					Role:     gothost.Everything(),
 				},
 				{
 					Identity: gothost.NewPeer(r2.GetID()),
-					Role:     gothost.NewRegexpRole(regexp.MustCompile(".*"), regexp.MustCompile(".*")),
+					Role:     gothost.Everything(),
 				},
 			},
 		}
