@@ -7,67 +7,60 @@ import (
 	"fmt"
 	"io"
 	"path"
+	"reflect"
+	"slices"
+	"strings"
 
+	"github.com/brendoncarroll/go-exp/slices2"
 	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/inet256/inet256/pkg/inet256"
-	"golang.org/x/exp/slices"
 )
 
-// Identity is 2 groups of peers.
-// - Members are the set of peers that are part of the identity.
-// - Owners are the set of peers that are allowed to modify the identity.
+// Identity is a set of peer addresses
 type Identity struct {
-	Owners  []IdentityElement `json:"owners"`
-	Members []IdentityElement `json:"members"`
+	Peer   *PeerID    `json:"peer,omitempty"`
+	Name   *string    `json:"name,omitempty"`
+	Anyone *struct{}  `json:"anyone,omitempty"`
+	Union  []Identity `json:"union,omitempty"`
 }
 
-func (i Identity) Equals(j Identity) bool {
-	return slices.Equal(i.Owners, j.Owners) && slices.Equal(i.Members, j.Members)
-}
-
-// IdentityElement is a single element of an Identity, it can either refer to:
-// - A single PeerID
-// - Another Identity by name
-// - Anyone
-type IdentityElement struct {
-	Peer   *PeerID   `json:"peer,omitempty"`
-	Name   *string   `json:"name,omitempty"`
-	Anyone *struct{} `json:"anyone,omitempty"`
-}
-
-// NewPeer returns a single PeerID element.
-func NewPeer(peer PeerID) IdentityElement {
-	return IdentityElement{Peer: &peer}
-}
-
-// NewNamed returns a reference to another identity.
-func NewNamed(name string) IdentityElement {
-	return IdentityElement{Name: &name}
-}
-
-// Anyone returns an element that includes anyone
-func Anyone() IdentityElement {
-	return IdentityElement{Anyone: new(struct{})}
-}
-
-// ParseIDElement parses an IdentityElement from it's text representation.
-func ParseIDElement(x []byte) (IdentityElement, error) {
+func (i Identity) Add(xs ...Identity) Identity {
 	switch {
-	case bytes.Equal(x, []byte("ANYONE")):
-		return Anyone(), nil
-	case bytes.HasPrefix(x, []byte("@")):
-		return NewNamed(string(bytes.TrimPrefix(x, []byte("@")))), nil
+	case i.Peer != nil:
+		return NewUnionIden(append(xs, i)...)
+	case i.Name != nil:
+		return NewUnionIden(append(xs, i)...)
+	case i.Anyone != nil:
+		return i
+	case i.Union != nil:
+		return NewUnionIden(append(xs, i.Union...)...)
 	default:
-		if addr, err := inet256.ParseAddrBase64(x); err == nil {
-			return NewPeer(addr), nil
-		}
-		return IdentityElement{}, fmt.Errorf("could not parse identity element from %q", x)
+		return NewUnionIden(xs...)
 	}
 }
 
-func (e IdentityElement) String() string {
+func (i Identity) Remove(xs ...Identity) Identity {
+	switch {
+	case i.Union != nil:
+		return Identity{
+			Union: slices2.Filter(i.Union, func(iden Identity) bool {
+				return !slices.ContainsFunc(xs, func(x Identity) bool {
+					return x.Equals(iden)
+				})
+			}),
+		}
+	default:
+		return i
+	}
+}
+
+func (i Identity) Equals(j Identity) bool {
+	return reflect.DeepEqual(i, j)
+}
+
+func (e Identity) String() string {
 	if e.Peer != nil {
 		return e.Peer.Base64String()
 	}
@@ -77,7 +70,55 @@ func (e IdentityElement) String() string {
 	if e.Anyone != nil {
 		return "ANYONE"
 	}
+	if e.Union != nil {
+		return "[" + strings.Join(slices2.Map(e.Union, func(x Identity) string { return x.String() }), ", ") + "]"
+	}
 	return "NOONE"
+}
+
+// NewPeer returns a single PeerID element.
+func NewPeer(peer PeerID) Identity {
+	return Identity{Peer: &peer}
+}
+
+// NewNamed returns a reference to another identity.
+func NewNamedIden(name string) Identity {
+	return Identity{Name: &name}
+}
+
+// Anyone returns an element that includes anyone
+func Anyone() Identity {
+	return Identity{Anyone: new(struct{})}
+}
+
+func NewUnionIden(idens ...Identity) Identity {
+	if len(idens) == 0 {
+		return Identity{}
+	}
+	if len(idens) == 1 {
+		return idens[0]
+	}
+	idens = slices.Clone(idens)
+	slices.SortFunc(idens, func(a, b Identity) int {
+		return strings.Compare(a.String(), b.String())
+	})
+	// TODO dedup
+	return Identity{Union: idens}
+}
+
+// ParseIDElement parses an IdentityElement from it's text representation.
+func ParseIDElement(x []byte) (Identity, error) {
+	switch {
+	case bytes.Equal(x, []byte("ANYONE")):
+		return Anyone(), nil
+	case bytes.HasPrefix(x, []byte("@")):
+		return NewNamedIden(string(bytes.TrimPrefix(x, []byte("@")))), nil
+	default:
+		if addr, err := inet256.ParseAddrBase64(x); err == nil {
+			return NewPeer(addr), nil
+		}
+		return Identity{}, fmt.Errorf("could not parse identity element from %q", x)
+	}
 }
 
 func CreateIdentity(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root, name string, iden Identity) (*gotfs.Root, error) {

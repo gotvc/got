@@ -6,7 +6,6 @@ import (
 	"crypto/ed25519"
 	"os"
 	"path/filepath"
-	"regexp"
 	"testing"
 
 	"github.com/inet256/inet256/networks/beaconnet"
@@ -56,8 +55,14 @@ func TestMultiRepoSync(t *testing.T) {
 	err := e.ModifyPolicy(ctx, func(x gothost.Policy) gothost.Policy {
 		return gothost.Policy{
 			Rules: []gothost.Rule{
-				{Allow: true, Subject: gothost.NewPeer(r1.GetID()), Verb: gothost.OpTouch, Object: regexp.MustCompile(".*")},
-				{Allow: true, Subject: gothost.NewPeer(r2.GetID()), Verb: gothost.OpTouch, Object: regexp.MustCompile(".*")},
+				{
+					Identity: gothost.NewPeer(r1.GetID()),
+					Role:     gothost.Everything(),
+				},
+				{
+					Identity: gothost.NewPeer(r2.GetID()),
+					Role:     gothost.Everything(),
+				},
 			},
 		}
 	})
