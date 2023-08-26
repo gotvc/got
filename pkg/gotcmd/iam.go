@@ -52,6 +52,15 @@ func newIAMCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 				fmt.Fprintf(w, "%s\t%v\n", name, iden)
 			}
 			fmt.Fprintln(w)
+			fmt.Fprintln(w, "ROLES")
+			fmt.Fprintln(w, "NAME\tELEMENTS")
+			names = maps.Keys(cfg.Roles)
+			slices.Sort(names)
+			for _, name := range names {
+				role := cfg.Identities[name]
+				fmt.Fprintf(w, "%s\t%v\n", name, role)
+			}
+			fmt.Fprintln(w)
 			fmt.Fprintln(w, "POLICY")
 			for i, rule := range cfg.Policy.Rules {
 				fmt.Fprintf(w, "%d) ", i)
