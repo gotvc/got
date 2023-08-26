@@ -56,8 +56,14 @@ func TestMultiRepoSync(t *testing.T) {
 	err := e.ModifyPolicy(ctx, func(x gothost.Policy) gothost.Policy {
 		return gothost.Policy{
 			Rules: []gothost.Rule{
-				{Allow: true, Subject: gothost.NewPeer(r1.GetID()), Verb: gothost.OpTouch, Object: regexp.MustCompile(".*")},
-				{Allow: true, Subject: gothost.NewPeer(r2.GetID()), Verb: gothost.OpTouch, Object: regexp.MustCompile(".*")},
+				{
+					Identity: gothost.NewPeer(r1.GetID()),
+					Role:     gothost.NewRegexpRole(regexp.MustCompile(".*"), regexp.MustCompile(".*")),
+				},
+				{
+					Identity: gothost.NewPeer(r2.GetID()),
+					Role:     gothost.NewRegexpRole(regexp.MustCompile(".*"), regexp.MustCompile(".*")),
+				},
 			},
 		}
 	})

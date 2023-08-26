@@ -288,6 +288,7 @@ func (e *HostEngine) modifyFS(ctx context.Context, fn func(op *gotfs.Operator, m
 type authzPolicy struct {
 	pol        Policy
 	identities map[string]Identity
+	roles      map[string]Role
 }
 
 func newAuthzPolicy(x State) (*authzPolicy, error) {
@@ -296,50 +297,69 @@ func newAuthzPolicy(x State) (*authzPolicy, error) {
 	}
 	return &authzPolicy{
 		pol:        x.Policy,
+		roles:      x.Roles,
 		identities: x.Identities,
 	}, nil
 }
 
 func (p *authzPolicy) CanDo(sub PeerID, verb gotauthz.Verb, object string) bool {
-	var allow bool
+	a := Action{Verb: verb, Object: object}
 	for _, r := range p.pol.Rules {
-		if p.matchesVerb(&r, verb) && p.isReachableFrom(sub, r.Subject) && r.Object.MatchString(object) {
-			allow = r.Allow
+		if p.roleContains(r.Role, a) && p.idenContains(r.Identity, sub) {
+			return true
 		}
 	}
-	return allow
+	return false
 }
 
 // isReachableFrom returns true if dst is reachable from start
 // TODO: use graphs package, this is O(n^2)
-func (p *authzPolicy) isReachableFrom(dst PeerID, start IdentityElement) bool {
+func (p *authzPolicy) idenContains(iden Identity, x PeerID) bool {
 	switch {
-	case start.Peer != nil:
-		if *start.Peer == dst {
+	case iden.Peer != nil:
+		if *iden.Peer == x {
 			return true
 		}
-	case start.Name != nil:
-		if iden, exists := p.identities[*start.Name]; exists {
-			for _, target2 := range iden.Members {
-				if p.isReachableFrom(dst, target2) {
-					return true
-				}
+	case iden.Name != nil:
+		if iden2, exists := p.identities[*iden.Name]; exists {
+			return p.idenContains(iden2, x)
+		}
+	case iden.Anyone != nil:
+		return true
+	case iden.Union != nil:
+		for _, iden2 := range iden.Union {
+			if p.idenContains(iden2, x) {
+				return true
 			}
 		}
-	case start.Anyone != nil:
-		return true
 	}
 	return false
 }
 
-func (p *authzPolicy) matchesVerb(r *Rule, verb gotauthz.Verb) bool {
-	switch r.Verb {
-	case OpLook:
-		return !IsWriteVerb(verb)
-	case OpTouch:
-		return true
+func (p *authzPolicy) roleContains(role Role, a Action) (ret bool) {
+	switch {
+	case role.Single != nil:
+		return role.Single.Contains(a)
+	case role.Regexp != nil:
+		return role.Regexp.Contains(a)
+	case role.Union != nil:
+		for _, role2 := range role.Union {
+			if p.roleContains(role2, a) {
+				return true
+			}
+		}
+		return false
+	case role.Subtract != nil:
+		return p.roleContains(role.Subtract.L, a) && !p.roleContains(role.Subtract.R, a)
+	case role.Named != nil:
+		role2, exists := p.roles[*role.Named]
+		if !exists {
+			return false
+		}
+		return p.roleContains(role2, a)
+	default:
+		return false
 	}
-	return false
 }
 
 func newConfigBranchErr() error {

@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"fmt"
 
-	"github.com/brendoncarroll/go-exp/slices2"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gothost"
 	"github.com/gotvc/got/pkg/gotrepo"
@@ -45,18 +44,18 @@ func newIAMCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 			}
 			w := bufio.NewWriter(cmd.OutOrStdout())
 			fmt.Fprintln(w, "IDENTITIES")
-			fmt.Fprintln(w, "NAME\tOWNERS\tMEMBERS")
+			fmt.Fprintln(w, "NAME\tMEMBERS")
 			names := maps.Keys(cfg.Identities)
 			slices.Sort(names)
 			for _, name := range names {
 				iden := cfg.Identities[name]
-				fmt.Fprintf(w, "%s\t%v\t%v\n", name, iden.Owners, iden.Members)
+				fmt.Fprintf(w, "%s\t%v\n", name, iden)
 			}
 			fmt.Fprintln(w)
 			fmt.Fprintln(w, "POLICY")
 			for i, rule := range cfg.Policy.Rules {
 				fmt.Fprintf(w, "%d) ", i)
-				if _, err := w.Write(gothost.MarshalRule(rule)); err != nil {
+				if _, err := w.WriteString(rule.String()); err != nil {
 					return err
 				}
 			}
@@ -73,9 +72,7 @@ func newIAMCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 				if _, exists := x.Identities[name]; exists {
 					return nil, fmt.Errorf("an identity with name %q already exists", name)
 				}
-				x.Identities[name] = gothost.Identity{
-					Owners: []gothost.IdentityElement{gothost.NewNamed(name)},
-				}
+				x.Identities[name] = gothost.NewNamedIden(name)
 				return &x, nil
 			})
 		},
@@ -107,7 +104,7 @@ func newIAMCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 					return nil, fmt.Errorf("identity %q does not exist", name)
 				}
 				iden := x.Identities[name]
-				iden.Members = append(x.Identities[name].Members, idenElems...)
+				iden = iden.Add(idenElems...)
 				x.Identities[name] = iden
 				return &x, nil
 			})
@@ -128,31 +125,7 @@ func newIAMCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 					return nil, fmt.Errorf("identity %q does not exist", name)
 				}
 				iden := x.Identities[name]
-				iden.Members = slices2.Filter(iden.Members, func(ie gothost.IdentityElement) bool {
-					return slices.Contains(idenElems, ie)
-				})
-				x.Identities[name] = iden
-				return &x, nil
-			})
-		},
-	}
-	rmOwner := &cobra.Command{
-		Use:   "rm-own",
-		Short: "removes an owner from an identity",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
-			idenElems, err := parseIdenElems(args[1:])
-			if err != nil {
-				return err
-			}
-			return modify(func(x gothost.State) (*gothost.State, error) {
-				if _, exists := x.Identities[name]; !exists {
-					return nil, fmt.Errorf("identity %q does not exist", name)
-				}
-				iden := x.Identities[name]
-				iden.Owners = slices2.Filter(iden.Owners, func(ie gothost.IdentityElement) bool {
-					return slices.Contains(idenElems, ie)
-				})
+				iden = iden.Remove(idenElems...)
 				x.Identities[name] = iden
 				return &x, nil
 			})
@@ -163,11 +136,10 @@ func newIAMCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 	c.AddCommand(deleteIden)
 	c.AddCommand(addMember)
 	c.AddCommand(rmMember)
-	c.AddCommand(rmOwner)
 	return c
 }
 
-func parseIdenElems(xs []string) (ret []gothost.IdentityElement, _ error) {
+func parseIdenElems(xs []string) (ret []gothost.Identity, _ error) {
 	for _, ieStr := range xs {
 		ie, err := gothost.ParseIDElement([]byte(ieStr))
 		if err != nil {
