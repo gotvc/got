@@ -96,13 +96,13 @@ func (r *Repo) Rm(ctx context.Context, paths ...string) error {
 	if err != nil {
 		return err
 	}
-	fsop := r.getFSOp(&b.Info)
+	fsag := r.getFSOp(&b.Info)
 	stage := r.getStage()
 	for _, target := range paths {
 		if snap == nil {
 			return fmt.Errorf("path %q not found", target)
 		}
-		if err := fsop.ForEachLeaf(ctx, vol.FSStore, snap.Root, target, func(p string, _ *gotfs.Info) error {
+		if err := fsag.ForEachLeaf(ctx, vol.FSStore, snap.Root, target, func(p string, _ *gotfs.Info) error {
 			return stage.Delete(ctx, p)
 		}); err != nil {
 			return err
@@ -139,7 +139,7 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 		return err
 	}
 	vol := branch.Volume
-	fsop := r.getFSOp(&branch.Info)
+	fsag := r.getFSOp(&branch.Info)
 	snap, err := branches.GetHead(ctx, vol)
 	if err != nil {
 		return err
@@ -148,7 +148,7 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 	if snap != nil {
 		root = snap.Root
 	} else {
-		rootPtr, err := fsop.NewEmpty(ctx, vol.FSStore)
+		rootPtr, err := fsag.NewEmpty(ctx, vol.FSStore)
 		if err != nil {
 			return err
 		}
@@ -160,7 +160,7 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 		case sop.Delete != nil:
 			op.Delete = sop.Delete
 		case sop.Put != nil:
-			md, err := fsop.GetInfo(ctx, vol.FSStore, root, p)
+			md, err := fsag.GetInfo(ctx, vol.FSStore, root, p)
 			if err != nil && !posixfs.IsErrNotExist(err) {
 				return err
 			}
@@ -199,8 +199,8 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 		FS:  stores.AddWriteLayer(dst.FS, src.FS),
 		VC:  stores.AddWriteLayer(dst.VC, src.VC),
 	}
-	fsop := r.getFSOp(&branch.Info)
-	vcop := r.getVCOp(&branch.Info)
+	fsag := r.getFSOp(&branch.Info)
+	vcag := r.getVCOp(&branch.Info)
 	ctx, cf := metrics.Child(ctx, "applying changes")
 	defer cf()
 	if err := branches.Apply(ctx, branch.Volume, *src, func(x *Snap) (*Snap, error) {
@@ -208,7 +208,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 		if x != nil {
 			root = &x.Root
 		}
-		nextRoot, err := r.stage.Apply(ctx, fsop, src.FS, src.Raw, root)
+		nextRoot, err := r.stage.Apply(ctx, fsag, src.FS, src.Raw, root)
 		if err != nil {
 			return nil, err
 		}
@@ -216,7 +216,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 		if x != nil {
 			parents = []Snap{*x}
 		}
-		return vcop.NewSnapshot(ctx, src.VC, parents, *nextRoot, snapInfo)
+		return vcag.NewSnapshot(ctx, src.VC, parents, *nextRoot, snapInfo)
 	}); err != nil {
 		return err
 	}
@@ -235,7 +235,7 @@ func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) er
 	if err != nil {
 		return err
 	}
-	fsop := r.getFSOp(&b.Info)
+	fsag := r.getFSOp(&b.Info)
 	return posixfs.WalkLeaves(ctx, r.workingDir, "", func(p string, ent posixfs.DirEnt) error {
 		// filter staging
 		if op, err := r.stage.Get(ctx, p); err != nil {
@@ -245,7 +245,7 @@ func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) er
 		}
 		// filter branch head
 		if snap != nil {
-			if _, err := fsop.GetInfo(ctx, b.Volume.FSStore, snap.Root, p); err != nil && !os.IsNotExist(err) {
+			if _, err := fsag.GetInfo(ctx, b.Volume.FSStore, snap.Root, p); err != nil && !os.IsNotExist(err) {
 				return err
 			} else if err == nil {
 				return nil

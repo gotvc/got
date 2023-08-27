@@ -12,8 +12,8 @@ import (
 )
 
 func TestBuilderMkdir(t *testing.T) {
-	ctx, op, s := setup(t)
-	b := op.NewBuilder(ctx, s, s)
+	ctx, ag, s := setup(t)
+	b := ag.NewBuilder(ctx, s, s)
 	require.Error(t, b.Mkdir("1", 0o755))
 	require.NoError(t, b.Mkdir("", 0o755))
 	var p string
@@ -24,8 +24,8 @@ func TestBuilderMkdir(t *testing.T) {
 }
 
 func TestBuilderSmallFiles(t *testing.T) {
-	ctx, op, s := setup(t)
-	b := op.NewBuilder(ctx, s, s)
+	ctx, ag, s := setup(t)
+	b := ag.NewBuilder(ctx, s, s)
 	require.NoError(t, b.Mkdir("", 0o755))
 	const N = 1e5
 	for i := 0; i < N; i++ {
@@ -38,7 +38,7 @@ func TestBuilderSmallFiles(t *testing.T) {
 	root, err := b.Finish()
 	require.NoError(t, err)
 	var count int
-	err = op.ForEachLeaf(ctx, s, *root, "", func(p string, md *Info) error {
+	err = ag.ForEachLeaf(ctx, s, *root, "", func(p string, md *Info) error {
 		count++
 		return nil
 	})
@@ -48,8 +48,8 @@ func TestBuilderSmallFiles(t *testing.T) {
 	require.LessOrEqual(t, s.Len(), int(N))
 }
 
-func setup(t testing.TB) (context.Context, *Operator, *cadata.MemStore) {
-	op := NewOperator()
+func setup(t testing.TB) (context.Context, *Agent, *cadata.MemStore) {
+	op := NewAgent()
 	s := cadata.NewMem(cadata.DefaultHash, DefaultMaxBlobSize)
 	return testutil.Context(t), op, s
 }

@@ -36,14 +36,14 @@ type State struct {
 	Roles      map[string]Role
 }
 
-func (s *State) Load(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, root gotfs.Root) error {
+func (s *State) Load(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store, root gotfs.Root) error {
 	// identities
 	maps.Clear(s.Identities)
 	if s.Identities == nil {
 		s.Identities = make(map[string]Identity)
 	}
-	if err := fsop.ReadDir(ctx, ms, root, IdentitiesPath, func(e gotfs.DirEnt) error {
-		data, err := fsop.ReadFile(ctx, ms, ds, root, path.Join(IdentitiesPath, e.Name), 1<<16)
+	if err := fsag.ReadDir(ctx, ms, root, IdentitiesPath, func(e gotfs.DirEnt) error {
+		data, err := fsag.ReadFile(ctx, ms, ds, root, path.Join(IdentitiesPath, e.Name), 1<<16)
 		if err != nil {
 			return err
 		}
@@ -58,7 +58,7 @@ func (s *State) Load(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.St
 	}
 
 	// policy
-	polData, err := fsop.ReadFile(ctx, ms, ds, root, PolicyPath, 1<<20)
+	polData, err := fsag.ReadFile(ctx, ms, ds, root, PolicyPath, 1<<20)
 	if err != nil && !posixfs.IsErrNotExist(err) {
 		return err
 	} else if err == nil {
@@ -73,8 +73,8 @@ func (s *State) Load(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.St
 	if s.Roles == nil {
 		s.Roles = make(map[string]Role)
 	}
-	if err := fsop.ReadDir(ctx, ms, root, RolesPath, func(e gotfs.DirEnt) error {
-		data, err := fsop.ReadFile(ctx, ms, ds, root, path.Join(RolesPath, e.Name), 1<<16)
+	if err := fsag.ReadDir(ctx, ms, root, RolesPath, func(e gotfs.DirEnt) error {
+		data, err := fsag.ReadFile(ctx, ms, ds, root, path.Join(RolesPath, e.Name), 1<<16)
 		if err != nil {
 			return err
 		}
@@ -90,8 +90,8 @@ func (s *State) Load(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.St
 	return nil
 }
 
-func (s *State) Save(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store) (*gotfs.Root, error) {
-	b := fsop.NewBuilder(ctx, ms, ds)
+func (s *State) Save(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store) (*gotfs.Root, error) {
+	b := fsag.NewBuilder(ctx, ms, ds)
 	if err := b.Mkdir("", 0o755); err != nil {
 		return nil, err
 	}

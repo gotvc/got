@@ -13,7 +13,7 @@ import (
 
 // ForEach calls fn once for each Ref in the snapshot graph.
 func ForEach(ctx context.Context, s cadata.Store, xs []Ref, fn func(Ref, Snapshot) error) error {
-	o := NewOperator()
+	o := NewAgent()
 	o.readOnly = true
 	visited := map[Ref]struct{}{}
 	refs := newRefQueue()
@@ -72,13 +72,13 @@ func IsDescendentOf(ctx context.Context, s Store, x, a Snapshot) (bool, error) {
 }
 
 func isDescendentOf(ctx context.Context, m map[Ref]struct{}, s Store, x, a Snapshot) (bool, error) {
-	op := NewOperator()
-	op.readOnly = true
+	ag := NewAgent()
+	ag.readOnly = true
 	for _, parentRef := range x.Parents {
 		if _, exists := m[parentRef]; exists {
 			continue
 		}
-		parent, err := op.GetSnapshot(ctx, s, parentRef)
+		parent, err := ag.GetSnapshot(ctx, s, parentRef)
 		if err != nil {
 			return false, err
 		}
@@ -99,8 +99,8 @@ func isDescendentOf(ctx context.Context, m map[Ref]struct{}, s Store, x, a Snaps
 
 // Sync ensures dst has all of the data reachable from snap.
 func Sync(ctx context.Context, src cadata.Store, dst cadata.Store, snap Snapshot, syncRoot func(gotfs.Root) error) error {
-	op := NewOperator()
-	op.readOnly = true
+	ag := NewAgent()
+	ag.readOnly = true
 	var sync func(snap Snapshot) error
 	sync = func(snap Snapshot) error {
 		for _, parentRef := range snap.Parents {
@@ -108,7 +108,7 @@ func Sync(ctx context.Context, src cadata.Store, dst cadata.Store, snap Snapshot
 			if exists, err := dst.Exists(ctx, parentRef.CID); err != nil {
 				return err
 			} else if !exists {
-				parent, err := op.GetSnapshot(ctx, src, parentRef)
+				parent, err := ag.GetSnapshot(ctx, src, parentRef)
 				if err != nil {
 					return err
 				}
@@ -138,8 +138,8 @@ func Populate(ctx context.Context, s cadata.Store, start Snapshot, set stores.Se
 		if err != nil {
 			return err
 		} else if !exists {
-			op := NewOperator()
-			parent, err := op.GetSnapshot(ctx, s, parentRef)
+			ag := NewAgent()
+			parent, err := ag.GetSnapshot(ctx, s, parentRef)
 			if err != nil {
 				return err
 			}

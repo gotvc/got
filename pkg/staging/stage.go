@@ -150,10 +150,10 @@ func (s *Stage) IsEmpty(ctx context.Context) (bool, error) {
 	return n == 0, nil
 }
 
-func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, base *gotfs.Root) (*gotfs.Root, error) {
+func (s *Stage) Apply(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store, base *gotfs.Root) (*gotfs.Root, error) {
 	if base == nil {
 		var err error
-		base, err = fsop.NewEmpty(ctx, ms)
+		base, err = fsag.NewEmpty(ctx, ms)
 		if err != nil {
 			return nil, err
 		}
@@ -163,7 +163,7 @@ func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.S
 		switch {
 		case fileOp.Put != nil:
 			var err error
-			base, err = fsop.MkdirAll(ctx, ms, *base, path.Dir(p))
+			base, err = fsag.MkdirAll(ctx, ms, *base, path.Dir(p))
 			if err != nil {
 				return err
 			}
@@ -192,7 +192,7 @@ func (s *Stage) Apply(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.S
 	ctx, cf := metrics.Child(ctx, "splicing")
 	defer cf()
 	metrics.SetDenom(ctx, "segs", len(segs), "segs")
-	root, err := fsop.Splice(ctx, ms, ds, segs)
+	root, err := fsag.Splice(ctx, ms, ds, segs)
 	if err != nil {
 		return nil, err
 	}

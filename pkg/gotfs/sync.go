@@ -11,8 +11,8 @@ import (
 // Sync ensures dst has all the data reachable from root
 // dst and src should both be metadata stores.
 // copyData will be called to sync metadata
-func (o *Operator) Sync(ctx context.Context, srcMeta, srcData, dstMeta, dstData Store, root Root) error {
-	return o.gotkv.Sync(ctx, srcMeta, dstMeta, *root.toGotKV(), func(ent gotkv.Entry) error {
+func (a *Agent) Sync(ctx context.Context, srcMeta, srcData, dstMeta, dstData Store, root Root) error {
+	return a.gotkv.Sync(ctx, srcMeta, dstMeta, *root.toGotKV(), func(ent gotkv.Entry) error {
 		if isExtentKey(ent.Key) {
 			ext, err := parseExtent(ent.Value)
 			if err != nil {
@@ -25,8 +25,8 @@ func (o *Operator) Sync(ctx context.Context, srcMeta, srcData, dstMeta, dstData 
 }
 
 // Populate adds the ID for all the metadata blobs to mdSet and all the data blobs to dataSet
-func (o *Operator) Populate(ctx context.Context, s Store, root Root, mdSet, dataSet cadata.Set) error {
-	return o.gotkv.Populate(ctx, s, *root.toGotKV(), mdSet, func(ent gotkv.Entry) error {
+func (a *Agent) Populate(ctx context.Context, s Store, root Root, mdSet, dataSet cadata.Set) error {
+	return a.gotkv.Populate(ctx, s, *root.toGotKV(), mdSet, func(ent gotkv.Entry) error {
 		if isExtentKey(ent.Key) {
 			ext, err := parseExtent(ent.Value)
 			if err != nil {

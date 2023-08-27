@@ -21,8 +21,8 @@ import (
 type HostEngine struct {
 	inner branches.Space
 
-	vcop *gotvc.Operator
-	fsop *gotfs.Operator
+	vcag *gotvc.Agent
+	fsag *gotfs.Agent
 
 	initDone   atomic.Bool
 	initSem    *semaphore.Weighted
@@ -35,8 +35,8 @@ func NewHostEngine(inner branches.Space) *HostEngine {
 	info := branches.NewConfig(true).AsInfo()
 	return &HostEngine{
 		inner:   inner,
-		fsop:    branches.NewGotFS(&info),
-		vcop:    branches.NewGotVC(&info),
+		fsag:    branches.NewGotFS(&info),
+		vcag:    branches.NewGotVC(&info),
 		initSem: semaphore.NewWeighted(1),
 	}
 }
@@ -81,7 +81,7 @@ func (e *HostEngine) ensureInit(ctx context.Context) error {
 			if err := json.Unmarshal(src, &snap); err != nil {
 				return err
 			}
-			return dst.Load(ctx, e.fsop, v.FSStore, v.RawStore, snap.Root)
+			return dst.Load(ctx, e.fsag, v.FSStore, v.RawStore, snap.Root)
 		},
 		Inverse: nil,
 		Copy:    cells.DefaultCopy[State],
@@ -129,7 +129,7 @@ func (e *HostEngine) Open(peerID PeerID) branches.Space {
 }
 
 func (e *HostEngine) Modify(ctx context.Context, fn func(State) (*State, error)) error {
-	return e.modifyFS(ctx, func(op *gotfs.Operator, ms cadata.Store, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
+	return e.modifyFS(ctx, func(op *gotfs.Agent, ms cadata.Store, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
 		var xState State
 		if err := xState.Load(ctx, op, ms, ds, x); err != nil {
 			return nil, err
@@ -151,7 +151,7 @@ func (e *HostEngine) View(ctx context.Context) (*State, error) {
 		return nil, err
 	}
 	var s State
-	if err := s.Load(ctx, e.fsop, ms, ds, *root); err != nil {
+	if err := s.Load(ctx, e.fsag, ms, ds, *root); err != nil {
 		return nil, err
 	}
 	return &s, nil
@@ -162,11 +162,11 @@ func (e *HostEngine) GetPolicy(ctx context.Context) (*Policy, error) {
 	if err != nil {
 		return nil, err
 	}
-	return GetPolicy(ctx, e.fsop, ms, ds, *root)
+	return GetPolicy(ctx, e.fsag, ms, ds, *root)
 }
 
 func (e *HostEngine) ModifyPolicy(ctx context.Context, fn func(pol Policy) Policy) error {
-	return e.modifyFS(ctx, func(op *gotfs.Operator, ms cadata.Store, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
+	return e.modifyFS(ctx, func(op *gotfs.Agent, ms cadata.Store, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
 		xPol, err := GetPolicy(ctx, op, ms, ds, x)
 		if err != nil {
 			return nil, err
@@ -183,13 +183,13 @@ func (e *HostEngine) SetPolicy(ctx context.Context, pol Policy) error {
 }
 
 func (e *HostEngine) CreateIdentity(ctx context.Context, name string, iden Identity) error {
-	return e.modifyFS(ctx, func(op *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
+	return e.modifyFS(ctx, func(op *gotfs.Agent, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
 		return CreateIdentity(ctx, op, ms, ds, x, name, iden)
 	})
 }
 
 func (e *HostEngine) DeleteIdentity(ctx context.Context, name string) error {
-	return e.modifyFS(ctx, func(op *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
+	return e.modifyFS(ctx, func(op *gotfs.Agent, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
 		return DeleteIdentity(ctx, op, ms, x, name)
 	})
 }
@@ -199,7 +199,7 @@ func (e *HostEngine) GetIdentity(ctx context.Context, name string) (*Identity, e
 	if err != nil {
 		return nil, err
 	}
-	return GetIdentity(ctx, e.fsop, ms, ds, *r, name)
+	return GetIdentity(ctx, e.fsag, ms, ds, *r, name)
 }
 
 func (e *HostEngine) ListIdentities(ctx context.Context) ([]string, error) {
@@ -207,7 +207,7 @@ func (e *HostEngine) ListIdentities(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	return ListIdentities(ctx, e.fsop, ms, *r)
+	return ListIdentities(ctx, e.fsag, ms, *r)
 }
 
 func (e *HostEngine) ListIdentitiesFull(ctx context.Context) ([]IDEntry, error) {
@@ -215,7 +215,7 @@ func (e *HostEngine) ListIdentitiesFull(ctx context.Context) ([]IDEntry, error) 
 	if err != nil {
 		return nil, err
 	}
-	return ListIdentitiesFull(ctx, e.fsop, ms, ds, *r)
+	return ListIdentitiesFull(ctx, e.fsag, ms, ds, *r)
 }
 
 func (e *HostEngine) CanDo(ctx context.Context, sub PeerID, verb branchintc.Verb, obj string) (bool, error) {
@@ -241,7 +241,7 @@ func (e *HostEngine) readFS(ctx context.Context) (ms, ds cadata.Store, root *got
 	if snap == nil {
 		ms := stores.NewMem()
 		ds := stores.NewMem()
-		root, err := e.fsop.NewEmpty(ctx, ms)
+		root, err := e.fsag.NewEmpty(ctx, ms)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -250,7 +250,7 @@ func (e *HostEngine) readFS(ctx context.Context) (ms, ds cadata.Store, root *got
 	return v.FSStore, v.RawStore, &snap.Root, nil
 }
 
-func (e *HostEngine) modifyFS(ctx context.Context, fn func(op *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error)) error {
+func (e *HostEngine) modifyFS(ctx context.Context, fn func(op *gotfs.Agent, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error)) error {
 	defer func() {
 		if e.cachedCell != nil {
 			e.cachedCell.Invalidate()
@@ -270,13 +270,13 @@ func (e *HostEngine) modifyFS(ctx context.Context, fn func(op *gotfs.Operator, m
 		if snap != nil {
 			x = snap.Root
 		} else {
-			r, err := e.fsop.NewEmpty(ctx, scratch.FS)
+			r, err := e.fsag.NewEmpty(ctx, scratch.FS)
 			if err != nil {
 				return nil, err
 			}
 			x = *r
 		}
-		y, err := fn(e.fsop, scratch.FS, scratch.Raw, x)
+		y, err := fn(e.fsag, scratch.FS, scratch.Raw, x)
 		if err != nil {
 			return nil, err
 		}
@@ -284,7 +284,7 @@ func (e *HostEngine) modifyFS(ctx context.Context, fn func(op *gotfs.Operator, m
 		if snap != nil {
 			parents = append(parents, *snap)
 		}
-		return e.vcop.NewSnapshot(ctx, scratch.VC, parents, *y, gotvc.SnapInfo{})
+		return e.vcag.NewSnapshot(ctx, scratch.VC, parents, *y, gotvc.SnapInfo{})
 	})
 }
 

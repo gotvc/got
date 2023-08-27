@@ -121,9 +121,9 @@ func ParseIDElement(x []byte) (Identity, error) {
 	}
 }
 
-func CreateIdentity(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, x gotfs.Root, name string, iden Identity) (*gotfs.Root, error) {
+func CreateIdentity(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store, x gotfs.Root, name string, iden Identity) (*gotfs.Root, error) {
 	root := &x
-	root, err := fsop.MkdirAll(ctx, ms, *root, IdentitiesPath)
+	root, err := fsag.MkdirAll(ctx, ms, *root, IdentitiesPath)
 	if err != nil {
 		return nil, err
 	}
@@ -132,22 +132,22 @@ func CreateIdentity(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Sto
 	if err != nil {
 		return nil, err
 	}
-	return fsop.CreateFile(ctx, ms, ds, *root, p, bytes.NewReader(data))
+	return fsag.CreateFile(ctx, ms, ds, *root, p, bytes.NewReader(data))
 }
 
-func DeleteIdentity(ctx context.Context, fsop *gotfs.Operator, ms cadata.Store, x gotfs.Root, name string) (*gotfs.Root, error) {
+func DeleteIdentity(ctx context.Context, fsag *gotfs.Agent, ms cadata.Store, x gotfs.Root, name string) (*gotfs.Root, error) {
 	root := &x
-	root, err := fsop.MkdirAll(ctx, ms, *root, IdentitiesPath)
+	root, err := fsag.MkdirAll(ctx, ms, *root, IdentitiesPath)
 	if err != nil {
 		return nil, err
 	}
 	p := path.Join(IdentitiesPath, name)
-	return fsop.RemoveAll(ctx, ms, *root, p)
+	return fsag.RemoveAll(ctx, ms, *root, p)
 }
 
-func GetIdentity(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, root gotfs.Root, name string) (*Identity, error) {
+func GetIdentity(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store, root gotfs.Root, name string) (*Identity, error) {
 	p := path.Join(IdentitiesPath, name)
-	r, err := fsop.NewReader(ctx, ms, ds, root, p)
+	r, err := fsag.NewReader(ctx, ms, ds, root, p)
 	if err != nil {
 		return nil, err
 	}
@@ -162,9 +162,9 @@ func GetIdentity(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store,
 	return &ret, nil
 }
 
-func ListIdentities(ctx context.Context, fsop *gotfs.Operator, ms cadata.Store, root gotfs.Root) ([]string, error) {
+func ListIdentities(ctx context.Context, fsag *gotfs.Agent, ms cadata.Store, root gotfs.Root) ([]string, error) {
 	var ret []string
-	if err := fsop.ReadDir(ctx, ms, root, IdentitiesPath, func(ent gotfs.DirEnt) error {
+	if err := fsag.ReadDir(ctx, ms, root, IdentitiesPath, func(ent gotfs.DirEnt) error {
 		ret = append(ret, ent.Name)
 		return nil
 	}); err != nil {
@@ -181,10 +181,10 @@ type IDEntry struct {
 	Identity Identity
 }
 
-func ListIdentitiesFull(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, root gotfs.Root) ([]IDEntry, error) {
+func ListIdentitiesFull(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store, root gotfs.Root) ([]IDEntry, error) {
 	var ret []IDEntry
-	if err := fsop.ReadDir(ctx, ms, root, IdentitiesPath, func(ent gotfs.DirEnt) error {
-		r, err := fsop.NewReader(ctx, ms, ds, root, path.Join(IdentitiesPath, ent.Name))
+	if err := fsag.ReadDir(ctx, ms, root, IdentitiesPath, func(ent gotfs.DirEnt) error {
+		r, err := fsag.NewReader(ctx, ms, ds, root, path.Join(IdentitiesPath, ent.Name))
 		if err != nil {
 			return err
 		}

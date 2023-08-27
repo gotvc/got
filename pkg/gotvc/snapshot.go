@@ -62,11 +62,11 @@ type SnapInfo struct {
 	Message string
 }
 
-func (o *Operator) NewSnapshot(ctx context.Context, s cadata.Store, parents []Snapshot, root Root, sinfo SnapInfo) (*Snapshot, error) {
+func (a *Agent) NewSnapshot(ctx context.Context, s cadata.Store, parents []Snapshot, root Root, sinfo SnapInfo) (*Snapshot, error) {
 	var n uint64
 	parentRefs := make([]Ref, len(parents))
 	for i, parent := range parents {
-		parentRef, err := o.PostSnapshot(ctx, s, parent)
+		parentRef, err := a.PostSnapshot(ctx, s, parent)
 		if err != nil {
 			return nil, err
 		}
@@ -94,22 +94,22 @@ func (o *Operator) NewSnapshot(ctx context.Context, s cadata.Store, parents []Sn
 }
 
 // NewZero creates a new snapshot with no parent
-func (op *Operator) NewZero(ctx context.Context, s cadata.Store, root Root, sinfo SnapInfo) (*Snapshot, error) {
-	return op.NewSnapshot(ctx, s, nil, root, sinfo)
+func (ag *Agent) NewZero(ctx context.Context, s cadata.Store, root Root, sinfo SnapInfo) (*Snapshot, error) {
+	return ag.NewSnapshot(ctx, s, nil, root, sinfo)
 }
 
 // PostSnapshot marshals the snapshot and posts it to the store
-func (op *Operator) PostSnapshot(ctx context.Context, s Store, x Snapshot) (*Ref, error) {
-	if op.readOnly {
+func (ag *Agent) PostSnapshot(ctx context.Context, s Store, x Snapshot) (*Ref, error) {
+	if ag.readOnly {
 		panic("gotvc: operator is read-only. This is a bug.")
 	}
-	return op.dop.Post(ctx, s, marshalSnapshot(x))
+	return ag.da.Post(ctx, s, marshalSnapshot(x))
 }
 
 // GetSnapshot retrieves the snapshot referenced by ref from the store.
-func (op *Operator) GetSnapshot(ctx context.Context, s Store, ref Ref) (*Snapshot, error) {
+func (ag *Agent) GetSnapshot(ctx context.Context, s Store, ref Ref) (*Snapshot, error) {
 	var x *Snapshot
-	if err := op.dop.GetF(ctx, s, ref, func(data []byte) error {
+	if err := ag.da.GetF(ctx, s, ref, func(data []byte) error {
 		var err error
 		x, err = parseSnapshot(data)
 		return err
@@ -121,7 +121,7 @@ func (op *Operator) GetSnapshot(ctx context.Context, s Store, ref Ref) (*Snapsho
 
 // Squash turns multiple snapshots into one.
 // It preserves the latest version of the data, but destroys versioning granularity
-func (op *Operator) Squash(ctx context.Context, s Store, x Snapshot, n int) (*Snapshot, error) {
+func (ag *Agent) Squash(ctx context.Context, s Store, x Snapshot, n int) (*Snapshot, error) {
 	if n < 1 {
 		return nil, fmt.Errorf("cannot squash single commit")
 	}
@@ -131,7 +131,7 @@ func (op *Operator) Squash(ctx context.Context, s Store, x Snapshot, n int) (*Sn
 	if len(x.Parents) > 1 {
 		return nil, fmt.Errorf("cannot rebase > 1 parents")
 	}
-	parent, err := op.GetSnapshot(ctx, s, x.Parents[0])
+	parent, err := ag.GetSnapshot(ctx, s, x.Parents[0])
 	if err != nil {
 		return nil, err
 	}
@@ -142,7 +142,7 @@ func (op *Operator) Squash(ctx context.Context, s Store, x Snapshot, n int) (*Sn
 			Parents: parent.Parents,
 		}, nil
 	}
-	y, err := op.Squash(ctx, s, *parent, n-1)
+	y, err := ag.Squash(ctx, s, *parent, n-1)
 	if err != nil {
 		return nil, err
 	}
@@ -168,9 +168,9 @@ func parseSnapshot(data []byte) (*Snapshot, error) {
 
 // RefFromSnapshot computes a ref for snap if it was posted to s.
 // It only calls s.Hash and s.MaxSize; it does not mutate s.
-func (op *Operator) RefFromSnapshot(snap Snapshot, s cadata.Store) Ref {
+func (ag *Agent) RefFromSnapshot(snap Snapshot, s cadata.Store) Ref {
 	s2 := cadata.NewVoid(s.Hash, s.MaxSize())
-	ref, err := op.PostSnapshot(context.TODO(), s2, snap)
+	ref, err := ag.PostSnapshot(context.TODO(), s2, snap)
 	if err != nil {
 		panic(err)
 	}
@@ -178,7 +178,7 @@ func (op *Operator) RefFromSnapshot(snap Snapshot, s cadata.Store) Ref {
 }
 
 // Check ensures that snapshot is valid.
-func (o *Operator) Check(ctx context.Context, s cadata.Store, snap Snapshot, checkRoot func(gotfs.Root) error) error {
+func (a *Agent) Check(ctx context.Context, s cadata.Store, snap Snapshot, checkRoot func(gotfs.Root) error) error {
 	logctx.Infof(ctx, "checking snapshot #%d", snap.N)
 	if err := checkRoot(snap.Root); err != nil {
 		return err
@@ -192,11 +192,11 @@ func (o *Operator) Check(ctx context.Context, s cadata.Store, snap Snapshot, che
 		}
 	}
 	for _, parentRef := range snap.Parents {
-		parent, err := o.GetSnapshot(ctx, s, parentRef)
+		parent, err := a.GetSnapshot(ctx, s, parentRef)
 		if err != nil {
 			return err
 		}
-		if err := o.Check(ctx, s, *parent, checkRoot); err != nil {
+		if err := a.Check(ctx, s, *parent, checkRoot); err != nil {
 			return err
 		}
 	}

@@ -24,15 +24,15 @@ import (
 )
 
 type Importer struct {
-	gotfs *gotfs.Operator
+	gotfs *gotfs.Agent
 	cache kv.Store[string, Entry]
 
 	ms, ds cadata.Store
 }
 
-func NewImporter(fsop *gotfs.Operator, cache kv.Store[string, Entry], ms, ds cadata.Store) *Importer {
+func NewImporter(fsag *gotfs.Agent, cache kv.Store[string, Entry], ms, ds cadata.Store) *Importer {
 	return &Importer{
-		gotfs: fsop,
+		gotfs: fsag,
 		cache: cache,
 
 		ms: ms,
@@ -140,7 +140,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 	return root, nil
 }
 
-func importFileConcurrent(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, fsx posixfs.FS, p string, numWorkers int) (*gotfs.Root, error) {
+func importFileConcurrent(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store, fsx posixfs.FS, p string, numWorkers int) (*gotfs.Root, error) {
 	stat, err := fsx.Stat(p)
 	if err != nil {
 		return nil, err
@@ -161,7 +161,7 @@ func importFileConcurrent(ctx context.Context, fsop *gotfs.Operator, ms, ds cada
 		}
 		rs[i] = io.LimitReader(f, end-start)
 	}
-	return fsop.FileFromReaders(ctx, ms, ds, stat.Mode(), rs)
+	return fsag.FileFromReaders(ctx, ms, ds, stat.Mode(), rs)
 }
 
 func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
@@ -176,8 +176,8 @@ func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
 	return start, end
 }
 
-func createEmptyDir(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store) (*gotfs.Root, error) {
-	return fsop.NewEmpty(ctx, ms)
+func createEmptyDir(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store) (*gotfs.Root, error) {
+	return fsag.NewEmpty(ctx, ms)
 }
 
 func needsUpdate(ctx context.Context, cache Cache, p string, finfo posixfs.FileInfo) (bool, error) {

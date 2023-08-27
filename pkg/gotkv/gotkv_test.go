@@ -15,34 +15,34 @@ import (
 func TestNewEmpty(t *testing.T) {
 	ctx := testutil.Context(t)
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
-	op := newTestOperator(t)
-	x, err := op.NewEmpty(ctx, s)
+	ag := newTestAgent(t)
+	x, err := ag.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	require.NotNil(t, x)
 }
 
 func TestPutGet(t *testing.T) {
 	ctx, s, x := testSetup(t)
-	op := newTestOperator(t)
+	ag := newTestAgent(t)
 	key := []byte("key1")
 	value := []byte("value")
-	x, err := op.Put(ctx, s, *x, key, value)
+	x, err := ag.Put(ctx, s, *x, key, value)
 	require.NoError(t, err)
 	t.Log(x)
 	// ptree.DebugTree(ctx, ptree.ReadParams[Entry, Ref]{
-	// 	Store:           &ptreeGetter{op: &op.dop, s: s},
+	// 	Store:           &ptreeGetter{op: &ag.dop, s: s},
 	// 	Compare:         compareEntries,
 	// 	NewDecoder:      newDecoder,
 	// 	NewIndexDecoder: newIndexDecoder,
 	// }, x.toPtree(), os.Stderr)
-	actualValue, err := op.Get(ctx, s, *x, key)
+	actualValue, err := ag.Get(ctx, s, *x, key)
 	require.NoError(t, err)
 	require.Equal(t, value, actualValue)
 }
 
 func TestPutGetMany(t *testing.T) {
 	ctx, s, x := testSetup(t)
-	op := newTestOperator(t)
+	ag := newTestAgent(t)
 	const N = 200
 	makeKey := func(i int) []byte {
 		return []byte(fmt.Sprintf("%d-key", i))
@@ -53,7 +53,7 @@ func TestPutGetMany(t *testing.T) {
 	for i := 0; i < N; i++ {
 		key, value := makeKey(i), makeValue(i)
 		var err error
-		x, err = op.Put(ctx, s, *x, key, value)
+		x, err = ag.Put(ctx, s, *x, key, value)
 		if !bytes.Contains(x.First, []byte("-key")) {
 			t.Fatalf("on %d: %q", i, x.First)
 		}
@@ -62,7 +62,7 @@ func TestPutGetMany(t *testing.T) {
 	// ptree.DebugTree(s, *x)
 	for i := 0; i < N; i++ {
 		key, value := makeKey(i), makeValue(i)
-		actualValue, err := op.Get(ctx, s, *x, key)
+		actualValue, err := ag.Get(ctx, s, *x, key)
 		require.NoError(t, err)
 		require.Equal(t, string(value), string(actualValue))
 	}
@@ -70,24 +70,24 @@ func TestPutGetMany(t *testing.T) {
 
 func testSetup(t *testing.T) (context.Context, cadata.Store, *Root) {
 	ctx := testutil.Context(t)
-	op := newTestOperator(t)
+	ag := newTestAgent(t)
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
-	x, err := op.NewEmpty(ctx, s)
+	x, err := ag.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	return ctx, s, x
 }
 
-func newTestOperator(t testing.TB) Operator {
-	return NewOperator(1<<13, 1<<16)
+func newTestAgent(t testing.TB) Agent {
+	return NewAgent(1<<13, 1<<16)
 }
 
 func BenchmarkPut(b *testing.B) {
 	ctx := testutil.Context(b)
 	s := cadata.NewVoid(cadata.DefaultHash, cadata.DefaultMaxSize)
-	op := newTestOperator(b)
+	ag := newTestAgent(b)
 	const M = 100
 
-	bu := op.NewBuilder(s)
+	bu := ag.NewBuilder(s)
 	b.ReportAllocs()
 	b.ResetTimer()
 	b.SetBytes(M * (8 + 64))

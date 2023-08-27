@@ -16,10 +16,10 @@ type DEntry struct {
 	Right maybe.Maybe[[]byte]
 }
 
-func (op *Operator) NewDiffer(s cadata.Getter, left, right Root, span Span) *Differ {
+func (ag *Agent) NewDiffer(s cadata.Getter, left, right Root, span Span) *Differ {
 	return &Differ{
-		left:  op.NewIterator(s, left, span),
-		right: op.NewIterator(s, right, span),
+		left:  ag.NewIterator(s, left, span),
+		right: ag.NewIterator(s, right, span),
 	}
 }
 

@@ -30,17 +30,17 @@ func (r *Repo) getImporter(ctx context.Context, b *branches.Info) (*porting.Impo
 	if err != nil {
 		return nil, err
 	}
-	fsop := r.getFSOp(b)
+	fsag := r.getFSOp(b)
 	cache := newPortingCache(r.localDB, saltHash)
-	return porting.NewImporter(fsop, cache, st.FS, st.Raw), nil
+	return porting.NewImporter(fsag, cache, st.FS, st.Raw), nil
 }
 
 func (r *Repo) getExporter(b *branches.Info) *porting.Exporter {
-	fsop := r.getFSOp(b)
+	fsag := r.getFSOp(b)
 	salt := saltFromBytes(b.Salt)
 	saltHash := gdat.Hash(salt[:])
 	cache := newPortingCache(r.localDB, saltHash)
-	return porting.NewExporter(fsop, cache, r.workingDir)
+	return porting.NewExporter(fsag, cache, r.workingDir)
 }
 
 func (r *Repo) getImportTriple(ctx context.Context, b *branches.Info) (ret *branches.StoreTriple, _ error) {

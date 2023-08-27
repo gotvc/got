@@ -17,12 +17,12 @@ import (
 func TestWrite(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	op := newOperator(t)
+	ag := newAgent(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
 	const N = 10
 	const size = 10e6
 
-	b := op.NewBuilder(ctx, ms, ds)
+	b := ag.NewBuilder(ctx, ms, ds)
 	for i := 0; i < N; i++ {
 		k := fmt.Sprintf("key-%04d", i)
 		b.Put(ctx, []byte(k), []byte("value"))
@@ -37,7 +37,7 @@ func TestWrite(t *testing.T) {
 	require.NoError(t, err)
 	for i := 0; i < N; i++ {
 		prefix := fmt.Sprintf("key-%04d-data", i)
-		r, err := op.NewReader(ctx, ms, ds, *root, []byte(prefix))
+		r, err := ag.NewReader(ctx, ms, ds, *root, []byte(prefix))
 		require.NoError(t, err)
 		t.Logf("reading prefix %q", prefix)
 		testutil.StreamsEqual(t, testutil.RandomStream(i, size), r)
@@ -47,9 +47,9 @@ func TestWrite(t *testing.T) {
 func TestSetPrefix(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	op := newOperator(t)
+	ag := newAgent(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
-	b := op.NewBuilder(ctx, ms, ds)
+	b := ag.NewBuilder(ctx, ms, ds)
 
 	err := b.SetPrefix([]byte("prefix1"))
 	require.NoError(t, err)
@@ -62,13 +62,13 @@ func TestSetPrefix(t *testing.T) {
 func TestCopyFrom(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	op := newOperator(t, WithFilter(func(x []byte) bool {
+	ag := newAgent(t, WithFilter(func(x []byte) bool {
 		return len(x) >= 9
 	}))
 	ms, ds := stores.NewMem(), stores.NewMem()
 	roots := make([]Root, 3)
 	for i := range roots {
-		b := op.NewBuilder(ctx, ms, ds)
+		b := ag.NewBuilder(ctx, ms, ds)
 		err := b.Put(ctx, []byte(strconv.Itoa(i)), []byte("test-value"))
 		require.NoError(t, err)
 		prefix := strconv.Itoa(i) + "\x00"
@@ -81,7 +81,7 @@ func TestCopyFrom(t *testing.T) {
 		roots[i] = *root
 	}
 
-	b := op.NewBuilder(ctx, ms, ds)
+	b := ag.NewBuilder(ctx, ms, ds)
 	for i := range roots {
 		err := b.CopyFrom(ctx, roots[i], gotkv.TotalSpan())
 		require.NoError(t, err)
@@ -92,7 +92,7 @@ func TestCopyFrom(t *testing.T) {
 	for i := range roots {
 		prefix := strconv.Itoa(i) + "\x00"
 
-		r, err := op.NewReader(ctx, ms, ds, *root, []byte(prefix))
+		r, err := ag.NewReader(ctx, ms, ds, *root, []byte(prefix))
 		require.NoError(t, err)
 		rng := testutil.RandomStream(i, 1e8)
 		testutil.StreamsEqual(t, rng, r)
@@ -107,14 +107,14 @@ func TestCopyFrom(t *testing.T) {
 func TestCopyExtents(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	op := newOperator(t)
+	ag := newAgent(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
-	b := op.NewBuilder(ctx, ms, ds)
+	b := ag.NewBuilder(ctx, ms, ds)
 
 	const N = 5
 	var exts [][]*Extent
 	for i := 0; i < N; i++ {
-		exts2, err := op.CreateExtents(ctx, ds, testutil.RandomStream(i, 10e6))
+		exts2, err := ag.CreateExtents(ctx, ds, testutil.RandomStream(i, 10e6))
 		require.NoError(t, err)
 		exts = append(exts, exts2)
 	}
@@ -131,15 +131,15 @@ func TestCopyExtents(t *testing.T) {
 	for i := range rngs {
 		rngs[i] = testutil.RandomStream(i, 10e6)
 	}
-	actual, err := op.NewReader(ctx, ms, ds, *root, []byte("0"))
+	actual, err := ag.NewReader(ctx, ms, ds, *root, []byte("0"))
 	require.NoError(t, err)
 	expected := io.MultiReader(rngs...)
 	testutil.StreamsEqual(t, expected, actual)
 }
 
-func newOperator(t testing.TB, opts ...Option) Operator {
-	gkv := gotkv.NewOperator(1<<13, 1<<20)
-	dop := gdat.NewOperator()
-	o := NewOperator(&gkv, dop, opts...)
+func newAgent(t testing.TB, opts ...Option) Agent {
+	gkv := gotkv.NewAgent(1<<13, 1<<20)
+	dop := gdat.NewAgent()
+	o := NewAgent(&gkv, dop, opts...)
 	return o
 }

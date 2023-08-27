@@ -15,7 +15,7 @@ import (
 
 func TestDiffer(t *testing.T) {
 	ctx := testutil.Context(t)
-	op := NewOperator()
+	ag := NewAgent()
 
 	tcs := []struct {
 		Left     memFS
@@ -48,12 +48,12 @@ func TestDiffer(t *testing.T) {
 		tc := tc
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			s := stores.NewMem()
-			lb := op.NewBuilder(ctx, s, s)
+			lb := ag.NewBuilder(ctx, s, s)
 			left := buildFS(t, lb, tc.Left)
-			rb := op.NewBuilder(ctx, s, s)
+			rb := ag.NewBuilder(ctx, s, s)
 			right := buildFS(t, rb, tc.Right)
 
-			d := op.NewDiffer(s, left, right)
+			d := ag.NewDiffer(s, left, right)
 			actual, err := streams.Collect[DeltaEntry](ctx, d, 100)
 			require.NoError(t, err)
 			require.Equal(t, len(tc.Expected), len(actual))

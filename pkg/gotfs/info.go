@@ -55,25 +55,25 @@ func parseInfoKey(k []byte) (string, error) {
 }
 
 // PutInfo assigns metadata to p
-func (o *Operator) PutInfo(ctx context.Context, s Store, x Root, p string, md *Info) (*Root, error) {
+func (a *Agent) PutInfo(ctx context.Context, s Store, x Root, p string, md *Info) (*Root, error) {
 	p = cleanPath(p)
 	if err := checkPath(p); err != nil {
 		return nil, err
 	}
 	k := makeInfoKey(p)
-	root, err := o.gotkv.Put(ctx, s, *x.toGotKV(), k, md.marshal())
+	root, err := a.gotkv.Put(ctx, s, *x.toGotKV(), k, md.marshal())
 	return newRoot(root), err
 }
 
 // GetInfo retrieves the metadata at p if it exists and errors otherwise
-func (o *Operator) GetInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
-	return o.getInfo(ctx, s, x.ToGotKV(), p)
+func (a *Agent) GetInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
+	return a.getInfo(ctx, s, x.ToGotKV(), p)
 }
 
-func (o *Operator) getInfo(ctx context.Context, s Store, x gotkv.Root, p string) (*Info, error) {
+func (a *Agent) getInfo(ctx context.Context, s Store, x gotkv.Root, p string) (*Info, error) {
 	p = cleanPath(p)
 	var md *Info
-	err := o.gotkv.GetF(ctx, s, x, makeInfoKey(p), func(data []byte) error {
+	err := a.gotkv.GetF(ctx, s, x, makeInfoKey(p), func(data []byte) error {
 		var err error
 		md, err = parseInfo(data)
 		return err
@@ -88,8 +88,8 @@ func (o *Operator) getInfo(ctx context.Context, s Store, x gotkv.Root, p string)
 }
 
 // GetDirInfo returns directory metadata at p if it exists, and errors otherwise
-func (o *Operator) GetDirInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
-	md, err := o.GetInfo(ctx, s, x, p)
+func (a *Agent) GetDirInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
+	md, err := a.GetInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err
 	}
@@ -100,8 +100,8 @@ func (o *Operator) GetDirInfo(ctx context.Context, s Store, x Root, p string) (*
 }
 
 // GetFileInfo returns the file metadata at p if it exists, and errors otherwise
-func (o *Operator) GetFileInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
-	md, err := o.GetInfo(ctx, s, x, p)
+func (a *Agent) GetFileInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
+	md, err := a.GetInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err
 	}
@@ -111,8 +111,8 @@ func (o *Operator) GetFileInfo(ctx context.Context, s Store, x Root, p string) (
 	return md, nil
 }
 
-func (o *Operator) checkNoEntry(ctx context.Context, s Store, x Root, p string) error {
-	_, err := o.GetInfo(ctx, s, x, p)
+func (a *Agent) checkNoEntry(ctx context.Context, s Store, x Root, p string) error {
+	_, err := a.GetInfo(ctx, s, x, p)
 	switch {
 	case err == os.ErrNotExist:
 		return nil

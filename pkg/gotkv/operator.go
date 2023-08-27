@@ -45,67 +45,67 @@ func (it *Iterator) Seek(ctx context.Context, gteq []byte) error {
 	return it.it.Seek(ctx, Entry{Key: gteq})
 }
 
-// Option is used to configure an Operator
-type Option func(op *Operator)
+// Option is used to configure an Agent
+type Option func(ag *Agent)
 
-func WithDataOperator(ro *gdat.Operator) Option {
-	return func(o *Operator) {
-		o.dop = ro
+func WithDataAgent(ro *gdat.Agent) Option {
+	return func(a *Agent) {
+		a.da = ro
 	}
 }
 
-// WithSeed returns an Option which sets the seed for an Operator.
+// WithSeed returns an Option which sets the seed for an Agent.
 // Seed affects node boundaries.
 func WithSeed(seed *[16]byte) Option {
 	if seed == nil {
 		panic("seed cannot be nil")
 	}
-	return func(o *Operator) {
-		o.seed = seed
+	return func(a *Agent) {
+		a.seed = seed
 	}
 }
 
-// Operator holds common configuration for operations on gotkv instances.
+// Agent holds common configuration for operations on gotkv instances.
 // It has nothing to do with the state of a particular gotkv instance. It is NOT analagous to a collection object.
 // It is safe for use by multiple goroutines.
-type Operator struct {
-	dop               *gdat.Operator
+type Agent struct {
+	da                *gdat.Agent
 	maxSize, meanSize int
 	seed              *[16]byte
 }
 
-// NewOperator returns an operator which will create nodes with mean size `meanSize`
+// NewAgent returns an operator which will create nodes with mean size `meanSize`
 // and maximum size `maxSize`.
-func NewOperator(meanSize, maxSize int, opts ...Option) Operator {
-	op := Operator{
-		dop:      gdat.NewOperator(),
+func NewAgent(meanSize, maxSize int, opts ...Option) Agent {
+	ag := Agent{
+		da:       gdat.NewAgent(),
 		meanSize: meanSize,
 		maxSize:  maxSize,
 	}
-	if op.meanSize <= 0 {
-		panic(fmt.Sprintf("gotkv.NewOperator: invalid average size %d", op.meanSize))
+	if ag.meanSize <= 0 {
+		panic(fmt.Sprintf("gotkv.NewAgent: invalid average size %d", ag.meanSize))
 	}
-	if op.maxSize <= 0 {
-		panic(fmt.Sprintf("gotkv.NewOperator: invalid max size %d", op.maxSize))
+	if ag.maxSize <= 0 {
+		panic(fmt.Sprintf("gotkv.NewAgent: invalid max size %d", ag.maxSize))
 	}
 	for _, opt := range opts {
-		opt(&op)
+		opt(&ag)
 	}
-	return op
+	return ag
 }
 
-func (o *Operator) MeanSize() int {
-	return o.meanSize
+func (a *Agent) MeanSize() int {
+	return a.meanSize
 }
 
-func (o *Operator) MaxSize() int {
-	return o.maxSize
+func (a *Agent) MaxSize() int {
+	return a.maxSize
 }
 
 // GetF calls fn with the value corresponding to key in the instance x.
 // The value must not be used outside the callback.
-func (o *Operator) GetF(ctx context.Context, s cadata.Getter, x Root, key []byte, fn func([]byte) error) error {
-	it := o.NewIterator(s, x, kvstreams.SingleItemSpan(key))
+func (a *Agent) GetF(ctx context.Context, s cadata.Getter, x Root, key []byte, fn func([]byte) error) error {
+	it := a.NewIterator(s, x, kvstreams.SingleItemSpan(key))
 	var ent Entry
 	err := it.Next(ctx, &ent)
 	if err != nil {
@@ -118,9 +118,9 @@ func (o *Operator) GetF(ctx context.Context, s cadata.Getter, x Root, key []byte
 }
 
 // Get returns the value corresponding to key in the instance x.
-func (o *Operator) Get(ctx context.Context, s cadata.Getter, x Root, key []byte) ([]byte, error) {
+func (a *Agent) Get(ctx context.Context, s cadata.Getter, x Root, key []byte) ([]byte, error) {
 	var ret []byte
-	if err := o.GetF(ctx, s, x, key, func(data []byte) error {
+	if err := a.GetF(ctx, s, x, key, func(data []byte) error {
 		ret = append([]byte{}, data...)
 		return nil
 	}); err != nil {
@@ -131,8 +131,8 @@ func (o *Operator) Get(ctx context.Context, s cadata.Getter, x Root, key []byte)
 
 // Put returns a new version of the instance x with the entry at key corresponding to value.
 // If an entry at key already exists it is overwritten, otherwise it will be created.
-func (o *Operator) Put(ctx context.Context, s cadata.Store, x Root, key, value []byte) (*Root, error) {
-	return o.Mutate(ctx, s, x, Mutation{
+func (a *Agent) Put(ctx context.Context, s cadata.Store, x Root, key, value []byte) (*Root, error) {
+	return a.Mutate(ctx, s, x, Mutation{
 		Span:    SingleKeySpan(key),
 		Entries: []Entry{{Key: key, Value: value}},
 	})
@@ -140,27 +140,27 @@ func (o *Operator) Put(ctx context.Context, s cadata.Store, x Root, key, value [
 
 // Delete returns a new version of the instance x where there is no entry for key.
 // If key does not exist no error is returned.
-func (o *Operator) Delete(ctx context.Context, s cadata.Store, x Root, key []byte) (*Root, error) {
-	return o.DeleteSpan(ctx, s, x, kvstreams.SingleItemSpan(key))
+func (a *Agent) Delete(ctx context.Context, s cadata.Store, x Root, key []byte) (*Root, error) {
+	return a.DeleteSpan(ctx, s, x, kvstreams.SingleItemSpan(key))
 }
 
 // DeleteSpan returns a new version of the instance x where there are no entries contained in span.
-func (o *Operator) DeleteSpan(ctx context.Context, s cadata.Store, x Root, span Span) (*Root, error) {
-	return o.Mutate(ctx, s, x, Mutation{
+func (a *Agent) DeleteSpan(ctx context.Context, s cadata.Store, x Root, span Span) (*Root, error) {
+	return a.Mutate(ctx, s, x, Mutation{
 		Span: span,
 	})
 }
 
 // NewEmpty returns a new GotKV instance with no entries.
-func (o *Operator) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) {
-	b := o.NewBuilder(s)
+func (a *Agent) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) {
+	b := a.NewBuilder(s)
 	return b.Finish(ctx)
 }
 
 // MaxEntry returns the entry in the instance x, within span, with the greatest lexicographic value.
-func (o *Operator) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span Span) (*Entry, error) {
+func (a *Agent) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span Span) (*Entry, error) {
 	rp := ptree.ReadParams[Entry, Ref]{
-		Store:           &ptreeGetter{op: o.dop, s: s},
+		Store:           &ptreeGetter{ag: a.da, s: s},
 		Compare:         compareEntries,
 		NewIndexDecoder: newIndexDecoder,
 		NewDecoder:      newDecoder,
@@ -175,11 +175,11 @@ func (o *Operator) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span S
 	return &dst, nil
 }
 
-func (o *Operator) HasPrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (bool, error) {
+func (a *Agent) HasPrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (bool, error) {
 	if !bytes.HasPrefix(x.First, prefix) {
 		return false, nil
 	}
-	maxEnt, err := o.MaxEntry(ctx, s, x, kvstreams.TotalSpan())
+	maxEnt, err := a.MaxEntry(ctx, s, x, kvstreams.TotalSpan())
 	if err != nil {
 		return false, err
 	}
@@ -191,15 +191,15 @@ func (o *Operator) HasPrefix(ctx context.Context, s cadata.Getter, x Root, prefi
 
 // AddPrefix prepends prefix to all the keys in instance x.
 // This is a O(1) operation.
-func (o *Operator) AddPrefix(x Root, prefix []byte) Root {
+func (a *Agent) AddPrefix(x Root, prefix []byte) Root {
 	return AddPrefix(x, prefix)
 }
 
 // RemovePrefix removes a prefix from all the keys in instance x.
 // RemotePrefix errors if all the entries in x do not share a common prefix.
 // This is a O(1) operation.
-func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (*Root, error) {
-	if yes, err := o.HasPrefix(ctx, s, x, prefix); err != nil {
+func (a *Agent) RemovePrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (*Root, error) {
+	if yes, err := a.HasPrefix(ctx, s, x, prefix); err != nil {
 		return nil, err
 	} else if yes {
 		return nil, fmt.Errorf("tree does not have prefix %q", prefix)
@@ -214,12 +214,12 @@ func (o *Operator) RemovePrefix(ctx context.Context, s cadata.Getter, x Root, pr
 
 // NewBuilder returns a Builder for constructing a GotKV instance.
 // Data will be persisted to s.
-func (o *Operator) NewBuilder(s Store) *Builder {
+func (a *Agent) NewBuilder(s Store) *Builder {
 	b := ptree.NewBuilder(ptree.BuilderParams[Entry, Ref]{
-		Store:           &ptreeStore{op: o.dop, s: s},
-		MeanSize:        o.meanSize,
-		MaxSize:         o.maxSize,
-		Seed:            o.seed,
+		Store:           &ptreeStore{ag: a.da, s: s},
+		MeanSize:        a.meanSize,
+		MaxSize:         a.maxSize,
+		Seed:            a.seed,
 		NewEncoder:      func() ptree.Encoder[Entry] { return &Encoder{} },
 		NewIndexEncoder: func() ptree.IndexEncoder[Entry, Ref] { return &IndexEncoder{} },
 		Compare:         compareEntries,
@@ -230,12 +230,12 @@ func (o *Operator) NewBuilder(s Store) *Builder {
 
 // NewIterator returns an iterator for the instance rooted at x, which
 // will emit all keys within span in the instance.
-func (o *Operator) NewIterator(s Getter, root Root, span Span) *Iterator {
+func (a *Agent) NewIterator(s Getter, root Root, span Span) *Iterator {
 	if span.End != nil && bytes.Compare(span.Begin, span.End) > 0 {
 		panic(fmt.Sprintf("cannot iterate over descending span. begin=%q end=%q", span.Begin, span.End))
 	}
 	it := ptree.NewIterator(ptree.IteratorParams[Entry, Ref]{
-		Store:           &ptreeGetter{op: o.dop, s: s},
+		Store:           &ptreeGetter{ag: a.da, s: s},
 		NewDecoder:      newDecoder,
 		NewIndexDecoder: newIndexDecoder,
 		Compare:         compareEntries,
@@ -249,8 +249,8 @@ func (o *Operator) NewIterator(s Getter, root Root, span Span) *Iterator {
 
 // ForEach calls fn with every entry, in the GotKV instance rooted at root, contained in span, in lexicographical order.
 // If fn returns an error, ForEach immediately returns that error.
-func (o *Operator) ForEach(ctx context.Context, s Getter, root Root, span Span, fn func(Entry) error) error {
-	it := o.NewIterator(s, root, span)
+func (a *Agent) ForEach(ctx context.Context, s Getter, root Root, span Span, fn func(Entry) error) error {
+	it := a.NewIterator(s, root, span)
 	var ent Entry
 	for {
 		if err := it.Next(ctx, &ent); err != nil {
@@ -273,7 +273,7 @@ type Mutation struct {
 }
 
 // Mutate applies a batch of mutations to the tree x.
-func (o *Operator) Mutate(ctx context.Context, s cadata.Store, x Root, mutations ...Mutation) (*Root, error) {
+func (a *Agent) Mutate(ctx context.Context, s cadata.Store, x Root, mutations ...Mutation) (*Root, error) {
 	iters := make([]kvstreams.Iterator, 2*len(mutations)+1)
 	var begin []byte
 	for i, mut := range mutations {
@@ -285,7 +285,7 @@ func (o *Operator) Mutate(ctx context.Context, s cadata.Store, x Root, mutations
 				return nil, fmt.Errorf("spans out of order %d start: %q < %d end: %q", i, mut.Span.Begin, i-1, mut.Span.End)
 			}
 		}
-		beforeIter := o.NewIterator(s, x, Span{
+		beforeIter := a.NewIterator(s, x, Span{
 			Begin: begin,
 			End:   append([]byte{}, mut.Span.Begin...), // ensure this isn't nil, there must be an upper bound.
 		})
@@ -293,11 +293,11 @@ func (o *Operator) Mutate(ctx context.Context, s cadata.Store, x Root, mutations
 		iters[2*i+1] = kvstreams.NewLiteral(mut.Entries)
 		begin = mut.Span.End
 	}
-	iters[len(iters)-1] = o.NewIterator(s, x, Span{
+	iters[len(iters)-1] = a.NewIterator(s, x, Span{
 		Begin: begin,
 		End:   nil,
 	})
-	return o.Concat(ctx, s, iters...)
+	return a.Concat(ctx, s, iters...)
 }
 
 func checkMutation(mut Mutation) error {
@@ -311,8 +311,8 @@ func checkMutation(mut Mutation) error {
 
 // Concat copies data from the iterators in order.
 // If the iterators produce out of order keys concat errors.
-func (o *Operator) Concat(ctx context.Context, s cadata.Store, iters ...kvstreams.Iterator) (*Root, error) {
-	b := o.NewBuilder(s)
+func (a *Agent) Concat(ctx context.Context, s cadata.Store, iters ...kvstreams.Iterator) (*Root, error) {
+	b := a.NewBuilder(s)
 	for _, iter := range iters {
 		if err := CopyAll(ctx, b, iter); err != nil {
 			return nil, err

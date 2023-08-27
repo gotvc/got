@@ -77,10 +77,10 @@ func (*DEK) String() string {
 	return "{ 32 byte DEK }"
 }
 
-func (o *Operator) postEncrypt(ctx context.Context, s cadata.Poster, keyFunc KeyFunc, data []byte) (cadata.ID, *DEK, error) {
+func (a *Agent) postEncrypt(ctx context.Context, s cadata.Poster, keyFunc KeyFunc, data []byte) (cadata.ID, *DEK, error) {
 	dek := keyFunc(Hash(data))
-	ctext := o.acquire(s.MaxSize())
-	defer o.release(ctext)
+	ctext := a.acquire(s.MaxSize())
+	defer a.release(ctext)
 	n := cryptoXOR(dek, ctext, data)
 	id, err := s.Post(ctx, ctext[:n])
 	if err != nil {

@@ -15,8 +15,8 @@ func TestAddPrefix(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
 	s := cadata.NewMem(cadata.DefaultHash, 1<<16)
-	op := NewOperator(1<<13, 1<<16)
-	b := op.NewBuilder(s)
+	ag := NewAgent(1<<13, 1<<16)
+	b := ag.NewBuilder(s)
 
 	const N = 1e4
 	generateEntries(N, func(ent Entry) {
@@ -32,7 +32,7 @@ func TestAddPrefix(t *testing.T) {
 
 	t.Logf("produced %d blobs", s.Len())
 
-	it := op.NewIterator(s, root2, TotalSpan())
+	it := ag.NewIterator(s, root2, TotalSpan())
 	var ent Entry
 	for i := 0; i < N; i++ {
 		err := it.Next(ctx, &ent)

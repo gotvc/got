@@ -169,7 +169,7 @@ func Apply(ctx context.Context, v Volume, src StoreTriple, fn func(*Snap) (*Snap
 	})
 }
 
-func History(ctx context.Context, v Volume, vcop *gotvc.Operator, fn func(ref gdat.Ref, snap Snap) error) error {
+func History(ctx context.Context, v Volume, vcag *gotvc.Agent, fn func(ref gdat.Ref, snap Snap) error) error {
 	snap, err := GetHead(ctx, v)
 	if err != nil {
 		return err
@@ -177,24 +177,24 @@ func History(ctx context.Context, v Volume, vcop *gotvc.Operator, fn func(ref gd
 	if snap == nil {
 		return nil
 	}
-	ref := vcop.RefFromSnapshot(*snap, v.VCStore)
+	ref := vcag.RefFromSnapshot(*snap, v.VCStore)
 	if err := fn(ref, *snap); err != nil {
 		return err
 	}
 	return gotvc.ForEach(ctx, v.VCStore, snap.Parents, fn)
 }
 
-// NewGotFS creates a new gotfs.Operator suitable for writing to the branch
-func NewGotFS(b *Info, opts ...gotfs.Option) *gotfs.Operator {
+// NewGotFS creates a new gotfs.Agent suitable for writing to the branch
+func NewGotFS(b *Info, opts ...gotfs.Option) *gotfs.Agent {
 	opts = append(opts, gotfs.WithSalt(deriveFSSalt(b)))
-	fsop := gotfs.NewOperator(opts...)
-	return fsop
+	fsag := gotfs.NewAgent(opts...)
+	return fsag
 }
 
-// NewGotVC creates a new gotvc.Operator suitable for writing to the branch
-func NewGotVC(b *Info, opts ...gotvc.Option) *gotvc.Operator {
+// NewGotVC creates a new gotvc.Agent suitable for writing to the branch
+func NewGotVC(b *Info, opts ...gotvc.Option) *gotvc.Agent {
 	opts = append(opts, gotvc.WithSalt(deriveVCSalt(b)))
-	return gotvc.NewOperator(opts...)
+	return gotvc.NewAgent(opts...)
 }
 
 func deriveFSSalt(b *Info) *[32]byte {

@@ -12,17 +12,17 @@ import (
 
 func TestDiff(t *testing.T) {
 	ctx := testutil.Context(t)
-	op := newTestOperator(t)
+	ag := newTestAgent(t)
 	s := stores.NewMem()
 
-	lb := op.NewBuilder(s)
+	lb := ag.NewBuilder(s)
 	require.NoError(t, lb.Put(ctx, []byte("a"), []byte("1")))
 	require.NoError(t, lb.Put(ctx, []byte("b"), []byte("2")))
 	require.NoError(t, lb.Put(ctx, []byte("c"), []byte("3")))
 	left, err := lb.Finish(ctx)
 	require.NoError(t, err)
 
-	rb := op.NewBuilder(s)
+	rb := ag.NewBuilder(s)
 	require.NoError(t, rb.Put(ctx, []byte("a"), []byte("1")))
 	require.NoError(t, rb.Put(ctx, []byte("b"), []byte("2222")))
 	require.NoError(t, rb.Put(ctx, []byte("c"), []byte("3")))
@@ -30,7 +30,7 @@ func TestDiff(t *testing.T) {
 	right, err := rb.Finish(ctx)
 	require.NoError(t, err)
 
-	d := op.NewDiffer(s, *left, *right, TotalSpan())
+	d := ag.NewDiffer(s, *left, *right, TotalSpan())
 	dents, err := streams.Collect[DEntry](ctx, d, 6)
 	require.NoError(t, err)
 	require.Equal(t, []DEntry{

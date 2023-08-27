@@ -14,7 +14,7 @@ var _ io.ReadSeeker = &Reader{}
 
 type Reader struct {
 	ctx    context.Context
-	o      *Operator
+	a      *Agent
 	ms, ds cadata.Store
 	root   Root
 	prefix []byte
@@ -22,10 +22,10 @@ type Reader struct {
 	offset int64
 }
 
-func (o *Operator) NewReader(ctx context.Context, ms, ds cadata.Store, root Root, prefix []byte) (*Reader, error) {
+func (a *Agent) NewReader(ctx context.Context, ms, ds cadata.Store, root Root, prefix []byte) (*Reader, error) {
 	return &Reader{
 		ctx:    ctx,
-		o:      o,
+		a:      a,
 		ms:     ms,
 		ds:     ds,
 		root:   root,
@@ -40,7 +40,7 @@ func (r *Reader) Read(buf []byte) (int, error) {
 }
 
 func (r *Reader) Seek(offset int64, whence int) (int64, error) {
-	size, err := r.o.SizeOf(r.ctx, r.ms, r.root, r.prefix)
+	size, err := r.a.SizeOf(r.ctx, r.ms, r.root, r.prefix)
 	if err != nil {
 		return 0, err
 	}
@@ -69,7 +69,7 @@ func (r *Reader) ReadAt(buf []byte, offset int64) (int, error) {
 	if offset < 0 {
 		return 0, fmt.Errorf("invalid offset %d", offset)
 	}
-	it := r.o.gotkv.NewIterator(r.ms, r.root, gotkv.PrefixSpan(r.prefix))
+	it := r.a.gotkv.NewIterator(r.ms, r.root, gotkv.PrefixSpan(r.prefix))
 	gteq := make([]byte, 0, gotkv.MaxKeySize)
 	gteq = appendKey(gteq, r.prefix, uint64(offset))
 	if err := it.Seek(r.ctx, gteq); err != nil {
@@ -99,7 +99,7 @@ func (r *Reader) readFromIterator(ctx context.Context, it *gotkv.Iterator, ds ca
 		if err := it.Next(ctx, &ent); err != nil {
 			return 0, err
 		}
-		if r.o.keyFilter(ent.Key) {
+		if r.a.keyFilter(ent.Key) {
 			break
 		}
 	}
@@ -119,7 +119,7 @@ func (r *Reader) readFromIterator(ctx context.Context, it *gotkv.Iterator, ds ca
 		return 0, fmt.Errorf("incorrect extent extentStart=%d asked for start=%d", extentStart, start)
 	}
 	var n int
-	if err := r.o.getExtentF(ctx, ds, ext, func(data []byte) error {
+	if err := r.a.getExtentF(ctx, ds, ext, func(data []byte) error {
 		n += copy(buf, data[start-extentStart:])
 		return nil
 	}); err != nil {

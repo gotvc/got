@@ -13,24 +13,24 @@ type (
 	Store  = cadata.Store
 )
 
-type Option = func(*Operator)
+type Option = func(*Agent)
 
 func WithSalt(salt *[32]byte) Option {
 	if salt == nil {
 		panic("gdat.WithSalt called with nil")
 	}
-	return func(o *Operator) {
-		o.kf = SaltedConvergent(salt)
+	return func(a *Agent) {
+		a.kf = SaltedConvergent(salt)
 	}
 }
 
 func WithCacheSize(n int) Option {
-	return func(o *Operator) {
-		o.cacheSize = n
+	return func(a *Agent) {
+		a.cacheSize = n
 	}
 }
 
-type Operator struct {
+type Agent struct {
 	kf KeyFunc
 
 	cacheSize int
@@ -38,8 +38,8 @@ type Operator struct {
 	pool      sync.Pool
 }
 
-func NewOperator(opts ...Option) *Operator {
-	o := &Operator{
+func NewAgent(opts ...Option) *Agent {
+	o := &Agent{
 		kf:        Convergent,
 		cacheSize: 32,
 	}
@@ -56,8 +56,8 @@ func NewOperator(opts ...Option) *Operator {
 	return o
 }
 
-func (o *Operator) Post(ctx context.Context, s cadata.Poster, data []byte) (*Ref, error) {
-	id, dek, err := o.postEncrypt(ctx, s, o.kf, data)
+func (a *Agent) Post(ctx context.Context, s cadata.Poster, data []byte) (*Ref, error) {
+	id, dek, err := a.postEncrypt(ctx, s, a.kf, data)
 	if err != nil {
 		return nil, err
 	}
@@ -67,50 +67,50 @@ func (o *Operator) Post(ctx context.Context, s cadata.Poster, data []byte) (*Ref
 	}, nil
 }
 
-func (o *Operator) GetF(ctx context.Context, s Getter, ref Ref, fn func(data []byte) error) error {
-	if data := o.checkCache(ref); data != nil {
+func (a *Agent) GetF(ctx context.Context, s Getter, ref Ref, fn func(data []byte) error) error {
+	if data := a.checkCache(ref); data != nil {
 		return fn(data)
 	}
-	buf := o.acquire(s.MaxSize())
-	n, err := o.Read(ctx, s, ref, buf)
+	buf := a.acquire(s.MaxSize())
+	n, err := a.Read(ctx, s, ref, buf)
 	if err != nil {
 		return err
 	}
 	data := buf[:n]
-	o.loadCache(ref, data)
+	a.loadCache(ref, data)
 	return fn(data)
 }
 
-func (o *Operator) Read(ctx context.Context, s Getter, ref Ref, buf []byte) (int, error) {
+func (a *Agent) Read(ctx context.Context, s Getter, ref Ref, buf []byte) (int, error) {
 	return getDecrypt(ctx, s, ref.DEK, ref.CID, buf)
 }
 
-func (o *Operator) checkCache(ref Ref) []byte {
-	data, exists := o.cache.Get(ref)
+func (a *Agent) checkCache(ref Ref) []byte {
+	data, exists := a.cache.Get(ref)
 	if !exists {
 		return nil
 	}
 	return data.([]byte)
 }
 
-func (o *Operator) loadCache(ref Ref, data []byte) {
-	o.cache.Add(ref, append([]byte{}, data...))
+func (a *Agent) loadCache(ref Ref, data []byte) {
+	a.cache.Add(ref, append([]byte{}, data...))
 }
 
-func (o *Operator) onCacheEvict(key, value any) {
+func (a *Agent) onCacheEvict(key, value any) {
 	buf := value.([]byte)
-	o.release(buf)
+	a.release(buf)
 }
 
-func (o *Operator) acquire(n int) []byte {
-	buf := o.pool.Get().([]byte)
+func (a *Agent) acquire(n int) []byte {
+	buf := a.pool.Get().([]byte)
 	if len(buf) < n {
 		buf = make([]byte, n)
 	}
 	return buf
 }
 
-func (o *Operator) release(x []byte) {
+func (a *Agent) release(x []byte) {
 	x = append(x, make([]byte, cap(x)-len(x))...)
-	o.pool.Put(x)
+	a.pool.Put(x)
 }

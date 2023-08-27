@@ -26,12 +26,12 @@ func TestDeltaRW(t *testing.T) {
 	}
 	ctx := testutil.Context(t)
 	s := stores.NewMem()
-	op := NewOperator()
+	ag := NewAgent()
 	for i, tc := range tcs {
 		expected := tc
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			t.Parallel()
-			b := op.NewDeltaBuilder(s, s)
+			b := ag.NewDeltaBuilder(s, s)
 			for _, de := range expected {
 				err := b.write(ctx, de)
 				require.NoError(t, err)
@@ -39,7 +39,7 @@ func TestDeltaRW(t *testing.T) {
 			delta, err := b.Finish(ctx)
 			require.NoError(t, err)
 
-			it := op.NewDeltaIterator(s, s, *delta)
+			it := ag.NewDeltaIterator(s, s, *delta)
 			actual, err := streams.Collect[DeltaEntry](ctx, it, 10)
 			require.NoError(t, err)
 			require.Equal(t, len(expected), len(actual))

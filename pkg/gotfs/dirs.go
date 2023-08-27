@@ -20,8 +20,8 @@ type DirEnt struct {
 }
 
 // NewEmpty creates a new filesystem with an empty root directory
-func (o *Operator) NewEmpty(ctx context.Context, s Store) (*Root, error) {
-	b := o.NewBuilder(ctx, s, stores.NewVoid())
+func (a *Agent) NewEmpty(ctx context.Context, s Store) (*Root, error) {
+	b := a.NewBuilder(ctx, s, stores.NewVoid())
 	if err := b.Mkdir("/", 0o755); err != nil {
 		return nil, err
 	}
@@ -29,30 +29,30 @@ func (o *Operator) NewEmpty(ctx context.Context, s Store) (*Root, error) {
 }
 
 // Mkdir creates a directory at path p
-func (o *Operator) Mkdir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+func (a *Agent) Mkdir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
 	p = cleanPath(p)
-	if err := o.checkNoEntry(ctx, s, x, p); err != nil {
+	if err := a.checkNoEntry(ctx, s, x, p); err != nil {
 		return nil, err
 	}
 	md := &Info{
 		Mode: uint32(0o755 | os.ModeDir),
 	}
-	return o.PutInfo(ctx, s, x, p, md)
+	return a.PutInfo(ctx, s, x, p, md)
 }
 
 // MkdirAll creates the directory p and any of p's ancestors if necessary.
-func (o *Operator) MkdirAll(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+func (a *Agent) MkdirAll(ctx context.Context, s Store, x Root, p string) (*Root, error) {
 	p = cleanPath(p)
 	parts := strings.Split(p, string(Sep))
 	y := &x
 	var err error
-	y, err = o.ensureDir(ctx, s, x, "")
+	y, err = a.ensureDir(ctx, s, x, "")
 	if err != nil {
 		return nil, err
 	}
 	for i := range parts {
 		p2 := strings.Join(parts[:i+1], string(Sep))
-		y, err = o.ensureDir(ctx, s, *y, p2)
+		y, err = a.ensureDir(ctx, s, *y, p2)
 		if err != nil {
 			return nil, err
 		}
@@ -60,11 +60,11 @@ func (o *Operator) MkdirAll(ctx context.Context, s Store, x Root, p string) (*Ro
 	return y, nil
 }
 
-func (o *Operator) ensureDir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+func (a *Agent) ensureDir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
 	y := &x
-	_, err := o.GetDirInfo(ctx, s, x, p)
+	_, err := a.GetDirInfo(ctx, s, x, p)
 	if posixfs.IsErrNotExist(err) {
-		y, err = o.Mkdir(ctx, s, x, p)
+		y, err = a.Mkdir(ctx, s, x, p)
 		if err != nil {
 			return nil, err
 		}
@@ -75,9 +75,9 @@ func (o *Operator) ensureDir(ctx context.Context, s Store, x Root, p string) (*R
 }
 
 // ReadDir calls fn for every child of the directory at p.
-func (o *Operator) ReadDir(ctx context.Context, s Store, x Root, p string, fn func(e DirEnt) error) error {
+func (a *Agent) ReadDir(ctx context.Context, s Store, x Root, p string, fn func(e DirEnt) error) error {
 	p = cleanPath(p)
-	di, err := o.newDirIterator(ctx, s, x, p)
+	di, err := a.newDirIterator(ctx, s, x, p)
 	if err != nil {
 		return err
 	}
@@ -96,9 +96,9 @@ func (o *Operator) ReadDir(ctx context.Context, s Store, x Root, p string, fn fu
 	return nil
 }
 
-func (o *Operator) RemoveAll(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+func (a *Agent) RemoveAll(ctx context.Context, s Store, x Root, p string) (*Root, error) {
 	p = cleanPath(p)
-	_, err := o.GetInfo(ctx, s, x, p)
+	_, err := a.GetInfo(ctx, s, x, p)
 	if os.IsNotExist(err) {
 		return &x, nil
 	}
@@ -107,7 +107,7 @@ func (o *Operator) RemoveAll(ctx context.Context, s Store, x Root, p string) (*R
 	}
 	k := makeInfoKey(p)
 	span := gotkv.PrefixSpan(k)
-	root, err := o.gotkv.DeleteSpan(ctx, s, *x.toGotKV(), span)
+	root, err := a.gotkv.DeleteSpan(ctx, s, *x.toGotKV(), span)
 	return newRoot(root), err
 }
 
@@ -130,13 +130,13 @@ type dirIterator struct {
 	iter *gotkv.Iterator
 }
 
-func (o *Operator) newDirIterator(ctx context.Context, s Store, x Root, p string) (*dirIterator, error) {
-	_, err := o.GetDirInfo(ctx, s, x, p)
+func (a *Agent) newDirIterator(ctx context.Context, s Store, x Root, p string) (*dirIterator, error) {
+	_, err := a.GetDirInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err
 	}
 	span := dirSpan(p)
-	iter := o.gotkv.NewIterator(s, *x.toGotKV(), span)
+	iter := a.gotkv.NewIterator(s, *x.toGotKV(), span)
 	ent := &gotkv.Entry{}
 	if err := iter.Next(ctx, ent); err != nil {
 		return nil, err

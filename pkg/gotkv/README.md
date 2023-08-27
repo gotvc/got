@@ -11,15 +11,15 @@ func main() {
     // create operator
     avgSize := 1 << 13
     maxSize := 1 << 16
-    kvop := gotkv.NewOperator(avgSize, maxSize)
+    kvop := gotkv.NewAgent(avgSize, maxSize)
 
     // create store
     s := cadata.NewMem(cadata.DefaultHash, maxSize)
 
     // ignoring errors for brevity
-    x, _ := op.NewEmpty(ctx, s)
-    x, _ = op.Put(ctx, s, *x, []byte("my key"), []byte("my value"))
-    value, _ := op.Get(ctx, s, *x, []byte("my key"))
+    x, _ := ag.NewEmpty(ctx, s)
+    x, _ = ag.Put(ctx, s, *x, []byte("my key"), []byte("my value"))
+    value, _ := ag.Get(ctx, s, *x, []byte("my key"))
     // value == []byte("my value")
 } 
 ```
@@ -35,13 +35,13 @@ func main() {
     // create operator
     avgSize := 1 << 13
     maxSize := 1 << 16
-    kvop := gotkv.NewOperator(avgSize, maxSize)
+    kvop := gotkv.NewAgent(avgSize, maxSize)
 
     // create store
     s := cadata.NewMem(cadata.DefaultHash, maxSize)
 
     // ignoring errors for brevity
-    b := kvop.NewBuilder(s)
+    b := kvag.NewBuilder(s)
     for i := 0; i < 10; i++ { 
         b.Put(ctx, []byte("key-" + strconv.Itoa(i)), []byte("my value"))
     }

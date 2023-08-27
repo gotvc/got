@@ -60,8 +60,8 @@ func (r *Repo) Stat(ctx context.Context, p string) (*gotfs.Info, error) {
 	if snap == nil {
 		return nil, fmt.Errorf("branch is empty")
 	}
-	fsop := r.getFSOp(&branch.Info)
-	return fsop.GetInfo(ctx, branch.Volume.FSStore, snap.Root, p)
+	fsag := r.getFSOp(&branch.Info)
+	return fsag.GetInfo(ctx, branch.Volume.FSStore, snap.Root, p)
 }
 
 func (r *Repo) Check(ctx context.Context) error {
@@ -77,8 +77,8 @@ func (r *Repo) Check(ctx context.Context) error {
 	if snap == nil {
 		return nil
 	}
-	vcop := r.getVCOp(&branch.Info)
-	return vcop.Check(ctx, vol.VCStore, *snap, func(root gotfs.Root) error {
+	vcag := r.getVCOp(&branch.Info)
+	return vcag.Check(ctx, vol.VCStore, *snap, func(root gotfs.Root) error {
 		return r.getFSOp(&branch.Info).Check(ctx, vol.FSStore, root, func(ref gdat.Ref) error {
 			return nil
 		})

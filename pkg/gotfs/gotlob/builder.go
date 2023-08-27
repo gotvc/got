@@ -16,7 +16,7 @@ import (
 
 // Builder chunks large objects, stores them, and then writes extents to a gotkv instance.
 type Builder struct {
-	op     *Operator
+	ag     *Agent
 	ctx    context.Context
 	ms, ds cadata.Store
 
@@ -29,18 +29,18 @@ type Builder struct {
 	err     error
 }
 
-func (o *Operator) NewBuilder(ctx context.Context, ms, ds cadata.Store) *Builder {
-	if ms.MaxSize() < o.gotkv.MaxSize() {
+func (a *Agent) NewBuilder(ctx context.Context, ms, ds cadata.Store) *Builder {
+	if ms.MaxSize() < a.gotkv.MaxSize() {
 		panic(fmt.Sprint("store size too small", ms.MaxSize()))
 	}
 	b := &Builder{
-		op:  o,
+		ag:  a,
 		ctx: ctx,
 		ms:  ms,
 		ds:  ds,
-		kvb: o.gotkv.NewBuilder(ms),
+		kvb: a.gotkv.NewBuilder(ms),
 	}
-	b.chunker = o.newChunker(b.handleChunk)
+	b.chunker = a.newChunker(b.handleChunk)
 	if ds.MaxSize() < b.chunker.MaxSize() {
 		panic(fmt.Sprint("store size too small", ds.MaxSize()))
 	}
@@ -88,8 +88,8 @@ func (b *Builder) GetPrefix(out []byte) []byte {
 	if len(b.queue) == 0 {
 		return nil
 	}
-	op := b.queue[len(b.queue)-1]
-	if op.isInline {
+	ag := b.queue[len(b.queue)-1]
+	if ag.isInline {
 		return nil
 	}
 	prefix := b.queue[len(b.queue)-1].key
@@ -129,7 +129,7 @@ func (b *Builder) CopyExtent(ctx context.Context, ext *Extent, isShort bool) err
 	}
 	if b.chunker.Buffered() > 0 || isShort {
 		// can't just copy the extent because we are not aligned.
-		return b.op.getExtentF(ctx, b.ds, ext, func(data []byte) error {
+		return b.ag.getExtentF(ctx, b.ds, ext, func(data []byte) error {
 			_, err := b.Write(data)
 			return err
 		})
@@ -166,7 +166,7 @@ func (b *Builder) IsFinished() bool {
 }
 
 func (b *Builder) handleChunk(data []byte) error {
-	ext, err := b.op.post(b.ctx, b.ds, data)
+	ext, err := b.ag.post(b.ctx, b.ds, data)
 	if err != nil {
 		return err
 	}
@@ -242,7 +242,7 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 	if err := b.checkFinished(); err != nil {
 		return err
 	}
-	maxExtKey, maxExt, err := b.op.MaxExtent(ctx, b.ms, root, span)
+	maxExtKey, maxExt, err := b.ag.MaxExtent(ctx, b.ms, root, span)
 	if err != nil {
 		return err
 	}
@@ -253,7 +253,7 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 			return nil
 		}
 	}
-	it := b.op.gotkv.NewIterator(b.ms, root, span1)
+	it := b.ag.gotkv.NewIterator(b.ms, root, span1)
 	// copy one by one until we can fast copy
 	var ent kvstreams.Entry
 	for b.chunker.Buffered() > 0 {
@@ -263,7 +263,7 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 			}
 			return err
 		}
-		if b.op.keyFilter(ent.Key) {
+		if b.ag.keyFilter(ent.Key) {
 			ext, err := ParseExtent(ent.Value)
 			if err != nil {
 				return err
@@ -282,9 +282,9 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 		return err
 	}
 	// if the max entry was inline, then set the last key, otherwise the maxEnt will take care of it.
-	if maxEnt, err := b.op.gotkv.MaxEntry(ctx, b.ms, root, span1); err != nil {
+	if maxEnt, err := b.ag.gotkv.MaxEntry(ctx, b.ms, root, span1); err != nil {
 		return err
-	} else if maxEnt != nil && !b.op.keyFilter(maxEnt.Key) {
+	} else if maxEnt != nil && !b.ag.keyFilter(maxEnt.Key) {
 		b.setLastKey(maxEnt.Key)
 	}
 	// the last extent needs to fill the chunker
@@ -304,9 +304,9 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 		}
 		span2 := span
 		span2.Begin = gotkv.KeyAfter(maxExtKey)
-		it2 := b.op.gotkv.NewIterator(b.ms, root, span2)
+		it2 := b.ag.gotkv.NewIterator(b.ms, root, span2)
 		if err := streams.ForEach[gotkv.Entry](ctx, it2, func(ent kvstreams.Entry) error {
-			if b.op.keyFilter(ent.Key) {
+			if b.ag.keyFilter(ent.Key) {
 				panic(fmt.Sprintf("found extent after max extent. %q", ent.Key))
 			}
 			return b.Put(ctx, ent.Key, ent.Value)

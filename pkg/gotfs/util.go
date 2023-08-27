@@ -40,8 +40,8 @@ func ChangesOnBase(base Root, changes []Segment) []Segment {
 
 func Dump(ctx context.Context, s Store, root Root, w io.Writer) error {
 	bw := bufio.NewWriter(w)
-	op := NewOperator()
-	it := op.gotkv.NewIterator(s, *root.toGotKV(), gotkv.TotalSpan())
+	ag := NewAgent()
+	it := ag.gotkv.NewIterator(s, *root.toGotKV(), gotkv.TotalSpan())
 	var ent gotkv.Entry
 	for err := it.Next(ctx, &ent); !streams.IsEOS(err); err = it.Next(ctx, &ent) {
 		if err != nil {

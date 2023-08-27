@@ -39,9 +39,9 @@ type DeltaIterator struct {
 	ent gotkv.Entry
 }
 
-func (op *Operator) NewDeltaIterator(ms, ds cadata.Store, delta Delta) *DeltaIterator {
+func (ag *Agent) NewDeltaIterator(ms, ds cadata.Store, delta Delta) *DeltaIterator {
 	return &DeltaIterator{
-		iter: op.gotkv.NewIterator(ms, gotkv.Root(delta), gotkv.TotalSpan()),
+		iter: ag.gotkv.NewIterator(ms, gotkv.Root(delta), gotkv.TotalSpan()),
 	}
 }
 
@@ -100,9 +100,9 @@ func (di *DeltaIterator) Next(ctx context.Context, dst *DeltaEntry) error {
 	}
 }
 
-func (op *Operator) NewDeltaBuilder(ms, ds cadata.Store) *DeltaBuilder {
+func (ag *Agent) NewDeltaBuilder(ms, ds cadata.Store) *DeltaBuilder {
 	return &DeltaBuilder{
-		b: op.gotkv.NewBuilder(ms),
+		b: ag.gotkv.NewBuilder(ms),
 	}
 }
 

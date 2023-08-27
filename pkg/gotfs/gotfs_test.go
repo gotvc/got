@@ -14,7 +14,7 @@ import (
 
 func BenchmarkWrite(b *testing.B) {
 	s := cadata.NewVoid(gdat.Hash, DefaultMaxBlobSize)
-	op := NewOperator()
+	ag := NewAgent()
 
 	b.Run("1-1GB", func(b *testing.B) {
 		ctx := testutil.Context(b)
@@ -24,7 +24,7 @@ func BenchmarkWrite(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			rng := mrand.New(mrand.NewSource(0))
-			bu := op.NewBuilder(ctx, s, s)
+			bu := ag.NewBuilder(ctx, s, s)
 			if err := bu.BeginFile("", 0); err != nil {
 				b.Fatal(err)
 			}
@@ -48,7 +48,7 @@ func BenchmarkWrite(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			rng := mrand.New(mrand.NewSource(0))
-			bu := op.NewBuilder(ctx, s, s)
+			bu := ag.NewBuilder(ctx, s, s)
 			if err := bu.Mkdir("", 0); err != nil {
 				b.Fatal(err)
 			}

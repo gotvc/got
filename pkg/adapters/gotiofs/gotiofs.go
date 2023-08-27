@@ -22,8 +22,8 @@ var _ iofs.FS = &FS{}
 // FS implements io/fs.FS
 type FS struct {
 	ctx   context.Context
-	gotvc *gotvc.Operator
-	gotfs *gotfs.Operator
+	gotvc *gotvc.Agent
+	gotfs *gotfs.Agent
 	vol   *branches.Volume
 }
 
@@ -45,12 +45,12 @@ func (s *FS) Open(name string) (iofs.File, error) {
 	if snap == nil {
 		return nil, iofs.ErrNotExist
 	}
-	fsop := s.gotfs
+	fsag := s.gotfs
 	ms := s.vol.FSStore
-	if _, err := fsop.GetInfo(s.ctx, ms, snap.Root, name); err != nil {
+	if _, err := fsag.GetInfo(s.ctx, ms, snap.Root, name); err != nil {
 		return nil, convertError(err)
 	}
-	return NewFile(s.ctx, fsop, s.vol.FSStore, s.vol.RawStore, snap.Root, name), nil
+	return NewFile(s.ctx, fsag, s.vol.FSStore, s.vol.RawStore, snap.Root, name), nil
 }
 
 var _ iofs.File = &File{}
@@ -60,7 +60,7 @@ var _ io.Seeker = &File{}
 
 type File struct {
 	ctx    context.Context
-	gotfs  *gotfs.Operator
+	gotfs  *gotfs.Agent
 	ms, ds cadata.Store
 	root   gotfs.Root
 	path   string
@@ -68,10 +68,10 @@ type File struct {
 	r *gotfs.Reader
 }
 
-func NewFile(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, root gotfs.Root, p string) *File {
+func NewFile(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store, root gotfs.Root, p string) *File {
 	return &File{
 		ctx:   ctx,
-		gotfs: fsop,
+		gotfs: fsag,
 		ms:    ms,
 		ds:    ds,
 		root:  root,
@@ -156,15 +156,15 @@ func (f *File) stat(p string) (*fileInfo, error) {
 	return finfo.(*fileInfo), nil
 }
 
-func Stat(ctx context.Context, fsop *gotfs.Operator, ms cadata.Store, root gotfs.Root, p string) (iofs.FileInfo, error) {
-	info, err := fsop.GetInfo(ctx, ms, root, p)
+func Stat(ctx context.Context, fsag *gotfs.Agent, ms cadata.Store, root gotfs.Root, p string) (iofs.FileInfo, error) {
+	info, err := fsag.GetInfo(ctx, ms, root, p)
 	if err != nil {
 		return nil, convertError(err)
 	}
 	mode := iofs.FileMode(info.Mode)
 	var size int64
 	if mode.IsRegular() {
-		s, err := fsop.SizeOfFile(ctx, ms, root, p)
+		s, err := fsag.SizeOfFile(ctx, ms, root, p)
 		if err != nil {
 			return nil, convertError(err)
 		}

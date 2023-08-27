@@ -4,29 +4,29 @@ import (
 	"github.com/gotvc/got/pkg/gdat"
 )
 
-type Option = func(o *Operator)
+type Option = func(a *Agent)
 
 func WithSalt(salt *[32]byte) Option {
-	return func(o *Operator) {
-		o.salt = salt
+	return func(a *Agent) {
+		a.salt = salt
 	}
 }
 
-type Operator struct {
+type Agent struct {
 	salt      *[32]byte
 	cacheSize int
 	readOnly  bool
-	dop       *gdat.Operator
+	da        *gdat.Agent
 }
 
-func NewOperator(opts ...Option) *Operator {
-	op := Operator{
+func NewAgent(opts ...Option) *Agent {
+	ag := Agent{
 		cacheSize: 256,
 		salt:      &[32]byte{},
 	}
 	for _, opt := range opts {
-		opt(&op)
+		opt(&ag)
 	}
-	op.dop = gdat.NewOperator(gdat.WithSalt(op.salt), gdat.WithCacheSize(op.cacheSize))
-	return &op
+	ag.da = gdat.NewAgent(gdat.WithSalt(ag.salt), gdat.WithCacheSize(ag.cacheSize))
+	return &ag
 }

@@ -13,12 +13,12 @@ import (
 )
 
 // WriteTAR writes the gotfs instance at root to tw.
-func WriteTAR(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, root gotfs.Root, tw *tar.Writer) error {
-	return fsop.ForEach(ctx, ms, root, "", func(p string, info *gotfs.Info) error {
+func WriteTAR(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store, root gotfs.Root, tw *tar.Writer) error {
+	return fsag.ForEach(ctx, ms, root, "", func(p string, info *gotfs.Info) error {
 		mode := posixfs.FileMode(info.Mode)
 		var size int64
 		if mode.IsRegular() {
-			s, err := fsop.SizeOfFile(ctx, ms, root, "")
+			s, err := fsag.SizeOfFile(ctx, ms, root, "")
 			if err != nil {
 				return err
 			}
@@ -34,7 +34,7 @@ func WriteTAR(ctx context.Context, fsop *gotfs.Operator, ms, ds cadata.Store, ro
 			return err
 		}
 		if mode.IsRegular() {
-			r, err := fsop.NewReader(ctx, ms, ds, root, p)
+			r, err := fsag.NewReader(ctx, ms, ds, root, p)
 			if err != nil {
 				return err
 			}

@@ -19,12 +19,12 @@ type Entry struct {
 type Cache = kv.Store[string, Entry]
 
 type Exporter struct {
-	gotfs *gotfs.Operator
+	gotfs *gotfs.Agent
 	cache Cache
 	fsx   posixfs.FS
 }
 
-func NewExporter(gotfs *gotfs.Operator, cache Cache, fsx posixfs.FS) *Exporter {
+func NewExporter(gotfs *gotfs.Agent, cache Cache, fsx posixfs.FS) *Exporter {
 	return &Exporter{
 		gotfs: gotfs,
 		cache: cache,

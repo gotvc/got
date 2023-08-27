@@ -65,16 +65,16 @@ var (
 	ErrKeyNotFound = fmt.Errorf("key not found")
 )
 
-var defaultReadOnlyOperator = &Operator{dop: gdat.NewOperator()}
+var defaultReadOnlyAgent = &Agent{da: gdat.NewAgent()}
 
-// Get is a convenience function for performing Get without creating an Operator.
+// Get is a convenience function for performing Get without creating an Agent.
 func Get(ctx context.Context, s Getter, x Root, key []byte) ([]byte, error) {
-	return defaultReadOnlyOperator.Get(ctx, s, x, key)
+	return defaultReadOnlyAgent.Get(ctx, s, x, key)
 }
 
-// GetF is a convenience function for performing GetF without creating an Operator
+// GetF is a convenience function for performing GetF without creating an Agent
 func GetF(ctx context.Context, s Getter, x Root, key []byte, fn func([]byte) error) error {
-	return defaultReadOnlyOperator.GetF(ctx, s, x, key, fn)
+	return defaultReadOnlyAgent.GetF(ctx, s, x, key, fn)
 }
 
 // CopyAll copies all the entries from iterator to builder.
@@ -88,10 +88,10 @@ func CopyAll(ctx context.Context, b *Builder, it kvstreams.Iterator) error {
 }
 
 // Sync ensures dst has all the data reachable from x.
-func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Root, entryFn func(Entry) error) error {
+func (a *Agent) Sync(ctx context.Context, src cadata.Getter, dst Store, x Root, entryFn func(Entry) error) error {
 	rp := ptree.ReadParams[Entry, Ref]{
 		Compare:         compareEntries,
-		Store:           &ptreeGetter{op: o.dop, s: src},
+		Store:           &ptreeGetter{ag: a.da, s: src},
 		NewIndexDecoder: func() ptree.IndexDecoder[Entry, Ref] { return &IndexDecoder{} },
 		NewDecoder:      func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 	}
@@ -108,10 +108,10 @@ func (o *Operator) Sync(ctx context.Context, src cadata.Getter, dst Store, x Roo
 
 // Populate adds all blobs reachable from x to set.
 // If an item is in set all of the blobs reachable from it are also assumed to also be in set.
-func (o *Operator) Populate(ctx context.Context, s Store, x Root, set cadata.Set, entryFn func(ent Entry) error) error {
+func (a *Agent) Populate(ctx context.Context, s Store, x Root, set cadata.Set, entryFn func(ent Entry) error) error {
 	rp := ptree.ReadParams[Entry, Ref]{
 		Compare:    compareEntries,
-		Store:      &ptreeGetter{op: o.dop, s: s},
+		Store:      &ptreeGetter{ag: a.da, s: s},
 		NewDecoder: func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 	}
 	return do(ctx, rp, x.toPtree(), doer{
@@ -174,12 +174,12 @@ func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x ptree.Root[Entry
 }
 
 type ptreeGetter struct {
-	op *gdat.Operator
+	ag *gdat.Agent
 	s  cadata.Getter
 }
 
 func (s *ptreeGetter) Get(ctx context.Context, ref Ref, buf []byte) (int, error) {
-	return s.op.Read(ctx, s.s, ref, buf)
+	return s.ag.Read(ctx, s.s, ref, buf)
 }
 
 func (s *ptreeGetter) MaxSize() int {
@@ -187,12 +187,12 @@ func (s *ptreeGetter) MaxSize() int {
 }
 
 type ptreeStore struct {
-	op *gdat.Operator
+	ag *gdat.Agent
 	s  cadata.Store
 }
 
 func (s *ptreeStore) Post(ctx context.Context, data []byte) (Ref, error) {
-	ref, err := s.op.Post(ctx, s.s, data)
+	ref, err := s.ag.Post(ctx, s.s, data)
 	if err != nil {
 		return Ref{}, err
 	}
@@ -200,7 +200,7 @@ func (s *ptreeStore) Post(ctx context.Context, data []byte) (Ref, error) {
 }
 
 func (s *ptreeStore) Get(ctx context.Context, ref Ref, buf []byte) (int, error) {
-	return s.op.Read(ctx, s.s, ref, buf)
+	return s.ag.Read(ctx, s.s, ref, buf)
 }
 
 func (s *ptreeStore) MaxSize() int {
@@ -210,7 +210,7 @@ func (s *ptreeStore) MaxSize() int {
 // DebugTree writes human-readable debug information about the tree to w.
 func DebugTree(ctx context.Context, s cadata.Store, root Root, w io.Writer) error {
 	rp := ptree.ReadParams[Entry, Ref]{
-		Store:           &ptreeGetter{s: s, op: defaultReadOnlyOperator.dop},
+		Store:           &ptreeGetter{s: s, ag: defaultReadOnlyAgent.da},
 		Compare:         compareEntries,
 		NewDecoder:      func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 		NewIndexDecoder: func() ptree.IndexDecoder[Entry, Ref] { return &IndexDecoder{} },
