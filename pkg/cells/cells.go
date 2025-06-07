@@ -3,8 +3,8 @@ package cells
 import (
 	"context"
 
-	"github.com/brendoncarroll/go-state/cells"
-	"github.com/brendoncarroll/go-state/cells/aeadcell"
+	"go.brendoncarroll.net/state/cells"
+	"go.brendoncarroll.net/state/cells/aeadcell"
 	"golang.org/x/crypto/chacha20poly1305"
 )
 

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/brendoncarroll/go-exp/streams"
-	"github.com/brendoncarroll/go-state"
+	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/state"
 )
 
 type Iterator[T, Ref any] struct {

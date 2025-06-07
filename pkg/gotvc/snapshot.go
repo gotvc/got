@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-tai64"
-	"github.com/brendoncarroll/stdctx/logctx"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/stdctx/logctx"
+	"go.brendoncarroll.net/tai64"
 
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"

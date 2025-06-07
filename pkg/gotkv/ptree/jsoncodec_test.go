@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/brendoncarroll/go-state"
-	"github.com/brendoncarroll/go-state/cadata"
+	"go.brendoncarroll.net/state"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 type Entry struct {

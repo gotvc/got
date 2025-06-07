@@ -7,12 +7,12 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotauthz"
+	"go.brendoncarroll.net/p2p"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/stdctx/logctx"
 )
 
 type StoreID struct {
@@ -90,7 +90,7 @@ func (s *blobPullSrv) handleAsk(ctx context.Context, resp []byte, msg p2p.Messag
 func checkPullReply(id cadata.ID, peer PeerID, reply []byte) error {
 	if bytes.HasPrefix(reply, id[:]) {
 		if len(reply) == len(id) {
-			return cadata.ErrNotFound
+			return cadata.ErrNotFound{Key: id}
 		} else {
 			errdata := reply[len(id):]
 			var we WireError

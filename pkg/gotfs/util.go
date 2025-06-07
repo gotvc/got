@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/brendoncarroll/go-exp/streams"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
+	"go.brendoncarroll.net/exp/streams"
 )
 
 // ChangesOnBase inserts segments from base between each Segment in changes.

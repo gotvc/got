@@ -5,8 +5,8 @@ import (
 	"context"
 	"io"
 
-	"github.com/brendoncarroll/go-exp/streams"
-	"github.com/brendoncarroll/go-state/cadata"
+	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 var _ Iterator = &Merger{}

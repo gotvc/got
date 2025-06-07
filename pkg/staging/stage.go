@@ -10,10 +10,10 @@ import (
 
 	"errors"
 
-	"github.com/brendoncarroll/go-state"
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/kv"
-	"github.com/brendoncarroll/stdctx/logctx"
+	"go.brendoncarroll.net/state"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/state/kv"
+	"go.brendoncarroll.net/stdctx/logctx"
 
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/metrics"
@@ -79,7 +79,7 @@ func (s *Stage) Get(ctx context.Context, p string) (*Operation, error) {
 	p = cleanPath(p)
 	data, err := kv.Get(ctx, s.storage, []byte(p))
 	if err != nil {
-		if errors.Is(err, state.ErrNotFound) {
+		if errors.Is(err, state.ErrNotFound[string]{Key: p}) {
 			return nil, nil
 		}
 		return nil, err
@@ -92,7 +92,7 @@ func (s *Stage) Get(ctx context.Context, p string) (*Operation, error) {
 }
 
 func (s *Stage) ForEach(ctx context.Context, fn func(p string, op Operation) error) error {
-	return kv.ForEach[[]byte](ctx, s.storage, state.TotalSpan[[]byte](), func(k []byte) error {
+	return kv.ForEach(ctx, s.storage, state.TotalSpan[[]byte](), func(k []byte) error {
 		v, err := kv.Get(ctx, s.storage, k)
 		if err != nil {
 			return err
@@ -116,7 +116,7 @@ func (s *Stage) CheckConflict(ctx context.Context, p string) error {
 	for i := len(parts) - 1; i > 0; i-- {
 		conflictPath := strings.Join(parts[:i], "/")
 		data, err := kv.Get(ctx, s.storage, []byte(cleanPath(conflictPath)))
-		if err != nil && !errors.Is(err, state.ErrNotFound) {
+		if err != nil && !errors.Is(err, state.ErrNotFound[string]{Key: conflictPath}) {
 			return err
 		}
 		if len(data) > 0 {

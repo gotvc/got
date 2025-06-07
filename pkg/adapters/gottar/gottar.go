@@ -7,9 +7,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotfs"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/state/posixfs"
 )
 
 // WriteTAR writes the gotfs instance at root to tw.

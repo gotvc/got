@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/brendoncarroll/go-exp/slices2"
-	"github.com/brendoncarroll/go-state/cadata"
+	"go.brendoncarroll.net/exp/slices2"
+	"go.brendoncarroll.net/state/cadata"
 	"google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
 

@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/cadata/fsstore"
-	"github.com/brendoncarroll/go-state/cadata/storetest"
-	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/stretchr/testify/require"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/state/cadata/fsstore"
+	"go.brendoncarroll.net/state/cadata/storetest"
+	"go.brendoncarroll.net/state/posixfs"
 
 	"github.com/gotvc/got/pkg/testutil"
 )

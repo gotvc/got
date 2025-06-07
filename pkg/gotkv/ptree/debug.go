@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/brendoncarroll/go-exp/streams"
+	"go.brendoncarroll.net/exp/streams"
 )
 
 func DebugTree[T, Ref any](ctx context.Context, params ReadParams[T, Ref], x Root[T, Ref], w io.Writer) error {

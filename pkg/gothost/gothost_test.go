@@ -7,8 +7,8 @@ import (
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/gotvc/got/pkg/testutil"
-	"github.com/inet256/inet256/pkg/inet256"
 	"github.com/stretchr/testify/require"
+	"go.inet256.org/inet256/pkg/inet256"
 )
 
 func TestConfigureDefaults(t *testing.T) {

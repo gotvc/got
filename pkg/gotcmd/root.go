@@ -3,8 +3,8 @@ package gotcmd
 import (
 	"context"
 
-	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/spf13/cobra"
+	"go.brendoncarroll.net/stdctx/logctx"
 	"go.uber.org/zap"
 
 	"github.com/gotvc/got"

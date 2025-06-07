@@ -5,9 +5,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-state/cells"
-	"github.com/brendoncarroll/stdctx/logctx"
+	"go.brendoncarroll.net/p2p"
+	"go.brendoncarroll.net/state/cells"
+	"go.brendoncarroll.net/stdctx/logctx"
 )
 
 const cellSize = 1 << 16

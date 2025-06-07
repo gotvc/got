@@ -3,9 +3,9 @@ package ptree
 import (
 	"testing"
 
-	"github.com/brendoncarroll/go-state"
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/stretchr/testify/require"
+	"go.brendoncarroll.net/state"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 func TestIndex(t *testing.T) {

@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/brendoncarroll/go-exp/streams"
-	"github.com/brendoncarroll/go-state/cadata"
+	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 type DiffFn = func(key, leftValue, rightValue []byte) error

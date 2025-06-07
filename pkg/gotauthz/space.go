@@ -6,7 +6,7 @@ import (
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/branches/branchintc"
-	"github.com/inet256/inet256/pkg/inet256"
+	"go.inet256.org/inet256/pkg/inet256"
 )
 
 type (

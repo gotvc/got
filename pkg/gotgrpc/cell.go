@@ -3,7 +3,7 @@ package gotgrpc
 import (
 	"context"
 
-	"github.com/brendoncarroll/go-state/cells"
+	"go.brendoncarroll.net/state/cells"
 )
 
 var _ cells.BytesCell = &Cell{}

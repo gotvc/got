@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/brendoncarroll/go-state/cadata"
+	"go.brendoncarroll.net/state/cadata"
 	"golang.org/x/sync/errgroup"
 )
 

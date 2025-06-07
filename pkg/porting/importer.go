@@ -10,16 +10,16 @@ import (
 
 	"errors"
 
-	"github.com/brendoncarroll/go-state"
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/kv"
-	"github.com/brendoncarroll/go-state/posixfs"
-	"github.com/brendoncarroll/go-tai64"
-	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/metrics"
 	"github.com/gotvc/got/pkg/units"
+	"go.brendoncarroll.net/state"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/state/kv"
+	"go.brendoncarroll.net/state/posixfs"
+	"go.brendoncarroll.net/stdctx/logctx"
+	"go.brendoncarroll.net/tai64"
 	"golang.org/x/exp/slices"
 )
 
@@ -183,7 +183,7 @@ func createEmptyDir(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store)
 func needsUpdate(ctx context.Context, cache Cache, p string, finfo posixfs.FileInfo) (bool, error) {
 	var ent Entry
 	err := cache.Get(ctx, p, &ent)
-	if errors.Is(err, state.ErrNotFound) {
+	if errors.Is(err, state.ErrNotFound[string]{Key: p}) {
 		return true, nil
 	}
 	if err != nil {

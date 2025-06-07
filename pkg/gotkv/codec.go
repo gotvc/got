@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/brendoncarroll/go-state"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
+	"go.brendoncarroll.net/state"
 )
 
 type Index = ptree.Index[kvstreams.Entry, gdat.Ref]

@@ -6,10 +6,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/brendoncarroll/go-exp/streams"
-	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/stores"
+	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/state/posixfs"
 )
 
 const Sep = '/'

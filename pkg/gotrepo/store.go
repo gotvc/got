@@ -7,8 +7,8 @@ import (
 	"errors"
 	"math"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/dgraph-io/badger/v3"
+	"go.brendoncarroll.net/state/cadata"
 	"golang.org/x/sync/semaphore"
 
 	"github.com/gotvc/got/pkg/gotrepo/repodb"
@@ -162,13 +162,13 @@ func (sm *storeManager) add(ctx context.Context, sid StoreID, id cadata.ID) erro
 			return err
 		}
 		if count < 1 {
-			return cadata.ErrNotFound
+			return cadata.ErrNotFound{Key: id}
 		}
 		// and that it's in the store
 		if exists, err := sm.store.Exists(ctx, id); err != nil {
 			return err
 		} else if !exists {
-			return cadata.ErrNotFound
+			return cadata.ErrNotFound{Key: id}
 		}
 		if exists, err := sm.isInSet(tx, sid, id); err != nil {
 			return err
@@ -192,7 +192,7 @@ func (sm *storeManager) get(ctx context.Context, sid StoreID, id cadata.ID, buf 
 		return 0, err
 	}
 	if !exists {
-		return 0, cadata.ErrNotFound
+		return 0, cadata.ErrNotFound{Key: id}
 	}
 	return sm.store.Get(ctx, id, buf)
 }

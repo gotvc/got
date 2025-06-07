@@ -10,8 +10,8 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/stretchr/testify/require"
+	"go.brendoncarroll.net/stdctx/logctx"
 	"go.uber.org/zap"
 )
 

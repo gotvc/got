@@ -5,8 +5,8 @@ import (
 	"io"
 	"math"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/stdctx/logctx"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/stdctx/logctx"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/chacha20"
 )

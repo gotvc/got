@@ -7,8 +7,8 @@ import (
 	"encoding/base64"
 	"fmt"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/metrics"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 const (

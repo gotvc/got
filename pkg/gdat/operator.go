@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	lru "github.com/hashicorp/golang-lru"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 type (

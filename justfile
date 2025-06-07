@@ -25,13 +25,13 @@ docker:
 	docker build -t got:local .
 
 add-replace:
-	go mod edit -replace=github.com/brendoncarroll/go-state=../../brendoncarroll/go-state
-	go mod edit -replace=github.com/brendoncarroll/go-p2p=../../brendoncarroll/go-p2p
+	go mod edit -replace=go.brendoncarroll.net/state=../../brendoncarroll/go-state
+	go mod edit -replace=go.brendoncarroll.net/go-p2p=../../brendoncarroll/go-p2p
 	go mod edit -replace=github.com/inet256/inet256=../../inet256/inet256
 
 drop-replace:
-	go mod edit -dropreplace=github.com/brendoncarroll/go-state
-	go mod edit -dropreplace=github.com/brendoncarroll/go-p2p
+	go mod edit -dropreplace=go.brendoncarroll.net/state
+	go mod edit -dropreplace=go.brendoncarroll.net/go-p2p
 	go mod edit -dropreplace=github.com/inet256/inet256
 
 precommit: drop-replace test

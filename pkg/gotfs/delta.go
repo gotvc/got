@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/brendoncarroll/go-exp/streams"
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gotfs/gotlob"
 	"github.com/gotvc/got/pkg/gotkv"
+	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 // Delta is the different between two Roots

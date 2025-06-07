@@ -5,10 +5,10 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/brendoncarroll/go-state"
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/posixfs"
-	"github.com/brendoncarroll/go-tai64"
+	"go.brendoncarroll.net/state"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/state/posixfs"
+	"go.brendoncarroll.net/tai64"
 
 	"github.com/gotvc/got/pkg/branches"
 )

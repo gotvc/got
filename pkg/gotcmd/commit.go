@@ -6,11 +6,11 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got"
 	"github.com/gotvc/got/pkg/gotrepo"
 	"github.com/gotvc/got/pkg/metrics"
 	"github.com/spf13/cobra"
+	"go.brendoncarroll.net/tai64"
 	"golang.org/x/sync/errgroup"
 )
 

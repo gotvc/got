@@ -3,9 +3,9 @@ package gotfs
 import (
 	"context"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 // Sync ensures dst has all the data reachable from root

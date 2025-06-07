@@ -3,7 +3,7 @@ package ptree
 import (
 	"fmt"
 
-	"github.com/brendoncarroll/go-state"
+	"go.brendoncarroll.net/state"
 )
 
 type Index[T, Ref any] struct {

@@ -6,12 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/brendoncarroll/go-state"
-	"github.com/brendoncarroll/go-state/kv"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/porting"
+	"go.brendoncarroll.net/state"
+	"go.brendoncarroll.net/state/kv"
 )
 
 // GetImportStores returns a store triple for importing the branch.
@@ -50,7 +50,7 @@ func (r *Repo) getImportTriple(ctx context.Context, b *branches.Info) (ret *bran
 	s := r.getKVStore(tableImportStores)
 	v, err := kv.Get(ctx, s, saltHash[:])
 	if err != nil {
-		if errors.Is(err, state.ErrNotFound) {
+		if state.IsErrNotFound[[]byte](err) {
 			v = make([]byte, 8*3)
 			for i := 0; i < 3; i++ {
 				id, err := r.storeManager.Create(ctx)
@@ -90,7 +90,7 @@ func newPortingCache(db *badger.DB, saltHash [32]byte) *portingCache {
 }
 
 func (c *portingCache) Get(ctx context.Context, p string, dst *porting.Entry) error {
-	return state.ErrNotFound
+	return state.ErrNotFound[string]{Key: p}
 }
 
 func (c *portingCache) Exists(ctx context.Context, p string) (bool, error) {

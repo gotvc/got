@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/kv"
-	"github.com/brendoncarroll/go-state/posixfs"
-	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/gotfs"
+
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/state/kv"
+	"go.brendoncarroll.net/state/posixfs"
+	"go.brendoncarroll.net/tai64"
 )
 
 type Entry struct {

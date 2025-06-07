@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-state/cells/httpcell"
-	"github.com/inet256/inet256/pkg/inet256"
+	"go.brendoncarroll.net/p2p"
+	"go.brendoncarroll.net/state/cells/httpcell"
+	"go.inet256.org/inet256/pkg/inet256"
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"

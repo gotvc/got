@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/brendoncarroll/stdctx/logctx"
+	"go.brendoncarroll.net/stdctx/logctx"
 	"go.uber.org/zap"
 
 	"github.com/gotvc/got/pkg/branches"

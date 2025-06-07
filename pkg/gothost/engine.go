@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/cells"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/state/cells"
 	"golang.org/x/sync/semaphore"
 
 	"github.com/gotvc/got/pkg/branches"
