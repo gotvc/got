@@ -9,12 +9,12 @@ import (
 
 	"errors"
 
-	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-state/cadata"
+	"go.brendoncarroll.net/p2p"
+	"go.brendoncarroll.net/state/cadata"
 
-	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
+	"go.brendoncarroll.net/stdctx/logctx"
 )
 
 type BranchID struct {

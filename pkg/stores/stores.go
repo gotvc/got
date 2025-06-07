@@ -4,10 +4,10 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/cadata/fsstore"
-	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gdat"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/state/cadata/fsstore"
+	"go.brendoncarroll.net/state/posixfs"
 )
 
 type (

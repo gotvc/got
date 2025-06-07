@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/brendoncarroll/go-exp/maybe"
-	"github.com/brendoncarroll/go-exp/streams"
-	"github.com/brendoncarroll/go-state/cadata"
+	"go.brendoncarroll.net/exp/maybe"
+	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 // DEntry is the delta between 2 Entries

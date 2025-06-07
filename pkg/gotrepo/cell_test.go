@@ -3,9 +3,9 @@ package gotrepo
 import (
 	"testing"
 
-	"github.com/brendoncarroll/go-state/cells"
-	"github.com/brendoncarroll/go-state/cells/celltest"
 	"github.com/gotvc/got/pkg/testutil"
+	"go.brendoncarroll.net/state/cells"
+	"go.brendoncarroll.net/state/cells/celltest"
 )
 
 func TestCell(t *testing.T) {

@@ -4,9 +4,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/brendoncarroll/go-state"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/stretchr/testify/require"
+	"go.brendoncarroll.net/state"
 )
 
 func TestEncoder(t *testing.T) {

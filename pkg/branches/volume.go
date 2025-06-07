@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/cells"
-	"github.com/brendoncarroll/stdctx/logctx"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/state/cells"
+	"go.brendoncarroll.net/stdctx/logctx"
 
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"

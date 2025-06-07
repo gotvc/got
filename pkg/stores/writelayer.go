@@ -3,7 +3,7 @@ package stores
 import (
 	"context"
 
-	"github.com/brendoncarroll/go-state/cadata"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 type writeLayer struct {

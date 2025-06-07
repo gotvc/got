@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/stretchr/testify/require"
+	"go.brendoncarroll.net/state/posixfs"
 
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"

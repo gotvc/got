@@ -4,8 +4,8 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/spf13/cobra"
+	"go.brendoncarroll.net/stdctx/logctx"
 	ftpserver "goftp.io/server/v2"
 
 	"github.com/gotvc/got/pkg/adapters/gotftp"

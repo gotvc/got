@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 func TestMarshalUnmarshal(t *testing.T) {

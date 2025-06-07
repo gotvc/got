@@ -10,9 +10,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/brendoncarroll/go-state/posixfs"
-	"github.com/inet256/inet256/pkg/inet256"
-	"github.com/inet256/inet256/pkg/serde"
+	"go.brendoncarroll.net/state/posixfs"
+	"go.inet256.org/inet256/pkg/inet256"
+	"go.inet256.org/inet256/pkg/serde"
 )
 
 const pemTypePrivateKey = "PRIVATE KEY"

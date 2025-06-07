@@ -7,11 +7,11 @@ import (
 
 	"errors"
 
-	"github.com/brendoncarroll/go-exp/streams"
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
+	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 // Builder chunks large objects, stores them, and then writes extents to a gotkv instance.

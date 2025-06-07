@@ -3,8 +3,8 @@ package ptree
 import (
 	"context"
 
-	"github.com/brendoncarroll/go-exp/maybe"
-	"github.com/brendoncarroll/go-exp/streams"
+	"go.brendoncarroll.net/exp/maybe"
+	"go.brendoncarroll.net/exp/streams"
 )
 
 // MaxEntry returns the entry in span with the greatest (ordered last) key.

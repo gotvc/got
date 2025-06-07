@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/brendoncarroll/go-tai64"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
+	"go.brendoncarroll.net/tai64"
 	"golang.org/x/exp/slices"
 )
 

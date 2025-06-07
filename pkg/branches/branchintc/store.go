@@ -3,7 +3,7 @@ package branchintc
 import (
 	"context"
 
-	"github.com/brendoncarroll/go-state/cadata"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 var _ cadata.Store = &Store{}

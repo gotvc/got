@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/brendoncarroll/go-exp/streams"
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/gotkv"
+	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/stdctx/logctx"
 	"go.uber.org/zap"
 )
 

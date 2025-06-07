@@ -8,11 +8,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/inet256/inet256/networks/beaconnet"
-	"github.com/inet256/inet256/pkg/inet256"
-	"github.com/inet256/inet256/pkg/inet256d"
-	"github.com/inet256/inet256/pkg/mesh256"
 	"github.com/stretchr/testify/require"
+	"go.inet256.org/inet256/networks/beaconnet"
+	"go.inet256.org/inet256/pkg/inet256"
+	"go.inet256.org/inet256/pkg/inet256d"
+	"go.inet256.org/inet256/pkg/mesh256"
 
 	"github.com/gotvc/got"
 	"github.com/gotvc/got/pkg/branches"

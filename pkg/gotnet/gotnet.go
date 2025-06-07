@@ -7,14 +7,14 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-p2p/p/p2pmux"
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/gotauthz"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/inet256/inet256/pkg/inet256"
+	"go.brendoncarroll.net/p2p"
+	"go.brendoncarroll.net/p2p/p/p2pmux"
+	"go.brendoncarroll.net/state/cadata"
+	"go.inet256.org/inet256/pkg/inet256"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc/codes"
 )

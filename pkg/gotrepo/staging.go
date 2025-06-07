@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/brendoncarroll/go-state/posixfs"
-	"github.com/brendoncarroll/stdctx/logctx"
+	"go.brendoncarroll.net/state/posixfs"
+	"go.brendoncarroll.net/stdctx/logctx"
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"

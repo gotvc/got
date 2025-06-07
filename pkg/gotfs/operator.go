@@ -7,8 +7,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/stdctx/logctx"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/stdctx/logctx"
 
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"

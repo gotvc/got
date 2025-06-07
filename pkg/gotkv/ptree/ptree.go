@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/brendoncarroll/go-exp/streams"
+	"go.brendoncarroll.net/exp/streams"
 )
 
 // Getter is used to retrieve nodes from storage by Ref

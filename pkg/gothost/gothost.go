@@ -8,13 +8,13 @@ import (
 	"path"
 	"regexp"
 
-	"github.com/brendoncarroll/go-exp/slices2"
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/internal/graphs"
 	"github.com/gotvc/got/pkg/branches/branchintc"
 	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/inet256/inet256/pkg/inet256"
+	"go.brendoncarroll.net/exp/slices2"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/state/posixfs"
+	"go.inet256.org/inet256/pkg/inet256"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )

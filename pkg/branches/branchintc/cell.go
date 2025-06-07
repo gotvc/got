@@ -3,7 +3,7 @@ package branchintc
 import (
 	"context"
 
-	"github.com/brendoncarroll/go-state/cells"
+	"go.brendoncarroll.net/state/cells"
 )
 
 type cellHook = func(ctx context.Context, verb Verb, next func(ctx context.Context) error) error

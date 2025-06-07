@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"path/filepath"
 
-	"github.com/brendoncarroll/go-state/posixfs"
+	"go.brendoncarroll.net/state/posixfs"
 )
 
 type Config struct {

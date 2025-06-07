@@ -4,11 +4,11 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/brendoncarroll/go-exp/streams"
-	"github.com/brendoncarroll/go-state"
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
+	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/state"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 func TestBuilder(t *testing.T) {

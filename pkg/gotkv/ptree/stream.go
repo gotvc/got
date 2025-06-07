@@ -6,10 +6,10 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/brendoncarroll/go-exp/maybe"
-	"github.com/brendoncarroll/go-exp/streams"
-	"github.com/brendoncarroll/go-state"
 	"github.com/dchest/siphash"
+	"go.brendoncarroll.net/exp/maybe"
+	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/state"
 )
 
 // NextIndexFromSlice returns a NextIndex function for StreamReaders which will

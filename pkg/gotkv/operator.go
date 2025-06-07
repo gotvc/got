@@ -5,12 +5,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/brendoncarroll/go-exp/maybe"
-	"github.com/brendoncarroll/go-exp/streams"
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
 	"github.com/gotvc/got/pkg/gotkv/ptree"
+	"go.brendoncarroll.net/exp/maybe"
+	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 // Builder is used to construct GotKV instances

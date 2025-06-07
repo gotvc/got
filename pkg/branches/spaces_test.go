@@ -3,8 +3,8 @@ package branches
 import (
 	"testing"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/stretchr/testify/require"
+	"go.brendoncarroll.net/state/cadata"
 
 	"github.com/gotvc/got/pkg/cells"
 	"github.com/gotvc/got/pkg/stores"

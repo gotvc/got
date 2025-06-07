@@ -6,8 +6,8 @@ import (
 	"encoding/binary"
 	"errors"
 
-	"github.com/brendoncarroll/go-state/cells"
 	"github.com/dgraph-io/badger/v3"
+	"go.brendoncarroll.net/state/cells"
 
 	"github.com/gotvc/got/pkg/gotrepo/repodb"
 )

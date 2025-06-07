@@ -3,11 +3,10 @@ package gotrepo
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 
-	"github.com/brendoncarroll/go-state"
-	"github.com/brendoncarroll/go-state/kv"
+	"go.brendoncarroll.net/state"
+	"go.brendoncarroll.net/state/kv"
 
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/metrics"
@@ -180,7 +179,7 @@ func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
 func (r *Repo) getActiveBranch(ctx context.Context) (string, error) {
 	s := r.getKVStore(tableDefault)
 	v, err := kv.Get(ctx, s, []byte(keyActive))
-	if err != nil && !errors.Is(err, state.ErrNotFound) {
+	if err != nil && !state.IsErrNotFound[[]byte](err) {
 		return "", err
 	}
 	return string(v), nil

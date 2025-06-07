@@ -4,11 +4,11 @@ import (
 	"container/list"
 	"context"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/metrics"
 	"github.com/gotvc/got/pkg/stores"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 // ForEach calls fn once for each Ref in the snapshot graph.

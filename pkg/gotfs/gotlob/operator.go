@@ -4,13 +4,13 @@ import (
 	"context"
 	"io"
 
-	"github.com/brendoncarroll/go-exp/streams"
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/chunking"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/metrics"
 	"github.com/gotvc/got/pkg/units"
+	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 type Option func(a *Agent)

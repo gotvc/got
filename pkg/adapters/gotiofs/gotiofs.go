@@ -9,12 +9,12 @@ import (
 	"path"
 	"time"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/posixfs"
-	"github.com/brendoncarroll/stdctx/logctx"
 	"github.com/gotvc/got/pkg/branches"
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotvc"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/state/posixfs"
+	"go.brendoncarroll.net/stdctx/logctx"
 )
 
 var _ iofs.FS = &FS{}

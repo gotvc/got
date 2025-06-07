@@ -6,12 +6,12 @@ import (
 	"net"
 	"sync"
 
-	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-p2p/f/x509"
-	"github.com/brendoncarroll/go-p2p/s/quicswarm"
-	"github.com/brendoncarroll/go-p2p/s/udpswarm"
-	"github.com/inet256/inet256/pkg/inet256"
-	"github.com/inet256/inet256/pkg/mesh256"
+	"go.brendoncarroll.net/p2p"
+	"go.brendoncarroll.net/p2p/f/x509"
+	"go.brendoncarroll.net/p2p/s/quicswarm"
+	"go.brendoncarroll.net/p2p/s/udpswarm"
+	"go.inet256.org/inet256/pkg/inet256"
+	"go.inet256.org/inet256/pkg/mesh256"
 
 	"github.com/gotvc/got/pkg/gotfs"
 )

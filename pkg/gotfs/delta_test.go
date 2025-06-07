@@ -4,10 +4,10 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/brendoncarroll/go-exp/streams"
 	"github.com/gotvc/got/pkg/stores"
 	"github.com/gotvc/got/pkg/testutil"
 	"github.com/stretchr/testify/require"
+	"go.brendoncarroll.net/exp/streams"
 )
 
 func TestDeltaRW(t *testing.T) {

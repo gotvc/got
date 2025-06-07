@@ -4,9 +4,9 @@ import (
 	"context"
 	"sync"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/cells"
-	"github.com/brendoncarroll/go-tai64"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/state/cells"
+	"go.brendoncarroll.net/tai64"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )

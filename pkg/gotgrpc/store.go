@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/brendoncarroll/go-state/cadata"
-	"github.com/brendoncarroll/go-state/kv"
-	"github.com/brendoncarroll/stdctx/logctx"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/state/kv"
+	"go.brendoncarroll.net/stdctx/logctx"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -51,7 +51,7 @@ func (s Store) Get(ctx context.Context, id cadata.ID, buf []byte) (int, error) {
 		switch status.Code(err) {
 		case codes.NotFound:
 			if errorMsgContains(err, "blob") {
-				return 0, cadata.ErrNotFound
+				return 0, cadata.ErrNotFound{Key: id}
 			}
 		}
 		return 0, err
@@ -84,7 +84,7 @@ func (s Store) Add(ctx context.Context, id cadata.ID) error {
 	switch status.Code(err) {
 	case codes.NotFound:
 		if errorMsgContains(err, "blob") {
-			return cadata.ErrNotFound
+			return cadata.ErrNotFound{Key: id}
 		}
 	}
 	return err

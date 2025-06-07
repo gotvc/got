@@ -5,10 +5,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/brendoncarroll/go-state"
-	"github.com/brendoncarroll/go-state/kv"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/gotvc/got/pkg/gotkv/kvstreams"
+	"go.brendoncarroll.net/state"
+	"go.brendoncarroll.net/state/kv"
 )
 
 type badgerKVStore struct {
@@ -35,7 +35,7 @@ func (s badgerKVStore) Get(ctx context.Context, k []byte, dst *[]byte) error {
 		item, err := tx.Get(Key(nil, s.tid, k))
 		if err != nil {
 			if errors.Is(err, badger.ErrKeyNotFound) {
-				return state.ErrNotFound
+				return state.ErrNotFound[[]byte]{Key: k}
 			}
 			return err
 		}

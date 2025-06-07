@@ -5,12 +5,12 @@ import (
 	"crypto/tls"
 	"strings"
 
-	"github.com/brendoncarroll/go-p2p"
-	"github.com/brendoncarroll/go-p2p/p/mbapp"
-	"github.com/brendoncarroll/stdctx/logctx"
-	"github.com/inet256/inet256/client/go/inet256client"
-	"github.com/inet256/inet256/pkg/inet256"
-	"github.com/inet256/inet256/pkg/p2padapter"
+	"go.brendoncarroll.net/p2p"
+	"go.brendoncarroll.net/p2p/p/mbapp"
+	"go.brendoncarroll.net/stdctx/logctx"
+	"go.inet256.org/inet256/client/go/inet256client"
+	"go.inet256.org/inet256/pkg/inet256"
+	"go.inet256.org/inet256/pkg/p2padapter"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
 

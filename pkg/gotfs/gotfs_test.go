@@ -7,9 +7,9 @@ import (
 	mrand "math/rand"
 	"testing"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/testutil"
+	"go.brendoncarroll.net/state/cadata"
 )
 
 func BenchmarkWrite(b *testing.B) {

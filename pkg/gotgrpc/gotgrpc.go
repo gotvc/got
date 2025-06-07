@@ -3,9 +3,9 @@ package gotgrpc
 import (
 	"context"
 
-	"github.com/brendoncarroll/go-state/cadata"
 	"github.com/gotvc/got/pkg/gdat"
 	"github.com/gotvc/got/pkg/gotfs"
+	"go.brendoncarroll.net/state/cadata"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 )

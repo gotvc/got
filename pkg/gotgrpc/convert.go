@@ -1,8 +1,8 @@
 package gotgrpc
 
 import (
-	"github.com/brendoncarroll/go-exp/slices2"
-	"github.com/brendoncarroll/go-tai64"
+	"go.brendoncarroll.net/exp/slices2"
+	"go.brendoncarroll.net/tai64"
 
 	"github.com/gotvc/got/pkg/branches"
 )

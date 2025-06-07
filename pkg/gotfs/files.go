@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/brendoncarroll/go-state/posixfs"
 	"github.com/gotvc/got/pkg/gotfs/gotlob"
 	"github.com/gotvc/got/pkg/metrics"
+	"go.brendoncarroll.net/state/posixfs"
 	"golang.org/x/sync/errgroup"
 )
 
