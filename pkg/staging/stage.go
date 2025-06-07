@@ -115,8 +115,9 @@ func (s *Stage) CheckConflict(ctx context.Context, p string) error {
 	parts := strings.Split(p, "/")
 	for i := len(parts) - 1; i > 0; i-- {
 		conflictPath := strings.Join(parts[:i], "/")
-		data, err := kv.Get(ctx, s.storage, []byte(cleanPath(conflictPath)))
-		if err != nil && !errors.Is(err, state.ErrNotFound[string]{Key: conflictPath}) {
+		k := []byte(cleanPath(conflictPath))
+		data, err := kv.Get(ctx, s.storage, k)
+		if err != nil && !state.IsErrNotFound[[]byte](err) {
 			return err
 		}
 		if len(data) > 0 {

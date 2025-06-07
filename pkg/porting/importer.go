@@ -8,8 +8,6 @@ import (
 	"path"
 	"runtime"
 
-	"errors"
-
 	"github.com/gotvc/got/pkg/gotfs"
 	"github.com/gotvc/got/pkg/gotkv"
 	"github.com/gotvc/got/pkg/metrics"
@@ -183,7 +181,7 @@ func createEmptyDir(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store)
 func needsUpdate(ctx context.Context, cache Cache, p string, finfo posixfs.FileInfo) (bool, error) {
 	var ent Entry
 	err := cache.Get(ctx, p, &ent)
-	if errors.Is(err, state.ErrNotFound[string]{Key: p}) {
+	if state.IsErrNotFound[string](err) {
 		return true, nil
 	}
 	if err != nil {
