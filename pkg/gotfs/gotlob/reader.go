@@ -14,7 +14,7 @@ var _ io.ReadSeeker = &Reader{}
 
 type Reader struct {
 	ctx    context.Context
-	a      *Agent
+	a      *Machine
 	ms, ds cadata.Store
 	root   Root
 	prefix []byte
@@ -22,7 +22,7 @@ type Reader struct {
 	offset int64
 }
 
-func (a *Agent) NewReader(ctx context.Context, ms, ds cadata.Store, root Root, prefix []byte) (*Reader, error) {
+func (a *Machine) NewReader(ctx context.Context, ms, ds cadata.Store, root Root, prefix []byte) (*Reader, error) {
 	return &Reader{
 		ctx:    ctx,
 		a:      a,

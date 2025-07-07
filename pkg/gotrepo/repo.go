@@ -246,11 +246,11 @@ func (r *Repo) GetHostEngine() *gothost.HostEngine {
 	return r.hostEngine
 }
 
-func (r *Repo) getFSOp(b *branches.Info) *gotfs.Agent {
+func (r *Repo) getFSOp(b *branches.Info) *gotfs.Machine {
 	return branches.NewGotFS(b)
 }
 
-func (r *Repo) getVCOp(b *branches.Info) *gotvc.Agent {
+func (r *Repo) getVCOp(b *branches.Info) *gotvc.Machine {
 	return branches.NewGotVC(b)
 }
 

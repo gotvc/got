@@ -12,7 +12,7 @@ import (
 
 func TestDiff(t *testing.T) {
 	ctx := testutil.Context(t)
-	ag := newTestAgent(t)
+	ag := newTestMachine(t)
 	s := stores.NewMem()
 
 	lb := ag.NewBuilder(s)

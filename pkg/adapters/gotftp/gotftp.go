@@ -18,7 +18,7 @@ var _ ftpserver.Driver = &Driver{}
 type Driver struct {
 	ctx   context.Context
 	v     branches.Volume
-	gotfs gotfs.Agent
+	gotfs gotfs.Machine
 }
 
 func NewDriver(ctx context.Context, info branches.Info, v branches.Volume) *Driver {

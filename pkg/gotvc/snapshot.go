@@ -62,7 +62,7 @@ type SnapInfo struct {
 	Message string
 }
 
-func (a *Agent) NewSnapshot(ctx context.Context, s cadata.Store, parents []Snapshot, root Root, sinfo SnapInfo) (*Snapshot, error) {
+func (a *Machine) NewSnapshot(ctx context.Context, s cadata.Store, parents []Snapshot, root Root, sinfo SnapInfo) (*Snapshot, error) {
 	var n uint64
 	parentRefs := make([]Ref, len(parents))
 	for i, parent := range parents {
@@ -94,12 +94,12 @@ func (a *Agent) NewSnapshot(ctx context.Context, s cadata.Store, parents []Snaps
 }
 
 // NewZero creates a new snapshot with no parent
-func (ag *Agent) NewZero(ctx context.Context, s cadata.Store, root Root, sinfo SnapInfo) (*Snapshot, error) {
+func (ag *Machine) NewZero(ctx context.Context, s cadata.Store, root Root, sinfo SnapInfo) (*Snapshot, error) {
 	return ag.NewSnapshot(ctx, s, nil, root, sinfo)
 }
 
 // PostSnapshot marshals the snapshot and posts it to the store
-func (ag *Agent) PostSnapshot(ctx context.Context, s Store, x Snapshot) (*Ref, error) {
+func (ag *Machine) PostSnapshot(ctx context.Context, s Store, x Snapshot) (*Ref, error) {
 	if ag.readOnly {
 		panic("gotvc: operator is read-only. This is a bug.")
 	}
@@ -107,7 +107,7 @@ func (ag *Agent) PostSnapshot(ctx context.Context, s Store, x Snapshot) (*Ref, e
 }
 
 // GetSnapshot retrieves the snapshot referenced by ref from the store.
-func (ag *Agent) GetSnapshot(ctx context.Context, s Store, ref Ref) (*Snapshot, error) {
+func (ag *Machine) GetSnapshot(ctx context.Context, s Store, ref Ref) (*Snapshot, error) {
 	var x *Snapshot
 	if err := ag.da.GetF(ctx, s, ref, func(data []byte) error {
 		var err error
@@ -121,7 +121,7 @@ func (ag *Agent) GetSnapshot(ctx context.Context, s Store, ref Ref) (*Snapshot, 
 
 // Squash turns multiple snapshots into one.
 // It preserves the latest version of the data, but destroys versioning granularity
-func (ag *Agent) Squash(ctx context.Context, s Store, x Snapshot, n int) (*Snapshot, error) {
+func (ag *Machine) Squash(ctx context.Context, s Store, x Snapshot, n int) (*Snapshot, error) {
 	if n < 1 {
 		return nil, fmt.Errorf("cannot squash single commit")
 	}
@@ -168,7 +168,7 @@ func parseSnapshot(data []byte) (*Snapshot, error) {
 
 // RefFromSnapshot computes a ref for snap if it was posted to s.
 // It only calls s.Hash and s.MaxSize; it does not mutate s.
-func (ag *Agent) RefFromSnapshot(snap Snapshot, s cadata.Store) Ref {
+func (ag *Machine) RefFromSnapshot(snap Snapshot, s cadata.Store) Ref {
 	s2 := cadata.NewVoid(s.Hash, s.MaxSize())
 	ref, err := ag.PostSnapshot(context.TODO(), s2, snap)
 	if err != nil {
@@ -178,7 +178,7 @@ func (ag *Agent) RefFromSnapshot(snap Snapshot, s cadata.Store) Ref {
 }
 
 // Check ensures that snapshot is valid.
-func (a *Agent) Check(ctx context.Context, s cadata.Store, snap Snapshot, checkRoot func(gotfs.Root) error) error {
+func (a *Machine) Check(ctx context.Context, s cadata.Store, snap Snapshot, checkRoot func(gotfs.Root) error) error {
 	logctx.Infof(ctx, "checking snapshot #%d", snap.N)
 	if err := checkRoot(snap.Root); err != nil {
 		return err

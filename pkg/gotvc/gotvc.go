@@ -13,7 +13,7 @@ import (
 
 // ForEach calls fn once for each Ref in the snapshot graph.
 func ForEach(ctx context.Context, s cadata.Store, xs []Ref, fn func(Ref, Snapshot) error) error {
-	o := NewAgent()
+	o := NewMachine()
 	o.readOnly = true
 	visited := map[Ref]struct{}{}
 	refs := newRefQueue()
@@ -72,7 +72,7 @@ func IsDescendentOf(ctx context.Context, s Store, x, a Snapshot) (bool, error) {
 }
 
 func isDescendentOf(ctx context.Context, m map[Ref]struct{}, s Store, x, a Snapshot) (bool, error) {
-	ag := NewAgent()
+	ag := NewMachine()
 	ag.readOnly = true
 	for _, parentRef := range x.Parents {
 		if _, exists := m[parentRef]; exists {
@@ -99,7 +99,7 @@ func isDescendentOf(ctx context.Context, m map[Ref]struct{}, s Store, x, a Snaps
 
 // Sync ensures dst has all of the data reachable from snap.
 func Sync(ctx context.Context, src cadata.Store, dst cadata.Store, snap Snapshot, syncRoot func(gotfs.Root) error) error {
-	ag := NewAgent()
+	ag := NewMachine()
 	ag.readOnly = true
 	var sync func(snap Snapshot) error
 	sync = func(snap Snapshot) error {
@@ -138,7 +138,7 @@ func Populate(ctx context.Context, s cadata.Store, start Snapshot, set stores.Se
 		if err != nil {
 			return err
 		} else if !exists {
-			ag := NewAgent()
+			ag := NewMachine()
 			parent, err := ag.GetSnapshot(ctx, s, parentRef)
 			if err != nil {
 				return err

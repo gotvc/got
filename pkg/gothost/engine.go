@@ -21,8 +21,8 @@ import (
 type HostEngine struct {
 	inner branches.Space
 
-	vcag *gotvc.Agent
-	fsag *gotfs.Agent
+	vcag *gotvc.Machine
+	fsag *gotfs.Machine
 
 	initDone   atomic.Bool
 	initSem    *semaphore.Weighted
@@ -129,7 +129,7 @@ func (e *HostEngine) Open(peerID PeerID) branches.Space {
 }
 
 func (e *HostEngine) Modify(ctx context.Context, fn func(State) (*State, error)) error {
-	return e.modifyFS(ctx, func(op *gotfs.Agent, ms cadata.Store, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
+	return e.modifyFS(ctx, func(op *gotfs.Machine, ms cadata.Store, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
 		var xState State
 		if err := xState.Load(ctx, op, ms, ds, x); err != nil {
 			return nil, err
@@ -166,7 +166,7 @@ func (e *HostEngine) GetPolicy(ctx context.Context) (*Policy, error) {
 }
 
 func (e *HostEngine) ModifyPolicy(ctx context.Context, fn func(pol Policy) Policy) error {
-	return e.modifyFS(ctx, func(op *gotfs.Agent, ms cadata.Store, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
+	return e.modifyFS(ctx, func(op *gotfs.Machine, ms cadata.Store, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
 		xPol, err := GetPolicy(ctx, op, ms, ds, x)
 		if err != nil {
 			return nil, err
@@ -183,13 +183,13 @@ func (e *HostEngine) SetPolicy(ctx context.Context, pol Policy) error {
 }
 
 func (e *HostEngine) CreateIdentity(ctx context.Context, name string, iden Identity) error {
-	return e.modifyFS(ctx, func(op *gotfs.Agent, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
+	return e.modifyFS(ctx, func(op *gotfs.Machine, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
 		return CreateIdentity(ctx, op, ms, ds, x, name, iden)
 	})
 }
 
 func (e *HostEngine) DeleteIdentity(ctx context.Context, name string) error {
-	return e.modifyFS(ctx, func(op *gotfs.Agent, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
+	return e.modifyFS(ctx, func(op *gotfs.Machine, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error) {
 		return DeleteIdentity(ctx, op, ms, x, name)
 	})
 }
@@ -250,7 +250,7 @@ func (e *HostEngine) readFS(ctx context.Context) (ms, ds cadata.Store, root *got
 	return v.FSStore, v.RawStore, &snap.Root, nil
 }
 
-func (e *HostEngine) modifyFS(ctx context.Context, fn func(op *gotfs.Agent, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error)) error {
+func (e *HostEngine) modifyFS(ctx context.Context, fn func(op *gotfs.Machine, ms, ds cadata.Store, x gotfs.Root) (*gotfs.Root, error)) error {
 	defer func() {
 		if e.cachedCell != nil {
 			e.cachedCell.Invalidate()

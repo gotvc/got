@@ -17,7 +17,7 @@ import (
 func TestWrite(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	ag := newAgent(t)
+	ag := newMach(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
 	const N = 10
 	const size = 10e6
@@ -47,7 +47,7 @@ func TestWrite(t *testing.T) {
 func TestSetPrefix(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	ag := newAgent(t)
+	ag := newMach(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
 	b := ag.NewBuilder(ctx, ms, ds)
 
@@ -62,7 +62,7 @@ func TestSetPrefix(t *testing.T) {
 func TestCopyFrom(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	ag := newAgent(t, WithFilter(func(x []byte) bool {
+	ag := newMach(t, WithFilter(func(x []byte) bool {
 		return len(x) >= 9
 	}))
 	ms, ds := stores.NewMem(), stores.NewMem()
@@ -107,7 +107,7 @@ func TestCopyFrom(t *testing.T) {
 func TestCopyExtents(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	ag := newAgent(t)
+	ag := newMach(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
 	b := ag.NewBuilder(ctx, ms, ds)
 
@@ -137,9 +137,9 @@ func TestCopyExtents(t *testing.T) {
 	testutil.StreamsEqual(t, expected, actual)
 }
 
-func newAgent(t testing.TB, opts ...Option) Agent {
-	gkv := gotkv.NewAgent(1<<13, 1<<20)
-	dop := gdat.NewAgent()
-	o := NewAgent(&gkv, dop, opts...)
+func newMach(t testing.TB, opts ...Option) Machine {
+	gkv := gotkv.NewMachine(1<<13, 1<<20)
+	dop := gdat.NewMachine()
+	o := NewMachine(&gkv, dop, opts...)
 	return o
 }

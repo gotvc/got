@@ -22,13 +22,13 @@ import (
 )
 
 type Importer struct {
-	gotfs *gotfs.Agent
+	gotfs *gotfs.Machine
 	cache kv.Store[string, Entry]
 
 	ms, ds cadata.Store
 }
 
-func NewImporter(fsag *gotfs.Agent, cache kv.Store[string, Entry], ms, ds cadata.Store) *Importer {
+func NewImporter(fsag *gotfs.Machine, cache kv.Store[string, Entry], ms, ds cadata.Store) *Importer {
 	return &Importer{
 		gotfs: fsag,
 		cache: cache,
@@ -138,7 +138,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 	return root, nil
 }
 
-func importFileConcurrent(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store, fsx posixfs.FS, p string, numWorkers int) (*gotfs.Root, error) {
+func importFileConcurrent(ctx context.Context, fsag *gotfs.Machine, ms, ds cadata.Store, fsx posixfs.FS, p string, numWorkers int) (*gotfs.Root, error) {
 	stat, err := fsx.Stat(p)
 	if err != nil {
 		return nil, err
@@ -174,7 +174,7 @@ func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
 	return start, end
 }
 
-func createEmptyDir(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store) (*gotfs.Root, error) {
+func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms, ds cadata.Store) (*gotfs.Root, error) {
 	return fsag.NewEmpty(ctx, ms)
 }
 

@@ -14,7 +14,7 @@ import (
 )
 
 // GetPolicy reads a Policy from a gotfs filesystem
-func GetPolicy(ctx context.Context, ag *gotfs.Agent, ms, ds cadata.Store, x gotfs.Root) (*Policy, error) {
+func GetPolicy(ctx context.Context, ag *gotfs.Machine, ms, ds cadata.Store, x gotfs.Root) (*Policy, error) {
 	r, err := ag.NewReader(ctx, ms, ds, x, PolicyPath)
 	if err != nil {
 		if posixfs.IsErrNotExist(err) {
@@ -30,7 +30,7 @@ func GetPolicy(ctx context.Context, ag *gotfs.Agent, ms, ds cadata.Store, x gotf
 }
 
 // SetPolicy writes a policy to a gotfs filesystem
-func SetPolicy(ctx context.Context, ag *gotfs.Agent, ms, ds cadata.Store, x gotfs.Root, pol Policy) (*gotfs.Root, error) {
+func SetPolicy(ctx context.Context, ag *gotfs.Machine, ms, ds cadata.Store, x gotfs.Root, pol Policy) (*gotfs.Root, error) {
 	data := MarshalPolicy(pol)
 	return ag.PutFile(ctx, ms, ds, x, PolicyPath, bytes.NewReader(data))
 }

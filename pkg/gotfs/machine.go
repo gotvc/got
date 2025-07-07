@@ -23,42 +23,42 @@ const (
 	DefaultMeanBlobSizeMetadata = 1 << 13
 )
 
-type Option func(a *Agent)
+type Option func(a *Machine)
 
 func WithSalt(salt *[32]byte) Option {
-	return func(a *Agent) {
+	return func(a *Machine) {
 		a.salt = salt
 	}
 }
 
 // WithMetaCacheSize sets the size of the cache for metadata
 func WithMetaCacheSize(n int) Option {
-	return func(a *Agent) {
+	return func(a *Machine) {
 		a.metaCacheSize = n
 	}
 }
 
 // WithContentCacheSize sets the size of the cache for raw data
 func WithContentCacheSize(n int) Option {
-	return func(a *Agent) {
+	return func(a *Machine) {
 		a.rawCacheSize = n
 	}
 }
 
-type Agent struct {
+type Machine struct {
 	maxBlobSize                                 int
 	minSizeData, meanSizeData, meanSizeMetadata int
 	salt                                        *[32]byte
 	rawCacheSize, metaCacheSize                 int
 
-	rawOp        *gdat.Agent
-	gotkv        gotkv.Agent
+	rawOp        *gdat.Machine
+	gotkv        gotkv.Machine
 	chunkingSeed *[32]byte
-	lob          gotlob.Agent
+	lob          gotlob.Machine
 }
 
-func NewAgent(opts ...Option) *Agent {
-	o := &Agent{
+func NewMachine(opts ...Option) *Machine {
+	o := &Machine{
 		maxBlobSize:      DefaultMaxBlobSize,
 		minSizeData:      DefaultMinBlobSizeData,
 		meanSizeData:     DefaultMeanBlobSizeData,
@@ -74,7 +74,7 @@ func NewAgent(opts ...Option) *Agent {
 	// data
 	var rawSalt [32]byte
 	gdat.DeriveKey(rawSalt[:], o.salt, []byte("raw"))
-	o.rawOp = gdat.NewAgent(
+	o.rawOp = gdat.NewMachine(
 		gdat.WithSalt(&rawSalt),
 		gdat.WithCacheSize(o.rawCacheSize),
 	)
@@ -85,16 +85,16 @@ func NewAgent(opts ...Option) *Agent {
 	// metadata
 	var metadataSalt [32]byte
 	gdat.DeriveKey(metadataSalt[:], o.salt, []byte("gotkv"))
-	metaOp := gdat.NewAgent(
+	metaOp := gdat.NewMachine(
 		gdat.WithSalt(&metadataSalt),
 		gdat.WithCacheSize(o.metaCacheSize),
 	)
 	var treeSeed [16]byte
 	gdat.DeriveKey(treeSeed[:], o.salt, []byte("gotkv-seed"))
-	o.gotkv = gotkv.NewAgent(
+	o.gotkv = gotkv.NewMachine(
 		o.meanSizeMetadata,
 		o.maxBlobSize,
-		gotkv.WithDataAgent(metaOp),
+		gotkv.WithDataMachine(metaOp),
 		gotkv.WithSeed(&treeSeed),
 	)
 	lobOpts := []gotlob.Option{
@@ -105,20 +105,20 @@ func NewAgent(opts ...Option) *Agent {
 			return isExtentKey(x)
 		}),
 	}
-	o.lob = gotlob.NewAgent(&o.gotkv, o.rawOp, lobOpts...)
+	o.lob = gotlob.NewMachine(&o.gotkv, o.rawOp, lobOpts...)
 	return o
 }
 
-func (a *Agent) MeanBlobSizeData() int {
+func (a *Machine) MeanBlobSizeData() int {
 	return a.meanSizeData
 }
 
-func (a *Agent) MeanBlobSizeMetadata() int {
+func (a *Machine) MeanBlobSizeMetadata() int {
 	return a.meanSizeMetadata
 }
 
 // Select returns a new root containing everything under p, shifted to the root.
-func (a *Agent) Select(ctx context.Context, s cadata.Store, root Root, p string) (*Root, error) {
+func (a *Machine) Select(ctx context.Context, s cadata.Store, root Root, p string) (*Root, error) {
 	p = cleanPath(p)
 	_, err := a.GetInfo(ctx, s, root, p)
 	if err != nil {
@@ -140,7 +140,7 @@ func (a *Agent) Select(ctx context.Context, s cadata.Store, root Root, p string)
 	return newRoot(y), err
 }
 
-func (a *Agent) deleteOutside(ctx context.Context, s cadata.Store, root gotkv.Root, span gotkv.Span) (*gotkv.Root, error) {
+func (a *Machine) deleteOutside(ctx context.Context, s cadata.Store, root gotkv.Root, span gotkv.Span) (*gotkv.Root, error) {
 	x := &root
 	var err error
 	if x, err = a.gotkv.DeleteSpan(ctx, s, *x, gotkv.Span{Begin: nil, End: span.Begin}); err != nil {
@@ -152,7 +152,7 @@ func (a *Agent) deleteOutside(ctx context.Context, s cadata.Store, root gotkv.Ro
 	return x, err
 }
 
-func (a *Agent) ForEach(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Info) error) error {
+func (a *Machine) ForEach(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Info) error) error {
 	p = cleanPath(p)
 	fn2 := func(ent gotkv.Entry) error {
 		if !isExtentKey(ent.Key) {
@@ -173,7 +173,7 @@ func (a *Agent) ForEach(ctx context.Context, s cadata.Store, root Root, p string
 }
 
 // ForEachLeaf calls fn with each regular file in root, beneath p.
-func (a *Agent) ForEachLeaf(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Info) error) error {
+func (a *Machine) ForEachLeaf(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Info) error) error {
 	return a.ForEach(ctx, s, root, p, func(p string, md *Info) error {
 		if os.FileMode(md.Mode).IsDir() {
 			return nil
@@ -184,7 +184,7 @@ func (a *Agent) ForEachLeaf(ctx context.Context, s cadata.Store, root Root, p st
 
 // Graft places branch at p in root.
 // If p == "" then branch is returned unaltered.
-func (a *Agent) Graft(ctx context.Context, ms, ds cadata.Store, root Root, p string, branch Root) (*Root, error) {
+func (a *Machine) Graft(ctx context.Context, ms, ds cadata.Store, root Root, p string, branch Root) (*Root, error) {
 	p = cleanPath(p)
 	if p == "" {
 		return &branch, nil
@@ -217,7 +217,7 @@ func (a *Agent) Graft(ctx context.Context, ms, ds cadata.Store, root Root, p str
 	})
 }
 
-func (a *Agent) addPrefix(root Root, p string) gotkv.Root {
+func (a *Machine) addPrefix(root Root, p string) gotkv.Root {
 	p = cleanPath(p)
 	k := makeInfoKey(p)
 	root2 := a.gotkv.AddPrefix(*root.toGotKV(), k[:len(k)-1])
@@ -226,11 +226,11 @@ func (a *Agent) addPrefix(root Root, p string) gotkv.Root {
 
 // MaxInfo returns the maximum path and the corresponding Info for the path.
 // If no Info entry can be found MaxInfo returns ("", nil, nil)
-func (a *Agent) MaxInfo(ctx context.Context, ms cadata.Store, root Root, span Span) (string, *Info, error) {
+func (a *Machine) MaxInfo(ctx context.Context, ms cadata.Store, root Root, span Span) (string, *Info, error) {
 	return a.maxInfo(ctx, ms, root.ToGotKV(), span)
 }
 
-func (a *Agent) maxInfo(ctx context.Context, ms cadata.Store, root gotkv.Root, span Span) (string, *Info, error) {
+func (a *Machine) maxInfo(ctx context.Context, ms cadata.Store, root gotkv.Root, span Span) (string, *Info, error) {
 	ent, err := a.gotkv.MaxEntry(ctx, ms, root, span)
 	if err != nil {
 		return "", nil, err
@@ -262,7 +262,7 @@ func (a *Agent) maxInfo(ctx context.Context, ms cadata.Store, root gotkv.Root, s
 	}
 }
 
-func (a *Agent) Check(ctx context.Context, s Store, root Root, checkData func(ref gdat.Ref) error) error {
+func (a *Machine) Check(ctx context.Context, s Store, root Root, checkData func(ref gdat.Ref) error) error {
 	var lastPath *string
 	var lastOffset *uint64
 	return a.gotkv.ForEach(ctx, s, *root.toGotKV(), gotkv.Span{}, func(ent gotkv.Entry) error {
@@ -316,7 +316,7 @@ func (a *Agent) Check(ctx context.Context, s Store, root Root, checkData func(re
 	})
 }
 
-func (a *Agent) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*Root, error) {
+func (a *Machine) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*Root, error) {
 	b := a.NewBuilder(ctx, ms, ds)
 	for i, seg := range segs {
 		if i > 0 && bytes.Compare(segs[i-1].Span.End, segs[i].Span.Begin) > 0 {

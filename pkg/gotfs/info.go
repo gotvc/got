@@ -55,7 +55,7 @@ func parseInfoKey(k []byte) (string, error) {
 }
 
 // PutInfo assigns metadata to p
-func (a *Agent) PutInfo(ctx context.Context, s Store, x Root, p string, md *Info) (*Root, error) {
+func (a *Machine) PutInfo(ctx context.Context, s Store, x Root, p string, md *Info) (*Root, error) {
 	p = cleanPath(p)
 	if err := checkPath(p); err != nil {
 		return nil, err
@@ -66,11 +66,11 @@ func (a *Agent) PutInfo(ctx context.Context, s Store, x Root, p string, md *Info
 }
 
 // GetInfo retrieves the metadata at p if it exists and errors otherwise
-func (a *Agent) GetInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
+func (a *Machine) GetInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
 	return a.getInfo(ctx, s, x.ToGotKV(), p)
 }
 
-func (a *Agent) getInfo(ctx context.Context, s Store, x gotkv.Root, p string) (*Info, error) {
+func (a *Machine) getInfo(ctx context.Context, s Store, x gotkv.Root, p string) (*Info, error) {
 	p = cleanPath(p)
 	var md *Info
 	err := a.gotkv.GetF(ctx, s, x, makeInfoKey(p), func(data []byte) error {
@@ -88,7 +88,7 @@ func (a *Agent) getInfo(ctx context.Context, s Store, x gotkv.Root, p string) (*
 }
 
 // GetDirInfo returns directory metadata at p if it exists, and errors otherwise
-func (a *Agent) GetDirInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
+func (a *Machine) GetDirInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
 	md, err := a.GetInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err
@@ -100,7 +100,7 @@ func (a *Agent) GetDirInfo(ctx context.Context, s Store, x Root, p string) (*Inf
 }
 
 // GetFileInfo returns the file metadata at p if it exists, and errors otherwise
-func (a *Agent) GetFileInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
+func (a *Machine) GetFileInfo(ctx context.Context, s Store, x Root, p string) (*Info, error) {
 	md, err := a.GetInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err
@@ -111,7 +111,7 @@ func (a *Agent) GetFileInfo(ctx context.Context, s Store, x Root, p string) (*In
 	return md, nil
 }
 
-func (a *Agent) checkNoEntry(ctx context.Context, s Store, x Root, p string) error {
+func (a *Machine) checkNoEntry(ctx context.Context, s Store, x Root, p string) error {
 	_, err := a.GetInfo(ctx, s, x, p)
 	switch {
 	case err == os.ErrNotExist:

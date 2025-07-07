@@ -45,7 +45,7 @@ func newDerefCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 				return err
 			}
 			s := repo.UnionStore()
-			dag := gdat.NewAgent()
+			dag := gdat.NewMachine()
 			return dag.GetF(ctx, s, ref, func(data []byte) error {
 				_, err := cmd.OutOrStdout().Write(data)
 				return err

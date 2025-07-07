@@ -22,8 +22,8 @@ var _ iofs.FS = &FS{}
 // FS implements io/fs.FS
 type FS struct {
 	ctx   context.Context
-	gotvc *gotvc.Agent
-	gotfs *gotfs.Agent
+	gotvc *gotvc.Machine
+	gotfs *gotfs.Machine
 	vol   *branches.Volume
 }
 
@@ -60,7 +60,7 @@ var _ io.Seeker = &File{}
 
 type File struct {
 	ctx    context.Context
-	gotfs  *gotfs.Agent
+	gotfs  *gotfs.Machine
 	ms, ds cadata.Store
 	root   gotfs.Root
 	path   string
@@ -68,7 +68,7 @@ type File struct {
 	r *gotfs.Reader
 }
 
-func NewFile(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store, root gotfs.Root, p string) *File {
+func NewFile(ctx context.Context, fsag *gotfs.Machine, ms, ds cadata.Store, root gotfs.Root, p string) *File {
 	return &File{
 		ctx:   ctx,
 		gotfs: fsag,
@@ -156,7 +156,7 @@ func (f *File) stat(p string) (*fileInfo, error) {
 	return finfo.(*fileInfo), nil
 }
 
-func Stat(ctx context.Context, fsag *gotfs.Agent, ms cadata.Store, root gotfs.Root, p string) (iofs.FileInfo, error) {
+func Stat(ctx context.Context, fsag *gotfs.Machine, ms cadata.Store, root gotfs.Root, p string) (iofs.FileInfo, error) {
 	info, err := fsag.GetInfo(ctx, ms, root, p)
 	if err != nil {
 		return nil, convertError(err)

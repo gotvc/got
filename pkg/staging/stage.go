@@ -151,7 +151,7 @@ func (s *Stage) IsEmpty(ctx context.Context) (bool, error) {
 	return n == 0, nil
 }
 
-func (s *Stage) Apply(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store, base *gotfs.Root) (*gotfs.Root, error) {
+func (s *Stage) Apply(ctx context.Context, fsag *gotfs.Machine, ms, ds cadata.Store, base *gotfs.Root) (*gotfs.Root, error) {
 	if base == nil {
 		var err error
 		base, err = fsag.NewEmpty(ctx, ms)
@@ -201,7 +201,7 @@ func (s *Stage) Apply(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Stor
 	return root, nil
 }
 
-func jsonMarshal(x interface{}) []byte {
+func jsonMarshal(x any) []byte {
 	data, err := json.Marshal(x)
 	if err != nil {
 		panic(err)

@@ -15,7 +15,7 @@ import (
 func TestNewEmpty(t *testing.T) {
 	ctx := testutil.Context(t)
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
-	ag := newTestAgent(t)
+	ag := newTestMachine(t)
 	x, err := ag.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	require.NotNil(t, x)
@@ -23,7 +23,7 @@ func TestNewEmpty(t *testing.T) {
 
 func TestPutGet(t *testing.T) {
 	ctx, s, x := testSetup(t)
-	ag := newTestAgent(t)
+	ag := newTestMachine(t)
 	key := []byte("key1")
 	value := []byte("value")
 	x, err := ag.Put(ctx, s, *x, key, value)
@@ -42,7 +42,7 @@ func TestPutGet(t *testing.T) {
 
 func TestPutGetMany(t *testing.T) {
 	ctx, s, x := testSetup(t)
-	ag := newTestAgent(t)
+	ag := newTestMachine(t)
 	const N = 200
 	makeKey := func(i int) []byte {
 		return []byte(fmt.Sprintf("%d-key", i))
@@ -70,21 +70,21 @@ func TestPutGetMany(t *testing.T) {
 
 func testSetup(t *testing.T) (context.Context, cadata.Store, *Root) {
 	ctx := testutil.Context(t)
-	ag := newTestAgent(t)
+	ag := newTestMachine(t)
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
 	x, err := ag.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	return ctx, s, x
 }
 
-func newTestAgent(t testing.TB) Agent {
-	return NewAgent(1<<13, 1<<16)
+func newTestMachine(t testing.TB) Machine {
+	return NewMachine(1<<13, 1<<16)
 }
 
 func BenchmarkPut(b *testing.B) {
 	ctx := testutil.Context(b)
 	s := cadata.NewVoid(cadata.DefaultHash, cadata.DefaultMaxSize)
-	ag := newTestAgent(b)
+	ag := newTestMachine(b)
 	const M = 100
 
 	bu := ag.NewBuilder(s)

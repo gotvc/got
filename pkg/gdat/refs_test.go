@@ -12,7 +12,7 @@ import (
 func TestMarshalUnmarshal(t *testing.T) {
 	ctx := testutil.Context(t)
 	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
-	ag := NewAgent()
+	ag := NewMachine()
 	x, err := ag.Post(ctx, s, []byte("test data"))
 	require.NoError(t, err)
 
