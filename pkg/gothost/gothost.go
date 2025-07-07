@@ -36,7 +36,7 @@ type State struct {
 	Roles      map[string]Role
 }
 
-func (s *State) Load(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store, root gotfs.Root) error {
+func (s *State) Load(ctx context.Context, fsag *gotfs.Machine, ms, ds cadata.Store, root gotfs.Root) error {
 	// identities
 	maps.Clear(s.Identities)
 	if s.Identities == nil {
@@ -90,7 +90,7 @@ func (s *State) Load(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store
 	return nil
 }
 
-func (s *State) Save(ctx context.Context, fsag *gotfs.Agent, ms, ds cadata.Store) (*gotfs.Root, error) {
+func (s *State) Save(ctx context.Context, fsag *gotfs.Machine, ms, ds cadata.Store) (*gotfs.Root, error) {
 	b := fsag.NewBuilder(ctx, ms, ds)
 	if err := b.Mkdir("", 0o755); err != nil {
 		return nil, err

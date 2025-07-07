@@ -16,7 +16,7 @@ import (
 
 // Builder chunks large objects, stores them, and then writes extents to a gotkv instance.
 type Builder struct {
-	ag     *Agent
+	ag     *Machine
 	ctx    context.Context
 	ms, ds cadata.Store
 
@@ -29,7 +29,7 @@ type Builder struct {
 	err     error
 }
 
-func (a *Agent) NewBuilder(ctx context.Context, ms, ds cadata.Store) *Builder {
+func (a *Machine) NewBuilder(ctx context.Context, ms, ds cadata.Store) *Builder {
 	if ms.MaxSize() < a.gotkv.MaxSize() {
 		panic(fmt.Sprint("store size too small", ms.MaxSize()))
 	}

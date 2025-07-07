@@ -55,7 +55,7 @@ func TestMkdirAll(t *testing.T) {
 	requireChildren(t, ag, s, *x, "path/to/the", []string{"dir"})
 }
 
-func requireChildren(t *testing.T, ag *Agent, s Store, x Root, p string, expected []string) {
+func requireChildren(t *testing.T, ag *Machine, s Store, x Root, p string, expected []string) {
 	ctx := testutil.Context(t)
 	var actual []string
 	err := ag.ReadDir(ctx, s, x, p, func(e DirEnt) error {

@@ -14,7 +14,7 @@ import (
 
 func BenchmarkWrite(b *testing.B) {
 	s := cadata.NewVoid(gdat.Hash, DefaultMaxBlobSize)
-	ag := NewAgent()
+	ag := NewMachine()
 
 	b.Run("1-1GB", func(b *testing.B) {
 		ctx := testutil.Context(b)

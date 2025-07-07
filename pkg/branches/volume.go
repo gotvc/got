@@ -111,7 +111,7 @@ func syncStores(ctx context.Context, src, dst StoreTriple, snap gotvc.Snapshot) 
 	return gotvc.Sync(ctx, src.VC, dst.VC, snap, func(root gotfs.Root) error {
 		ctx, cf := metrics.Child(ctx, "syncing gotfs")
 		defer cf()
-		fsag := gotfs.NewAgent()
+		fsag := gotfs.NewMachine()
 		return fsag.Sync(ctx, src.FS, src.Raw, dst.FS, dst.Raw, root)
 	})
 }
@@ -130,7 +130,7 @@ func CleanupVolume(ctx context.Context, vol Volume) error {
 	keep := [3]stores.MemSet{{}, {}, {}}
 	if start != nil {
 		if err := gotvc.Populate(ctx, ss[0], *start, keep[0], func(root gotfs.Root) error {
-			fsag := gotfs.NewAgent()
+			fsag := gotfs.NewMachine()
 			return fsag.Populate(ctx, ss[1], root, keep[1], keep[2])
 		}); err != nil {
 			return err

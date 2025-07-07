@@ -17,7 +17,7 @@ type Differ struct {
 	dent gotkv.DEntry
 }
 
-func (ag *Agent) NewDiffer(ms cadata.Store, left, right Root) *Differ {
+func (ag *Machine) NewDiffer(ms cadata.Store, left, right Root) *Differ {
 	return &Differ{
 		diff: ag.gotkv.NewDiffer(ms, left.ToGotKV(), right.ToGotKV(), gotkv.TotalSpan()),
 	}

@@ -26,7 +26,7 @@ func TestDeltaRW(t *testing.T) {
 	}
 	ctx := testutil.Context(t)
 	s := stores.NewMem()
-	ag := NewAgent()
+	ag := NewMachine()
 	for i, tc := range tcs {
 		expected := tc
 		t.Run(strconv.Itoa(i), func(t *testing.T) {

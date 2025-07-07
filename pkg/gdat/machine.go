@@ -13,24 +13,24 @@ type (
 	Store  = cadata.Store
 )
 
-type Option = func(*Agent)
+type Option = func(*Machine)
 
 func WithSalt(salt *[32]byte) Option {
 	if salt == nil {
 		panic("gdat.WithSalt called with nil")
 	}
-	return func(a *Agent) {
+	return func(a *Machine) {
 		a.kf = SaltedConvergent(salt)
 	}
 }
 
 func WithCacheSize(n int) Option {
-	return func(a *Agent) {
+	return func(a *Machine) {
 		a.cacheSize = n
 	}
 }
 
-type Agent struct {
+type Machine struct {
 	kf KeyFunc
 
 	cacheSize int
@@ -38,8 +38,8 @@ type Agent struct {
 	pool      sync.Pool
 }
 
-func NewAgent(opts ...Option) *Agent {
-	o := &Agent{
+func NewMachine(opts ...Option) *Machine {
+	o := &Machine{
 		kf:        Convergent,
 		cacheSize: 32,
 	}
@@ -56,7 +56,7 @@ func NewAgent(opts ...Option) *Agent {
 	return o
 }
 
-func (a *Agent) Post(ctx context.Context, s cadata.Poster, data []byte) (*Ref, error) {
+func (a *Machine) Post(ctx context.Context, s cadata.Poster, data []byte) (*Ref, error) {
 	id, dek, err := a.postEncrypt(ctx, s, a.kf, data)
 	if err != nil {
 		return nil, err
@@ -67,7 +67,7 @@ func (a *Agent) Post(ctx context.Context, s cadata.Poster, data []byte) (*Ref, e
 	}, nil
 }
 
-func (a *Agent) GetF(ctx context.Context, s Getter, ref Ref, fn func(data []byte) error) error {
+func (a *Machine) GetF(ctx context.Context, s Getter, ref Ref, fn func(data []byte) error) error {
 	if data := a.checkCache(ref); data != nil {
 		return fn(data)
 	}
@@ -81,11 +81,11 @@ func (a *Agent) GetF(ctx context.Context, s Getter, ref Ref, fn func(data []byte
 	return fn(data)
 }
 
-func (a *Agent) Read(ctx context.Context, s Getter, ref Ref, buf []byte) (int, error) {
+func (a *Machine) Read(ctx context.Context, s Getter, ref Ref, buf []byte) (int, error) {
 	return getDecrypt(ctx, s, ref.DEK, ref.CID, buf)
 }
 
-func (a *Agent) checkCache(ref Ref) []byte {
+func (a *Machine) checkCache(ref Ref) []byte {
 	data, exists := a.cache.Get(ref)
 	if !exists {
 		return nil
@@ -93,16 +93,16 @@ func (a *Agent) checkCache(ref Ref) []byte {
 	return data.([]byte)
 }
 
-func (a *Agent) loadCache(ref Ref, data []byte) {
+func (a *Machine) loadCache(ref Ref, data []byte) {
 	a.cache.Add(ref, append([]byte{}, data...))
 }
 
-func (a *Agent) onCacheEvict(key, value any) {
+func (a *Machine) onCacheEvict(key, value any) {
 	buf := value.([]byte)
 	a.release(buf)
 }
 
-func (a *Agent) acquire(n int) []byte {
+func (a *Machine) acquire(n int) []byte {
 	buf := a.pool.Get().([]byte)
 	if len(buf) < n {
 		buf = make([]byte, n)
@@ -110,7 +110,7 @@ func (a *Agent) acquire(n int) []byte {
 	return buf
 }
 
-func (a *Agent) release(x []byte) {
+func (a *Machine) release(x []byte) {
 	x = append(x, make([]byte, cap(x)-len(x))...)
 	a.pool.Put(x)
 }

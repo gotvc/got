@@ -12,7 +12,7 @@ import (
 
 // Builder manages building a filesystem.
 type Builder struct {
-	a   *Agent
+	a   *Machine
 	ctx context.Context
 	ms  Store
 
@@ -20,7 +20,7 @@ type Builder struct {
 	b        *gotlob.Builder
 }
 
-func (a *Agent) NewBuilder(ctx context.Context, ms, ds Store) *Builder {
+func (a *Machine) NewBuilder(ctx context.Context, ms, ds Store) *Builder {
 	b := &Builder{
 		a:   a,
 		ctx: ctx,
@@ -83,7 +83,7 @@ func (b *Builder) Write(data []byte) (int, error) {
 // writeExtents adds extents to the current file.
 // Rechunking is avoided, but the last Extent could be short, so it must be rechunked regardless.
 // WriteExtents is useful for efficiently joining Extents from disjoint regions of a file.
-// See also: Agent.CreateExtents
+// See also: Machine.CreateExtents
 func (b *Builder) writeExtents(ctx context.Context, exts []*Extent) error {
 	if b.IsFinished() {
 		return errBuilderIsFinished()

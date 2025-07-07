@@ -15,7 +15,7 @@ import (
 
 func TestDiffer(t *testing.T) {
 	ctx := testutil.Context(t)
-	ag := NewAgent()
+	ag := NewMachine()
 
 	tcs := []struct {
 		Left     memFS

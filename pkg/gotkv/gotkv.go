@@ -65,16 +65,16 @@ var (
 	ErrKeyNotFound = fmt.Errorf("key not found")
 )
 
-var defaultReadOnlyAgent = &Agent{da: gdat.NewAgent()}
+var defaultReadOnlyMachine = &Machine{da: gdat.NewMachine()}
 
-// Get is a convenience function for performing Get without creating an Agent.
+// Get is a convenience function for performing Get without creating an Machine.
 func Get(ctx context.Context, s Getter, x Root, key []byte) ([]byte, error) {
-	return defaultReadOnlyAgent.Get(ctx, s, x, key)
+	return defaultReadOnlyMachine.Get(ctx, s, x, key)
 }
 
-// GetF is a convenience function for performing GetF without creating an Agent
+// GetF is a convenience function for performing GetF without creating an Machine
 func GetF(ctx context.Context, s Getter, x Root, key []byte, fn func([]byte) error) error {
-	return defaultReadOnlyAgent.GetF(ctx, s, x, key, fn)
+	return defaultReadOnlyMachine.GetF(ctx, s, x, key, fn)
 }
 
 // CopyAll copies all the entries from iterator to builder.
@@ -88,7 +88,7 @@ func CopyAll(ctx context.Context, b *Builder, it kvstreams.Iterator) error {
 }
 
 // Sync ensures dst has all the data reachable from x.
-func (a *Agent) Sync(ctx context.Context, src cadata.Getter, dst Store, x Root, entryFn func(Entry) error) error {
+func (a *Machine) Sync(ctx context.Context, src cadata.Getter, dst Store, x Root, entryFn func(Entry) error) error {
 	rp := ptree.ReadParams[Entry, Ref]{
 		Compare:         compareEntries,
 		Store:           &ptreeGetter{ag: a.da, s: src},
@@ -108,7 +108,7 @@ func (a *Agent) Sync(ctx context.Context, src cadata.Getter, dst Store, x Root, 
 
 // Populate adds all blobs reachable from x to set.
 // If an item is in set all of the blobs reachable from it are also assumed to also be in set.
-func (a *Agent) Populate(ctx context.Context, s Store, x Root, set cadata.Set, entryFn func(ent Entry) error) error {
+func (a *Machine) Populate(ctx context.Context, s Store, x Root, set cadata.Set, entryFn func(ent Entry) error) error {
 	rp := ptree.ReadParams[Entry, Ref]{
 		Compare:    compareEntries,
 		Store:      &ptreeGetter{ag: a.da, s: s},
@@ -174,7 +174,7 @@ func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x ptree.Root[Entry
 }
 
 type ptreeGetter struct {
-	ag *gdat.Agent
+	ag *gdat.Machine
 	s  cadata.Getter
 }
 
@@ -187,7 +187,7 @@ func (s *ptreeGetter) MaxSize() int {
 }
 
 type ptreeStore struct {
-	ag *gdat.Agent
+	ag *gdat.Machine
 	s  cadata.Store
 }
 
@@ -210,7 +210,7 @@ func (s *ptreeStore) MaxSize() int {
 // DebugTree writes human-readable debug information about the tree to w.
 func DebugTree(ctx context.Context, s cadata.Store, root Root, w io.Writer) error {
 	rp := ptree.ReadParams[Entry, Ref]{
-		Store:           &ptreeGetter{s: s, ag: defaultReadOnlyAgent.da},
+		Store:           &ptreeGetter{s: s, ag: defaultReadOnlyMachine.da},
 		Compare:         compareEntries,
 		NewDecoder:      func() ptree.Decoder[Entry, Ref] { return &Decoder{} },
 		NewIndexDecoder: func() ptree.IndexDecoder[Entry, Ref] { return &IndexDecoder{} },

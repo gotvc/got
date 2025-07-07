@@ -169,7 +169,7 @@ func Apply(ctx context.Context, v Volume, src StoreTriple, fn func(*Snap) (*Snap
 	})
 }
 
-func History(ctx context.Context, v Volume, vcag *gotvc.Agent, fn func(ref gdat.Ref, snap Snap) error) error {
+func History(ctx context.Context, v Volume, vcag *gotvc.Machine, fn func(ref gdat.Ref, snap Snap) error) error {
 	snap, err := GetHead(ctx, v)
 	if err != nil {
 		return err
@@ -184,17 +184,17 @@ func History(ctx context.Context, v Volume, vcag *gotvc.Agent, fn func(ref gdat.
 	return gotvc.ForEach(ctx, v.VCStore, snap.Parents, fn)
 }
 
-// NewGotFS creates a new gotfs.Agent suitable for writing to the branch
-func NewGotFS(b *Info, opts ...gotfs.Option) *gotfs.Agent {
+// NewGotFS creates a new gotfs.Machine suitable for writing to the branch
+func NewGotFS(b *Info, opts ...gotfs.Option) *gotfs.Machine {
 	opts = append(opts, gotfs.WithSalt(deriveFSSalt(b)))
-	fsag := gotfs.NewAgent(opts...)
+	fsag := gotfs.NewMachine(opts...)
 	return fsag
 }
 
-// NewGotVC creates a new gotvc.Agent suitable for writing to the branch
-func NewGotVC(b *Info, opts ...gotvc.Option) *gotvc.Agent {
+// NewGotVC creates a new gotvc.Machine suitable for writing to the branch
+func NewGotVC(b *Info, opts ...gotvc.Option) *gotvc.Machine {
 	opts = append(opts, gotvc.WithSalt(deriveVCSalt(b)))
-	return gotvc.NewAgent(opts...)
+	return gotvc.NewMachine(opts...)
 }
 
 func deriveFSSalt(b *Info) *[32]byte {

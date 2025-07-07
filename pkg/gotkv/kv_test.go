@@ -15,7 +15,7 @@ func TestAddPrefix(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
 	s := cadata.NewMem(cadata.DefaultHash, 1<<16)
-	ag := NewAgent(1<<13, 1<<16)
+	ag := NewMachine(1<<13, 1<<16)
 	b := ag.NewBuilder(s)
 
 	const N = 1e4

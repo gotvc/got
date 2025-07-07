@@ -77,7 +77,7 @@ func (*DEK) String() string {
 	return "{ 32 byte DEK }"
 }
 
-func (a *Agent) postEncrypt(ctx context.Context, s cadata.Poster, keyFunc KeyFunc, data []byte) (cadata.ID, *DEK, error) {
+func (a *Machine) postEncrypt(ctx context.Context, s cadata.Poster, keyFunc KeyFunc, data []byte) (cadata.ID, *DEK, error) {
 	dek := keyFunc(Hash(data))
 	ctext := a.acquire(s.MaxSize())
 	defer a.release(ctext)

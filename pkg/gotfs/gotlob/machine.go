@@ -13,35 +13,35 @@ import (
 	"go.brendoncarroll.net/state/cadata"
 )
 
-type Option func(a *Agent)
+type Option func(a *Machine)
 
 // WithFilter sets a filter function, so that the operator ignores
 // any keys where fn(key) is false.
 func WithFilter(fn func([]byte) bool) Option {
-	return func(a *Agent) {
+	return func(a *Machine) {
 		a.keyFilter = fn
 	}
 }
 
-// WithChunking sets the chunking strategy used by the Agent
+// WithChunking sets the chunking strategy used by the Machine
 func WithChunking(flushBetween bool, fn func(onChunk chunking.ChunkHandler) *chunking.ContentDefined) Option {
-	return func(a *Agent) {
+	return func(a *Machine) {
 		a.newChunker = fn
 		a.flushBetween = flushBetween
 	}
 }
 
-type Agent struct {
-	gotkv *gotkv.Agent
-	gdat  *gdat.Agent
+type Machine struct {
+	gotkv *gotkv.Machine
+	gdat  *gdat.Machine
 
 	newChunker   func(chunking.ChunkHandler) *chunking.ContentDefined
 	keyFilter    func([]byte) bool
 	flushBetween bool
 }
 
-func NewAgent(gkvop *gotkv.Agent, dop *gdat.Agent, opts ...Option) Agent {
-	o := Agent{
+func NewMachine(gkvop *gotkv.Machine, dop *gdat.Machine, opts ...Option) Machine {
+	o := Machine{
 		gotkv: gkvop,
 		gdat:  dop,
 
@@ -57,7 +57,7 @@ func NewAgent(gkvop *gotkv.Agent, dop *gdat.Agent, opts ...Option) Agent {
 	return o
 }
 
-func (a *Agent) CreateExtents(ctx context.Context, ds cadata.Store, r io.Reader) ([]*Extent, error) {
+func (a *Machine) CreateExtents(ctx context.Context, ds cadata.Store, r io.Reader) ([]*Extent, error) {
 	var exts []*Extent
 	chunker := a.newChunker(func(data []byte) error {
 		ext, err := a.post(ctx, ds, data)
@@ -78,7 +78,7 @@ func (a *Agent) CreateExtents(ctx context.Context, ds cadata.Store, r io.Reader)
 	return exts, nil
 }
 
-func (a *Agent) SizeOf(ctx context.Context, ms cadata.Store, root Root, prefix []byte) (uint64, error) {
+func (a *Machine) SizeOf(ctx context.Context, ms cadata.Store, root Root, prefix []byte) (uint64, error) {
 	key, _, err := a.MaxExtent(ctx, ms, root, gotkv.PrefixSpan(prefix))
 	if err != nil {
 		return 0, err
@@ -90,7 +90,7 @@ func (a *Agent) SizeOf(ctx context.Context, ms cadata.Store, root Root, prefix [
 	return offset, nil
 }
 
-func (a *Agent) Splice(ctx context.Context, ms, ds cadata.Store, segs []Segment) (*Root, error) {
+func (a *Machine) Splice(ctx context.Context, ms, ds cadata.Store, segs []Segment) (*Root, error) {
 	b := a.NewBuilder(ctx, ms, ds)
 	for _, seg := range segs {
 		if err := b.CopyFrom(ctx, seg.Root, seg.Span); err != nil {
@@ -100,7 +100,7 @@ func (a *Agent) Splice(ctx context.Context, ms, ds cadata.Store, segs []Segment)
 	return b.Finish(ctx)
 }
 
-func (ag *Agent) post(ctx context.Context, s cadata.Store, data []byte) (*Extent, error) {
+func (ag *Machine) post(ctx context.Context, s cadata.Store, data []byte) (*Extent, error) {
 	ref, err := ag.gdat.Post(ctx, s, data)
 	if err != nil {
 		return nil, err
@@ -108,7 +108,7 @@ func (ag *Agent) post(ctx context.Context, s cadata.Store, data []byte) (*Extent
 	return &Extent{Offset: 0, Length: uint32(len(data)), Ref: *ref}, nil
 }
 
-func (ag *Agent) getExtentF(ctx context.Context, ds cadata.Store, ext *Extent, fn func([]byte) error) error {
+func (ag *Machine) getExtentF(ctx context.Context, ds cadata.Store, ext *Extent, fn func([]byte) error) error {
 	return ag.gdat.GetF(ctx, ds, ext.Ref, func(data []byte) error {
 		if err := checkExtentBounds(ext, len(data)); err != nil {
 			return err
@@ -117,7 +117,7 @@ func (ag *Agent) getExtentF(ctx context.Context, ds cadata.Store, ext *Extent, f
 	})
 }
 
-func (ag *Agent) readExtent(ctx context.Context, buf []byte, ds cadata.Store, ext *Extent) (int, error) {
+func (ag *Machine) readExtent(ctx context.Context, buf []byte, ds cadata.Store, ext *Extent) (int, error) {
 	n, err := ag.gdat.Read(ctx, ds, ext.Ref, buf)
 	if err != nil {
 		return 0, err
@@ -129,7 +129,7 @@ func (ag *Agent) readExtent(ctx context.Context, buf []byte, ds cadata.Store, ex
 }
 
 // maxEntry finds the maximum extent entry in root within span.
-func (ag *Agent) MaxExtent(ctx context.Context, ms cadata.Store, root Root, span Span) ([]byte, *Extent, error) {
+func (ag *Machine) MaxExtent(ctx context.Context, ms cadata.Store, root Root, span Span) ([]byte, *Extent, error) {
 	for {
 		ent, err := ag.gotkv.MaxEntry(ctx, ms, root, span)
 		if err != nil {
@@ -149,7 +149,7 @@ func (ag *Agent) MaxExtent(ctx context.Context, ms cadata.Store, root Root, span
 	}
 }
 
-func (ag *Agent) MinExtent(ctx context.Context, ms cadata.Store, root Root, span Span) ([]byte, *Extent, error) {
+func (ag *Machine) MinExtent(ctx context.Context, ms cadata.Store, root Root, span Span) ([]byte, *Extent, error) {
 	it := ag.gotkv.NewIterator(ms, root, span)
 	var ent gotkv.Entry
 	for {

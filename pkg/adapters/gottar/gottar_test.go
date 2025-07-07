@@ -17,7 +17,7 @@ import (
 func TestRead(t *testing.T) {
 	ctx := testutil.Context(t)
 	ms, ds := stores.NewMem(), stores.NewMem()
-	fsag := gotfs.NewAgent()
+	fsag := gotfs.NewMachine()
 	err := WithPipe(func(w io.Writer) error {
 		tw := tar.NewWriter(w)
 		if err := tw.WriteHeader(&tar.Header{

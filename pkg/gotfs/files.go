@@ -12,13 +12,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-func (a *Agent) FileFromReader(ctx context.Context, ms, ds Store, mode posixfs.FileMode, r io.Reader) (*Root, error) {
+func (a *Machine) FileFromReader(ctx context.Context, ms, ds Store, mode posixfs.FileMode, r io.Reader) (*Root, error) {
 	return a.FileFromReaders(ctx, ms, ds, mode, []io.Reader{r})
 }
 
 // ImportReaders creates a single file at the root from concatenating the data in rs.
 // Each reader will be imported from in parallel.
-func (a *Agent) FileFromReaders(ctx context.Context, ms, ds Store, mode posixfs.FileMode, rs []io.Reader) (*Root, error) {
+func (a *Machine) FileFromReaders(ctx context.Context, ms, ds Store, mode posixfs.FileMode, rs []io.Reader) (*Root, error) {
 	exts := make([][]*Extent, len(rs))
 	eg := errgroup.Group{}
 	for i, r := range rs {
@@ -51,7 +51,7 @@ func (a *Agent) FileFromReaders(ctx context.Context, ms, ds Store, mode posixfs.
 // If there is an entry at p CreateFile returns an error
 // ms is the store used for metadata
 // ds is the store used for data.
-func (a *Agent) CreateFile(ctx context.Context, ms, ds Store, x Root, p string, r io.Reader) (*Root, error) {
+func (a *Machine) CreateFile(ctx context.Context, ms, ds Store, x Root, p string, r io.Reader) (*Root, error) {
 	p = cleanPath(p)
 	if err := a.checkNoEntry(ctx, ms, x, p); err != nil {
 		return nil, err
@@ -60,7 +60,7 @@ func (a *Agent) CreateFile(ctx context.Context, ms, ds Store, x Root, p string, 
 }
 
 // PutFile creates or replaces the file at path using data from r
-func (a *Agent) PutFile(ctx context.Context, ms, ds Store, x Root, p string, r io.Reader) (*Root, error) {
+func (a *Machine) PutFile(ctx context.Context, ms, ds Store, x Root, p string, r io.Reader) (*Root, error) {
 	p = cleanPath(p)
 	fileRoot, err := a.FileFromReader(ctx, ms, ds, 0o755, r)
 	if err != nil {
@@ -70,14 +70,14 @@ func (a *Agent) PutFile(ctx context.Context, ms, ds Store, x Root, p string, r i
 }
 
 // SizeOfFile returns the size of the file at p in bytes.
-func (a *Agent) SizeOfFile(ctx context.Context, s Store, x Root, p string) (uint64, error) {
+func (a *Machine) SizeOfFile(ctx context.Context, s Store, x Root, p string) (uint64, error) {
 	p = cleanPath(p)
 	k := makeExtentPrefix(p)
 	return a.lob.SizeOf(ctx, s, *x.toGotKV(), k)
 }
 
 // ReadFileAt fills `buf` with data in the file at `p` starting at offset `start`
-func (a *Agent) ReadFileAt(ctx context.Context, ms, ds Store, x Root, p string, start int64, buf []byte) (int, error) {
+func (a *Machine) ReadFileAt(ctx context.Context, ms, ds Store, x Root, p string, start int64, buf []byte) (int, error) {
 	r, err := a.NewReader(ctx, ms, ds, x, p)
 	if err != nil {
 		return 0, err
@@ -88,7 +88,7 @@ func (a *Agent) ReadFileAt(ctx context.Context, ms, ds Store, x Root, p string, 
 type Reader = gotlob.Reader
 
 // NewReader returns an io.Reader | io.Seeker | io.ReaderAt
-func (a *Agent) NewReader(ctx context.Context, ms, ds Store, x Root, p string) (*Reader, error) {
+func (a *Machine) NewReader(ctx context.Context, ms, ds Store, x Root, p string) (*Reader, error) {
 	p = cleanPath(p)
 	_, err := a.GetFileInfo(ctx, ms, x, p)
 	if err != nil {
@@ -98,7 +98,7 @@ func (a *Agent) NewReader(ctx context.Context, ms, ds Store, x Root, p string) (
 	return a.lob.NewReader(ctx, ms, ds, *x.toGotKV(), k)
 }
 
-func (a *Agent) ReadFile(ctx context.Context, ms, ds Store, x Root, p string, max int) ([]byte, error) {
+func (a *Machine) ReadFile(ctx context.Context, ms, ds Store, x Root, p string, max int) ([]byte, error) {
 	r, err := a.NewReader(ctx, ms, ds, x, p)
 	if err != nil {
 		return nil, err
