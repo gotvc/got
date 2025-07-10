@@ -16,6 +16,7 @@ require (
 	go.brendoncarroll.net/state v0.0.0-20241118200920-627c9c196901
 	go.brendoncarroll.net/stdctx v0.0.0-20241118190518-40d09f4d11e7
 	go.brendoncarroll.net/tai64 v0.0.0-20241118171318-6e12d283d5e4
+	go.inet256.org/inet256 v0.0.8-0.20250106023139-eb36ad7a3f3f
 	go.uber.org/zap v1.24.0
 	goftp.io/server/v2 v2.0.1-0.20210902054531-841529b15085
 	golang.org/x/crypto v0.28.0
@@ -27,10 +28,6 @@ require (
 
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/brendoncarroll/go-exp v0.0.0-20230603162556-069bd4cbec7a // indirect
-	github.com/brendoncarroll/go-p2p v0.0.0-20230603163636-96d6516de644 // indirect
-	github.com/brendoncarroll/go-tai64 v0.0.0-20220726191612-c9e9c0704db4 // indirect
-	github.com/brendoncarroll/stdctx v0.0.0-20230325181752-a8a6ba46e3c1 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -65,7 +62,6 @@ require (
 	github.com/quic-go/qtls-go1-20 v0.3.1 // indirect
 	github.com/quic-go/quic-go v0.37.4 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	go.inet256.org/inet256 v0.0.8-0.20250106023139-eb36ad7a3f3f // indirect
 	go.opencensus.io v0.22.5 // indirect
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect

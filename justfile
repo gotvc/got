@@ -12,8 +12,8 @@ install: protobuf
 	go install ./cmd/got
 
 protobuf:
-	cd ./pkg/gotfs && ./build_protobuf.sh
-	cd ./pkg/gotgrpc && ./build_protobuf.sh
+	cd ./src/gotfs && ./build_protobuf.sh
+	cd ./src/gotgrpc && ./build_protobuf.sh
 
 build: protobuf
 	rm -r ./out/*
@@ -24,15 +24,5 @@ build: protobuf
 docker:
 	docker build -t got:local .
 
-add-replace:
-	go mod edit -replace=go.brendoncarroll.net/state=../../brendoncarroll/go-state
-	go mod edit -replace=go.brendoncarroll.net/go-p2p=../../brendoncarroll/go-p2p
-	go mod edit -replace=github.com/inet256/inet256=../../inet256/inet256
-
-drop-replace:
-	go mod edit -dropreplace=go.brendoncarroll.net/state
-	go mod edit -dropreplace=go.brendoncarroll.net/go-p2p
-	go mod edit -dropreplace=github.com/inet256/inet256
-
-precommit: drop-replace test
+precommit: test
 	go mod tidy

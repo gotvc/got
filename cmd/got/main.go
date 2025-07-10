@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/gotvc/got/pkg/gotcmd"
+	"github.com/gotvc/got/src/gotcmd"
 )
 
 func main() {

@@ -1,10 +1,10 @@
 package got
 
 import (
-	"github.com/gotvc/got/pkg/gdat"
-	"github.com/gotvc/got/pkg/gotfs"
-	"github.com/gotvc/got/pkg/gotrepo"
-	"github.com/gotvc/got/pkg/gotvc"
+	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/gotvc"
 )
 
 type (

@@ -15,14 +15,6 @@ github.com/beorn7/perks v0.0.0-20180321164747-3a771d992973/go.mod h1:Dwedo/Wpr24
 github.com/beorn7/perks v1.0.0/go.mod h1:KWe93zE9D1o94FZ5RNwFwVgaQK1VOXiVxmqh+CedLV8=
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
-github.com/brendoncarroll/go-exp v0.0.0-20230603162556-069bd4cbec7a h1:Q2G00nAN/prcPWmZuXiPfAixn+XRfL6hSjB83Pz50hY=
-github.com/brendoncarroll/go-exp v0.0.0-20230603162556-069bd4cbec7a/go.mod h1:BPjzn0WdcldzxIbDJORj8sDsUlHI7KB7bwGFq4aN6Fk=
-github.com/brendoncarroll/go-p2p v0.0.0-20230603163636-96d6516de644 h1:PJj8CDm3Dorj4NhqZFjYF1BDLHmQcF8JGzSWWlIAyyY=
-github.com/brendoncarroll/go-p2p v0.0.0-20230603163636-96d6516de644/go.mod h1:ALB6+VI2g6lQWGuFEJ9ffGQAu/1iSxfvT78sOIUnb5c=
-github.com/brendoncarroll/go-tai64 v0.0.0-20220726191612-c9e9c0704db4 h1:yw9nUqzIq1Tj0txVls6R0KQnrWXW67nZja/q0TFYWaw=
-github.com/brendoncarroll/go-tai64 v0.0.0-20220726191612-c9e9c0704db4/go.mod h1:E9+Qr3YRBlU8HsajHzdoyHAm8XRqITZrtsh1gZSzu+4=
-github.com/brendoncarroll/stdctx v0.0.0-20230325181752-a8a6ba46e3c1 h1:E0YZnMY5eYKg2e1F71ePVBkZz3gkpb2RVmykwQGc9C4=
-github.com/brendoncarroll/stdctx v0.0.0-20230325181752-a8a6ba46e3c1/go.mod h1:nAlN6/6V71o/MZUQmPQy6zV6JEchXhsllPJLyUwnna0=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/cespare/xxhash v1.1.0 h1:a6HrQnmkObjyL+Gs60czilIUGqrzKutQD6XZog3p+ko=
 github.com/cespare/xxhash v1.1.0/go.mod h1:XrSqR1VqqWfGrhpAt58auRo0WTKS1nRRg3ghfAqPWnc=
@@ -124,8 +116,6 @@ github.com/hashicorp/hcl v1.0.0/go.mod h1:E5yfLk+7swimpb2L/Alb/PJmXilQ/rhwaUYs4T
 github.com/ianlancetaylor/demangle v0.0.0-20200824232613-28f6c0f3b639/go.mod h1:aSSvb/t6k1mPoxDqO4vJh6VOCGPwU4O0C2/Eqndh1Sc=
 github.com/inconshreveable/mousetrap v1.0.0 h1:Z8tu5sraLXCXIcARxBp/8cbvlwVa7Z1NHg9XEKhtSvM=
 github.com/inconshreveable/mousetrap v1.0.0/go.mod h1:PxqpIevigyE2G7u3NXJIT2ANytuPF1OarO4DADm73n8=
-github.com/inet256/inet256 v0.0.8-0.20230603164405-67b6a7a91980 h1:TFKAMo6bkpp2lFJCK7wIzo2ydA0x7TYBNpSu00cbjpY=
-github.com/inet256/inet256 v0.0.8-0.20230603164405-67b6a7a91980/go.mod h1:ndc7Ow2FVe7bW2AXzVurOUP7d0+DfTV59CEtRJuR9Yg=
 github.com/jlaffaye/ftp v0.0.0-20190624084859-c1312a7102bf/go.mod h1:lli8NYPQOFy3O++YmYbqVgOcQ1JPCwdOy+5zSjKJ9qY=
 github.com/jpillora/backoff v1.0.0/go.mod h1:J/6gKK9jxlEcS3zixgDgUAsiuZ7yrSoa/FX5e0EB2j4=
 github.com/json-iterator/go v1.1.6/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCVDaaPEHmU=
