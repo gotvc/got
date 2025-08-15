@@ -8,6 +8,7 @@ import (
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/internal/stores"
 )
 
 func (r *Repo) Ls(ctx context.Context, p string, fn func(gotfs.DirEnt) error) error {
@@ -15,14 +16,15 @@ func (r *Repo) Ls(ctx context.Context, p string, fn func(gotfs.DirEnt) error) er
 	if err != nil {
 		return err
 	}
-	snap, err := branches.GetHead(ctx, branch.Volume)
+	snap, tx, err := branches.GetHead(ctx, branch.Volume)
 	if err != nil {
 		return err
 	}
+	defer tx.Abort(ctx)
 	if snap == nil {
 		return nil
 	}
-	return r.getFSOp(&branch.Info).ReadDir(ctx, branch.Volume.FSStore, snap.Root, p, fn)
+	return branches.NewGotFS(&branch.Info).ReadDir(ctx, tx, snap.Root, p, fn)
 }
 
 func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
@@ -30,17 +32,17 @@ func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	vol := branch.Volume
-	snap, err := branches.GetHead(ctx, branch.Volume)
+	snap, tx, err := branches.GetHead(ctx, branch.Volume)
 	if err != nil {
 		return err
 	}
+	defer tx.Abort(ctx)
 	if snap == nil {
 		return nil
 	}
 	ctx, cf := context.WithCancel(ctx)
 	defer cf()
-	fr, err := r.getFSOp(&branch.Info).NewReader(ctx, vol.FSStore, vol.RawStore, snap.Root, p)
+	fr, err := branches.NewGotFS(&branch.Info).NewReader(ctx, [2]stores.Reading{tx, tx}, snap.Root, p)
 	if err != nil {
 		return err
 	}
@@ -53,15 +55,15 @@ func (r *Repo) Stat(ctx context.Context, p string) (*gotfs.Info, error) {
 	if err != nil {
 		return nil, err
 	}
-	snap, err := branches.GetHead(ctx, branch.Volume)
+	snap, tx, err := branches.GetHead(ctx, branch.Volume)
 	if err != nil {
 		return nil, err
 	}
 	if snap == nil {
 		return nil, fmt.Errorf("branch is empty")
 	}
-	fsag := r.getFSOp(&branch.Info)
-	return fsag.GetInfo(ctx, branch.Volume.FSStore, snap.Root, p)
+	fsag := branches.NewGotFS(&branch.Info)
+	return fsag.GetInfo(ctx, tx, snap.Root, p)
 }
 
 func (r *Repo) Check(ctx context.Context) error {
@@ -69,17 +71,16 @@ func (r *Repo) Check(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	vol := branch.Volume
-	snap, err := branches.GetHead(ctx, vol)
+	snap, tx, err := branches.GetHead(ctx, branch.Volume)
 	if err != nil {
 		return err
 	}
 	if snap == nil {
 		return nil
 	}
-	vcag := r.getVCOp(&branch.Info)
-	return vcag.Check(ctx, vol.VCStore, *snap, func(root gotfs.Root) error {
-		return r.getFSOp(&branch.Info).Check(ctx, vol.FSStore, root, func(ref gdat.Ref) error {
+	vcag := branches.NewGotVC(&branch.Info)
+	return vcag.Check(ctx, tx, *snap, func(root gotfs.Root) error {
+		return branches.NewGotFS(&branch.Info).Check(ctx, tx, root, func(ref gdat.Ref) error {
 			return nil
 		})
 	})

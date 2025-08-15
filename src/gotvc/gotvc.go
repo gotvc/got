@@ -8,11 +8,10 @@ import (
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/stores"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 // ForEach calls fn once for each Ref in the snapshot graph.
-func ForEach(ctx context.Context, s cadata.Store, xs []Ref, fn func(Ref, Snapshot) error) error {
+func ForEach(ctx context.Context, s stores.Reading, xs []Ref, fn func(Ref, Snapshot) error) error {
 	o := NewMachine()
 	o.readOnly = true
 	visited := map[Ref]struct{}{}
@@ -66,12 +65,12 @@ func (rq *refQueue) len() int {
 }
 
 // IsDescendentOf returns true if any of x's parents are equal to a.
-func IsDescendentOf(ctx context.Context, s Store, x, a Snapshot) (bool, error) {
+func IsDescendentOf(ctx context.Context, s stores.Reading, x, a Snapshot) (bool, error) {
 	m := map[Ref]struct{}{}
 	return isDescendentOf(ctx, m, s, x, a)
 }
 
-func isDescendentOf(ctx context.Context, m map[Ref]struct{}, s Store, x, a Snapshot) (bool, error) {
+func isDescendentOf(ctx context.Context, m map[Ref]struct{}, s stores.Reading, x, a Snapshot) (bool, error) {
 	ag := NewMachine()
 	ag.readOnly = true
 	for _, parentRef := range x.Parents {
@@ -98,7 +97,7 @@ func isDescendentOf(ctx context.Context, m map[Ref]struct{}, s Store, x, a Snaps
 }
 
 // Sync ensures dst has all of the data reachable from snap.
-func Sync(ctx context.Context, src cadata.Store, dst cadata.Store, snap Snapshot, syncRoot func(gotfs.Root) error) error {
+func Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Snapshot) error {
 	ag := NewMachine()
 	ag.readOnly = true
 	var sync func(snap Snapshot) error
@@ -120,7 +119,8 @@ func Sync(ctx context.Context, src cadata.Store, dst cadata.Store, snap Snapshot
 				}
 			}
 		}
-		if err := syncRoot(snap.Root); err != nil {
+		fsmach := gotfs.NewMachine()
+		if err := fsmach.Sync(ctx, [2]stores.Reading{src, src}, [2]stores.Writing{dst, dst}, snap.Root); err != nil {
 			return err
 		}
 		metrics.AddInt(ctx, "snapshots", 1, "snapshots")
@@ -131,7 +131,7 @@ func Sync(ctx context.Context, src cadata.Store, dst cadata.Store, snap Snapshot
 
 // Populate adds all the cadata.IDs reachable from start to set.
 // This will not include the CID for start itself, which has not yet been computed.
-func Populate(ctx context.Context, s cadata.Store, start Snapshot, set stores.Set, rootFn func(gotfs.Root) error) error {
+func Populate(ctx context.Context, s stores.Reading, start Snapshot, set stores.Set, rootFn func(gotfs.Root) error) error {
 	for _, parentRef := range start.Parents {
 		parentCID := parentRef.CID
 		exists, err := set.Exists(ctx, parentCID)

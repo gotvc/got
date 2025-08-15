@@ -1,0 +1,68 @@
+package volumes
+
+import (
+	"context"
+
+	"blobcache.io/blobcache/src/blobcache"
+	"go.brendoncarroll.net/state/cadata"
+)
+
+type TxParams = blobcache.TxParams
+
+type Volume interface {
+	BeginTx(ctx context.Context, tp TxParams) (Tx, error)
+}
+
+var _ Tx = &blobcache.Tx{}
+
+type Tx interface {
+	Commit(ctx context.Context, root []byte) error
+	Abort(ctx context.Context) error
+	Load(ctx context.Context, dst *[]byte) error
+
+	Post(ctx context.Context, data []byte) (blobcache.CID, error)
+	Exists(ctx context.Context, cid blobcache.CID) (bool, error)
+	Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, error)
+	MaxSize() int
+	Hash(data []byte) blobcache.CID
+}
+
+func Modify(ctx context.Context, vol Volume, fn func(dst cadata.PostExister, x []byte) ([]byte, error)) error {
+	tx, err := vol.BeginTx(ctx, TxParams{Mutate: true})
+	if err != nil {
+		return err
+	}
+	defer tx.Abort(ctx)
+	var x []byte
+	if err := tx.Load(ctx, &x); err != nil {
+		return err
+	}
+	y, err := fn(tx, x)
+	if err != nil {
+		return err
+	}
+	return tx.Commit(ctx, y)
+}
+
+func View(ctx context.Context, vol Volume, fn func(src cadata.Getter, root []byte) error) error {
+	tx, err := vol.BeginTx(ctx, TxParams{Mutate: false})
+	if err != nil {
+		return err
+	}
+	defer tx.Abort(ctx)
+	var root []byte
+	if err := tx.Load(ctx, &root); err != nil {
+		return err
+	}
+	return fn(tx, root)
+}
+
+// Blobcache is a volume backed by blobcache.
+type Blobcache struct {
+	Service blobcache.Service
+	Handle  blobcache.Handle
+}
+
+func (bc *Blobcache) BeginTx(ctx context.Context, tp TxParams) (Tx, error) {
+	return blobcache.BeginTx(ctx, bc.Service, bc.Handle, tp)
+}

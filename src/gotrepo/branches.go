@@ -3,13 +3,18 @@ package gotrepo
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"fmt"
 
-	"go.brendoncarroll.net/state"
-	"go.brendoncarroll.net/state/kv"
-
 	"github.com/gotvc/got/src/branches"
+	"github.com/gotvc/got/src/internal/dbutil"
 	"github.com/gotvc/got/src/internal/metrics"
+	"github.com/gotvc/got/src/internal/staging"
+	"github.com/jmoiron/sqlx"
+)
+
+const (
+	nameMaster = "master"
 )
 
 type BranchInfo = branches.Info
@@ -40,6 +45,14 @@ func (r *Repo) GetBranch(ctx context.Context, name string) (*Branch, error) {
 		_, branch, err := r.GetActiveBranch(ctx)
 		return branch, err
 	}
+	return r.getBranch(ctx, name)
+}
+
+// getBranch returns a specific branch, or an error if it does not exist
+func (r *Repo) getBranch(ctx context.Context, name string) (*Branch, error) {
+	if name == "" {
+		return nil, fmt.Errorf("branch name cannot be empty")
+	}
 	info, err := r.space.Get(ctx, name)
 	if err != nil {
 		return nil, err
@@ -48,7 +61,7 @@ func (r *Repo) GetBranch(ctx context.Context, name string) (*Branch, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Branch{Info: *info, Volume: *vol}, nil
+	return &Branch{Info: *info, Volume: vol}, nil
 }
 
 // SetBranch sets branch metadata
@@ -70,44 +83,54 @@ func (r *Repo) ForEachBranch(ctx context.Context, fn func(string) error) error {
 
 // SetActiveBranch sets the active branch to name
 func (r *Repo) SetActiveBranch(ctx context.Context, name string) error {
-	branch, err := r.GetBranch(ctx, name)
+	desiredBranch, err := r.GetBranch(ctx, name)
 	if err != nil {
 		return err
 	}
-	isEmpty, err := r.stage.IsEmpty(ctx)
-	if err != nil {
-		return err
-	}
-	if !isEmpty {
-		current, err := r.GetBranch(ctx, "")
+	return dbutil.DoTx(ctx, r.db, func(tx *sqlx.Tx) error {
+		activeName, err := getActiveBranch(tx)
 		if err != nil {
 			return err
 		}
-		if !bytes.Equal(branch.Salt, current.Salt) {
-			return fmt.Errorf("staging must be empty to change to a branch with a different salt")
+		activeBranch, err := r.getBranch(ctx, activeName)
+		if err != nil {
+			return err
 		}
-	}
-	return r.setActiveBranch(ctx, name)
+		// if active branch has the same salt as the desired branch, then
+		// there is no check to do.
+		// If they have different salts, then we need to check if the staging area is empty.
+		if !bytes.Equal(desiredBranch.Salt, activeBranch.Salt) {
+			sa, err := newStagingArea(tx, &activeBranch.Info)
+			if err != nil {
+				return err
+			}
+			stage := staging.New(sa)
+			isEmpty, err := stage.IsEmpty(ctx)
+			if err != nil {
+				return err
+			}
+			if !isEmpty {
+				return fmt.Errorf("staging must be empty to change to a branch with a different salt")
+			}
+		}
+		return setActiveBranch(tx, name)
+	})
 }
 
 // GetActiveBranch returns the name of the active branch, and the branch
 func (r *Repo) GetActiveBranch(ctx context.Context) (string, *Branch, error) {
-	name, err := r.getActiveBranch(ctx)
-	if err != nil {
-		return "", nil, err
-	}
-	if name == "" {
-		name = nameMaster
-	}
+	name, err := dbutil.DoTx1(ctx, r.db, func(tx *sqlx.Tx) (string, error) {
+		return getActiveBranch(tx)
+	})
 	info, err := r.GetSpace().Get(ctx, name)
 	if err != nil {
 		return "", nil, err
 	}
-	v, err := r.GetSpace().Open(ctx, name)
+	vol, err := r.GetSpace().Open(ctx, name)
 	if err != nil {
 		return "", nil, err
 	}
-	return name, &Branch{Info: *info, Volume: *v}, nil
+	return name, &Branch{Info: *info, Volume: vol}, nil
 }
 
 // SetBranchHead
@@ -116,11 +139,14 @@ func (r *Repo) SetBranchHead(ctx context.Context, name string, snap Snap) error 
 	if err != nil {
 		return err
 	}
-	st, err := r.getImportTriple(ctx, &branch.Info)
-	if err != nil {
-		return err
-	}
-	return branches.SetHead(ctx, branch.Volume, *st, snap)
+	return dbutil.DoTxRO(ctx, r.db, func(tx *sqlx.Tx) error {
+		sa, err := newStagingArea(tx, &branch.Info)
+		if err != nil {
+			return err
+		}
+		src := sa.getStore()
+		return branches.SetHead(ctx, branch.Volume, src, snap)
+	})
 }
 
 func (r *Repo) GetBranchHead(ctx context.Context, name string) (*Snap, error) {
@@ -128,7 +154,14 @@ func (r *Repo) GetBranchHead(ctx context.Context, name string) (*Snap, error) {
 	if err != nil {
 		return nil, err
 	}
-	return branches.GetHead(ctx, b.Volume)
+	snap, tx, err := branches.GetHead(ctx, b.Volume)
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.Abort(ctx); err != nil {
+		return nil, err
+	}
+	return snap, nil
 }
 
 // Fork creates a new branch called next and sets its head to match base's
@@ -160,7 +193,7 @@ func (r *Repo) History(ctx context.Context, name string, fn func(ref Ref, s Snap
 	if err != nil {
 		return err
 	}
-	return branches.History(ctx, branch.Volume, r.getVCOp(&branch.Info), fn)
+	return branches.History(ctx, branches.NewGotVC(&branch.Info), branch.Volume, fn)
 }
 
 func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
@@ -176,16 +209,23 @@ func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
 	return nil
 }
 
-func (r *Repo) getActiveBranch(ctx context.Context) (string, error) {
-	s := r.getKVStore(tableDefault)
-	v, err := kv.Get(ctx, s, []byte(keyActive))
-	if err != nil && !state.IsErrNotFound[[]byte](err) {
+func getActiveBranch(tx *sqlx.Tx) (string, error) {
+	var ret string
+	if err := tx.Get(&ret, `SELECT name FROM branches WHERE active > 0 LIMIT 1`); err != nil {
+		if err == sql.ErrNoRows {
+			return nameMaster, nil
+		}
 		return "", err
 	}
-	return string(v), nil
+	return ret, nil
 }
 
-func (r *Repo) setActiveBranch(ctx context.Context, name string) error {
-	s := r.getKVStore(tableDefault)
-	return s.Put(ctx, []byte(keyActive), []byte(name))
+func setActiveBranch(tx *sqlx.Tx, name string) error {
+	if _, err := tx.Exec(`DELETE FROM branches`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`INSERT INTO branches (name, active) VALUES (?, 1)`, name); err != nil {
+		return err
+	}
+	return nil
 }

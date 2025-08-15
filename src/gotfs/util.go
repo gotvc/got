@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
 )
 
@@ -38,7 +39,7 @@ func ChangesOnBase(base Root, changes []Segment) []Segment {
 	return segs
 }
 
-func Dump(ctx context.Context, s Store, root Root, w io.Writer) error {
+func Dump(ctx context.Context, s stores.Reading, root Root, w io.Writer) error {
 	bw := bufio.NewWriter(w)
 	ag := NewMachine()
 	it := ag.gotkv.NewIterator(s, *root.toGotKV(), gotkv.TotalSpan())

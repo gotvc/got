@@ -8,6 +8,7 @@ import (
 	"io"
 
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/state/posixfs"
 )
@@ -34,7 +35,7 @@ func WriteTAR(ctx context.Context, fsag *gotfs.Machine, ms, ds cadata.Store, roo
 			return err
 		}
 		if mode.IsRegular() {
-			r, err := fsag.NewReader(ctx, ms, ds, root, p)
+			r, err := fsag.NewReader(ctx, [2]stores.Reading{ms, ds}, root, p)
 			if err != nil {
 				return err
 			}

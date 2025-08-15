@@ -3,24 +3,14 @@ package gotrepo
 import (
 	"bytes"
 	"context"
-	"crypto"
-	"crypto/rand"
-	"crypto/x509"
-	"encoding/pem"
-	"fmt"
 	"io"
 
 	"go.brendoncarroll.net/state/posixfs"
-	"go.inet256.org/inet256/pkg/inet256"
-	"go.inet256.org/inet256/pkg/serde"
+	"go.inet256.org/inet256/src/inet256"
 )
 
-const pemTypePrivateKey = "PRIVATE KEY"
-
-type PrivateKey = inet256.PrivateKey
-
-func (r *Repo) GetID() inet256.Addr {
-	return inet256.NewAddr(r.privateKey.Public())
+func (r *Repo) GetID() inet256.ID {
+	return inet256.NewID(r.privateKey.Public().(inet256.PublicKey))
 }
 
 func (r *Repo) GetPrivateKey() inet256.PrivateKey {
@@ -52,42 +42,20 @@ func writeIfNotExists(fsx posixfs.FS, p string, mode posixfs.FileMode, r io.Read
 	return f.Close()
 }
 
-func marshalPEM(ty string, data []byte) []byte {
-	return pem.EncodeToMemory(&pem.Block{
-		Type:  ty,
-		Bytes: data,
-	})
-}
-
-func parsePEM(ty string, pemData []byte) ([]byte, error) {
-	b, _ := pem.Decode(pemData)
-	if b == nil {
-		return nil, fmt.Errorf("no PEM block found")
-	}
-	if b.Type != pemTypePrivateKey {
-		return nil, fmt.Errorf("PEM block is wrong type HAVE: %s, WANT: %s", b.Type, ty)
-	}
-	return b.Bytes, nil
-}
-
 func marshalPrivateKey(x inet256.PrivateKey) []byte {
-	return marshalPEM(pemTypePrivateKey, serde.MarshalPrivateKey(x))
+	data, err := inet256.DefaultPKI.MarshalPrivateKey(nil, x)
+	if err != nil {
+		panic(err)
+	}
+	return data
 }
 
 func parsePrivateKey(data []byte) (inet256.PrivateKey, error) {
-	data, err := parsePEM(pemTypePrivateKey, data)
-	if err != nil {
-		return nil, err
-	}
-	privateKey, err := x509.ParsePKCS8PrivateKey(data)
-	if err != nil {
-		return nil, err
-	}
-	return inet256.PrivateKeyFromBuiltIn(privateKey.(crypto.Signer))
+	return inet256.DefaultPKI.ParsePrivateKey(data)
 }
 
 func generatePrivateKey() inet256.PrivateKey {
-	_, priv, err := inet256.GenerateKey(rand.Reader)
+	_, priv, err := inet256.GenerateKey()
 	if err != nil {
 		panic(err)
 	}

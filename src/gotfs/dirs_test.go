@@ -5,12 +5,14 @@ import (
 	"path"
 	"testing"
 
+	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestReadDir(t *testing.T) {
 	ctx, ag, s := setup(t)
+	ss := [2]stores.RW{s, s}
 	x, err := ag.NewEmpty(ctx, s)
 	require.NoError(t, err)
 	x, err = ag.Mkdir(ctx, s, *x, "dir0")
@@ -22,12 +24,12 @@ func TestReadDir(t *testing.T) {
 	ps := []string{"0-file1.txt", "2-file2.txt", "3-file3.txt"}
 	for i := range ps {
 		p := path.Join("dir1", ps[i])
-		x, err = ag.CreateFile(ctx, s, s, *x, p, bytes.NewReader(nil))
+		x, err = ag.CreateFile(ctx, ss, *x, p, bytes.NewReader(nil))
 		require.NoError(t, err)
 	}
 	x, err = ag.Mkdir(ctx, s, *x, "dir1/1-subdir")
 	require.NoError(t, err)
-	x, err = ag.CreateFile(ctx, s, s, *x, "dir1/1-subdir/file.txt", bytes.NewReader(nil))
+	x, err = ag.CreateFile(ctx, ss, *x, "dir1/1-subdir/file.txt", bytes.NewReader(nil))
 	require.NoError(t, err)
 
 	expected := append(ps[:1], append([]string{"1-subdir"}, ps[1:]...)...)

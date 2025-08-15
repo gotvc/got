@@ -8,6 +8,7 @@ import (
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/gotkv/ptree"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/maybe"
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/cadata"
@@ -131,7 +132,7 @@ func (a *Machine) Get(ctx context.Context, s cadata.Getter, x Root, key []byte) 
 
 // Put returns a new version of the instance x with the entry at key corresponding to value.
 // If an entry at key already exists it is overwritten, otherwise it will be created.
-func (a *Machine) Put(ctx context.Context, s cadata.Store, x Root, key, value []byte) (*Root, error) {
+func (a *Machine) Put(ctx context.Context, s stores.RW, x Root, key, value []byte) (*Root, error) {
 	return a.Mutate(ctx, s, x, Mutation{
 		Span:    SingleKeySpan(key),
 		Entries: []Entry{{Key: key, Value: value}},
@@ -152,7 +153,7 @@ func (a *Machine) DeleteSpan(ctx context.Context, s cadata.Store, x Root, span S
 }
 
 // NewEmpty returns a new GotKV instance with no entries.
-func (a *Machine) NewEmpty(ctx context.Context, s cadata.Store) (*Root, error) {
+func (a *Machine) NewEmpty(ctx context.Context, s stores.RW) (*Root, error) {
 	b := a.NewBuilder(s)
 	return b.Finish(ctx)
 }
@@ -214,7 +215,7 @@ func (a *Machine) RemovePrefix(ctx context.Context, s cadata.Getter, x Root, pre
 
 // NewBuilder returns a Builder for constructing a GotKV instance.
 // Data will be persisted to s.
-func (a *Machine) NewBuilder(s Store) *Builder {
+func (a *Machine) NewBuilder(s stores.RW) *Builder {
 	b := ptree.NewBuilder(ptree.BuilderParams[Entry, Ref]{
 		Store:           &ptreeStore{ag: a.da, s: s},
 		MeanSize:        a.meanSize,
@@ -273,7 +274,7 @@ type Mutation struct {
 }
 
 // Mutate applies a batch of mutations to the tree x.
-func (a *Machine) Mutate(ctx context.Context, s cadata.Store, x Root, mutations ...Mutation) (*Root, error) {
+func (a *Machine) Mutate(ctx context.Context, s stores.RW, x Root, mutations ...Mutation) (*Root, error) {
 	iters := make([]kvstreams.Iterator, 2*len(mutations)+1)
 	var begin []byte
 	for i, mut := range mutations {
@@ -311,7 +312,7 @@ func checkMutation(mut Mutation) error {
 
 // Concat copies data from the iterators in order.
 // If the iterators produce out of order keys concat errors.
-func (a *Machine) Concat(ctx context.Context, s cadata.Store, iters ...kvstreams.Iterator) (*Root, error) {
+func (a *Machine) Concat(ctx context.Context, s stores.RW, iters ...kvstreams.Iterator) (*Root, error) {
 	b := a.NewBuilder(s)
 	for _, iter := range iters {
 		if err := CopyAll(ctx, b, iter); err != nil {

@@ -12,6 +12,7 @@ import (
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotvc"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
@@ -24,10 +25,10 @@ type FS struct {
 	ctx   context.Context
 	gotvc *gotvc.Machine
 	gotfs *gotfs.Machine
-	vol   *branches.Volume
+	vol   branches.Volume
 }
 
-func New(ctx context.Context, info branches.Info, v *branches.Volume) *FS {
+func New(ctx context.Context, info branches.Info, v branches.Volume) *FS {
 	return &FS{
 		ctx:   ctx,
 		gotvc: branches.NewGotVC(&info),
@@ -38,19 +39,19 @@ func New(ctx context.Context, info branches.Info, v *branches.Volume) *FS {
 
 func (s *FS) Open(name string) (iofs.File, error) {
 	logctx.Infof(s.ctx, "open %q", name)
-	snap, err := branches.GetHead(s.ctx, *s.vol)
+	snap, tx, err := branches.GetHead(s.ctx, s.vol)
 	if err != nil {
 		return nil, err
 	}
+	defer tx.Abort(s.ctx)
 	if snap == nil {
 		return nil, iofs.ErrNotExist
 	}
 	fsag := s.gotfs
-	ms := s.vol.FSStore
-	if _, err := fsag.GetInfo(s.ctx, ms, snap.Root, name); err != nil {
+	if _, err := fsag.GetInfo(s.ctx, tx, snap.Root, name); err != nil {
 		return nil, convertError(err)
 	}
-	return NewFile(s.ctx, fsag, s.vol.FSStore, s.vol.RawStore, snap.Root, name), nil
+	return NewFile(s.ctx, fsag, tx, tx, snap.Root, name), nil
 }
 
 var _ iofs.File = &File{}
@@ -61,14 +62,14 @@ var _ io.Seeker = &File{}
 type File struct {
 	ctx    context.Context
 	gotfs  *gotfs.Machine
-	ms, ds cadata.Store
+	ms, ds cadata.Getter
 	root   gotfs.Root
 	path   string
 
 	r *gotfs.Reader
 }
 
-func NewFile(ctx context.Context, fsag *gotfs.Machine, ms, ds cadata.Store, root gotfs.Root, p string) *File {
+func NewFile(ctx context.Context, fsag *gotfs.Machine, ms, ds stores.Reading, root gotfs.Root, p string) *File {
 	return &File{
 		ctx:   ctx,
 		gotfs: fsag,
@@ -98,7 +99,7 @@ func (f *File) ReadAt(buf []byte, off int64) (int, error) {
 	if off < 0 {
 		return 0, errors.New("negative offset")
 	}
-	return f.gotfs.ReadFileAt(f.ctx, f.ms, f.ds, f.root, f.path, off, buf)
+	return f.gotfs.ReadFileAt(f.ctx, [2]stores.Reading{f.ms, f.ds}, f.root, f.path, off, buf)
 }
 
 func (f *File) Seek(offset int64, whence int) (int64, error) {
@@ -139,7 +140,7 @@ func (f *File) Close() error {
 
 func (f *File) ensureReader() error {
 	if f.r == nil {
-		r, err := f.gotfs.NewReader(f.ctx, f.ms, f.ds, f.root, f.path)
+		r, err := f.gotfs.NewReader(f.ctx, [2]stores.Reading{f.ms, f.ds}, f.root, f.path)
 		if err != nil {
 			return err
 		}
@@ -156,7 +157,7 @@ func (f *File) stat(p string) (*fileInfo, error) {
 	return finfo.(*fileInfo), nil
 }
 
-func Stat(ctx context.Context, fsag *gotfs.Machine, ms cadata.Store, root gotfs.Root, p string) (iofs.FileInfo, error) {
+func Stat(ctx context.Context, fsag *gotfs.Machine, ms stores.Reading, root gotfs.Root, p string) (iofs.FileInfo, error) {
 	info, err := fsag.GetInfo(ctx, ms, root, p)
 	if err != nil {
 		return nil, convertError(err)

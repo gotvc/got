@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 
 	"go.brendoncarroll.net/state"
-	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/tai64"
 
@@ -15,21 +14,16 @@ import (
 
 var _ Space = &branchSpecDir{}
 
-type cellFactory = func(spec CellSpec) (Cell, error)
-type storeFactory = func(spec StoreSpec) (Store, error)
-
 type branchSpecDir struct {
 	makeDefault func(context.Context) (VolumeSpec, error)
-	cf          cellFactory
-	sf          storeFactory
+	mkvol       func(ctx context.Context, spec VolumeSpec) (Volume, error)
 	fs          posixfs.FS
 }
 
-func newBranchSpecDir(makeDefault func(ctx context.Context) (VolumeSpec, error), cf cellFactory, sf storeFactory, fs posixfs.FS) *branchSpecDir {
+func newBranchSpecDir(makeDefault func(ctx context.Context) (VolumeSpec, error), mkvol func(ctx context.Context, spec VolumeSpec) (Volume, error), fs posixfs.FS) *branchSpecDir {
 	return &branchSpecDir{
 		makeDefault: makeDefault,
-		cf:          cf,
-		sf:          sf,
+		mkvol:       mkvol,
 		fs:          fs,
 	}
 }
@@ -66,7 +60,7 @@ func (r *branchSpecDir) CreateWithSpec(ctx context.Context, name string, spec Br
 	if err := branches.CheckName(name); err != nil {
 		return nil, err
 	}
-	_, err := r.cf(spec.Volume.Cell)
+	_, err := r.mkvol(ctx, spec.Volume)
 	if err != nil {
 		return nil, err
 	}
@@ -103,12 +97,12 @@ func (r *branchSpecDir) Set(ctx context.Context, k string, cfg branches.Config) 
 	return r.saveSpec(ctx, k, *spec)
 }
 
-func (r *branchSpecDir) Open(ctx context.Context, name string) (*branches.Volume, error) {
+func (r *branchSpecDir) Open(ctx context.Context, name string) (branches.Volume, error) {
 	spec, err := r.loadSpec(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	return r.makeVol(name, spec.Volume)
+	return r.mkvol(ctx, spec.Volume)
 }
 
 func (r *branchSpecDir) loadSpec(ctx context.Context, k string) (*BranchSpec, error) {
@@ -132,26 +126,4 @@ func (r *branchSpecDir) saveSpec(ctx context.Context, k string, spec BranchSpec)
 		return err
 	}
 	return posixfs.PutFile(ctx, r.fs, k, 0o644, bytes.NewReader(data))
-}
-
-func (r *branchSpecDir) makeVol(k string, spec VolumeSpec) (*Volume, error) {
-	cell, err := r.cf(spec.Cell)
-	if err != nil {
-		return nil, err
-	}
-	ss := [3]cadata.Store{}
-	for i, spec := range []StoreSpec{
-		spec.VCStore, spec.FSStore, spec.RawStore,
-	} {
-		ss[i], err = r.sf(spec)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return &Volume{
-		Cell:     cell,
-		VCStore:  ss[0],
-		FSStore:  ss[1],
-		RawStore: ss[2],
-	}, nil
 }

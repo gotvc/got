@@ -20,7 +20,7 @@ type DirEnt struct {
 }
 
 // NewEmpty creates a new filesystem with an empty root directory
-func (a *Machine) NewEmpty(ctx context.Context, s Store) (*Root, error) {
+func (a *Machine) NewEmpty(ctx context.Context, s stores.RW) (*Root, error) {
 	b := a.NewBuilder(ctx, s, stores.NewVoid())
 	if err := b.Mkdir("/", 0o755); err != nil {
 		return nil, err
@@ -29,7 +29,7 @@ func (a *Machine) NewEmpty(ctx context.Context, s Store) (*Root, error) {
 }
 
 // Mkdir creates a directory at path p
-func (a *Machine) Mkdir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+func (a *Machine) Mkdir(ctx context.Context, s stores.RW, x Root, p string) (*Root, error) {
 	p = cleanPath(p)
 	if err := a.checkNoEntry(ctx, s, x, p); err != nil {
 		return nil, err
@@ -41,7 +41,7 @@ func (a *Machine) Mkdir(ctx context.Context, s Store, x Root, p string) (*Root, 
 }
 
 // MkdirAll creates the directory p and any of p's ancestors if necessary.
-func (a *Machine) MkdirAll(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+func (a *Machine) MkdirAll(ctx context.Context, s stores.RW, x Root, p string) (*Root, error) {
 	p = cleanPath(p)
 	parts := strings.Split(p, string(Sep))
 	y := &x
@@ -60,7 +60,7 @@ func (a *Machine) MkdirAll(ctx context.Context, s Store, x Root, p string) (*Roo
 	return y, nil
 }
 
-func (a *Machine) ensureDir(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+func (a *Machine) ensureDir(ctx context.Context, s stores.RW, x Root, p string) (*Root, error) {
 	y := &x
 	_, err := a.GetDirInfo(ctx, s, x, p)
 	if posixfs.IsErrNotExist(err) {
@@ -75,7 +75,7 @@ func (a *Machine) ensureDir(ctx context.Context, s Store, x Root, p string) (*Ro
 }
 
 // ReadDir calls fn for every child of the directory at p.
-func (a *Machine) ReadDir(ctx context.Context, s Store, x Root, p string, fn func(e DirEnt) error) error {
+func (a *Machine) ReadDir(ctx context.Context, s stores.Reading, x Root, p string, fn func(e DirEnt) error) error {
 	p = cleanPath(p)
 	di, err := a.newDirIterator(ctx, s, x, p)
 	if err != nil {
@@ -124,13 +124,13 @@ func SpanForPath(p string) gotkv.Span {
 }
 
 type dirIterator struct {
-	s    Store
+	s    stores.Reading
 	x    Root
 	p    string
 	iter *gotkv.Iterator
 }
 
-func (a *Machine) newDirIterator(ctx context.Context, s Store, x Root, p string) (*dirIterator, error) {
+func (a *Machine) newDirIterator(ctx context.Context, s stores.Reading, x Root, p string) (*dirIterator, error) {
 	_, err := a.GetDirInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err
