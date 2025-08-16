@@ -9,10 +9,6 @@ import (
 
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/stretchr/testify/require"
-	"go.inet256.org/inet256/networks/beaconnet"
-	"go.inet256.org/inet256/src/inet256"
-	"go.inet256.org/inet256/src/inet256d"
-	"go.inet256.org/inet256/src/mesh256"
 
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
@@ -159,28 +155,4 @@ func listBranches(t testing.TB, r *gotrepo.Repo) (ret []string) {
 	})
 	require.NoError(t, err)
 	return ret
-}
-
-const inet256Endpoint = "tcp://127.0.0.1:12345"
-
-func TestMain(m *testing.M) {
-	code := func() int {
-		ctx, cf := context.WithCancel(context.Background())
-		defer cf()
-		_, privateKey, _ := inet256.GenerateKey()
-		d := inet256d.New(inet256d.Params{
-			APIAddr: inet256Endpoint,
-			MainNodeParams: mesh256.Params{
-				NewNetwork: beaconnet.Factory,
-				PrivateKey: privateKey,
-				Peers:      mesh256.NewPeerStore(),
-			},
-		})
-		go d.Run(ctx)
-		if err := os.Setenv("INET256_API", inet256Endpoint); err != nil {
-			panic(err)
-		}
-		return m.Run()
-	}()
-	os.Exit(code)
 }

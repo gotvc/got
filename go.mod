@@ -27,13 +27,10 @@ require (
 )
 
 require (
-	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/cloudflare/circl v1.6.1 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/flynn/noise v1.0.0 // indirect
-	github.com/go-chi/chi v4.0.3+incompatible // indirect
+	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-task/slim-sprig v0.0.0-20230315185526-52ccab3ef572 // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/btree v1.1.2 // indirect
@@ -41,18 +38,16 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.5 // indirect
+	github.com/kr/pretty v0.3.1 // indirect
 	github.com/mattn/go-colorable v0.1.9 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/onsi/ginkgo/v2 v2.9.5 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
-	github.com/prometheus/client_golang v1.19.1 // indirect
-	github.com/prometheus/client_model v0.5.0 // indirect
-	github.com/prometheus/common v0.48.0 // indirect
-	github.com/prometheus/procfs v0.12.0 // indirect
 	github.com/quic-go/quic-go v0.48.2 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
+	github.com/rogpeppe/go-internal v1.10.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	go.brendoncarroll.net/p2p v0.0.0-20241118201502-2abd1a6f58e7 // indirect
 	go.uber.org/mock v0.4.0 // indirect
@@ -60,11 +55,7 @@ require (
 	golang.org/x/mod v0.26.0 // indirect
 	golang.org/x/net v0.42.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect
-	golang.org/x/text v0.28.0 // indirect
 	golang.org/x/tools v0.35.0 // indirect
-	golang.zx2c4.com/wireguard v0.0.0-20220920152132-bb719d3a6e2c // indirect
-	google.golang.org/genproto v0.0.0-20200526211855-cb27e3aa2013 // indirect
-	google.golang.org/grpc v1.69.2 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
 	modernc.org/libc v1.66.3 // indirect
