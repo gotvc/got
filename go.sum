@@ -1,5 +1,5 @@
-blobcache.io/blobcache v0.0.0-20250812212224-2487eec1f8b3 h1:Rk93bLZrNg9AS6AJwcumN/6C88LCGyxjYef/WKmTIeE=
-blobcache.io/blobcache v0.0.0-20250812212224-2487eec1f8b3/go.mod h1:HyleXyyZXd0B+4McLAjFYW62z8R2DEPUsJYI+fVhywQ=
+blobcache.io/blobcache v0.0.0-20250816021103-f0b957e36f05 h1:bDv3Fcy97V3O5fahMHbhf7tj6XcFxy8TcpY/5FdZ6o8=
+blobcache.io/blobcache v0.0.0-20250816021103-f0b957e36f05/go.mod h1:lVE9fil7eKDl3JtqOl8FsMAAlf8xP9QpTSWFC7k+EEA=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 filippo.io/edwards25519 v1.1.0 h1:FNf4tywRC1HmFuKW5xopWpigGjJKiJSV0Cqo0cJWDaA=
 filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=

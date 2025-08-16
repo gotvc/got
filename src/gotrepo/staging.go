@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"slices"
 	"strings"
@@ -409,7 +408,6 @@ func (sa *stagingArea) Get(ctx context.Context, p string, dst *staging.Operation
 		}
 		return err
 	}
-	log.Println("GET", p, string(data))
 	return json.Unmarshal(data, dst)
 }
 

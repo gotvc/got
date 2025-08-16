@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"blobcache.io/blobcache/src/blobcache"
+	"blobcache.io/blobcache/src/schema/simplens"
 
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/internal/volumes"
@@ -26,10 +28,18 @@ func ParseVolumeSpec(data []byte) (*VolumeSpec, error) {
 	return &spec, nil
 }
 
-func (r *Repo) MakeVolume(ctx context.Context, spec VolumeSpec) (branches.Volume, error) {
-	volh, err := r.bc.CreateVolume(ctx, nil, spec)
+func (r *Repo) MakeVolume(ctx context.Context, branchName string, spec VolumeSpec) (branches.Volume, error) {
+	nsc := simplens.Client{Service: r.bc}
+	volh, err := nsc.OpenAt(ctx, blobcache.Handle{}, branchName, blobcache.Action_ALL)
 	if err != nil {
-		return nil, err
+		if strings.Contains(err.Error(), "entry not found") {
+			volh, err = nsc.CreateAt(ctx, blobcache.Handle{}, branchName, spec)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
 	}
 	return &volumes.Blobcache{Service: r.bc, Handle: *volh}, nil
 }

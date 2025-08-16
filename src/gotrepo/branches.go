@@ -122,6 +122,9 @@ func (r *Repo) GetActiveBranch(ctx context.Context) (string, *Branch, error) {
 	name, err := dbutil.DoTx1(ctx, r.db, func(tx *sqlx.Tx) (string, error) {
 		return getActiveBranch(tx)
 	})
+	if err != nil {
+		return "", nil, err
+	}
 	info, err := r.GetSpace().Get(ctx, name)
 	if err != nil {
 		return "", nil, err

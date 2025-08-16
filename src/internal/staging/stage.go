@@ -107,7 +107,7 @@ func (s *Stage) CheckConflict(ctx context.Context, p string) error {
 		conflictPath := strings.Join(parts[:i], "/")
 		k := cleanPath(conflictPath)
 		op, err := kv.Get(ctx, s.storage, k)
-		if err != nil && !state.IsErrNotFound[Operation](err) {
+		if err != nil && !state.IsErrNotFound[string](err) {
 			return err
 		}
 		if op != (Operation{}) {

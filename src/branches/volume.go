@@ -26,9 +26,9 @@ type (
 )
 
 // SyncVolumes syncs the contents of src to dst.
-func SyncVolumes(ctx context.Context, src, dst Volume, force bool) error {
-	return applySnapshot(ctx, dst, func(_ stores.RW, x *gotvc.Snapshot) (*gotvc.Snapshot, error) {
-		goal, tx, err := getSnapshot(ctx, src)
+func SyncVolumes(ctx context.Context, srcVol, dstVol Volume, force bool) error {
+	return applySnapshot(ctx, dstVol, func(dst stores.RW, x *gotvc.Snapshot) (*gotvc.Snapshot, error) {
+		goal, tx, err := getSnapshot(ctx, srcVol)
 		if err != nil {
 			return nil, err
 		}
@@ -36,10 +36,8 @@ func SyncVolumes(ctx context.Context, src, dst Volume, force bool) error {
 		switch {
 		case goal == nil && x == nil:
 			return nil, nil
-		case goal == nil:
-			if !force {
-				return nil, fmt.Errorf("cannot clear volume without force=true")
-			}
+		case goal == nil && !force:
+			return nil, fmt.Errorf("cannot clear volume without force=true")
 		case x == nil:
 		case goal.Equals(*x):
 		default:
@@ -50,6 +48,9 @@ func SyncVolumes(ctx context.Context, src, dst Volume, force bool) error {
 			if !force && !hasAncestor {
 				return nil, fmt.Errorf("cannot CAS, dst ref is not parent of src ref")
 			}
+		}
+		if err := syncStores(ctx, tx, dst, *goal); err != nil {
+			return nil, err
 		}
 		return goal, nil
 	})
@@ -84,7 +85,6 @@ func applySnapshot(ctx context.Context, dstVol Volume, fn func(stores.RW, *Snap)
 		return err
 	}
 	defer tx.Abort(ctx)
-
 	var xData []byte
 	if err := tx.Load(ctx, &xData); err != nil {
 		return err
@@ -92,20 +92,24 @@ func applySnapshot(ctx context.Context, dstVol Volume, fn func(stores.RW, *Snap)
 	var xSnap *Snap
 	if len(xData) > 0 {
 		xSnap = &Snap{}
-		if err := json.Unmarshal(xData, &xSnap); err != nil {
+		if err := json.Unmarshal(xData, xSnap); err != nil {
 			return err
 		}
 	}
 	ySnap, err := fn(tx, xSnap)
 	if err != nil {
-		return nil
-	}
-	if ySnap == nil {
-		return tx.Commit(ctx, nil)
-	}
-	yData, err := json.Marshal(*ySnap)
-	if err != nil {
 		return err
+	}
+	var yData []byte
+	if ySnap != nil {
+		// this is a check for dangling references.
+		if err := syncStores(ctx, stores.NewVoid(), tx, *ySnap); err != nil {
+			return err
+		}
+		yData, err = json.Marshal(*ySnap)
+		if err != nil {
+			return err
+		}
 	}
 	return tx.Commit(ctx, yData)
 }

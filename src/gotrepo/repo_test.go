@@ -144,6 +144,7 @@ func newTestRepo(t testing.TB) *Repo {
 }
 
 func checkFileContent(t testing.TB, repo *Repo, p string, r io.Reader) {
+	t.Helper()
 	ctx := testutil.Context(t)
 	pr, pw := io.Pipe()
 	go func() {

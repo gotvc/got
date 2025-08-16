@@ -140,7 +140,6 @@ func Open(p string) (*Repo, error) {
 		}
 	case config.Blobcache.HTTP != nil:
 		bc = bcclient.NewClient(*config.Blobcache.HTTP)
-
 	default:
 		return nil, fmt.Errorf("must configure blobcache in .got/config.  It cannot be empty.")
 	}
@@ -228,8 +227,11 @@ func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) err
 	return err
 }
 
-func (r *Repo) defaultVolumeSpec(ctx context.Context) (VolumeSpec, error) {
-	return blobcache.DefaultLocalSpec(), nil
+func (r *Repo) defaultVolumeSpec(_ context.Context) (VolumeSpec, error) {
+	spec := blobcache.DefaultLocalSpec()
+	spec.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
+	spec.Local.MaxSize = 1 << 21
+	return spec, nil
 }
 
 func openLocalBlobcache(ctx context.Context, p string) (blobcache.Service, *sqlx.DB, error) {

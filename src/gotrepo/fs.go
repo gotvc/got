@@ -38,7 +38,7 @@ func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
 	}
 	defer tx.Abort(ctx)
 	if snap == nil {
-		return nil
+		return fmt.Errorf("branch is empty")
 	}
 	ctx, cf := context.WithCancel(ctx)
 	defer cf()

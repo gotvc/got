@@ -16,11 +16,11 @@ var _ Space = &branchSpecDir{}
 
 type branchSpecDir struct {
 	makeDefault func(context.Context) (VolumeSpec, error)
-	mkvol       func(ctx context.Context, spec VolumeSpec) (Volume, error)
+	mkvol       func(ctx context.Context, name string, spec VolumeSpec) (Volume, error)
 	fs          posixfs.FS
 }
 
-func newBranchSpecDir(makeDefault func(ctx context.Context) (VolumeSpec, error), mkvol func(ctx context.Context, spec VolumeSpec) (Volume, error), fs posixfs.FS) *branchSpecDir {
+func newBranchSpecDir(makeDefault func(ctx context.Context) (VolumeSpec, error), mkvol func(ctx context.Context, name string, spec VolumeSpec) (Volume, error), fs posixfs.FS) *branchSpecDir {
 	return &branchSpecDir{
 		makeDefault: makeDefault,
 		mkvol:       mkvol,
@@ -60,7 +60,7 @@ func (r *branchSpecDir) CreateWithSpec(ctx context.Context, name string, spec Br
 	if err := branches.CheckName(name); err != nil {
 		return nil, err
 	}
-	_, err := r.mkvol(ctx, spec.Volume)
+	_, err := r.mkvol(ctx, name, spec.Volume)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +102,7 @@ func (r *branchSpecDir) Open(ctx context.Context, name string) (branches.Volume,
 	if err != nil {
 		return nil, err
 	}
-	return r.mkvol(ctx, spec.Volume)
+	return r.mkvol(ctx, name, spec.Volume)
 }
 
 func (r *branchSpecDir) loadSpec(ctx context.Context, k string) (*BranchSpec, error) {
