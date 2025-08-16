@@ -140,6 +140,9 @@ func newTestRepo(t testing.TB) *Repo {
 	repo, err := Open(dirpath)
 	require.NoError(t, err)
 	require.NotNil(t, repo)
+	t.Cleanup(func() {
+		require.NoError(t, repo.Close())
+	})
 	return repo
 }
 

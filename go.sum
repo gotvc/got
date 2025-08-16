@@ -1,5 +1,5 @@
-blobcache.io/blobcache v0.0.0-20250816021103-f0b957e36f05 h1:bDv3Fcy97V3O5fahMHbhf7tj6XcFxy8TcpY/5FdZ6o8=
-blobcache.io/blobcache v0.0.0-20250816021103-f0b957e36f05/go.mod h1:lVE9fil7eKDl3JtqOl8FsMAAlf8xP9QpTSWFC7k+EEA=
+blobcache.io/blobcache v0.0.0-20250816174412-b4201ddd33af h1:x9QSNJZJOKxUi2hTuzzavFZqYr/WZvpsZcw/7KvMltY=
+blobcache.io/blobcache v0.0.0-20250816174412-b4201ddd33af/go.mod h1:lVE9fil7eKDl3JtqOl8FsMAAlf8xP9QpTSWFC7k+EEA=
 filippo.io/edwards25519 v1.1.0 h1:FNf4tywRC1HmFuKW5xopWpigGjJKiJSV0Cqo0cJWDaA=
 filippo.io/edwards25519 v1.1.0/go.mod h1:BxyFTGdWcka3PhytdK4V28tE5sGfRvvvRV7EaN4VDT4=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=

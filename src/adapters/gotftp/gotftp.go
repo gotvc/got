@@ -48,12 +48,11 @@ func (d *Driver) GetFile(ctx *ftpserver.Context, p string, off int64) (int64, io
 	if err != nil {
 		return 0, nil, err
 	}
-	defer tx.Abort(d.ctx)
 	size, err := d.gotfs.SizeOfFile(d.ctx, txn, *root, p)
 	if err != nil {
 		return 0, nil, err
 	}
-	f := gotiofs.NewFile(d.ctx, &d.gotfs, txn, txn, *root, p)
+	f := gotiofs.NewFile(d.ctx, &d.gotfs, tx, *root, p)
 	off2, err := f.Seek(off, io.SeekStart)
 	if err != nil {
 		return 0, nil, err

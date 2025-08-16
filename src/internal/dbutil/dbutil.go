@@ -8,8 +8,14 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-func OpenDB(path string) (*sqlx.DB, error) {
-	return sqlx.Open("sqlite", path)
+func OpenDB(p string) (*sqlx.DB, error) {
+	// How To for PRAGMAs with the modernc.org/sqlite driver
+	// https://pkg.go.dev/modernc.org/sqlite@v1.34.4#Driver.Open
+	db, err := sqlx.Open("sqlite", "file:"+p+"?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)")
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
 }
 
 func DoTx(ctx context.Context, db *sqlx.DB, fn func(tx *sqlx.Tx) error) error {
