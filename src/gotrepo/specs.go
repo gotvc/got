@@ -117,7 +117,7 @@ func (r *Repo) spaceFromSpecs(specs []SpaceLayerSpec) (branches.Space, error) {
 	}
 	layers = append(layers, branches.Layer{
 		Prefix: "",
-		Target: r.specDir,
+		Target: r.space,
 	})
 	return branches.NewMultiSpace(layers)
 }

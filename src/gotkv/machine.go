@@ -141,12 +141,12 @@ func (a *Machine) Put(ctx context.Context, s stores.RW, x Root, key, value []byt
 
 // Delete returns a new version of the instance x where there is no entry for key.
 // If key does not exist no error is returned.
-func (a *Machine) Delete(ctx context.Context, s cadata.Store, x Root, key []byte) (*Root, error) {
+func (a *Machine) Delete(ctx context.Context, s stores.RW, x Root, key []byte) (*Root, error) {
 	return a.DeleteSpan(ctx, s, x, kvstreams.SingleItemSpan(key))
 }
 
 // DeleteSpan returns a new version of the instance x where there are no entries contained in span.
-func (a *Machine) DeleteSpan(ctx context.Context, s cadata.Store, x Root, span Span) (*Root, error) {
+func (a *Machine) DeleteSpan(ctx context.Context, s stores.RW, x Root, span Span) (*Root, error) {
 	return a.Mutate(ctx, s, x, Mutation{
 		Span: span,
 	})

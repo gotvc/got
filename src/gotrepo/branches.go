@@ -29,10 +29,10 @@ func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Co
 	return r.space.Create(ctx, name, params)
 }
 
-// CreateBranchWithSpec creates a branch using spec
-func (r *Repo) CreateBranchWithSpec(ctx context.Context, name string, spec BranchSpec) (*BranchInfo, error) {
-	return r.specDir.CreateWithSpec(ctx, name, spec)
-}
+// // CreateBranchWithSpec creates a branch using spec
+// func (r *Repo) CreateBranchWithSpec(ctx context.Context, name string, spec BranchSpec) (*BranchInfo, error) {
+// 	return r.space.CreateWithSpec(ctx, name, spec)
+// }
 
 // DeleteBranch deletes a branch
 func (r *Repo) DeleteBranch(ctx context.Context, name string) error {

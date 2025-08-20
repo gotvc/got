@@ -21,6 +21,7 @@ import (
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/gotrepo/internal/dbmig"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/dbutil"
@@ -64,7 +65,7 @@ type Repo struct {
 	ctx context.Context
 
 	workingDir FS // workingDir is repoFS with reserved paths filtered.
-	specDir    *branchSpecDir
+	gnsc       *gotns.Client
 	space      branches.Space
 }
 
@@ -98,6 +99,14 @@ func Init(p string) error {
 	if err != nil {
 		return err
 	}
+	ctx := context.TODO()
+	if err := r.gnsc.Init(ctx, blobcache.Handle{}); err != nil {
+		return err
+	}
+	if _, err := branches.CreateIfNotExists(ctx, r.space, nameMaster, branches.NewConfig(false)); err != nil {
+		return err
+	}
+
 	return r.Close()
 }
 
@@ -158,13 +167,11 @@ func Open(p string) (*Repo, error) {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
 	}
-	r.specDir = newBranchSpecDir(r.defaultVolumeSpec, r.MakeVolume, posixfs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
-	if r.space, err = r.spaceFromSpecs(r.config.Spaces); err != nil {
-		return nil, err
+	r.gnsc = &gotns.Client{
+		Blobcache: r.bc,
+		Machine:   gotns.New(),
 	}
-	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster, branches.NewConfig(false)); err != nil {
-		return nil, err
-	}
+	r.space = gotns.NewSpace(r.gnsc, blobcache.Handle{})
 	return r, nil
 }
 
@@ -242,8 +249,14 @@ func openLocalBlobcache(ctx context.Context, p string) (blobcache.Service, *sqlx
 	if err := bclocal.SetupDB(ctx, db); err != nil {
 		return nil, nil, err
 	}
+	const Schema_GOTNS = blobcache.Schema("gotns")
+	schemas := bclocal.DefaultSchemas()
+	schemas[Schema_GOTNS] = gotns.Schema{}
+	rootSpec := blobcache.DefaultLocalSpec()
+	rootSpec.Local.Schema = Schema_GOTNS
 	return bclocal.New(bclocal.Env{
 		DB:      db,
-		Schemas: bclocal.DefaultSchemas(),
+		Schemas: schemas,
+		Root:    rootSpec,
 	}), db, nil
 }

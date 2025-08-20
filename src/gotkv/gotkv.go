@@ -3,6 +3,7 @@ package gotkv
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
@@ -30,6 +31,22 @@ type Root struct {
 	Ref   gdat.Ref `json:"ref"`
 	Depth uint8    `json:"depth"`
 	First []byte   `json:"first,omitempty"`
+}
+
+func (r Root) Marshal() (ret []byte) {
+	ret = append(ret, r.Ref.Marshal()...)
+	ret = append(ret, r.Depth)
+	ret = append(ret, r.First...)
+	return ret
+}
+
+func (r *Root) Unmarshal(data []byte) error {
+	if err := r.Ref.Unmarshal(data[:gdat.RefSize]); err != nil {
+		return err
+	}
+	r.Depth = data[gdat.RefSize]
+	r.First = data[gdat.RefSize+1:]
+	return nil
 }
 
 func newRoot(x *ptree.Root[Entry, gdat.Ref]) *Root {
@@ -65,6 +82,10 @@ const (
 var (
 	ErrKeyNotFound = fmt.Errorf("key not found")
 )
+
+func IsErrKeyNotFound(err error) bool {
+	return errors.Is(err, ErrKeyNotFound)
+}
 
 var defaultReadOnlyMachine = &Machine{da: gdat.NewMachine()}
 

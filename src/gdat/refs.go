@@ -12,8 +12,8 @@ import (
 )
 
 const (
-	MaxRefBinaryLen = cadata.IDSize + DEKSize
-	Base64Alphabet  = cadata.Base64Alphabet
+	Base64Alphabet = cadata.Base64Alphabet
+	RefSize        = cadata.IDSize + DEKSize
 )
 
 var codec = base64.NewEncoding(Base64Alphabet).WithPadding(base64.NoPadding)
@@ -21,6 +21,22 @@ var codec = base64.NewEncoding(Base64Alphabet).WithPadding(base64.NoPadding)
 type Ref struct {
 	CID cadata.ID
 	DEK DEK
+}
+
+func (r *Ref) Marshal() []byte {
+	var ret []byte
+	ret = append(ret, r.CID[:]...)
+	ret = append(ret, r.DEK[:]...)
+	return ret
+}
+
+func (r *Ref) Unmarshal(data []byte) error {
+	if len(data) != RefSize {
+		return fmt.Errorf("invalid ref length: %d", len(data))
+	}
+	copy(r.CID[:], data[:cadata.IDSize])
+	copy(r.DEK[:], data[cadata.IDSize:])
+	return nil
 }
 
 func (r Ref) MarshalText() ([]byte, error) {
