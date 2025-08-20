@@ -89,7 +89,7 @@ func (r layered) List(ctx context.Context, span Span, limit int) (ret []string, 
 	return ret, err
 }
 
-func (s layered) Open(ctx context.Context, k string) (*Volume, error) {
+func (s layered) Open(ctx context.Context, k string) (Volume, error) {
 	layer, err := s.find(k)
 	if err != nil {
 		return nil, err

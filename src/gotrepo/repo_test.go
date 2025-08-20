@@ -140,10 +140,14 @@ func newTestRepo(t testing.TB) *Repo {
 	repo, err := Open(dirpath)
 	require.NoError(t, err)
 	require.NotNil(t, repo)
+	t.Cleanup(func() {
+		require.NoError(t, repo.Close())
+	})
 	return repo
 }
 
 func checkFileContent(t testing.TB, repo *Repo, p string, r io.Reader) {
+	t.Helper()
 	ctx := testutil.Context(t)
 	pr, pw := io.Pipe()
 	go func() {

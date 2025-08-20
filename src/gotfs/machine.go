@@ -14,6 +14,7 @@ import (
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs/gotlob"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/stores"
 )
 
 const (
@@ -152,7 +153,7 @@ func (a *Machine) deleteOutside(ctx context.Context, s cadata.Store, root gotkv.
 	return x, err
 }
 
-func (a *Machine) ForEach(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Info) error) error {
+func (a *Machine) ForEach(ctx context.Context, s cadata.Getter, root Root, p string, fn func(p string, md *Info) error) error {
 	p = cleanPath(p)
 	fn2 := func(ent gotkv.Entry) error {
 		if !isExtentKey(ent.Key) {
@@ -173,7 +174,7 @@ func (a *Machine) ForEach(ctx context.Context, s cadata.Store, root Root, p stri
 }
 
 // ForEachLeaf calls fn with each regular file in root, beneath p.
-func (a *Machine) ForEachLeaf(ctx context.Context, s cadata.Store, root Root, p string, fn func(p string, md *Info) error) error {
+func (a *Machine) ForEachLeaf(ctx context.Context, s cadata.Getter, root Root, p string, fn func(p string, md *Info) error) error {
 	return a.ForEach(ctx, s, root, p, func(p string, md *Info) error {
 		if os.FileMode(md.Mode).IsDir() {
 			return nil
@@ -184,17 +185,17 @@ func (a *Machine) ForEachLeaf(ctx context.Context, s cadata.Store, root Root, p 
 
 // Graft places branch at p in root.
 // If p == "" then branch is returned unaltered.
-func (a *Machine) Graft(ctx context.Context, ms, ds cadata.Store, root Root, p string, branch Root) (*Root, error) {
+func (a *Machine) Graft(ctx context.Context, ss [2]stores.RW, root Root, p string, branch Root) (*Root, error) {
 	p = cleanPath(p)
 	if p == "" {
 		return &branch, nil
 	}
-	root2, err := a.MkdirAll(ctx, ms, root, parentPath(p))
+	root2, err := a.MkdirAll(ctx, ss[1], root, parentPath(p))
 	if err != nil {
 		return nil, err
 	}
 	k := makeInfoKey(p)
-	return a.Splice(ctx, ms, ds, []Segment{
+	return a.Splice(ctx, ss, []Segment{
 		{
 			Span: gotkv.Span{Begin: nil, End: k},
 			Contents: Expr{
@@ -230,7 +231,7 @@ func (a *Machine) MaxInfo(ctx context.Context, ms cadata.Store, root Root, span 
 	return a.maxInfo(ctx, ms, root.ToGotKV(), span)
 }
 
-func (a *Machine) maxInfo(ctx context.Context, ms cadata.Store, root gotkv.Root, span Span) (string, *Info, error) {
+func (a *Machine) maxInfo(ctx context.Context, ms cadata.Getter, root gotkv.Root, span Span) (string, *Info, error) {
 	ent, err := a.gotkv.MaxEntry(ctx, ms, root, span)
 	if err != nil {
 		return "", nil, err
@@ -262,7 +263,7 @@ func (a *Machine) maxInfo(ctx context.Context, ms cadata.Store, root gotkv.Root,
 	}
 }
 
-func (a *Machine) Check(ctx context.Context, s Store, root Root, checkData func(ref gdat.Ref) error) error {
+func (a *Machine) Check(ctx context.Context, s stores.Reading, root Root, checkData func(ref gdat.Ref) error) error {
 	var lastPath *string
 	var lastOffset *uint64
 	return a.gotkv.ForEach(ctx, s, *root.toGotKV(), gotkv.Span{}, func(ent gotkv.Entry) error {
@@ -316,8 +317,8 @@ func (a *Machine) Check(ctx context.Context, s Store, root Root, checkData func(
 	})
 }
 
-func (a *Machine) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*Root, error) {
-	b := a.NewBuilder(ctx, ms, ds)
+func (a *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (*Root, error) {
+	b := a.NewBuilder(ctx, ss[1], ss[0])
 	for i, seg := range segs {
 		if i > 0 && bytes.Compare(segs[i-1].Span.End, segs[i].Span.Begin) > 0 {
 			return nil, fmt.Errorf("segs out of order, %d end=%q %d begin=%q", i-1, segs[i-1].Span.End, i, segs[i].Span.Begin)
@@ -325,7 +326,7 @@ func (a *Machine) Splice(ctx context.Context, ms, ds Store, segs []Segment) (*Ro
 
 		var root gotkv.Root
 		if seg.Contents.Root.Ref.IsZero() {
-			r, err := a.gotkv.NewEmpty(ctx, ms)
+			r, err := a.gotkv.NewEmpty(ctx, ss[0])
 			if err != nil {
 				return nil, err
 			}

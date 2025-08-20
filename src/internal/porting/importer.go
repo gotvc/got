@@ -7,14 +7,14 @@ import (
 	"io"
 	"path"
 	"runtime"
+	"strings"
 
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/metrics"
+	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/units"
 	"go.brendoncarroll.net/state"
-	"go.brendoncarroll.net/state/cadata"
-	"go.brendoncarroll.net/state/kv"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
@@ -23,18 +23,18 @@ import (
 
 type Importer struct {
 	gotfs *gotfs.Machine
-	cache kv.Store[string, Entry]
+	cache DirState
 
-	ms, ds cadata.Store
+	ms, ds stores.RW
 }
 
-func NewImporter(fsag *gotfs.Machine, cache kv.Store[string, Entry], ms, ds cadata.Store) *Importer {
+func NewImporter(fsag *gotfs.Machine, cache DirState, ss [2]stores.RW) *Importer {
 	return &Importer{
 		gotfs: fsag,
 		cache: cache,
 
-		ms: ms,
-		ds: ds,
+		ms: ss[1],
+		ds: ss[0],
 	}
 }
 
@@ -64,8 +64,8 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 	if err != nil {
 		return nil, err
 	}
-	slices.SortFunc(dirents, func(a, b posixfs.DirEnt) bool {
-		return a.Name < b.Name
+	slices.SortFunc(dirents, func(a, b posixfs.DirEnt) int {
+		return strings.Compare(a.Name, b.Name)
 	})
 	metrics.SetDenom(ctx, "paths", len(dirents), "paths")
 	for _, dirent := range dirents {
@@ -85,7 +85,7 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 			},
 		})
 	}
-	return pr.gotfs.Splice(ctx, pr.ms, pr.ds, changes)
+	return pr.gotfs.Splice(ctx, [2]stores.RW{pr.ms, pr.ds}, changes)
 }
 
 func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
@@ -118,7 +118,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 			return nil, err
 		}
 		defer f.Close()
-		root, err = pr.gotfs.FileFromReader(ctx, pr.ms, pr.ds, finfo.Mode(), f)
+		root, err = pr.gotfs.FileFromReader(ctx, [2]stores.RW{pr.ms, pr.ds}, finfo.Mode(), f)
 		if err != nil {
 			return nil, err
 		}
@@ -138,7 +138,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 	return root, nil
 }
 
-func importFileConcurrent(ctx context.Context, fsag *gotfs.Machine, ms, ds cadata.Store, fsx posixfs.FS, p string, numWorkers int) (*gotfs.Root, error) {
+func importFileConcurrent(ctx context.Context, fsag *gotfs.Machine, ms, ds stores.RW, fsx posixfs.FS, p string, numWorkers int) (*gotfs.Root, error) {
 	stat, err := fsx.Stat(p)
 	if err != nil {
 		return nil, err
@@ -159,7 +159,7 @@ func importFileConcurrent(ctx context.Context, fsag *gotfs.Machine, ms, ds cadat
 		}
 		rs[i] = io.LimitReader(f, end-start)
 	}
-	return fsag.FileFromReaders(ctx, ms, ds, stat.Mode(), rs)
+	return fsag.FileFromReaders(ctx, [2]stores.RW{ms, ds}, stat.Mode(), rs)
 }
 
 func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
@@ -174,11 +174,11 @@ func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
 	return start, end
 }
 
-func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms, ds cadata.Store) (*gotfs.Root, error) {
+func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms, ds stores.RW) (*gotfs.Root, error) {
 	return fsag.NewEmpty(ctx, ms)
 }
 
-func needsUpdate(ctx context.Context, cache Cache, p string, finfo posixfs.FileInfo) (bool, error) {
+func needsUpdate(ctx context.Context, cache DirState, p string, finfo posixfs.FileInfo) (bool, error) {
 	var ent Entry
 	err := cache.Get(ctx, p, &ent)
 	if state.IsErrNotFound[string](err) {

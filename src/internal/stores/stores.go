@@ -70,3 +70,19 @@ func NewMem() cadata.Store {
 func NewVoid() cadata.Store {
 	return cadata.NewVoid(gdat.Hash, 1<<22)
 }
+
+// Reading is used for read-only operations.
+type Reading interface {
+	cadata.Getter
+}
+
+// Writing is used for additive copy-on-write operations.
+type Writing interface {
+	cadata.PostExister
+}
+
+// Writing is used for read-write operations.
+type RW interface {
+	Reading
+	Writing
+}

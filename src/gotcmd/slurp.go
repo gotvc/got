@@ -7,6 +7,7 @@ import (
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/internal/serde"
+	"github.com/gotvc/got/src/internal/stores"
 	"github.com/spf13/cobra"
 )
 
@@ -28,22 +29,20 @@ func newSlurpCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 			}
 			defer f.Close()
 
-			st, err := repo.GetImportStores(ctx, "")
-			if err != nil {
-				return err
-			}
-			fsag := gotfs.NewMachine()
-			root, err := fsag.FileFromReader(ctx, st.FS, st.Raw, 0o755, f)
-			if err != nil {
-				return err
-			}
-			w := cmd.OutOrStdout()
-			data, err := serde.MarshalPEM(root)
-			if err != nil {
-				return err
-			}
-			w.Write(data)
-			return nil
+			return repo.DoWithStore(ctx, "", func(st stores.RW) error {
+				fsag := gotfs.NewMachine()
+				root, err := fsag.FileFromReader(ctx, [2]stores.RW{st, st}, 0o755, f)
+				if err != nil {
+					return err
+				}
+				w := cmd.OutOrStdout()
+				data, err := serde.MarshalPEM(root)
+				if err != nil {
+					return err
+				}
+				w.Write(data)
+				return nil
+			})
 		},
 	}
 

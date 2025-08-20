@@ -6,8 +6,9 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/gotvc/got"
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/spf13/cobra"
 	"go.brendoncarroll.net/tai64"
@@ -26,7 +27,7 @@ func newCommitCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 			r := metrics.NewTTYRenderer(collector, cmd.OutOrStdout())
 			defer r.Close()
 			now := tai64.Now().TAI64()
-			return repo.Commit(ctx, got.SnapInfo{
+			return repo.Commit(ctx, gotvc.SnapInfo{
 				Message:    "",
 				CreatedAt:  now,
 				AuthoredAt: now,
@@ -47,7 +48,7 @@ func newHistoryCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 			pr, pw := io.Pipe()
 			eg := errgroup.Group{}
 			eg.Go(func() error {
-				err := repo.History(ctx, "", func(ref got.Ref, c got.Snap) error {
+				err := repo.History(ctx, "", func(ref gdat.Ref, c gotvc.Snap) error {
 					fmt.Fprintf(pw, "#%04d\t%v\n", c.N, ref.CID)
 					fmt.Fprintf(pw, "Created At: %v\n", c.CreatedAt.GoTime().Local().String())
 					fmt.Fprintf(pw, "Message: %s\n", c.Message)

@@ -6,8 +6,8 @@ import (
 	"io"
 
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 var _ io.ReadSeeker = &Reader{}
@@ -15,14 +15,14 @@ var _ io.ReadSeeker = &Reader{}
 type Reader struct {
 	ctx    context.Context
 	a      *Machine
-	ms, ds cadata.Store
+	ms, ds stores.Reading
 	root   Root
 	prefix []byte
 
 	offset int64
 }
 
-func (a *Machine) NewReader(ctx context.Context, ms, ds cadata.Store, root Root, prefix []byte) (*Reader, error) {
+func (a *Machine) NewReader(ctx context.Context, ms, ds stores.Reading, root Root, prefix []byte) (*Reader, error) {
 	return &Reader{
 		ctx:    ctx,
 		a:      a,
@@ -93,7 +93,7 @@ func (r *Reader) ReadAt(buf []byte, offset int64) (int, error) {
 	return n, io.EOF
 }
 
-func (r *Reader) readFromIterator(ctx context.Context, it *gotkv.Iterator, ds cadata.Store, start uint64, buf []byte) (int, error) {
+func (r *Reader) readFromIterator(ctx context.Context, it *gotkv.Iterator, ds stores.Reading, start uint64, buf []byte) (int, error) {
 	var ent gotkv.Entry
 	for {
 		if err := it.Next(ctx, &ent); err != nil {

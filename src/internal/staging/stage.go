@@ -3,7 +3,6 @@ package staging
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"path"
 	"strings"
@@ -11,16 +10,16 @@ import (
 	"errors"
 
 	"go.brendoncarroll.net/state"
-	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/state/kv"
 	"go.brendoncarroll.net/stdctx/logctx"
 
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/metrics"
+	"github.com/gotvc/got/src/internal/stores"
 )
 
 type Storage interface {
-	kv.Store[[]byte, []byte]
+	kv.Store[string, Operation]
 }
 
 type Operation struct {
@@ -53,7 +52,7 @@ func (s *Stage) Put(ctx context.Context, p string, root gotfs.Root) error {
 	op := Operation{
 		Put: (*PutOp)(&root),
 	}
-	return s.storage.Put(ctx, []byte(p), jsonMarshal(op))
+	return s.storage.Put(ctx, p, op)
 }
 
 // Delete removes a file at p with root
@@ -65,44 +64,35 @@ func (s *Stage) Delete(ctx context.Context, p string) error {
 	fo := Operation{
 		Delete: &DeleteOp{},
 	}
-	return s.storage.Put(ctx, []byte(p), jsonMarshal(fo))
+	return s.storage.Put(ctx, p, fo)
 }
 
 func (s *Stage) Discard(ctx context.Context, p string) error {
 	p = cleanPath(p)
-	return s.storage.Delete(ctx, []byte(p))
+	return s.storage.Delete(ctx, p)
 }
 
 // Get returns the operation, if any, staged for the path p
 // If there is no operation staged Get returns (nil, nil)
 func (s *Stage) Get(ctx context.Context, p string) (*Operation, error) {
 	p = cleanPath(p)
-	data, err := kv.Get(ctx, s.storage, []byte(p))
+	op, err := kv.Get(ctx, s.storage, p)
 	if err != nil {
 		if errors.Is(err, state.ErrNotFound[string]{Key: p}) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	var op Operation
-	if err := json.Unmarshal(data, &op); err != nil {
-		return nil, fmt.Errorf("%w while parsing staging operation: %q", err, data)
-	}
 	return &op, nil
 }
 
 func (s *Stage) ForEach(ctx context.Context, fn func(p string, op Operation) error) error {
-	return kv.ForEach(ctx, s.storage, state.TotalSpan[[]byte](), func(k []byte) error {
-		v, err := kv.Get(ctx, s.storage, k)
+	return kv.ForEach(ctx, s.storage, state.TotalSpan[string](), func(k string) error {
+		op, err := kv.Get(ctx, s.storage, k)
 		if err != nil {
 			return err
 		}
-		var fo Operation
-		if err := json.Unmarshal(v, &fo); err != nil {
-			return fmt.Errorf("%w while parsing staging operation: %q", err, v)
-		}
-		p := string(k)
-		return fn(p, fo)
+		return fn(k, op)
 	})
 }
 
@@ -115,19 +105,19 @@ func (s *Stage) CheckConflict(ctx context.Context, p string) error {
 	parts := strings.Split(p, "/")
 	for i := len(parts) - 1; i > 0; i-- {
 		conflictPath := strings.Join(parts[:i], "/")
-		k := []byte(cleanPath(conflictPath))
-		data, err := kv.Get(ctx, s.storage, k)
-		if err != nil && !state.IsErrNotFound[[]byte](err) {
+		k := cleanPath(conflictPath)
+		op, err := kv.Get(ctx, s.storage, k)
+		if err != nil && !state.IsErrNotFound[string](err) {
 			return err
 		}
-		if len(data) > 0 {
+		if op != (Operation{}) {
 			return newError(p, conflictPath)
 		}
 	}
 	// check for descendents
-	if err := kv.ForEach[[]byte](ctx, s.storage, state.TotalSpan[[]byte](), func(k []byte) error {
-		if bytes.HasPrefix(k, []byte(p+"/")) {
-			return newError(p, string(k))
+	if err := kv.ForEach(ctx, s.storage, state.TotalSpan[string](), func(k string) error {
+		if bytes.HasPrefix([]byte(k), []byte(p+"/")) {
+			return newError(p, k)
 		}
 		return nil
 	}); err != nil {
@@ -137,24 +127,24 @@ func (s *Stage) CheckConflict(ctx context.Context, p string) error {
 }
 
 func (s *Stage) Reset(ctx context.Context) error {
-	return kv.ForEach[[]byte](ctx, s.storage, state.TotalSpan[[]byte](), func(k []byte) error {
+	return kv.ForEach(ctx, s.storage, state.TotalSpan[string](), func(k string) error {
 		return s.storage.Delete(ctx, k)
 	})
 }
 
 func (s *Stage) IsEmpty(ctx context.Context) (bool, error) {
-	var keys [1][]byte
-	n, err := s.storage.List(ctx, state.TotalSpan[[]byte](), keys[:])
+	var keys [1]string
+	n, err := s.storage.List(ctx, state.TotalSpan[string](), keys[:])
 	if err != nil {
 		return false, err
 	}
 	return n == 0, nil
 }
 
-func (s *Stage) Apply(ctx context.Context, fsag *gotfs.Machine, ms, ds cadata.Store, base *gotfs.Root) (*gotfs.Root, error) {
+func (s *Stage) Apply(ctx context.Context, fsag *gotfs.Machine, ss [2]stores.RW, base *gotfs.Root) (*gotfs.Root, error) {
 	if base == nil {
 		var err error
-		base, err = fsag.NewEmpty(ctx, ms)
+		base, err = fsag.NewEmpty(ctx, ss[1])
 		if err != nil {
 			return nil, err
 		}
@@ -164,7 +154,7 @@ func (s *Stage) Apply(ctx context.Context, fsag *gotfs.Machine, ms, ds cadata.St
 		switch {
 		case fileOp.Put != nil:
 			var err error
-			base, err = fsag.MkdirAll(ctx, ms, *base, path.Dir(p))
+			base, err = fsag.MkdirAll(ctx, ss[1], *base, path.Dir(p))
 			if err != nil {
 				return err
 			}
@@ -193,20 +183,12 @@ func (s *Stage) Apply(ctx context.Context, fsag *gotfs.Machine, ms, ds cadata.St
 	ctx, cf := metrics.Child(ctx, "splicing")
 	defer cf()
 	metrics.SetDenom(ctx, "segs", len(segs), "segs")
-	root, err := fsag.Splice(ctx, ms, ds, segs)
+	root, err := fsag.Splice(ctx, ss, segs)
 	if err != nil {
 		return nil, err
 	}
 	metrics.AddInt(ctx, "segs", len(segs), "segs")
 	return root, nil
-}
-
-func jsonMarshal(x any) []byte {
-	data, err := json.Marshal(x)
-	if err != nil {
-		panic(err)
-	}
-	return data
 }
 
 func cleanPath(p string) string {

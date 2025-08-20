@@ -61,24 +61,14 @@ func (s *Space) List(ctx context.Context, span branches.Span, limit int) (ret []
 	return ret, err
 }
 
-func (s *Space) Open(ctx context.Context, name string) (*branches.Volume, error) {
-	v, err := s.inner.Open(ctx, name)
-	if err != nil {
+func (s *Space) Open(ctx context.Context, name string) (branches.Volume, error) {
+	var vol branches.Volume
+	if err := s.hook(ctx, "OPEN", name, func(ctx context.Context) error {
+		var err error
+		vol, err = s.inner.Open(ctx, name)
+		return err
+	}); err != nil {
 		return nil, err
 	}
-	return s.wrapVolume(v, name), nil
-}
-
-func (s *Space) wrapVolume(x *branches.Volume, name string) *branches.Volume {
-	storeHook := func(ctx context.Context, v Verb, next func(context.Context) error) error {
-		return s.hook(ctx, v, name, next)
-	}
-	return &branches.Volume{
-		Cell: newCell(x.Cell, func(ctx context.Context, verb Verb, next func(context.Context) error) error {
-			return s.hook(ctx, verb, name, next)
-		}),
-		VCStore:  newStore(x.VCStore, storeHook),
-		FSStore:  newStore(x.FSStore, storeHook),
-		RawStore: newStore(x.RawStore, storeHook),
-	}
+	return vol, nil
 }

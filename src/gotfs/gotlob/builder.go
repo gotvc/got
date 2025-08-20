@@ -10,15 +10,15 @@ import (
 	"github.com/gotvc/got/src/chunking"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 // Builder chunks large objects, stores them, and then writes extents to a gotkv instance.
 type Builder struct {
 	ag     *Machine
 	ctx    context.Context
-	ms, ds cadata.Store
+	ms, ds stores.RW
 
 	chunker *chunking.ContentDefined
 	kvb     *gotkv.Builder
@@ -29,7 +29,7 @@ type Builder struct {
 	err     error
 }
 
-func (a *Machine) NewBuilder(ctx context.Context, ms, ds cadata.Store) *Builder {
+func (a *Machine) NewBuilder(ctx context.Context, ms, ds stores.RW) *Builder {
 	if ms.MaxSize() < a.gotkv.MaxSize() {
 		panic(fmt.Sprint("store size too small", ms.MaxSize()))
 	}

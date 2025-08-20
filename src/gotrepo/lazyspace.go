@@ -60,7 +60,7 @@ func (ls *lazySpace) List(ctx context.Context, span branches.Span, limit int) ([
 	return space.List(ctx, span, limit)
 }
 
-func (ls *lazySpace) Open(ctx context.Context, name string) (*branches.Volume, error) {
+func (ls *lazySpace) Open(ctx context.Context, name string) (branches.Volume, error) {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return nil, err

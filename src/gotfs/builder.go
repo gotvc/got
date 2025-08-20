@@ -8,19 +8,25 @@ import (
 
 	"github.com/gotvc/got/src/gotfs/gotlob"
 	"github.com/gotvc/got/src/gotkv"
+	"go.brendoncarroll.net/state/cadata"
 )
+
+type GetPostExister interface {
+	cadata.Getter
+	cadata.PostExister
+}
 
 // Builder manages building a filesystem.
 type Builder struct {
 	a   *Machine
 	ctx context.Context
-	ms  Store
+	ms  GetPostExister
 
 	dirStack []string
 	b        *gotlob.Builder
 }
 
-func (a *Machine) NewBuilder(ctx context.Context, ms, ds Store) *Builder {
+func (a *Machine) NewBuilder(ctx context.Context, ms, ds GetPostExister) *Builder {
 	b := &Builder{
 		a:   a,
 		ctx: ctx,

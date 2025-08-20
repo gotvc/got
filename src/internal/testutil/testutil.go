@@ -24,6 +24,7 @@ func Context(t testing.TB) context.Context {
 }
 
 func StreamsEqual(t testing.TB, expected, actual io.Reader) {
+	t.Helper()
 	br1 := bufio.NewReaderSize(expected, 1<<20)
 	br2 := bufio.NewReaderSize(actual, 1<<20)
 	for i := 0; ; i++ {

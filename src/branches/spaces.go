@@ -72,7 +72,7 @@ type Space interface {
 	List(ctx context.Context, span Span, limit int) ([]string, error)
 
 	// Open returns a volume for viewing and modifying the branch contents.
-	Open(ctx context.Context, name string) (*Volume, error)
+	Open(ctx context.Context, name string) (Volume, error)
 }
 
 func CreateIfNotExists(ctx context.Context, r Space, k string, cfg Config) (*Info, error) {

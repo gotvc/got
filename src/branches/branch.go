@@ -8,6 +8,8 @@ import (
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotvc"
+	"github.com/gotvc/got/src/internal/stores"
+	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/tai64"
 	"golang.org/x/exp/slices"
 )
@@ -70,11 +72,11 @@ type Annotation struct {
 }
 
 func SortAnnotations(s []Annotation) {
-	slices.SortFunc(s, func(a, b Annotation) bool {
+	slices.SortFunc(s, func(a, b Annotation) int {
 		if a.Key != b.Key {
-			return a.Key < b.Key
+			return strings.Compare(a.Key, b.Key)
 		}
-		return a.Value < b.Value
+		return strings.Compare(a.Value, b.Value)
 	})
 }
 
@@ -137,9 +139,8 @@ func (m Mode) String() string {
 }
 
 // SetHead forcibly sets the head of the branch.
-func SetHead(ctx context.Context, v Volume, src StoreTriple, snap Snap) error {
-	dst := v.StoreTriple()
-	return applySnapshot(ctx, v.Cell, func(s *Snap) (*Snap, error) {
+func SetHead(ctx context.Context, dst Volume, src cadata.Getter, snap Snap) error {
+	return applySnapshot(ctx, dst, func(dst stores.RW, x *Snap) (*Snap, error) {
 		if err := syncStores(ctx, src, dst, snap); err != nil {
 			return nil, err
 		}
@@ -148,15 +149,14 @@ func SetHead(ctx context.Context, v Volume, src StoreTriple, snap Snap) error {
 }
 
 // GetHead returns the branch head
-func GetHead(ctx context.Context, v Volume) (*Snap, error) {
-	return getSnapshot(ctx, v.Cell)
+func GetHead(ctx context.Context, v Volume) (*Snap, Tx, error) {
+	return getSnapshot(ctx, v)
 }
 
 // Apply applies fn to branch, any missing data will be pulled from scratch
-func Apply(ctx context.Context, v Volume, src StoreTriple, fn func(*Snap) (*Snap, error)) error {
-	dst := v.StoreTriple()
-	return applySnapshot(ctx, v.Cell, func(x *Snap) (*Snap, error) {
-		y, err := fn(x)
+func Apply(ctx context.Context, dstVol Volume, src stores.Reading, fn func(stores.RW, *Snap) (*Snap, error)) error {
+	return applySnapshot(ctx, dstVol, func(dst stores.RW, x *Snap) (*Snap, error) {
+		y, err := fn(dst, x)
 		if err != nil {
 			return nil, err
 		}
@@ -169,19 +169,20 @@ func Apply(ctx context.Context, v Volume, src StoreTriple, fn func(*Snap) (*Snap
 	})
 }
 
-func History(ctx context.Context, v Volume, vcag *gotvc.Machine, fn func(ref gdat.Ref, snap Snap) error) error {
-	snap, err := GetHead(ctx, v)
+func History(ctx context.Context, vcag *gotvc.Machine, v Volume, fn func(ref gdat.Ref, snap Snap) error) error {
+	snap, tx, err := GetHead(ctx, v)
 	if err != nil {
 		return err
 	}
+	defer tx.Abort(ctx)
 	if snap == nil {
 		return nil
 	}
-	ref := vcag.RefFromSnapshot(*snap, v.VCStore)
+	ref := vcag.RefFromSnapshot(*snap, tx)
 	if err := fn(ref, *snap); err != nil {
 		return err
 	}
-	return gotvc.ForEach(ctx, v.VCStore, snap.Parents, fn)
+	return gotvc.ForEach(ctx, tx, snap.Parents, fn)
 }
 
 // NewGotFS creates a new gotfs.Machine suitable for writing to the branch

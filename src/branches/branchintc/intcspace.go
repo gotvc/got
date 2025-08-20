@@ -4,7 +4,7 @@ package branchintc
 import (
 	"context"
 
-	"go.inet256.org/inet256/pkg/inet256"
+	"go.inet256.org/inet256/src/inet256"
 )
 
 type PeerID = inet256.Addr

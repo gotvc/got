@@ -10,12 +10,23 @@ import (
 )
 
 type Config struct {
-	Spaces []SpaceLayerSpec `json:"spaces"`
+	Spaces    MultiSpaceSpec `json:"spaces"`
+	Blobcache BlobcacheSpec  `json:"blobcache"`
+}
+
+type BlobcacheSpec struct {
+	// InProcess runs a local blobcache instance within the repository.
+	InProcess *struct{} `json:"in_process,omitempty"`
+	// HTTP connects to blobcache over HTTP
+	HTTP *string `json:"http,omitempty"`
 }
 
 func DefaultConfig() Config {
 	return Config{
 		Spaces: []SpaceLayerSpec{},
+		Blobcache: BlobcacheSpec{
+			InProcess: &struct{}{},
+		},
 	}
 }
 

@@ -7,7 +7,6 @@ import (
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.uber.org/zap"
 
-	"github.com/gotvc/got"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/internal/metrics"
 )
@@ -22,11 +21,10 @@ func NewRootCmd() *cobra.Command {
 		Short: "got is like git, but with an 'o'",
 	}
 	open := func() (*gotrepo.Repo, error) {
-		return got.OpenRepo(".")
+		return gotrepo.Open(".")
 	}
 	for _, cmd := range []*cobra.Command{
 		newInitCmd(),
-		newCloneCmd(),
 	} {
 		rootCmd.AddCommand(cmd)
 	}
@@ -47,17 +45,13 @@ func NewRootCmd() *cobra.Command {
 		newForkCmd,
 		newSyncCmd,
 
-		newIAMCmd,
 		newLocalIDCmd,
-		newServeCmd,
-		newServeQUICCmd,
 		newHTTPCmd,
 		newFTPCmd,
 
 		newSlurpCmd,
 		newCleanupCmd,
 		newDebugCmd,
-		newDerefCmd,
 		newScrubCmd,
 	} {
 		rootCmd.AddCommand(cmdf(open))

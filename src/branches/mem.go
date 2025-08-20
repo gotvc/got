@@ -4,28 +4,25 @@ import (
 	"context"
 	"sync"
 
-	"go.brendoncarroll.net/state/cadata"
-	"go.brendoncarroll.net/state/cells"
+	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/tai64"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
 
 type MemSpace struct {
-	newStore func() cadata.Store
-	newCell  func() cells.BytesCell
+	newVolume func() volumes.Volume
 
 	mu      sync.RWMutex
 	infos   map[string]Info
 	volumes map[string]Volume
 }
 
-func NewMem(newStore func() cadata.Store, newCell func() cells.BytesCell) Space {
+func NewMem(newVolume func() volumes.Volume) Space {
 	return &MemSpace{
-		newStore: newStore,
-		newCell:  newCell,
-		infos:    map[string]Info{},
-		volumes:  make(map[string]Volume),
+		newVolume: newVolume,
+		infos:     map[string]Info{},
+		volumes:   make(map[string]Volume),
 	}
 }
 
@@ -49,12 +46,7 @@ func (r *MemSpace) Create(ctx context.Context, name string, cfg Config) (*Info, 
 	if _, exists := r.infos[name]; exists {
 		return nil, ErrExists
 	}
-	r.volumes[name] = Volume{
-		Cell:     r.newCell(),
-		VCStore:  r.newStore(),
-		FSStore:  r.newStore(),
-		RawStore: r.newStore(),
-	}
+	r.volumes[name] = r.newVolume()
 	info := cfg.AsInfo()
 	info.CreatedAt = tai64.Now().TAI64()
 	r.infos[name] = info
@@ -101,12 +93,12 @@ func (r *MemSpace) List(ctx context.Context, span Span, limit int) (ret []string
 	return ret, nil
 }
 
-func (r *MemSpace) Open(ctx context.Context, name string) (*Volume, error) {
+func (r *MemSpace) Open(ctx context.Context, name string) (Volume, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.volumes[name]; !exists {
 		return nil, ErrNotExist
 	}
 	v := r.volumes[name]
-	return &v, nil
+	return v, nil
 }
