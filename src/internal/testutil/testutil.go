@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	mrand "math/rand"
+	"net"
 	"strconv"
 	"testing"
 
@@ -66,4 +67,13 @@ func RandomFiles(seed int, numFiles int, sizeMean, sizeSig float64, fn func(stri
 		p := fmt.Sprintf(fmtStr, i)
 		fn(p, RandomStream(i, size))
 	}
+}
+
+func PacketConn(t testing.TB) net.PacketConn {
+	pc, err := net.ListenPacket("udp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		pc.Close()
+	})
+	return pc
 }

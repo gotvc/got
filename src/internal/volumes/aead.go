@@ -37,9 +37,9 @@ type AEADTx struct {
 	aead cipher.AEAD
 }
 
-func (tx *AEADTx) Commit(ctx context.Context, root []byte) error {
+func (tx *AEADTx) Commit(ctx context.Context) error {
 	// TODO: seal root
-	return tx.tx.Commit(ctx, root)
+	return tx.tx.Commit(ctx)
 }
 
 func (tx *AEADTx) Abort(ctx context.Context) error {
@@ -49,6 +49,10 @@ func (tx *AEADTx) Abort(ctx context.Context) error {
 func (tx *AEADTx) Load(ctx context.Context, dst *[]byte) error {
 	// TODO: unseal dst
 	return tx.tx.Load(ctx, dst)
+}
+
+func (tx *AEADTx) Save(ctx context.Context, root []byte) error {
+	return tx.tx.Save(ctx, root)
 }
 
 func (tx *AEADTx) Post(ctx context.Context, data []byte) (cid blobcache.CID, err error) {

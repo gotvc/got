@@ -18,14 +18,15 @@ import (
 )
 
 func TestMultiRepoSync(t *testing.T) {
-	t.Skip("network protocols are still unstable")
 
+	t.Skip("network protocols are still unstable")
 	ctx := testutil.Context(t)
 	ctx, cf := context.WithCancel(ctx)
 	t.Cleanup(cf)
 	secretKey := [32]byte{}
 	p1, p2, pOrigin := initRepo(t), initRepo(t), initRepo(t)
 	origin := openRepo(t, pOrigin)
+	go origin.Serve(ctx, testutil.PacketConn(t))
 	for _, p := range []string{p1, p2} {
 		err := gotrepo.ConfigureRepo(p, func(x gotrepo.Config) gotrepo.Config {
 			originEP := origin.GetEndpoint(ctx)
@@ -74,7 +75,6 @@ func TestMultiRepoSync(t *testing.T) {
 	// require.NoError(t, err)
 	// t.Log("RULES", hostConfig.Policy.Rules)
 
-	go origin.Serve(ctx)
 	createBranch(t, r1, "origin/master")
 	createBranch(t, r1, "origin/mybranch")
 	require.Contains(t, listBranches(t, r2), "origin/master")

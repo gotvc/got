@@ -16,9 +16,10 @@ type Volume interface {
 var _ Tx = &blobcache.Tx{}
 
 type Tx interface {
-	Commit(ctx context.Context, root []byte) error
+	Commit(ctx context.Context) error
 	Abort(ctx context.Context) error
 	Load(ctx context.Context, dst *[]byte) error
+	Save(ctx context.Context, src []byte) error
 
 	Post(ctx context.Context, data []byte) (blobcache.CID, error)
 	Exists(ctx context.Context, cid blobcache.CID) (bool, error)
@@ -41,7 +42,10 @@ func Modify(ctx context.Context, vol Volume, fn func(dst cadata.PostExister, x [
 	if err != nil {
 		return err
 	}
-	return tx.Commit(ctx, y)
+	if err := tx.Save(ctx, y); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func View(ctx context.Context, vol Volume, fn func(src cadata.Getter, root []byte) error) error {

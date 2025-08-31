@@ -15,7 +15,6 @@ import (
 )
 
 type Info struct {
-	Mode        Mode         `json:"mode"`
 	Salt        []byte       `json:"salt"`
 	Annotations []Annotation `json:"annotations"`
 
@@ -30,18 +29,17 @@ func (i Info) Clone() Info {
 }
 
 func (i Info) AsConfig() Config {
-	return Config{Mode: i.Mode, Salt: i.Salt, Annotations: i.Annotations}
+	return Config{Salt: i.Salt, Annotations: i.Annotations}
 }
 
 // Config is non-volume, user-modifiable information associated with a branch.
 type Config struct {
-	Mode        Mode         `json:"mode"`
 	Salt        []byte       `json:"salt"`
 	Annotations []Annotation `json:"annotations"`
 }
 
 func (c Config) AsInfo() Info {
-	return Info{Mode: c.Mode, Salt: c.Salt, Annotations: c.Annotations}
+	return Info{Salt: c.Salt, Annotations: c.Annotations}
 }
 
 func NewConfig(public bool) Config {
@@ -52,7 +50,6 @@ func NewConfig(public bool) Config {
 	}
 	return Config{
 		Salt: salt,
-		Mode: ModeExpand,
 	}
 }
 
@@ -61,7 +58,6 @@ func (c Config) Clone() Config {
 	return Config{
 		Salt:        slices.Clone(c.Salt),
 		Annotations: slices.Clone(c.Annotations),
-		Mode:        c.Mode,
 	}
 }
 

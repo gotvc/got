@@ -2,6 +2,7 @@ package gotns
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"blobcache.io/blobcache/src/blobcache"
@@ -21,10 +22,18 @@ func NewSpace(client *Client, volh blobcache.Handle) *Space {
 }
 
 func (bs *Space) Create(ctx context.Context, name string, config branches.Config) (*branches.Info, error) {
-	if err := bs.client.CreateAt(ctx, bs.volh, name, branches.Info{}); err != nil {
+	info := branches.Info{
+		Salt:        config.Salt,
+		Annotations: config.Annotations,
+	}
+	aux, err := json.Marshal(info)
+	if err != nil {
 		return nil, err
 	}
-	return &branches.Info{}, nil
+	if err := bs.client.CreateAt(ctx, bs.volh, name, aux); err != nil {
+		return nil, err
+	}
+	return &info, nil
 }
 
 func (bs *Space) Get(ctx context.Context, name string) (*branches.Info, error) {

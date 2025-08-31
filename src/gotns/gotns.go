@@ -5,13 +5,20 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/gotled"
 	"github.com/gotvc/got/src/internal/stores"
-	"go.brendoncarroll.net/exp/streams"
 )
 
-type Root struct {
+// Root contains references to the entire state of the namespace, including the history.
+type Root = gotled.Root[State, Delta]
+
+func ParseRoot(data []byte) (Root, error) {
+	return gotled.Parse(data, parseState, parseDelta)
+}
+
+// State represents the current state of a namespace.
+type State struct {
 	// Groups maps group names to group information.
 	// Group information holds group's Owner list, and shared KEM key for the group
 	// to receive messages.
@@ -26,8 +33,10 @@ type Root struct {
 	// The value is a KEM ciphertext sent by the containing group owner to the member.
 	// The ciphertext contains the containing group's KEM private key encrypted with the member's KEM public key.
 	Memberships gotkv.Root
+
 	// Rules holds rules for the namespace, granting look or touch access to branches.
 	Rules gotkv.Root
+
 	// Branches holds the actual branch entries themselves.
 	// Branch entries contain a volume OID, and a set of rights (which is for Blobcache)
 	// They also contain a set of DEK hashes for the DEKs that should be used to encrypt the volume
@@ -35,17 +44,19 @@ type Root struct {
 	Branches gotkv.Root
 }
 
-func (r Root) Marshal(out []byte) []byte {
+func (s State) Marshal(out []byte) []byte {
 	const versionTag = 0
 	out = append(out, versionTag)
-	out = appendLP(out, r.Groups.Marshal())
-	out = appendLP(out, r.Memberships.Marshal())
-	out = appendLP(out, r.Rules.Marshal())
-	out = appendLP(out, r.Branches.Marshal())
+	out = appendLP(out, s.Groups.Marshal())
+	out = appendLP(out, s.Leaves.Marshal())
+	out = appendLP(out, s.Memberships.Marshal())
+	out = appendLP(out, s.Rules.Marshal())
+	out = appendLP(out, s.Branches.Marshal())
 	return out
 }
 
-func (r *Root) Unmarshal(data []byte) error {
+func (s *State) Unmarshal(data []byte) error {
+	// read version tag
 	if len(data) < 1 {
 		return fmt.Errorf("too short to contain version tag")
 	}
@@ -56,240 +67,139 @@ func (r *Root) Unmarshal(data []byte) error {
 	}
 	data = data[1:]
 
-	for _, dst := range []*gotkv.Root{&r.Groups, &r.Memberships, &r.Rules, &r.Branches} {
-		kvrData, n, err := readLP(data)
+	// read all of the gotkv roots
+	for _, dst := range []*gotkv.Root{&s.Groups, &s.Leaves, &s.Memberships, &s.Rules, &s.Branches} {
+		kvrData, rest, err := readLP(data)
 		if err != nil {
 			return err
 		}
 		if err := dst.Unmarshal(kvrData); err != nil {
 			return err
 		}
-		data = data[n:]
+		data = rest
 	}
 	return nil
 }
 
-func parseRoot(x []byte) (*Root, error) {
+func parseState(x []byte) (State, error) {
 	if len(x) == 0 {
-		return nil, nil
+		return State{}, nil
 	}
-	var root Root
-	if err := root.Unmarshal(x); err != nil {
-		return nil, err
+	var state State
+	if err := state.Unmarshal(x); err != nil {
+		return State{}, err
 	}
-	return &root, nil
+	return state, nil
+}
+
+// Delta can be applied to a State to produce a new State.
+type Delta []Op
+
+func parseDelta(data []byte) (Delta, error) {
+	var ret Delta
+	for len(data) > 0 {
+		op, rest, err := ReadOp(data)
+		if err != nil {
+			return Delta{}, err
+		}
+		data = rest
+		ret = append(ret, op)
+	}
+	return ret, nil
+}
+
+func (d Delta) Marshal(out []byte) []byte {
+	for _, op := range d {
+		out = AppendOp(out, op)
+	}
+	return out
 }
 
 type Machine struct {
 	gotkv gotkv.Machine
+	led   gotled.Machine[State, Delta]
 }
 
 func New() Machine {
 	return Machine{
 		gotkv: gotkv.NewMachine(1<<14, 1<<20),
+		led: gotled.Machine[State, Delta]{
+			ParseState: parseState,
+			ParseDelta: parseDelta,
+		},
 	}
 }
 
+// New creates a new root.
 func (m *Machine) New(ctx context.Context, s stores.RW) (*Root, error) {
-	var r Root
-	for _, dst := range []*gotkv.Root{&r.Groups, &r.Memberships, &r.Rules, &r.Branches} {
+	var state State
+	for _, dst := range []*gotkv.Root{&state.Groups, &state.Leaves, &state.Memberships, &state.Rules, &state.Branches} {
 		kvr, err := m.gotkv.NewEmpty(ctx, s)
 		if err != nil {
 			return nil, err
 		}
 		*dst = *kvr
 	}
-	return &r, nil
+	if err := m.ValidateState(ctx, s, state); err != nil {
+		panic(err)
+	}
+	root := m.led.Initial(state)
+	if err := m.ValidateChange(ctx, s, root.State, root.State, Delta{}); err != nil {
+		return nil, err
+	}
+	return &root, nil
 }
 
-func (m *Machine) Validate(ctx context.Context, src stores.Reading, prev, next *Root) error {
-	if prev == nil {
-		// if there is no previous root, then just make sure the next root is valid.
-		for _, kvr := range []gotkv.Root{next.Groups, next.Memberships, next.Rules, next.Branches} {
-			if kvr.Ref.CID.IsZero() {
-				return fmt.Errorf("gotns: one of the roots is uninitialized")
-			}
+// ValidateState checks the state in isolation.
+func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State) error {
+	for _, kvr := range []gotkv.Root{x.Leaves, x.Groups, x.Memberships, x.Rules, x.Branches} {
+		if kvr.Ref.CID.IsZero() {
+			return fmt.Errorf("gotns: one of the States is uninitialized")
 		}
-		return nil
 	}
-	if next == nil {
-		return fmt.Errorf("gotns: the next root must not be nil")
-	}
+	return nil
+}
 
+// ValidateChange checks the change between two states.
+// Prev is assumed to be a known good, valid state.
+func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, next State, delta Delta) error {
 	// TODO: first validate auth operations, ensure that all the differences are signed.
 	return nil
 }
 
-func (m *Machine) AddMember(ctx context.Context, s stores.RW, root Root, name string, member string) (*Root, error) {
-	// TODO: Need to make sure group exists first.
-	memRoot, err := m.gotkv.Mutate(ctx, s, root.Memberships,
-		addMember(Membership{
-			Group:  name,
-			Member: member,
-		}),
-	)
-	if err != nil {
-		return nil, err
+// appendLP16 appends a length-prefixed byte slice to out.
+// the length is encoded as a 16-bit big-endian integer.
+func appendLP16(out []byte, data []byte) []byte {
+	out = binary.BigEndian.AppendUint16(out, uint16(len(data)))
+	return append(out, data...)
+}
+
+// readLP16 reads a length-prefixed byte slice from data.
+// the length is encoded as a 16-bit big-endian integer.
+func readLP16(data []byte) ([]byte, error) {
+	dataLen := binary.BigEndian.Uint16(data)
+	if len(data) < 2+int(dataLen) {
+		return nil, fmt.Errorf("length-prefixed data too short")
 	}
-	root.Memberships = *memRoot
-	return &root, nil
-}
-
-func (m *Machine) RemoveMember(ctx context.Context, s stores.RW, root Root, group string, member string) (*Root, error) {
-	// TODO: Need to make sure group exists first.
-	memRoot, err := m.gotkv.Mutate(ctx, s, root.Memberships,
-		rmMember(group, member),
-	)
-	if err != nil {
-		return nil, err
-	}
-	root.Memberships = *memRoot
-	return &root, nil
-}
-func (m *Machine) GetGroup(ctx context.Context, s stores.Reading, root Root, name string) (*Group, error) {
-	return nil, nil
-}
-
-// NewEntry creates a new entry with the provided information
-// and produces KEMs for each group with access to the entry.
-func (m *Machine) NewEntry(ctx context.Context, name string, rights blobcache.ActionSet, volume blobcache.OID, secret *[32]byte) (Entry, error) {
-	entry := Entry{
-		Name:   name,
-		Rights: rights,
-		Volume: volume,
-	}
-	return entry, nil
-}
-
-type Entry struct {
-	Name   string
-	Volume blobcache.OID
-	Rights blobcache.ActionSet
-
-	// DEK hashes are the hashes of the DEKs for this entry.
-	// We have 2 because the actual contents of the volume are not consistent
-	// with the namespace.
-	// Rotating the key would require adding it in the namespace first
-	// and then re-encrypting the volume root with the new key.
-	DEKHashes [][32]byte
-
-	// KEMCtexts contains DEKs encrypted with KEMs for each group with access to the entry.
-	KEMCTexts map[[32]byte][]byte
-}
-
-func (e Entry) Key(buf []byte) []byte {
-	buf = append(buf, e.Name...)
-	return buf
-}
-
-func (e Entry) Value(buf []byte) []byte {
-	buf = append(buf, e.Volume[:]...)
-	buf = binary.BigEndian.AppendUint64(buf, uint64(e.Rights))
-	for pubHash, ctext := range e.KEMCTexts {
-		// each element is concatenated keyhash and ctext, and then appended.
-		buf = appendLP(buf, append(pubHash[:], ctext...))
-	}
-	return buf
-}
-
-func ParseEntry(key, value []byte) (Entry, error) {
-	var entry Entry
-	entry.Name = string(key)
-
-	if len(value) < 16+8 {
-		return Entry{}, fmt.Errorf("entry value too short")
-	}
-	entry.Volume = blobcache.OID(value[:16])
-	entry.Rights = blobcache.ActionSet(binary.BigEndian.Uint64(value[16:24]))
-
-	return entry, nil
-}
-
-func (m *Machine) GetEntry(ctx context.Context, s stores.Reading, root Root, name []byte) (*Entry, error) {
-	val, err := m.gotkv.Get(ctx, s, root.Branches, name)
-	if err != nil {
-		if gotkv.IsErrKeyNotFound(err) {
-			return nil, nil
-		}
-		return nil, err
-	}
-	entry, err := ParseEntry(name, val)
-	if err != nil {
-		return nil, err
-	}
-	return &entry, nil
-}
-
-func (m *Machine) PutEntry(ctx context.Context, s stores.RW, root Root, entry Entry) (*Root, error) {
-	mut := PutEntry(entry)
-	entsRoot, err := m.gotkv.Mutate(ctx, s, root.Branches, mut)
-	if err != nil {
-		return nil, err
-	}
-	root.Branches = *entsRoot
-	return &root, nil
-}
-
-func (m *Machine) DeleteEntry(ctx context.Context, s stores.RW, root Root, name string) (*Root, error) {
-	entsRoot, err := m.gotkv.Delete(ctx, s, root.Branches, []byte(name))
-	if err != nil {
-		return nil, err
-	}
-	root.Branches = *entsRoot
-	return &root, nil
-}
-
-func PutEntry(entry Entry) gotkv.Mutation {
-	k := entry.Key(nil)
-	return gotkv.Mutation{
-		Span: gotkv.SingleKeySpan(k),
-		Entries: []gotkv.Entry{
-			{
-				Key:   entry.Key(nil),
-				Value: entry.Value(nil),
-			},
-		},
-	}
-}
-
-func (m *Machine) ListEntries(ctx context.Context, s stores.Reading, root Root, limit int) ([]Entry, error) {
-	span := gotkv.PrefixSpan([]byte(""))
-	it := m.gotkv.NewIterator(s, root.Branches, span)
-	var ents []Entry
-	for {
-		ent, err := streams.Next(ctx, it)
-		if err != nil {
-			if streams.IsEOS(err) {
-				break
-			}
-			return nil, err
-		}
-
-		entry, err := ParseEntry(ent.Key, ent.Value)
-		if err != nil {
-			return nil, err
-		}
-		ents = append(ents, entry)
-		if limit > 0 && len(ents) >= limit {
-			break
-		}
-	}
-	return ents, nil
+	return data[2 : 2+int(dataLen)], nil
 }
 
 // appendLP appends a length-prefixed byte slice to out.
+// the length is encoded as a varint.
 func appendLP(out []byte, data []byte) []byte {
 	out = binary.AppendUvarint(out, uint64(len(data)))
 	return append(out, data...)
 }
 
-func readLP(data []byte) ([]byte, int, error) {
+// readLP reads a length-prefixed byte slice from data.
+// the length is encoded as a varint.
+func readLP(data []byte) (y []byte, rest []byte, _ error) {
 	dataLen, n := binary.Uvarint(data)
 	if n <= 0 {
-		return nil, 0, fmt.Errorf("invalid length-prefixed data")
+		return nil, nil, fmt.Errorf("invalid length-prefixed data")
 	}
 	if len(data) < n+int(dataLen) {
-		return nil, 0, fmt.Errorf("length-prefixed data too short")
+		return nil, nil, fmt.Errorf("length-prefixed data too short")
 	}
-	return data[n : n+int(dataLen)], n + int(dataLen), nil
+	return data[n : n+int(dataLen)], data[n+int(dataLen):], nil
 }

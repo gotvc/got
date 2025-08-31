@@ -38,11 +38,10 @@ type MemoryTx struct {
 	mutate bool
 }
 
-func (tx *MemoryTx) Commit(ctx context.Context, root []byte) error {
+func (tx *MemoryTx) Commit(ctx context.Context) error {
 	if !tx.mutate {
 		return fmt.Errorf("cannot commit a read-only transaction")
 	}
-	tx.vol.root = append(tx.vol.root[:0], root...)
 	tx.vol.mu.Unlock()
 	return nil
 }
@@ -53,6 +52,14 @@ func (tx *MemoryTx) Abort(ctx context.Context) error {
 	} else {
 		tx.vol.mu.RUnlock()
 	}
+	return nil
+}
+
+func (tx *MemoryTx) Save(ctx context.Context, root []byte) error {
+	if !tx.mutate {
+		return fmt.Errorf("cannot save a read-only transaction")
+	}
+	tx.vol.root = append(tx.vol.root[:0], root...)
 	return nil
 }
 

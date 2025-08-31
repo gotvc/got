@@ -6,12 +6,12 @@ import (
 
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/branches"
-	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/exp/slices2"
 	"go.inet256.org/inet256/src/inet256"
 )
 
+// Client holds configuration for accessing a GotNS instance backed by a Blobcache Volume.
 type Client struct {
 	Blobcache blobcache.Service
 	Machine   Machine
@@ -40,7 +40,10 @@ func (c *Client) Init(ctx context.Context, volh blobcache.Handle) error {
 	if err != nil {
 		return err
 	}
-	return tx.Commit(ctx, root.Marshal(nil))
+	if err := tx.Save(ctx, root.Marshal(nil)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (c *Client) GetEntry(ctx context.Context, volh blobcache.Handle, name string) (*Entry, error) {
@@ -53,20 +56,28 @@ func (c *Client) GetEntry(ctx context.Context, volh blobcache.Handle, name strin
 		return nil, err
 	}
 	defer tx.Abort(ctx)
-	root, err := loadRoot(ctx, tx)
+	root, err := loadState(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
 	return c.Machine.GetEntry(ctx, tx, *root, []byte(name))
 }
 
-func (c *Client) PutEntry(ctx context.Context, volh blobcache.Handle, name string, entry branches.Info) error {
-	panic("not implemented")
+func (c *Client) PutEntry(ctx context.Context, volh blobcache.Handle, ent Entry) error {
+	return c.doTx(ctx, volh, func(txb *Builder) error {
+		txb.AddOp(&Op_PutEntry{
+			Entry: ent,
+		})
+		return nil
+	})
 }
 
 func (c *Client) DeleteEntry(ctx context.Context, volh blobcache.Handle, name string) error {
-	return c.doTx(ctx, volh, func(s stores.RW, root *Root) (*Root, error) {
-		return c.Machine.DeleteEntry(ctx, s, *root, name)
+	return c.doTx(ctx, volh, func(txb *Builder) error {
+		txb.AddOp(&Op_DeleteEntry{
+			Name: name,
+		})
+		return nil
 	})
 }
 
@@ -80,7 +91,7 @@ func (c *Client) ListEntries(ctx context.Context, volh blobcache.Handle, limit i
 		return nil, err
 	}
 	defer tx.Abort(ctx)
-	root, err := loadRoot(ctx, tx)
+	root, err := loadState(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +117,7 @@ func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string
 	return nil, nil
 }
 
-func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string, binfo branches.Info) error {
+func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string, aux []byte) error {
 	nsh, err := c.adjustHandle(ctx, nsh)
 	if err != nil {
 		return err
@@ -126,7 +137,7 @@ func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string
 	if err := tx.AllowLink(ctx, *volh); err != nil {
 		return err
 	}
-	root, err := loadRoot(ctx, tx)
+	root, err := loadState(ctx, tx)
 	if err != nil {
 		return err
 	}
@@ -138,7 +149,10 @@ func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string
 	if err != nil {
 		return err
 	}
-	return tx.Commit(ctx, root.Marshal(nil))
+	if err := tx.Save(ctx, root.Marshal(nil)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string) (branches.Volume, error) {
@@ -179,7 +193,7 @@ func (c *Client) AddMember(ctx context.Context, volh blobcache.Handle, name stri
 		return err
 	}
 	defer tx.Abort(ctx)
-	root, err := loadRoot(ctx, tx)
+	root, err := loadState(ctx, tx)
 	if err != nil {
 		return err
 	}
@@ -187,7 +201,10 @@ func (c *Client) AddMember(ctx context.Context, volh blobcache.Handle, name stri
 	if err != nil {
 		return err
 	}
-	return tx.Commit(ctx, root.Marshal(nil))
+	if err := tx.Save(ctx, root.Marshal(nil)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func (c *Client) adjustHandle(ctx context.Context, volh blobcache.Handle) (blobcache.Handle, error) {
@@ -202,7 +219,7 @@ func (c *Client) adjustHandle(ctx context.Context, volh blobcache.Handle) (blobc
 	}
 }
 
-func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, fn func(s stores.RW, root *Root) (*Root, error)) error {
+func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, fn func(txb *Builder) error) error {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return err
@@ -212,25 +229,36 @@ func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, fn func(s stor
 		return err
 	}
 	defer tx.Abort(ctx)
-	root, err := loadRoot(ctx, tx)
+	var data []byte
+	if err := tx.Load(ctx, &data); err != nil {
+		return err
+	}
+	root, err := ParseRoot(data)
 	if err != nil {
 		return err
 	}
-	root, err = fn(tx, root)
+	builder := c.Machine.NewBuilder(root)
+	if err := fn(builder); err != nil {
+		return err
+	}
+	root2, err := builder.Finish(ctx, tx)
 	if err != nil {
 		return err
 	}
-	return tx.Commit(ctx, root.Marshal(nil))
+	if err := tx.Save(ctx, root2.Marshal(nil)); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
-func loadRoot(ctx context.Context, tx *blobcache.Tx) (*Root, error) {
+func loadState(ctx context.Context, tx *blobcache.Tx) (*State, error) {
 	var data []byte
 	if err := tx.Load(ctx, &data); err != nil {
 		return nil, err
 	}
-	var r Root
-	if err := r.Unmarshal(data); err != nil {
+	root, err := ParseRoot(data)
+	if err != nil {
 		return nil, err
 	}
-	return &r, nil
+	return &root.State, nil
 }

@@ -17,28 +17,35 @@ var (
 type Schema struct{}
 
 func (s Schema) Validate(ctx context.Context, src cadata.Getter, prev, next []byte) error {
-	prevRoot, err := parseRoot(prev)
-	if err != nil {
-		return err
-	}
-	nextRoot, err := parseRoot(next)
-	if err != nil {
-		return err
-	}
 	mach := New()
-	return mach.Validate(ctx, src, prevRoot, nextRoot)
+	if len(prev) == 0 {
+		nextRoot, err := ParseRoot(next)
+		if err != nil {
+			return err
+		}
+		return mach.ValidateState(ctx, src, nextRoot.State)
+	}
+	prevRoot, err := ParseRoot(prev)
+	if err != nil {
+		return err
+	}
+	nextRoot, err := ParseRoot(next)
+	if err != nil {
+		return err
+	}
+	return mach.ValidateChange(ctx, src, prevRoot.State, nextRoot.State, nextRoot.Delta)
 }
 
 func (s Schema) ReadLinks(ctx context.Context, src cadata.Getter, rootData []byte, dst map[blobcache.OID]blobcache.ActionSet) error {
-	root, err := parseRoot(rootData)
+	if len(rootData) == 0 {
+		return nil
+	}
+	root, err := ParseRoot(rootData)
 	if err != nil {
 		return err
 	}
-	if root == nil {
-		return nil
-	}
 	mach := New()
-	entries, err := mach.ListEntries(ctx, src, *root, 0)
+	entries, err := mach.ListEntries(ctx, src, root.State, 0)
 	if err != nil {
 		return err
 	}
@@ -46,4 +53,8 @@ func (s Schema) ReadLinks(ctx context.Context, src cadata.Getter, rootData []byt
 		dst[ent.Volume] = ent.Rights
 	}
 	return nil
+}
+
+func (s Schema) Open(ctx context.Context, src cadata.Getter, rootData []byte, peer blobcache.PeerID) (blobcache.ActionSet, error) {
+	return blobcache.Action_ALL, nil
 }

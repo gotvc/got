@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"path/filepath"
 	"strings"
 
 	bcclient "blobcache.io/blobcache/client/go"
 	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/blobcache"
+	"blobcache.io/blobcache/src/schema"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/kv"
 	"go.brendoncarroll.net/state/posixfs"
@@ -18,6 +20,7 @@ import (
 	"go.inet256.org/inet256/src/inet256"
 	"go.uber.org/zap"
 
+	"github.com/cloudflare/circl/sign/ed25519"
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv"
@@ -200,8 +203,16 @@ func (r *Repo) GetSpace() Space {
 	return r.space
 }
 
-func (r *Repo) Serve(ctx context.Context) error {
-	return r.bc.(*bclocal.Service).Run(ctx)
+func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
+	svc := bclocal.New(bclocal.Env{
+		DB:         r.bcDB,
+		PrivateKey: r.privateKey.(ed25519.PrivateKey),
+		PacketConn: pc,
+		Schemas:    blobcacheSchemas(),
+		Root:       blobcacheRootSpec(),
+	})
+	r.bc = svc
+	return svc.Run(ctx)
 }
 
 func (r *Repo) GetEndpoint(ctx context.Context) blobcache.Endpoint {
@@ -241,7 +252,7 @@ func (r *Repo) defaultVolumeSpec(_ context.Context) (VolumeSpec, error) {
 	return spec, nil
 }
 
-func openLocalBlobcache(ctx context.Context, p string) (blobcache.Service, *sqlx.DB, error) {
+func openLocalBlobcache(ctx context.Context, p string) (*bclocal.Service, *sqlx.DB, error) {
 	db, err := dbutil.OpenDB(filepath.Join(p, "blobcache.db"))
 	if err != nil {
 		return nil, nil, err
@@ -249,14 +260,25 @@ func openLocalBlobcache(ctx context.Context, p string) (blobcache.Service, *sqlx
 	if err := bclocal.SetupDB(ctx, db); err != nil {
 		return nil, nil, err
 	}
-	const Schema_GOTNS = blobcache.Schema("gotns")
-	schemas := bclocal.DefaultSchemas()
-	schemas[Schema_GOTNS] = gotns.Schema{}
-	rootSpec := blobcache.DefaultLocalSpec()
-	rootSpec.Local.Schema = Schema_GOTNS
 	return bclocal.New(bclocal.Env{
 		DB:      db,
-		Schemas: schemas,
-		Root:    rootSpec,
+		Schemas: blobcacheSchemas(),
+		Root:    blobcacheRootSpec(),
 	}), db, nil
+}
+
+const schema_GOTNS = blobcache.Schema("gotns")
+
+func blobcacheSchemas() map[blobcache.Schema]schema.Schema {
+	schemas := bclocal.DefaultSchemas()
+	schemas[schema_GOTNS] = gotns.Schema{}
+	rootSpec := blobcache.DefaultLocalSpec()
+	rootSpec.Local.Schema = schema_GOTNS
+	return schemas
+}
+
+func blobcacheRootSpec() blobcache.VolumeSpec {
+	rootSpec := blobcache.DefaultLocalSpec()
+	rootSpec.Local.Schema = schema_GOTNS
+	return rootSpec
 }

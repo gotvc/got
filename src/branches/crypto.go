@@ -183,7 +183,6 @@ func (r *CryptoSpace) decryptName(x string) (string, error) {
 func (r *CryptoSpace) encryptInfo(x Info) Info {
 	y := Info{
 		Salt: r.encryptSalt(x.Salt),
-		Mode: x.Mode,
 	}
 	SortAnnotations(y.Annotations)
 	return y
@@ -196,7 +195,6 @@ func (r *CryptoSpace) decryptInfo(x Info) (*Info, error) {
 	}
 	return &Info{
 		Salt: salt,
-		Mode: x.Mode,
 	}, nil
 }
 

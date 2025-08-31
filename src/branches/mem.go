@@ -62,7 +62,6 @@ func (r *MemSpace) Set(ctx context.Context, name string, cfg Config) error {
 		return ErrNotExist
 	}
 	info := r.infos[name]
-	info.Mode = cfg.Mode
 	info.Salt = slices.Clone(cfg.Salt)
 	info.Annotations = slices.Clone(cfg.Annotations)
 	r.infos[name] = info

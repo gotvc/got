@@ -111,7 +111,10 @@ func applySnapshot(ctx context.Context, dstVol Volume, fn func(stores.RW, *Snap)
 			return err
 		}
 	}
-	return tx.Commit(ctx, yData)
+	if err := tx.Save(ctx, yData); err != nil {
+		return err
+	}
+	return tx.Commit(ctx)
 }
 
 func syncStores(ctx context.Context, src stores.Reading, dst stores.Writing, snap gotvc.Snapshot) (err error) {
