@@ -3,7 +3,7 @@ package stores
 import "context"
 
 type readOnly struct {
-	Store
+	RW
 }
 
 func (ro readOnly) Post(ctx context.Context, data []byte) (ID, error) {
@@ -19,6 +19,6 @@ func (ro readOnly) Delete(ctx context.Context, id ID) error {
 }
 
 // AssertReadOnly returns a new store backup by x, which will panic if it is modified.
-func AssertReadOnly(x Store) Store {
+func AssertReadOnly(x RW) Reading {
 	return readOnly{x}
 }

@@ -3,8 +3,10 @@ package dbutil
 import (
 	"context"
 	"database/sql"
+	"testing"
 
 	"github.com/jmoiron/sqlx"
+	"github.com/stretchr/testify/require"
 	_ "modernc.org/sqlite"
 )
 
@@ -48,4 +50,11 @@ func DoTxRO(ctx context.Context, db *sqlx.DB, fn func(tx *sqlx.Tx) error) error 
 	}
 	defer tx.Rollback()
 	return fn(tx)
+}
+
+func NewTestDB(t testing.TB) *sqlx.DB {
+	db, err := sqlx.Open("sqlite", ":memory:")
+	require.NoError(t, err)
+	t.Cleanup(func() { db.Close() })
+	return db
 }

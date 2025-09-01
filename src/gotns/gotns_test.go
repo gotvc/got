@@ -8,6 +8,7 @@ import (
 	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema/simplens"
+	"github.com/gotvc/got/src/internal/dbutil"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 	"go.inet256.org/inet256/src/inet256"
@@ -48,4 +49,31 @@ func TestMarshalOp(t *testing.T) {
 			require.Equal(t, x, y)
 		})
 	}
+}
+
+func TestCreateAt(t *testing.T) {
+	ctx := testutil.Context(t)
+	bc := newTestService(t)
+	gnsc := Client{Blobcache: bc, Machine: New()}
+	require.NoError(t, gnsc.Init(ctx, blobcache.Handle{}))
+
+	err := gnsc.CreateAt(ctx, blobcache.Handle{}, "test", nil)
+	require.NoError(t, err)
+}
+
+func newTestService(t *testing.T) *bclocal.Service {
+	ctx := testutil.Context(t)
+	db := dbutil.NewTestDB(t)
+	require.NoError(t, bclocal.SetupDB(ctx, db))
+	schemas := bclocal.DefaultSchemas()
+	schemas["gotns"] = Schema{}
+	rootSpec := blobcache.DefaultLocalSpec()
+	rootSpec.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
+	rootSpec.Local.Schema = "gotns"
+	return bclocal.New(bclocal.Env{
+		DB:         db,
+		Schemas:    schemas,
+		Root:       rootSpec,
+		PacketConn: testutil.PacketConn(t),
+	})
 }

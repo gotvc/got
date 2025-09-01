@@ -121,13 +121,15 @@ type Machine struct {
 }
 
 func New() Machine {
-	return Machine{
+	m := Machine{
 		gotkv: gotkv.NewMachine(1<<14, 1<<20),
 		led: gotled.Machine[State, Delta]{
 			ParseState: parseState,
 			ParseDelta: parseDelta,
 		},
 	}
+	m.led.Apply = m.Apply
+	return m
 }
 
 // New creates a new root.
@@ -165,6 +167,18 @@ func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State
 func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, next State, delta Delta) error {
 	// TODO: first validate auth operations, ensure that all the differences are signed.
 	return nil
+}
+
+func (m *Machine) Apply(ctx context.Context, s stores.RW, prev State, delta Delta) (State, error) {
+	state := prev
+	for _, op := range delta {
+		var err error
+		state, err = op.perform(ctx, m, s, state)
+		if err != nil {
+			return State{}, err
+		}
+	}
+	return state, nil
 }
 
 // appendLP16 appends a length-prefixed byte slice to out.

@@ -56,11 +56,11 @@ func (c *Client) GetEntry(ctx context.Context, volh blobcache.Handle, name strin
 		return nil, err
 	}
 	defer tx.Abort(ctx)
-	root, err := loadState(ctx, tx)
+	state, err := loadState(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
-	return c.Machine.GetEntry(ctx, tx, *root, []byte(name))
+	return c.Machine.GetEntry(ctx, tx, *state, []byte(name))
 }
 
 func (c *Client) PutEntry(ctx context.Context, volh blobcache.Handle, ent Entry) error {
@@ -127,7 +127,6 @@ func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string
 		return err
 	}
 	defer tx.Abort(ctx)
-
 	spec := blobcache.DefaultLocalSpec()
 	spec.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
 	volh, err := c.Blobcache.CreateVolume(ctx, nil, spec)
@@ -137,19 +136,27 @@ func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string
 	if err := tx.AllowLink(ctx, *volh); err != nil {
 		return err
 	}
-	root, err := loadState(ctx, tx)
+	var rootData []byte
+	if err := tx.Load(ctx, &rootData); err != nil {
+		return err
+	}
+	root, err := ParseRoot(rootData)
 	if err != nil {
 		return err
 	}
-	root, err = c.Machine.PutEntry(ctx, tx, *root, Entry{
-		Name:   name,
-		Volume: volh.OID,
-		Rights: blobcache.Action_ALL,
+	b := c.Machine.NewBuilder(root)
+	b.AddOp(&Op_PutEntry{
+		Entry: Entry{
+			Name:   name,
+			Volume: volh.OID,
+			Rights: blobcache.Action_ALL,
+		},
 	})
+	root2, err := b.Finish(ctx, tx)
 	if err != nil {
 		return err
 	}
-	if err := tx.Save(ctx, root.Marshal(nil)); err != nil {
+	if err := tx.Save(ctx, root2.Marshal(nil)); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)

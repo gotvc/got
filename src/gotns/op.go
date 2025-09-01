@@ -33,7 +33,7 @@ func (b *Builder) AddOp(op Op) {
 
 // Finish applies the changes to the previous root, and returns the new root.
 func (tx *Builder) Finish(ctx context.Context, s stores.RW) (Root, error) {
-	next, err := tx.m.Apply(tx.prev.State, Delta(tx.changes))
+	next, err := tx.m.Apply(ctx, s, tx.prev.State, Delta(tx.changes))
 	if err != nil {
 		return Root{}, err
 	}
@@ -93,6 +93,9 @@ type Op interface {
 	Unmarshal(data []byte) error
 	// OpCode returns the op code.
 	OpCode() OpCode
+
+	// perform applies the op to the state.
+	perform(ctx context.Context, m *Machine, s stores.RW, state State) (State, error)
 
 	isOp()
 }
@@ -187,6 +190,10 @@ func (op Op_CreateGroup) OpCode() OpCode {
 	return OpCode_CreateGroup
 }
 
+func (op Op_CreateGroup) perform(ctx context.Context, m *Machine, s stores.RW, state State) (State, error) {
+	panic("not implemented")
+}
+
 type Op_AddLeaf struct {
 	Leaf IdentityLeaf
 }
@@ -210,6 +217,10 @@ func (op Op_AddLeaf) OpCode() OpCode {
 	return OpCode_AddLeaf
 }
 
+func (op Op_AddLeaf) perform(ctx context.Context, m *Machine, s stores.RW, state State) (State, error) {
+	panic("not implemented")
+}
+
 type Op_DropLeaf struct {
 	LeafID inet256.ID
 }
@@ -230,6 +241,10 @@ func (op *Op_DropLeaf) Unmarshal(data []byte) error {
 
 func (op Op_DropLeaf) OpCode() OpCode {
 	return OpCode_DropLeaf
+}
+
+func (op Op_DropLeaf) perform(ctx context.Context, m *Machine, s stores.RW, state State) (State, error) {
+	panic("not implemented")
 }
 
 type Op_AddMember struct {
@@ -262,6 +277,10 @@ func (op Op_AddMember) OpCode() OpCode {
 	return OpCode_AddMember
 }
 
+func (op Op_AddMember) perform(ctx context.Context, m *Machine, s stores.RW, state State) (State, error) {
+	panic("not implemented")
+}
+
 type Op_RemoveMember struct {
 	Group, Member string
 }
@@ -290,6 +309,10 @@ func (op *Op_RemoveMember) Unmarshal(data []byte) error {
 
 func (op Op_RemoveMember) OpCode() OpCode {
 	return OpCode_RemoveMember
+}
+
+func (op Op_RemoveMember) perform(ctx context.Context, m *Machine, s stores.RW, state State) (State, error) {
+	panic("not implemented")
 }
 
 type Op_AddRule struct {
@@ -332,6 +355,10 @@ func (op Op_AddRule) OpCode() OpCode {
 	return OpCode_AddRule
 }
 
+func (op Op_AddRule) perform(ctx context.Context, m *Machine, s stores.RW, state State) (State, error) {
+	panic("not implemented")
+}
+
 type Op_DropRule struct {
 	RuleID CID
 }
@@ -352,6 +379,10 @@ func (op *Op_DropRule) Unmarshal(data []byte) error {
 
 func (op Op_DropRule) OpCode() OpCode {
 	return OpCode_DropRule
+}
+
+func (op Op_DropRule) perform(ctx context.Context, m *Machine, s stores.RW, state State) (State, error) {
+	panic("not implemented")
 }
 
 // Op_PutEntry creates or overwrites a Branch entry.
@@ -387,6 +418,14 @@ func (op Op_PutEntry) OpCode() OpCode {
 	return OpCode_PutEntry
 }
 
+func (op Op_PutEntry) perform(ctx context.Context, m *Machine, s stores.RW, state State) (State, error) {
+	next, err := m.PutEntry(ctx, s, state, op.Entry)
+	if err != nil {
+		return State{}, err
+	}
+	return *next, nil
+}
+
 // Op_DeleteEntry deletes a Branch entry.
 type Op_DeleteEntry struct {
 	Name string
@@ -405,4 +444,12 @@ func (op *Op_DeleteEntry) Unmarshal(data []byte) error {
 
 func (op Op_DeleteEntry) OpCode() OpCode {
 	return OpCode_DeleteEntry
+}
+
+func (op Op_DeleteEntry) perform(ctx context.Context, m *Machine, s stores.RW, state State) (State, error) {
+	next, err := m.DeleteEntry(ctx, s, state, op.Name)
+	if err != nil {
+		return State{}, err
+	}
+	return *next, nil
 }

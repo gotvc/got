@@ -96,7 +96,7 @@ func Parse[State, Delta Marshaler](data []byte, parseState Parser[State], parseD
 // Machine performs operations on a ledger.
 type Machine[State, Delta Marshaler] struct {
 	// Apply must produce the result of applying the delta to the state.
-	Apply func(prev State, change Delta) (State, error)
+	Apply func(ctx context.Context, s stores.RW, prev State, change Delta) (State, error)
 	// ParseState parses a State from a byte slice.
 	ParseState Parser[State]
 	// ParseDelta parses a Delta from a byte slice.
@@ -187,7 +187,8 @@ func (m *Machine[State, Delta]) Validate(ctx context.Context, s stores.Reading, 
 		if err != nil {
 			return err
 		}
-		nextState, err := m.Apply(prevRoot.State, root.Delta)
+		s2 := stores.AddWriteLayer(s, stores.NewMem())
+		nextState, err := m.Apply(ctx, s2, prevRoot.State, root.Delta)
 		if err != nil {
 			return err
 		}

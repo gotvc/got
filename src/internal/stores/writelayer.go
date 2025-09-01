@@ -7,14 +7,15 @@ import (
 )
 
 type writeLayer struct {
-	base, writeTo cadata.Store
+	base    Reading
+	writeTo RWD
 }
 
-func AddWriteLayer(base cadata.Store, writeTo cadata.Store) cadata.Store {
+func AddWriteLayer(base Reading, writeTo RWD) RW {
 	if base.Hash(nil) != writeTo.Hash(nil) {
 		panic("write layer has different hash function than base")
 	}
-	return writeLayer{base: AssertReadOnly(base), writeTo: writeTo}
+	return writeLayer{base: base, writeTo: writeTo}
 }
 
 func (wl writeLayer) Post(ctx context.Context, data []byte) (cadata.ID, error) {
@@ -40,16 +41,15 @@ func (wl writeLayer) Exists(ctx context.Context, id cadata.ID) (bool, error) {
 	if exists {
 		return true, nil
 	}
-	return wl.base.Exists(ctx, id)
+	if e, ok := wl.base.(cadata.Exister); ok {
+		return e.Exists(ctx, id)
+	} else {
+		panic("base store does not support Exists")
+	}
 }
 
 func (wl writeLayer) Delete(ctx context.Context, id cadata.ID) error {
 	return wl.writeTo.Delete(ctx, id)
-}
-
-func (wl writeLayer) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int, error) {
-	// TODO: maybe list both
-	return wl.base.List(ctx, span, ids)
 }
 
 func (wl writeLayer) MaxSize() int {

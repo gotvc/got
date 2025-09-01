@@ -86,3 +86,9 @@ type RW interface {
 	Reading
 	Writing
 }
+
+type RWD interface {
+	Reading
+	Writing
+	cadata.Deleter
+}
