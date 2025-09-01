@@ -13,6 +13,7 @@ import (
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/internal/stores"
 )
 
 type (
@@ -24,8 +25,9 @@ type (
 
 type Snapshot struct {
 	N       uint64     `json:"n"`
-	Root    gotfs.Root `json:"root"`
 	Parents []gdat.Ref `json:"parents"`
+
+	Root gotfs.Root `json:"root"`
 
 	CreatedAt  tai64.TAI64 `json:"created_at"`
 	Creator    string      `json:"creator,omitempty"`
@@ -62,7 +64,7 @@ type SnapInfo struct {
 	Message string
 }
 
-func (a *Machine) NewSnapshot(ctx context.Context, s cadata.Store, parents []Snapshot, root Root, sinfo SnapInfo) (*Snapshot, error) {
+func (a *Machine) NewSnapshot(ctx context.Context, s stores.Writing, parents []Snapshot, root Root, sinfo SnapInfo) (*Snapshot, error) {
 	var n uint64
 	parentRefs := make([]Ref, len(parents))
 	for i, parent := range parents {
@@ -99,7 +101,7 @@ func (ag *Machine) NewZero(ctx context.Context, s cadata.Store, root Root, sinfo
 }
 
 // PostSnapshot marshals the snapshot and posts it to the store
-func (ag *Machine) PostSnapshot(ctx context.Context, s Store, x Snapshot) (*Ref, error) {
+func (ag *Machine) PostSnapshot(ctx context.Context, s stores.Writing, x Snapshot) (*Ref, error) {
 	if ag.readOnly {
 		panic("gotvc: operator is read-only. This is a bug.")
 	}
@@ -107,7 +109,7 @@ func (ag *Machine) PostSnapshot(ctx context.Context, s Store, x Snapshot) (*Ref,
 }
 
 // GetSnapshot retrieves the snapshot referenced by ref from the store.
-func (ag *Machine) GetSnapshot(ctx context.Context, s Store, ref Ref) (*Snapshot, error) {
+func (ag *Machine) GetSnapshot(ctx context.Context, s stores.Reading, ref Ref) (*Snapshot, error) {
 	var x *Snapshot
 	if err := ag.da.GetF(ctx, s, ref, func(data []byte) error {
 		var err error
@@ -168,7 +170,7 @@ func parseSnapshot(data []byte) (*Snapshot, error) {
 
 // RefFromSnapshot computes a ref for snap if it was posted to s.
 // It only calls s.Hash and s.MaxSize; it does not mutate s.
-func (ag *Machine) RefFromSnapshot(snap Snapshot, s cadata.Store) Ref {
+func (ag *Machine) RefFromSnapshot(snap Snapshot, s cadata.Getter) Ref {
 	s2 := cadata.NewVoid(s.Hash, s.MaxSize())
 	ref, err := ag.PostSnapshot(context.TODO(), s2, snap)
 	if err != nil {
@@ -178,7 +180,7 @@ func (ag *Machine) RefFromSnapshot(snap Snapshot, s cadata.Store) Ref {
 }
 
 // Check ensures that snapshot is valid.
-func (a *Machine) Check(ctx context.Context, s cadata.Store, snap Snapshot, checkRoot func(gotfs.Root) error) error {
+func (a *Machine) Check(ctx context.Context, s stores.Reading, snap Snapshot, checkRoot func(gotfs.Root) error) error {
 	logctx.Infof(ctx, "checking snapshot #%d", snap.N)
 	if err := checkRoot(snap.Root); err != nil {
 		return err

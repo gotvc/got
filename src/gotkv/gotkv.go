@@ -3,12 +3,14 @@ package gotkv
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/gotkv/ptree"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/cadata"
@@ -29,6 +31,22 @@ type Root struct {
 	Ref   gdat.Ref `json:"ref"`
 	Depth uint8    `json:"depth"`
 	First []byte   `json:"first,omitempty"`
+}
+
+func (r Root) Marshal() (ret []byte) {
+	ret = append(ret, r.Ref.Marshal()...)
+	ret = append(ret, r.Depth)
+	ret = append(ret, r.First...)
+	return ret
+}
+
+func (r *Root) Unmarshal(data []byte) error {
+	if err := r.Ref.Unmarshal(data[:gdat.RefSize]); err != nil {
+		return err
+	}
+	r.Depth = data[gdat.RefSize]
+	r.First = data[gdat.RefSize+1:]
+	return nil
 }
 
 func newRoot(x *ptree.Root[Entry, gdat.Ref]) *Root {
@@ -65,6 +83,10 @@ var (
 	ErrKeyNotFound = fmt.Errorf("key not found")
 )
 
+func IsErrKeyNotFound(err error) bool {
+	return errors.Is(err, ErrKeyNotFound)
+}
+
 var defaultReadOnlyMachine = &Machine{da: gdat.NewMachine()}
 
 // Get is a convenience function for performing Get without creating an Machine.
@@ -88,7 +110,7 @@ func CopyAll(ctx context.Context, b *Builder, it kvstreams.Iterator) error {
 }
 
 // Sync ensures dst has all the data reachable from x.
-func (a *Machine) Sync(ctx context.Context, src cadata.Getter, dst Store, x Root, entryFn func(Entry) error) error {
+func (a *Machine) Sync(ctx context.Context, src stores.Reading, dst stores.Writing, x Root, entryFn func(Entry) error) error {
 	rp := ptree.ReadParams[Entry, Ref]{
 		Compare:         compareEntries,
 		Store:           &ptreeGetter{ag: a.da, s: src},
@@ -108,7 +130,7 @@ func (a *Machine) Sync(ctx context.Context, src cadata.Getter, dst Store, x Root
 
 // Populate adds all blobs reachable from x to set.
 // If an item is in set all of the blobs reachable from it are also assumed to also be in set.
-func (a *Machine) Populate(ctx context.Context, s Store, x Root, set cadata.Set, entryFn func(ent Entry) error) error {
+func (a *Machine) Populate(ctx context.Context, s stores.Reading, x Root, set cadata.Set, entryFn func(ent Entry) error) error {
 	rp := ptree.ReadParams[Entry, Ref]{
 		Compare:    compareEntries,
 		Store:      &ptreeGetter{ag: a.da, s: s},
@@ -188,7 +210,7 @@ func (s *ptreeGetter) MaxSize() int {
 
 type ptreeStore struct {
 	ag *gdat.Machine
-	s  cadata.Store
+	s  stores.RW
 }
 
 func (s *ptreeStore) Post(ctx context.Context, data []byte) (Ref, error) {
@@ -208,7 +230,7 @@ func (s *ptreeStore) MaxSize() int {
 }
 
 // DebugTree writes human-readable debug information about the tree to w.
-func DebugTree(ctx context.Context, s cadata.Store, root Root, w io.Writer) error {
+func DebugTree(ctx context.Context, s stores.Reading, root Root, w io.Writer) error {
 	rp := ptree.ReadParams[Entry, Ref]{
 		Store:           &ptreeGetter{s: s, ag: defaultReadOnlyMachine.da},
 		Compare:         compareEntries,

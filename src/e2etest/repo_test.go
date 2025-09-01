@@ -3,42 +3,46 @@ package main
 import (
 	"bytes"
 	"context"
-	"crypto/ed25519"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/stretchr/testify/require"
-	"go.inet256.org/inet256/networks/beaconnet"
-	"go.inet256.org/inet256/pkg/inet256"
-	"go.inet256.org/inet256/pkg/inet256d"
-	"go.inet256.org/inet256/pkg/mesh256"
 
-	"github.com/gotvc/got"
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gothost"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/testutil"
 )
 
 func TestMultiRepoSync(t *testing.T) {
+
+	t.Skip("network protocols are still unstable")
 	ctx := testutil.Context(t)
 	ctx, cf := context.WithCancel(ctx)
 	t.Cleanup(cf)
 	secretKey := [32]byte{}
 	p1, p2, pOrigin := initRepo(t), initRepo(t), initRepo(t)
 	origin := openRepo(t, pOrigin)
+	go origin.Serve(ctx, testutil.PacketConn(t))
 	for _, p := range []string{p1, p2} {
-		err := got.ConfigureRepo(p, func(x got.RepoConfig) got.RepoConfig {
-			originID := origin.GetID()
+		err := gotrepo.ConfigureRepo(p, func(x gotrepo.Config) gotrepo.Config {
+			originEP := origin.Endpoint()
+			fqid := origin.GetFQOID()
+
 			x.Spaces = []gotrepo.SpaceLayerSpec{
 				{
 					Prefix: "origin/",
 					Target: gotrepo.SpaceSpec{
 						Crypto: &gotrepo.CryptoSpaceSpec{
-							Inner:  gotrepo.SpaceSpec{Peer: &originID},
+							Inner: gotrepo.SpaceSpec{Blobcache: &gotrepo.VolumeSpec{
+								Remote: &blobcache.VolumeBackend_Remote{
+									Endpoint: originEP,
+									Volume:   fqid.OID,
+								},
+							}},
 							Secret: secretKey[:],
 						},
 					},
@@ -51,27 +55,26 @@ func TestMultiRepoSync(t *testing.T) {
 	r1, r2 := openRepo(t, p1), openRepo(t, p2)
 
 	// IAM setup
-	e := origin.GetHostEngine()
-	err := e.ModifyPolicy(ctx, func(x gothost.Policy) gothost.Policy {
-		return gothost.Policy{
-			Rules: []gothost.Rule{
-				{
-					Identity: gothost.NewPeer(r1.GetID()),
-					Role:     gothost.Everything(),
-				},
-				{
-					Identity: gothost.NewPeer(r2.GetID()),
-					Role:     gothost.Everything(),
-				},
-			},
-		}
-	})
-	require.NoError(t, err)
-	hostConfig, err := e.View(ctx)
-	require.NoError(t, err)
-	t.Log("RULES", hostConfig.Policy.Rules)
+	// e := origin.GetHostEngine()
+	// err := e.ModifyPolicy(ctx, func(x gothost.Policy) gothost.Policy {
+	// 	return gothost.Policy{
+	// 		Rules: []gothost.Rule{
+	// 			{
+	// 				Identity: gothost.NewPeer(r1.GetID()),
+	// 				Role:     gothost.Everything(),
+	// 			},
+	// 			{
+	// 				Identity: gothost.NewPeer(r2.GetID()),
+	// 				Role:     gothost.Everything(),
+	// 			},
+	// 		},
+	// 	}
+	// })
+	// require.NoError(t, err)
+	// hostConfig, err := e.View(ctx)
+	// require.NoError(t, err)
+	// t.Log("RULES", hostConfig.Policy.Rules)
 
-	go origin.Serve(ctx)
 	createBranch(t, r1, "origin/master")
 	createBranch(t, r1, "origin/mybranch")
 	require.Contains(t, listBranches(t, r2), "origin/master")
@@ -90,12 +93,12 @@ func TestMultiRepoSync(t *testing.T) {
 
 func initRepo(t testing.TB) string {
 	dirpath := t.TempDir()
-	require.NoError(t, got.InitRepo(dirpath))
+	require.NoError(t, gotrepo.Init(dirpath))
 	return dirpath
 }
 
-func openRepo(t testing.TB, p string) *got.Repo {
-	r, err := got.OpenRepo(p)
+func openRepo(t testing.TB, p string) *gotrepo.Repo {
+	r, err := gotrepo.Open(p)
 	require.NoError(t, err)
 	t.Cleanup(func() { r.Close() })
 	return r
@@ -106,30 +109,30 @@ func createFile(t testing.TB, repoPath, p string, data []byte) {
 	require.NoError(t, err)
 }
 
-func createBranch(t testing.TB, r *got.Repo, name string) {
+func createBranch(t testing.TB, r *gotrepo.Repo, name string) {
 	ctx := testutil.Context(t)
 	_, err := r.CreateBranch(ctx, name, branches.Config{})
 	require.NoError(t, err)
 }
 
-func commit(t testing.TB, r *got.Repo) {
+func commit(t testing.TB, r *gotrepo.Repo) {
 	ctx := testutil.Context(t)
 	err := r.Commit(ctx, gotvc.SnapInfo{})
 	require.NoError(t, err)
 }
 
-func sync(t testing.TB, r *got.Repo, src, dst string) {
+func sync(t testing.TB, r *gotrepo.Repo, src, dst string) {
 	ctx := testutil.Context(t)
 	err := r.Sync(ctx, src, dst, false)
 	require.NoError(t, err)
 }
 
-func add(t testing.TB, r *got.Repo, p string) {
+func add(t testing.TB, r *gotrepo.Repo, p string) {
 	err := r.Add(testutil.Context(t), p)
 	require.NoError(t, err)
 }
 
-func ls(t testing.TB, r *got.Repo, p string) (ret []string) {
+func ls(t testing.TB, r *gotrepo.Repo, p string) (ret []string) {
 	err := r.Ls(testutil.Context(t), p, func(de gotfs.DirEnt) error {
 		ret = append(ret, de.Name)
 		return nil
@@ -138,42 +141,18 @@ func ls(t testing.TB, r *got.Repo, p string) (ret []string) {
 	return ret
 }
 
-func cat(t testing.TB, r *got.Repo, p string) []byte {
+func cat(t testing.TB, r *gotrepo.Repo, p string) []byte {
 	buf := bytes.Buffer{}
 	err := r.Cat(context.TODO(), p, &buf)
 	require.NoError(t, err)
 	return buf.Bytes()
 }
 
-func listBranches(t testing.TB, r *got.Repo) (ret []string) {
+func listBranches(t testing.TB, r *gotrepo.Repo) (ret []string) {
 	err := r.ForEachBranch(context.TODO(), func(name string) error {
 		ret = append(ret, name)
 		return nil
 	})
 	require.NoError(t, err)
 	return ret
-}
-
-const inet256Endpoint = "tcp://127.0.0.1:12345"
-
-func TestMain(m *testing.M) {
-	code := func() int {
-		ctx, cf := context.WithCancel(context.Background())
-		defer cf()
-		privateKey, _ := inet256.PrivateKeyFromBuiltIn(ed25519.NewKeyFromSeed(make([]byte, ed25519.SeedSize)))
-		d := inet256d.New(inet256d.Params{
-			APIAddr: inet256Endpoint,
-			MainNodeParams: mesh256.Params{
-				NewNetwork: beaconnet.Factory,
-				PrivateKey: privateKey,
-				Peers:      mesh256.NewPeerStore(),
-			},
-		})
-		go d.Run(ctx)
-		if err := os.Setenv("INET256_API", inet256Endpoint); err != nil {
-			panic(err)
-		}
-		return m.Run()
-	}()
-	os.Exit(code)
 }

@@ -12,7 +12,8 @@ import (
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotvc"
-	"go.brendoncarroll.net/state/cadata"
+	"github.com/gotvc/got/src/internal/stores"
+	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 )
@@ -24,10 +25,10 @@ type FS struct {
 	ctx   context.Context
 	gotvc *gotvc.Machine
 	gotfs *gotfs.Machine
-	vol   *branches.Volume
+	vol   branches.Volume
 }
 
-func New(ctx context.Context, info branches.Info, v *branches.Volume) *FS {
+func New(ctx context.Context, info branches.Info, v branches.Volume) *FS {
 	return &FS{
 		ctx:   ctx,
 		gotvc: branches.NewGotVC(&info),
@@ -38,7 +39,7 @@ func New(ctx context.Context, info branches.Info, v *branches.Volume) *FS {
 
 func (s *FS) Open(name string) (iofs.File, error) {
 	logctx.Infof(s.ctx, "open %q", name)
-	snap, err := branches.GetHead(s.ctx, *s.vol)
+	snap, tx, err := branches.GetHead(s.ctx, s.vol)
 	if err != nil {
 		return nil, err
 	}
@@ -46,11 +47,10 @@ func (s *FS) Open(name string) (iofs.File, error) {
 		return nil, iofs.ErrNotExist
 	}
 	fsag := s.gotfs
-	ms := s.vol.FSStore
-	if _, err := fsag.GetInfo(s.ctx, ms, snap.Root, name); err != nil {
+	if _, err := fsag.GetInfo(s.ctx, tx, snap.Root, name); err != nil {
 		return nil, convertError(err)
 	}
-	return NewFile(s.ctx, fsag, s.vol.FSStore, s.vol.RawStore, snap.Root, name), nil
+	return NewFile(s.ctx, fsag, tx, snap.Root, name), nil
 }
 
 var _ iofs.File = &File{}
@@ -59,21 +59,20 @@ var _ io.ReaderAt = &File{}
 var _ io.Seeker = &File{}
 
 type File struct {
-	ctx    context.Context
-	gotfs  *gotfs.Machine
-	ms, ds cadata.Store
-	root   gotfs.Root
-	path   string
+	ctx   context.Context
+	gotfs *gotfs.Machine
+	txn   volumes.Tx
+	root  gotfs.Root
+	path  string
 
 	r *gotfs.Reader
 }
 
-func NewFile(ctx context.Context, fsag *gotfs.Machine, ms, ds cadata.Store, root gotfs.Root, p string) *File {
+func NewFile(ctx context.Context, fsag *gotfs.Machine, txn volumes.Tx, root gotfs.Root, p string) *File {
 	return &File{
 		ctx:   ctx,
 		gotfs: fsag,
-		ms:    ms,
-		ds:    ds,
+		txn:   txn,
 		root:  root,
 		path:  p,
 	}
@@ -98,7 +97,7 @@ func (f *File) ReadAt(buf []byte, off int64) (int, error) {
 	if off < 0 {
 		return 0, errors.New("negative offset")
 	}
-	return f.gotfs.ReadFileAt(f.ctx, f.ms, f.ds, f.root, f.path, off, buf)
+	return f.gotfs.ReadFileAt(f.ctx, f.getStores(), f.root, f.path, off, buf)
 }
 
 func (f *File) Seek(offset int64, whence int) (int64, error) {
@@ -110,12 +109,12 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (f *File) Stat() (iofs.FileInfo, error) {
-	return Stat(f.ctx, f.gotfs, f.ms, f.root, f.path)
+	return Stat(f.ctx, f.gotfs, f.getStores()[1], f.root, f.path)
 }
 
 func (f *File) ReadDir(n int) (ret []iofs.DirEntry, _ error) {
 	stopIter := errors.New("stop iteration")
-	if err := f.gotfs.ReadDir(f.ctx, f.ms, f.root, f.path, func(e gotfs.DirEnt) error {
+	if err := f.gotfs.ReadDir(f.ctx, f.getStores()[1], f.root, f.path, func(e gotfs.DirEnt) error {
 		if n > 0 && len(ret) >= n {
 			return stopIter
 		}
@@ -134,12 +133,16 @@ func (f *File) ReadDir(n int) (ret []iofs.DirEntry, _ error) {
 }
 
 func (f *File) Close() error {
-	return nil
+	return f.txn.Abort(f.ctx)
+}
+
+func (f *File) getStores() [2]stores.Reading {
+	return [2]stores.Reading{f.txn, f.txn}
 }
 
 func (f *File) ensureReader() error {
 	if f.r == nil {
-		r, err := f.gotfs.NewReader(f.ctx, f.ms, f.ds, f.root, f.path)
+		r, err := f.gotfs.NewReader(f.ctx, f.getStores(), f.root, f.path)
 		if err != nil {
 			return err
 		}
@@ -149,14 +152,14 @@ func (f *File) ensureReader() error {
 }
 
 func (f *File) stat(p string) (*fileInfo, error) {
-	finfo, err := Stat(f.ctx, f.gotfs, f.ms, f.root, p)
+	finfo, err := Stat(f.ctx, f.gotfs, f.getStores()[1], f.root, p)
 	if err != nil {
 		return nil, err
 	}
 	return finfo.(*fileInfo), nil
 }
 
-func Stat(ctx context.Context, fsag *gotfs.Machine, ms cadata.Store, root gotfs.Root, p string) (iofs.FileInfo, error) {
+func Stat(ctx context.Context, fsag *gotfs.Machine, ms stores.Reading, root gotfs.Root, p string) (iofs.FileInfo, error) {
 	info, err := fsag.GetInfo(ctx, ms, root, p)
 	if err != nil {
 		return nil, convertError(err)

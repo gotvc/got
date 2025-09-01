@@ -2,51 +2,34 @@ package gotrepo
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"path/filepath"
 	"strings"
 
-	"github.com/dgraph-io/badger/v3"
-	"github.com/dgraph-io/badger/v3/options"
+	bcclient "blobcache.io/blobcache/client/go"
+	"blobcache.io/blobcache/src/bclocal"
+	"blobcache.io/blobcache/src/blobcache"
+	"blobcache.io/blobcache/src/schema"
 	"go.brendoncarroll.net/state"
-	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/state/kv"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
-	"go.inet256.org/inet256/pkg/inet256"
+	"go.inet256.org/inet256/src/inet256"
 	"go.uber.org/zap"
 
+	"github.com/cloudflare/circl/sign/ed25519"
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gothost"
 	"github.com/gotvc/got/src/gotkv"
-	"github.com/gotvc/got/src/gotnet"
-	"github.com/gotvc/got/src/gotrepo/repodb"
+	"github.com/gotvc/got/src/gotns"
+	"github.com/gotvc/got/src/gotrepo/internal/dbmig"
 	"github.com/gotvc/got/src/gotvc"
-	"github.com/gotvc/got/src/internal/cells"
-	"github.com/gotvc/got/src/internal/staging"
-	"github.com/gotvc/got/src/internal/stores"
-)
-
-const (
-	MaxBlobSize = gotfs.DefaultMaxBlobSize
-	MaxCellSize = 1 << 16
-)
-
-const (
-	tableDefault      = repodb.TableID(1)
-	tableStaging      = repodb.TableID(2)
-	tablePorter       = repodb.TableID(3)
-	tableImportStores = repodb.TableID(4)
-	tableImportCaches = repodb.TableID(5)
-)
-
-const (
-	keyActive  = "ACTIVE"
-	nameMaster = "master"
+	"github.com/gotvc/got/src/internal/dbutil"
+	"github.com/gotvc/got/src/internal/migrations"
+	"github.com/jmoiron/sqlx"
 )
 
 // fs paths
@@ -56,55 +39,41 @@ const (
 	privateKeyPath = ".got/private.pem"
 	specDirPath    = ".got/branches"
 
-	localDBPath = ".got/local.db"
-
-	blobsPath   = ".got/blobs"
-	storeDBPath = ".got/stores.db"
-
-	cellDBPath = ".got/cells.db"
+	localDBPath      = ".got/got.db"
+	blobcacheDirPath = ".got/blobcache"
 )
 
 type (
 	FS = posixfs.FS
 
-	Cell   = cells.Cell
 	Space  = branches.Space
 	Volume = branches.Volume
-	Store  = cadata.Store
 
 	Ref  = gotkv.Ref
 	Root = gotfs.Root
 
 	Snap = gotvc.Snap
-
-	PeerID = gothost.PeerID
 )
 
 type Repo struct {
 	rootPath string
 	repoFS   FS // repoFS is the directory that the repo is in
 
-	localDB  *badger.DB
-	storesDB *badger.DB
-	cellsDB  *badger.DB
-
+	bcDB       *sqlx.DB
+	bc         blobcache.Service
+	db         *sqlx.DB
 	config     Config
 	privateKey inet256.PrivateKey
 	// ctx is used as the background context for serving the repo
 	ctx context.Context
 
 	workingDir FS // workingDir is repoFS with reserved paths filtered.
-	stage      *staging.Stage
-
-	specDir    *branchSpecDir
+	gnsc       *gotns.Client
 	space      branches.Space
-	hostEngine *gothost.HostEngine
-
-	cellManager  *cellManager
-	storeManager *storeManager
-	gotNet       *gotnet.Service
 }
 
+// Init initializes a new repo at the given path.
+// If bc is nil, a local blobcache will be created within the .got directory.
 func Init(p string) error {
 	repoDirFS := posixfs.NewDirFS(p)
 	if _, err := repoDirFS.Stat(configPath); posixfs.IsErrNotExist(err) {
@@ -129,14 +98,18 @@ func Init(p string) error {
 	if err := SavePrivateKey(repoDirFS, privateKeyPath, privKey); err != nil {
 		return err
 	}
-	// stores
-	if err := repoDirFS.Mkdir(blobsPath, 0o755); err != nil {
-		return err
-	}
 	r, err := Open(p)
 	if err != nil {
 		return err
 	}
+	ctx := context.TODO()
+	if err := r.gnsc.Init(ctx, blobcache.Handle{}, nil); err != nil {
+		return err
+	}
+	if _, err := branches.CreateIfNotExists(ctx, r.space, nameMaster, branches.NewConfig(false)); err != nil {
+		return err
+	}
+
 	return r.Close()
 }
 
@@ -150,82 +123,81 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	localDB, err := badger.Open(func() badger.Options {
-		opts := badger.DefaultOptions(filepath.Join(p, localDBPath))
-		opts = opts.WithCompression(options.None)
-		opts = opts.WithCompactL0OnClose(false)
-		opts.Logger = nil
-		return opts
-	}())
+	db, err := dbutil.OpenDB(filepath.Join(p, localDBPath))
 	if err != nil {
 		return nil, err
 	}
-	storesDB, err := badger.Open(func() badger.Options {
-		opts := badger.DefaultOptions(filepath.Join(p, storeDBPath))
-		opts = opts.WithCompression(options.None)
-		opts = opts.WithCompactL0OnClose(false)
-		opts.Logger = nil
-		return opts
-	}())
-	if err != nil {
+	if err := dbutil.DoTx(ctx, db, func(tx *sqlx.Tx) error {
+		return migrations.EnsureAll(tx, dbmig.ListMigrations())
+	}); err != nil {
 		return nil, err
 	}
-	cellsDB, err := badger.Open(func() badger.Options {
-		opts := badger.DefaultOptions(filepath.Join(p, cellDBPath))
-		opts = opts.WithCompression(options.None)
-		opts = opts.WithCompactL0OnClose(false)
-		opts.Logger = nil
 
-		opts.SyncWrites = true
-		return opts
-	}())
-	if err != nil {
-		return nil, err
-	}
 	privateKey, err := LoadPrivateKey(repoFS, privateKeyPath)
 	if err != nil {
 		return nil, err
 	}
-	fsStore := stores.NewFSStore(posixfs.NewDirFS(filepath.Join(p, blobsPath)), MaxBlobSize)
+
+	// blobcache
+	var bc blobcache.Service
+	var bcDB *sqlx.DB
+	switch {
+	case config.Blobcache.InProcess != nil:
+		if err := posixfs.MkdirAll(repoFS, blobcacheDirPath, 0o755); err != nil {
+			return nil, err
+		}
+		bc, bcDB, err = openLocalBlobcache(ctx, filepath.Join(p, blobcacheDirPath))
+		if err != nil {
+			return nil, err
+		}
+	case config.Blobcache.HTTP != nil:
+		bc = bcclient.NewClient(*config.Blobcache.HTTP)
+	default:
+		return nil, fmt.Errorf("must configure blobcache in .got/config.  It cannot be empty.")
+	}
+
 	r := &Repo{
 		rootPath:   p,
 		repoFS:     repoFS,
+		db:         db,
+		bc:         bc,
+		bcDB:       bcDB,
 		config:     *config,
 		privateKey: privateKey,
-		localDB:    localDB,
-		storesDB:   storesDB,
-		cellsDB:    cellsDB,
 		ctx:        ctx,
 
 		workingDir: posixfs.NewFiltered(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
-		storeManager: newStoreManager(fsStore, storesDB),
-		cellManager:  newCellManager(cellsDB),
-		stage:        staging.New(repodb.NewKVStore(localDB, tableStaging)),
 	}
-	r.specDir = newBranchSpecDir(r.makeDefaultVolume, r.MakeCell, r.MakeStore, posixfs.NewDirFS(filepath.Join(r.rootPath, specDirPath)))
-	if r.space, err = r.spaceFromSpecs(r.config.Spaces); err != nil {
+
+	// setup space
+	r.gnsc = &gotns.Client{
+		Blobcache: r.bc,
+		Machine:   gotns.New(),
+	}
+	spaceSpec := config.Spaces
+	spaceSpec = append(spaceSpec, SpaceLayerSpec{
+		Prefix: "",
+		Target: SpaceSpec{Local: &blobcache.OID{}},
+	})
+	space, err := r.MakeSpace(SpaceSpec{Multi: &spaceSpec})
+	if err != nil {
 		return nil, err
 	}
-	if _, err := branches.CreateIfNotExists(ctx, r.specDir, nameMaster, branches.NewConfig(false)); err != nil {
-		return nil, err
-	}
-	r.hostEngine = gothost.NewHostEngine(r.specDir)
-	if err := r.hostEngine.Initialize(ctx); err != nil {
-		return nil, err
-	}
+	r.space = space
 	return r, nil
 }
 
 func (r *Repo) Close() (retErr error) {
 	for _, fn := range []func() error{
-		r.localDB.Sync,
-		r.localDB.Close,
-		r.cellsDB.Sync,
-		r.cellsDB.Close,
-		r.storesDB.Sync,
-		r.storesDB.Close,
+		r.db.Close,
+		func() error {
+			if r.bcDB != nil {
+				return r.bcDB.Close()
+			}
+			return nil
+		},
 	} {
 		if err := fn(); err != nil {
 			retErr = errors.Join(retErr, err)
@@ -242,24 +214,56 @@ func (r *Repo) GetSpace() Space {
 	return r.space
 }
 
-func (r *Repo) GetHostEngine() *gothost.HostEngine {
-	return r.hostEngine
+func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
+	svc := bclocal.New(bclocal.Env{
+		DB:         r.bcDB,
+		PrivateKey: r.privateKey.(ed25519.PrivateKey),
+		PacketConn: pc,
+		Schemas:    blobcacheSchemas(),
+		Root:       *blobcacheRootSpec(),
+	})
+	r.bc = svc
+	return svc.Run(ctx)
 }
 
-func (r *Repo) getFSOp(b *branches.Info) *gotfs.Machine {
-	return branches.NewGotFS(b)
+// Cleanup removes unreferenced data from the repo's local DB.
+func (r *Repo) Cleanup(ctx context.Context) error {
+	if err := dbutil.DoTx(ctx, r.db, func(tx *sqlx.Tx) error {
+		logctx.Infof(ctx, "removing blobs from staging areas")
+		if err := cleanupStagingBlobs(ctx, tx); err != nil {
+			return err
+		}
+		logctx.Infof(ctx, "removing unreferenced blobs")
+		if err := cleanupBlobs(tx); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	logctx.Infof(ctx, "running VACUUM")
+	if _, err := r.db.Exec(`VACUUM`); err != nil {
+		return err
+	}
+	return nil
 }
 
-func (r *Repo) getVCOp(b *branches.Info) *gotvc.Machine {
-	return branches.NewGotVC(b)
+func (r *Repo) Endpoint() blobcache.Endpoint {
+	ep, err := r.bc.Endpoint(context.TODO())
+	if err != nil {
+		panic(err)
+	}
+	return ep
 }
 
-func (r *Repo) getKVStore(tid repodb.TableID) kv.Store[[]byte, []byte] {
-	return repodb.NewKVStore(r.localDB, tid)
-}
-
-func (r *Repo) UnionStore() cadata.Store {
-	return stores.AssertReadOnly(r.storeManager.store)
+func (r *Repo) GetFQOID() blobcache.FQOID {
+	ep, err := r.bc.Endpoint(r.ctx)
+	if err != nil {
+		panic(err)
+	}
+	return blobcache.FQOID{
+		Peer: ep.Peer,
+	}
 }
 
 func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) error {
@@ -274,39 +278,45 @@ func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) err
 	return err
 }
 
-func (r *Repo) makeDefaultVolume(ctx context.Context) (VolumeSpec, error) {
-	cellID, err := r.cellManager.Create(ctx)
-	if err != nil {
-		return VolumeSpec{}, err
-	}
-	cellSpec := CellSpec{
-		Encrypted: &EncryptedCellSpec{
-			Inner: CellSpec{
-				Local: (*LocalCellSpec)(&cellID),
-			},
-			Secret: generateSecret(32),
-		},
-	}
-	var storeIDs [3]uint64
-	for i := range storeIDs {
-		sid, err := r.storeManager.Create(ctx)
-		if err != nil {
-			return VolumeSpec{}, err
-		}
-		storeIDs[i] = sid
-	}
-	return VolumeSpec{
-		Cell:     cellSpec,
-		RawStore: StoreSpec{Local: (*LocalStoreSpec)(&storeIDs[0])},
-		FSStore:  StoreSpec{Local: (*LocalStoreSpec)(&storeIDs[1])},
-		VCStore:  StoreSpec{Local: (*LocalStoreSpec)(&storeIDs[2])},
-	}, nil
+func (r *Repo) defaultVolumeSpec(_ context.Context) (VolumeSpec, error) {
+	spec := blobcache.DefaultLocalSpec()
+	spec.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
+	spec.Local.MaxSize = 1 << 21
+	return spec, nil
 }
 
-func generateSecret(n int) []byte {
-	x := make([]byte, n)
-	if _, err := rand.Read(x); err != nil {
-		panic(err)
+func openLocalBlobcache(ctx context.Context, p string) (*bclocal.Service, *sqlx.DB, error) {
+	db, err := dbutil.OpenDB(filepath.Join(p, "blobcache.db"))
+	if err != nil {
+		return nil, nil, err
 	}
-	return x
+	// TODO: remove this.
+	// This prevents a sqlite BUSY error.
+	db.SetMaxOpenConns(1)
+	if err := bclocal.SetupDB(ctx, db); err != nil {
+		return nil, nil, err
+	}
+	return bclocal.New(bclocal.Env{
+		DB:      db,
+		Schemas: blobcacheSchemas(),
+		Root:    *blobcacheRootSpec(),
+	}), db, nil
+}
+
+const schema_GOTNS = blobcache.Schema("gotns")
+
+func blobcacheSchemas() map[blobcache.Schema]schema.Schema {
+	schemas := bclocal.DefaultSchemas()
+	schemas[schema_GOTNS] = gotns.Schema{}
+	rootSpec := blobcache.DefaultLocalSpec()
+	rootSpec.Local.Schema = schema_GOTNS
+	rootSpec.Local.MaxSize = 1 << 22
+	return schemas
+}
+
+func blobcacheRootSpec() *blobcache.VolumeSpec {
+	rootSpec := blobcache.DefaultLocalSpec()
+	rootSpec.Local.Schema = schema_GOTNS
+	rootSpec.Local.MaxSize = 1 << 22
+	return &rootSpec
 }

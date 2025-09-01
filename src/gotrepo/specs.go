@@ -4,45 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
-	"go.brendoncarroll.net/p2p"
-	"go.brendoncarroll.net/state/cells/httpcell"
-	"go.inet256.org/inet256/pkg/inet256"
+	"blobcache.io/blobcache/src/blobcache"
+	"blobcache.io/blobcache/src/schema/simplens"
 
 	"github.com/gotvc/got/src/branches"
-	"github.com/gotvc/got/src/gotgrpc"
-	"github.com/gotvc/got/src/internal/cells"
+	"github.com/gotvc/got/src/gotns"
+	"github.com/gotvc/got/src/internal/volumes"
 )
 
-type StoreSpec struct {
-	Local *LocalStoreSpec `json:"local,omitempty"`
-	// Blobcache *BlobcacheStoreSpec `json:"blobcache,omitempty"`
-}
-
-type LocalStoreSpec = StoreID
-
-// type BlobcacheStoreSpec = blobcache.PinSetHandle
-
-func (r *Repo) MakeStore(spec StoreSpec) (Store, error) {
-	switch {
-	case spec.Local != nil:
-		return r.storeManager.Open(*spec.Local), nil
-	default:
-		return nil, fmt.Errorf("empty store spec")
-	}
-}
-
-type BranchSpec struct {
-	Volume VolumeSpec `json:"volume"`
-	branches.Info
-}
-
-type VolumeSpec struct {
-	Cell     CellSpec  `json:"cell"`
-	VCStore  StoreSpec `json:"vc_store"`
-	FSStore  StoreSpec `json:"fs_store"`
-	RawStore StoreSpec `json:"raw_store"`
-}
+type VolumeSpec = blobcache.VolumeSpec
 
 func ParseVolumeSpec(data []byte) (*VolumeSpec, error) {
 	var spec VolumeSpec
@@ -52,98 +24,29 @@ func ParseVolumeSpec(data []byte) (*VolumeSpec, error) {
 	return &spec, nil
 }
 
-func (r *Repo) MakeVolume(spec VolumeSpec) (*Volume, error) {
-	cell, err := r.MakeCell(spec.Cell)
+func (r *Repo) MakeVolume(ctx context.Context, branchName string, spec VolumeSpec) (branches.Volume, error) {
+	nsc := simplens.Client{Service: r.bc}
+	volh, err := nsc.OpenAt(ctx, blobcache.Handle{}, branchName, blobcache.Action_ALL)
 	if err != nil {
-		return nil, err
-	}
-	vcStore, err := r.MakeStore(spec.VCStore)
-	if err != nil {
-		return nil, err
-	}
-	fsStore, err := r.MakeStore(spec.VCStore)
-	if err != nil {
-		return nil, err
-	}
-	rawStore, err := r.MakeStore(spec.VCStore)
-	if err != nil {
-		return nil, err
-	}
-	return &Volume{
-		Cell:     cell,
-		VCStore:  vcStore,
-		FSStore:  fsStore,
-		RawStore: rawStore,
-	}, nil
-}
-
-type CellSpec struct {
-	Local     *LocalCellSpec     `json:"local,omitempty"`
-	HTTP      *HTTPCellSpec      `json:"http,omitempty"`
-	Encrypted *EncryptedCellSpec `json:"encrypted,omitempty"`
-}
-
-type LocalCellSpec = CellID
-
-type HTTPCellSpec = httpcell.Spec
-
-type EncryptedCellSpec struct {
-	Inner  CellSpec `json:"inner"`
-	Secret []byte   `json:"secret"`
-}
-
-type PeerCellSpec struct {
-	ID   p2p.PeerID `json:"id"`
-	Name string     `json:"name"`
-}
-
-func ParseCellSpec(data []byte) (*CellSpec, error) {
-	cellSpec := CellSpec{}
-	if err := json.Unmarshal(data, &cellSpec); err != nil {
-		return nil, err
-	}
-	return &cellSpec, nil
-}
-
-func (r *Repo) MakeCell(spec CellSpec) (Cell, error) {
-	switch {
-	case spec.Local != nil:
-		return r.cellManager.Open(*spec.Local), nil
-
-	case spec.HTTP != nil:
-		return httpcell.New(*spec.HTTP), nil
-
-	case spec.Encrypted != nil:
-		inner, err := r.MakeCell(spec.Encrypted.Inner)
-		if err != nil {
+		if strings.Contains(err.Error(), "entry not found") {
+			volh, err = nsc.CreateAt(ctx, blobcache.Handle{}, branchName, spec)
+			if err != nil {
+				return nil, err
+			}
+		} else {
 			return nil, err
 		}
-		if len(spec.Encrypted.Secret) != 32 {
-			return nil, fmt.Errorf("encrypted cell has incorrect secret length. HAVE: %d WANT: %d", len(spec.Encrypted.Secret), 32)
-		}
-		secret := (*[32]byte)(spec.Encrypted.Secret)
-		return cells.NewEncrypted(inner, secret), nil
-
-	default:
-		return nil, fmt.Errorf("empty cell spec")
 	}
+	return &volumes.Blobcache{Service: r.bc, Handle: *volh}, nil
 }
 
+// MultiSpaceSpec is a prefix-routed space made up of layers.
 type MultiSpaceSpec []SpaceLayerSpec
 
+// SpaceLayerSpec is a layer in a multi-layer space.
 type SpaceLayerSpec struct {
 	Prefix string    `json:"prefix"`
 	Target SpaceSpec `json:"target"`
-}
-
-type QUICSpaceSpec struct {
-	ID   inet256.ID `json:"id"`
-	Addr string     `json:"addr"`
-}
-
-type GRPCSpaceSpec struct {
-	Endpoint string            `json:"endpoint"`
-	Headers  map[string]string `json:"headers,omitempty"`
 }
 
 type CryptoSpaceSpec struct {
@@ -158,34 +61,36 @@ type PrefixSpaceSpec struct {
 }
 
 type SpaceSpec struct {
-	Peer *inet256.ID    `json:"peer,omitempty"`
-	QUIC *QUICSpaceSpec `json:"quic,omitempty"`
-	GRPC *GRPCSpaceSpec `json:"grpc,omitempty"`
+	Local     *blobcache.OID `json:"local,omitempty"`
+	Blobcache *VolumeSpec    `json:"blobcache,omitempty"`
 
+	Multi  *MultiSpaceSpec  `json:"multi,omitempty"`
 	Crypto *CryptoSpaceSpec `json:"crypto,omitempty"`
 	Prefix *PrefixSpaceSpec `json:"prefix,omitempty"`
 }
 
 func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 	switch {
-	case spec.Peer != nil:
-		gn, err := r.getGotNet()
+	case spec.Local != nil:
+		volh, err := r.bc.OpenAs(r.ctx, nil, *spec.Local, blobcache.Action_ALL)
 		if err != nil {
 			return nil, err
 		}
-		return gn.GetSpace(*spec.Peer), nil
-	case spec.QUIC != nil:
-		gn, err := r.getQUICGotNet(*spec.QUIC)
-		if err != nil {
-			return nil, err
+		return gotns.NewSpace(r.gnsc, *volh), nil
+	case spec.Blobcache != nil:
+		return nil, fmt.Errorf("blobcache spaces in arbitrary volumes are not yet supported")
+	case spec.Multi != nil:
+		var layers []branches.Layer
+		for _, spec := range *spec.Multi {
+			layer := branches.Layer{
+				Prefix: spec.Prefix,
+				Target: newLazySpace(func(ctx context.Context) (branches.Space, error) {
+					return r.MakeSpace(spec.Target)
+				}),
+			}
+			layers = append(layers, layer)
 		}
-		return gn.GetSpace(spec.QUIC.ID), nil
-	case spec.GRPC != nil:
-		c, err := r.getGRPCClient(spec.GRPC.Endpoint, spec.GRPC.Headers)
-		if err != nil {
-			return nil, err
-		}
-		return gotgrpc.NewSpace(c), nil
+		return branches.NewMultiSpace(layers)
 	case spec.Crypto != nil:
 		secret := spec.Crypto.Secret
 		if len(secret) != branches.SecretSize {
@@ -210,22 +115,4 @@ func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 	default:
 		return nil, fmt.Errorf("empty SpaceSpec")
 	}
-}
-
-func (r *Repo) spaceFromSpecs(specs []SpaceLayerSpec) (branches.Space, error) {
-	var layers []branches.Layer
-	for _, spec := range specs {
-		layer := branches.Layer{
-			Prefix: spec.Prefix,
-			Target: newLazySpace(func(ctx context.Context) (branches.Space, error) {
-				return r.MakeSpace(spec.Target)
-			}),
-		}
-		layers = append(layers, layer)
-	}
-	layers = append(layers, branches.Layer{
-		Prefix: "",
-		Target: r.specDir,
-	})
-	return branches.NewMultiSpace(layers)
 }

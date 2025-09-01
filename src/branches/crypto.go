@@ -12,7 +12,7 @@ import (
 	"golang.org/x/exp/slices"
 
 	"github.com/gotvc/got/src/gdat"
-	"github.com/gotvc/got/src/internal/cells"
+	"github.com/gotvc/got/src/internal/volumes"
 )
 
 const SecretSize = 32
@@ -124,7 +124,7 @@ func (r *CryptoSpace) List(ctx context.Context, span Span, limit int) (ret []str
 	return ret, nil
 }
 
-func (r *CryptoSpace) Open(ctx context.Context, name string) (*Volume, error) {
+func (r *CryptoSpace) Open(ctx context.Context, name string) (Volume, error) {
 	v, err := r.inner.Open(ctx, name)
 	if err != nil {
 		return nil, err
@@ -183,7 +183,6 @@ func (r *CryptoSpace) decryptName(x string) (string, error) {
 func (r *CryptoSpace) encryptInfo(x Info) Info {
 	y := Info{
 		Salt: r.encryptSalt(x.Salt),
-		Mode: x.Mode,
 	}
 	SortAnnotations(y.Annotations)
 	return y
@@ -196,7 +195,6 @@ func (r *CryptoSpace) decryptInfo(x Info) (*Info, error) {
 	}
 	return &Info{
 		Salt: salt,
-		Mode: x.Mode,
 	}, nil
 }
 
@@ -220,16 +218,10 @@ func (r *CryptoSpace) decryptSalt(x []byte) ([]byte, error) {
 	return r.getAEAD(secret[:]).Open(nil, nonce, ctext, nil)
 }
 
-func (r *CryptoSpace) wrapVolume(name string, x *Volume) *Volume {
+func (r *CryptoSpace) wrapVolume(name string, x Volume) Volume {
 	var secret [32]byte
 	deriveKey(secret[:], r.secret, "got/space/cells/"+name)
-	yCell := cells.NewEncrypted(x.Cell, &secret)
-	return &Volume{
-		Cell:     yCell,
-		FSStore:  x.FSStore,
-		VCStore:  x.VCStore,
-		RawStore: x.RawStore,
-	}
+	return volumes.NewAEAD(x, &secret)
 }
 
 func (r *CryptoSpace) shouldPassthrough(name string) bool {

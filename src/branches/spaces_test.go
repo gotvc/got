@@ -3,11 +3,9 @@ package branches
 import (
 	"testing"
 
+	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/internal/volumes"
 	"github.com/stretchr/testify/require"
-	"go.brendoncarroll.net/state/cadata"
-
-	"github.com/gotvc/got/src/internal/cells"
-	"github.com/gotvc/got/src/internal/stores"
 )
 
 func TestMemSpace(t *testing.T) {
@@ -15,13 +13,10 @@ func TestMemSpace(t *testing.T) {
 }
 
 func newTestSpace(t testing.TB) Space {
-	newStore := func() cadata.Store {
-		return stores.NewMem()
+	newVolume := func() volumes.Volume {
+		return volumes.NewMemory(gdat.Hash, 1<<22)
 	}
-	newCell := func() cells.Cell {
-		return cells.NewMem()
-	}
-	return NewMem(newStore, newCell)
+	return NewMem(newVolume)
 }
 
 func TestCryptoSpace(t *testing.T) {
