@@ -22,7 +22,7 @@ func TestInit(t *testing.T) {
 	require.NoError(t, err)
 
 	gnsc := Client{Blobcache: bc, Machine: New()}
-	err = gnsc.Init(ctx, *volh)
+	err = gnsc.Init(ctx, *volh, nil)
 	require.NoError(t, err)
 }
 
@@ -30,7 +30,7 @@ func TestMarshalOp(t *testing.T) {
 	tc := []Op{
 		// &Op_CreateGroup{Group: Group{Name: "test"}},
 		// &Op_AddLeaf{},
-		&Op_DropLeaf{LeafID: inet256.ID{}},
+		&Op_DropLeaf{Group: "a", ID: inet256.ID{}},
 		&Op_AddMember{Group: "a", Member: "b"},
 		&Op_RemoveMember{Group: "a", Member: "b"},
 		&Op_AddRule{Rule: Rule{Subject: "sub", Verb: "verb", Object: NewGroupSet(regexp.MustCompile(".*"))}},
@@ -55,7 +55,7 @@ func TestCreateAt(t *testing.T) {
 	ctx := testutil.Context(t)
 	bc := newTestService(t)
 	gnsc := Client{Blobcache: bc, Machine: New()}
-	require.NoError(t, gnsc.Init(ctx, blobcache.Handle{}))
+	require.NoError(t, gnsc.Init(ctx, blobcache.Handle{}, nil))
 
 	err := gnsc.CreateAt(ctx, blobcache.Handle{}, "test", nil)
 	require.NoError(t, err)

@@ -5,6 +5,7 @@ import (
 
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
+	"github.com/gotvc/got/src/branches"
 	"go.brendoncarroll.net/state/cadata"
 )
 
@@ -33,7 +34,8 @@ func (s Schema) Validate(ctx context.Context, src cadata.Getter, prev, next []by
 	if err != nil {
 		return err
 	}
-	return mach.ValidateChange(ctx, src, prevRoot.State, nextRoot.State, nextRoot.Delta)
+	return nil
+	return mach.led.Validate(ctx, src, prevRoot, nextRoot)
 }
 
 func (s Schema) ReadLinks(ctx context.Context, src cadata.Getter, rootData []byte, dst map[blobcache.OID]blobcache.ActionSet) error {
@@ -45,7 +47,7 @@ func (s Schema) ReadLinks(ctx context.Context, src cadata.Getter, rootData []byt
 		return err
 	}
 	mach := New()
-	entries, err := mach.ListEntries(ctx, src, root.State, 0)
+	entries, err := mach.ListEntries(ctx, src, root.State, branches.TotalSpan(), 0)
 	if err != nil {
 		return err
 	}

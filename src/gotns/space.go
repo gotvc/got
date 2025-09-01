@@ -56,7 +56,7 @@ func (bs *Space) Delete(ctx context.Context, name string) error {
 }
 
 func (bs *Space) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {
-	return bs.client.ListEntries(ctx, bs.volh, limit)
+	return bs.client.ListEntries(ctx, bs.volh, span, limit)
 }
 
 func (bs *Space) Set(ctx context.Context, name string, config branches.Config) error {

@@ -61,6 +61,14 @@ type Group struct {
 	Owners []inet256.ID
 }
 
+func GenerateKEM() (kem.PublicKey, kem.PrivateKey, error) {
+	pub, priv, err := mlkem1024.GenerateKeyPair(rand.Reader)
+	if err != nil {
+		return nil, nil, err
+	}
+	return pub, priv, nil
+}
+
 func ParseGroup(key, value []byte) (*Group, error) {
 	var group Group
 	readLP(value)
@@ -79,14 +87,23 @@ func (g *Group) Value(out []byte) []byte {
 }
 
 // IdentityLeaf contains information about a specific signing key.
+// It is an entry in the Leaves table.
 type IdentityLeaf struct {
+	// Group is part of the key.
+	Group string
+	// ID is part of the key.
+	ID inet256.ID
+
 	PublicKey inet256.PublicKey
-	KEM       kem.PublicKey
-	Sig       []byte
+	SignedKEM SignedKEM
 }
 
-func ParseIdentityLeaf(data []byte) (*IdentityLeaf, error) {
-	pkData, rest, err := readLP(data)
+func ParseIdentityLeaf(key, value []byte) (*IdentityLeaf, error) {
+	group, id, err := parseLeafKey(key)
+	if err != nil {
+		return nil, err
+	}
+	pkData, data, err := readLP(value)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +111,6 @@ func ParseIdentityLeaf(data []byte) (*IdentityLeaf, error) {
 	if err != nil {
 		return nil, err
 	}
-	data = rest
 	sigKEMData, _, err := readLP(data)
 	if err != nil {
 		return nil, err
@@ -107,19 +123,44 @@ func ParseIdentityLeaf(data []byte) (*IdentityLeaf, error) {
 		return nil, fmt.Errorf("invalid signature for kem public key")
 	}
 	return &IdentityLeaf{
+		Group:     group,
+		ID:        id,
 		PublicKey: pubKey,
-		KEM:       sigKEM.KEM,
-		Sig:       sigKEM.Sig,
+		SignedKEM: *sigKEM,
 	}, nil
 }
 
-func (il *IdentityLeaf) Marshal(out []byte) []byte {
+// parseLeafKey parses the key portion of the GotKV entry in the Leaves table.
+// The first part of the key is the group name, and the last 32 bytes are the ID.
+func parseLeafKey(key []byte) (group string, id inet256.ID, _ error) {
+	if len(key) < 32 {
+		return "", inet256.ID{}, fmt.Errorf("leaf key too short")
+	}
+	group = string(key[:len(key)-32])
+	id = inet256.IDFromBytes(key[len(key)-32:])
+	return group, id, nil
+}
+
+func leafKey(group string, leafID inet256.ID) []byte {
+	key := []byte(group)
+	key = append(key, leafID[:]...)
+	return key
+}
+
+// Key returns the key portion of the GotKV entry in the Leaves table.
+func (il IdentityLeaf) Key(out []byte) []byte {
+	out = append(out, leafKey(il.Group, il.ID)...)
+	return out
+}
+
+// Value returns the value portion of the GotKV entry in the Leaves table.
+func (il *IdentityLeaf) Value(out []byte) []byte {
 	pkData, err := il.PublicKey.MarshalBinary()
 	if err != nil {
 		panic(err)
 	}
 	out = appendLP(out, pkData)
-	out = appendLP(out, il.Sig)
+	out = appendLP(out, il.SignedKEM.Marshal(nil))
 	return out
 }
 
@@ -138,11 +179,15 @@ func (il *IdentityLeaf) GenerateKEM(sigPriv inet256.PrivateKey) kem.PrivateKey {
 	if !inet256.DefaultPKI.Verify(&sigCtxKEM, sigPriv.Public().(inet256.PublicKey), kemData, sig) {
 		panic("this is a bug")
 	}
-	il.KEM = pub
-	il.Sig = sig
+	il.SignedKEM = SignedKEM{KEM: pub, Sig: sig}
 	return priv
 }
 
+func (il *IdentityLeaf) Verify() bool {
+	return il.SignedKEM.Verify(il.PublicKey)
+}
+
+// SignedKEM is a KEM public key and a signature of the KEM public key.
 type SignedKEM struct {
 	KEM kem.PublicKey
 	Sig []byte
@@ -166,6 +211,13 @@ func ParseSignedKEM(data []byte) (*SignedKEM, error) {
 	return &SignedKEM{KEM: kemPub, Sig: sig}, nil
 }
 
+func (sk SignedKEM) Marshal(out []byte) []byte {
+	kemData := MarshalKEMPublicKey(nil, KEM_MLKEM1024, sk.KEM)
+	out = appendLP(out, kemData)
+	out = appendLP(out, sk.Sig)
+	return out
+}
+
 func (sk *SignedKEM) Verify(pub inet256.PublicKey) bool {
 	kemData, err := sk.KEM.MarshalBinary()
 	if err != nil {
@@ -179,7 +231,21 @@ type Membership struct {
 	Group  string
 	Member string
 
-	GroupKEMs [][]byte
+	EncryptedKEM [][]byte
+}
+
+func (m *Machine) NewMembership(ctx context.Context, s stores.RW, state State, groupName string, memberName string) (*State, error) {
+	parentGroup, err := m.GetGroup(ctx, s, state, groupName)
+	if err != nil {
+		return nil, err
+	}
+	childGroup, err := m.GetGroup(ctx, s, state, memberName)
+	if err != nil {
+		return nil, err
+	}
+	parentGroup.KEM.Scheme().Encapsulate(childGroup.KEM)
+
+	return &state, nil
 }
 
 func ParseMembership(k, v []byte) (*Membership, error) {
@@ -187,19 +253,9 @@ func ParseMembership(k, v []byte) (*Membership, error) {
 	if err != nil {
 		return nil, err
 	}
-	var kems [][]byte
-	for len(v) > 0 {
-		ctext, rest, err := readLP(v)
-		if err != nil {
-			return nil, err
-		}
-		v = rest
-		kems = append(kems, ctext)
-	}
 	return &Membership{
-		Group:     group,
-		Member:    member,
-		GroupKEMs: kems,
+		Group:  group,
+		Member: member,
 	}, nil
 }
 
@@ -208,6 +264,7 @@ func (m *Membership) Key(out []byte) []byte {
 }
 
 func (m *Membership) Value(out []byte) []byte {
+	// TODO: store encrypted KEMs.
 	return nil
 }
 

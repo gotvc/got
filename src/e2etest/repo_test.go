@@ -29,7 +29,7 @@ func TestMultiRepoSync(t *testing.T) {
 	go origin.Serve(ctx, testutil.PacketConn(t))
 	for _, p := range []string{p1, p2} {
 		err := gotrepo.ConfigureRepo(p, func(x gotrepo.Config) gotrepo.Config {
-			originEP := origin.GetEndpoint(ctx)
+			originEP := origin.Endpoint()
 			fqid := origin.GetFQOID()
 
 			x.Spaces = []gotrepo.SpaceLayerSpec{
@@ -37,7 +37,7 @@ func TestMultiRepoSync(t *testing.T) {
 					Prefix: "origin/",
 					Target: gotrepo.SpaceSpec{
 						Crypto: &gotrepo.CryptoSpaceSpec{
-							Inner: gotrepo.SpaceSpec{Mount: &gotrepo.VolumeSpec{
+							Inner: gotrepo.SpaceSpec{Blobcache: &gotrepo.VolumeSpec{
 								Remote: &blobcache.VolumeBackend_Remote{
 									Endpoint: originEP,
 									Volume:   fqid.OID,

@@ -201,11 +201,21 @@ type Op_AddLeaf struct {
 func (op Op_AddLeaf) isOp() {}
 
 func (op Op_AddLeaf) Marshal(out []byte) []byte {
-	return op.Leaf.Marshal(out)
+	out = appendLP(out, op.Leaf.Key(nil))
+	out = appendLP(out, op.Leaf.Value(nil))
+	return out
 }
 
 func (op *Op_AddLeaf) Unmarshal(data []byte) error {
-	leaf, err := ParseIdentityLeaf(data)
+	k, data, err := readLP(data)
+	if err != nil {
+		return err
+	}
+	val, _, err := readLP(data)
+	if err != nil {
+		return err
+	}
+	leaf, err := ParseIdentityLeaf(k, val)
 	if err != nil {
 		return err
 	}
@@ -218,24 +228,31 @@ func (op Op_AddLeaf) OpCode() OpCode {
 }
 
 func (op Op_AddLeaf) perform(ctx context.Context, m *Machine, s stores.RW, state State) (State, error) {
-	panic("not implemented")
+	next, err := m.AddLeaf(ctx, s, state, op.Leaf)
+	if err != nil {
+		return State{}, err
+	}
+	return *next, nil
 }
 
 type Op_DropLeaf struct {
-	LeafID inet256.ID
+	Group string
+	ID    inet256.ID
 }
 
 func (op Op_DropLeaf) isOp() {}
 
 func (op Op_DropLeaf) Marshal(out []byte) []byte {
-	return op.LeafID[:]
+	return append(out, leafKey(op.Group, op.ID)...)
 }
 
 func (op *Op_DropLeaf) Unmarshal(data []byte) error {
-	if len(data) != 32 {
-		return fmt.Errorf("invalid leaf id length: %d", len(data))
+	group, id, err := parseLeafKey(data)
+	if err != nil {
+		return err
 	}
-	op.LeafID = inet256.IDFromBytes(data)
+	op.Group = group
+	op.ID = id
 	return nil
 }
 
@@ -244,7 +261,11 @@ func (op Op_DropLeaf) OpCode() OpCode {
 }
 
 func (op Op_DropLeaf) perform(ctx context.Context, m *Machine, s stores.RW, state State) (State, error) {
-	panic("not implemented")
+	next, err := m.DropLeaf(ctx, s, state, op.Group, op.ID)
+	if err != nil {
+		return State{}, err
+	}
+	return *next, nil
 }
 
 type Op_AddMember struct {
@@ -382,7 +403,11 @@ func (op Op_DropRule) OpCode() OpCode {
 }
 
 func (op Op_DropRule) perform(ctx context.Context, m *Machine, s stores.RW, state State) (State, error) {
-	panic("not implemented")
+	next, err := m.DropRule(ctx, s, state, op.RuleID)
+	if err != nil {
+		return State{}, err
+	}
+	return next, nil
 }
 
 // Op_PutEntry creates or overwrites a Branch entry.

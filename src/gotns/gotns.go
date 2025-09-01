@@ -8,6 +8,7 @@ import (
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/gotled"
 	"github.com/gotvc/got/src/internal/stores"
+	"go.inet256.org/inet256/src/inet256"
 )
 
 // Root contains references to the entire state of the namespace, including the history.
@@ -133,8 +134,8 @@ func New() Machine {
 }
 
 // New creates a new root.
-func (m *Machine) New(ctx context.Context, s stores.RW) (*Root, error) {
-	var state State
+func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (*Root, error) {
+	state := new(State)
 	for _, dst := range []*gotkv.Root{&state.Groups, &state.Leaves, &state.Memberships, &state.Rules, &state.Branches} {
 		kvr, err := m.gotkv.NewEmpty(ctx, s)
 		if err != nil {
@@ -142,11 +143,30 @@ func (m *Machine) New(ctx context.Context, s stores.RW) (*Root, error) {
 		}
 		*dst = *kvr
 	}
-	if err := m.ValidateState(ctx, s, state); err != nil {
+	kemPub, _, err := GenerateKEM()
+	if err != nil {
+		return nil, err
+	}
+	g := Group{
+		Name: "admin",
+		KEM:  kemPub,
+	}
+	state, err = m.CreateGroup(ctx, s, *state, g)
+	if err != nil {
+		return nil, err
+	}
+	for _, leaf := range admins {
+		var err error
+		state, err = m.AddLeaf(ctx, s, *state, leaf)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := m.ValidateState(ctx, s, *state); err != nil {
 		panic(err)
 	}
-	root := m.led.Initial(state)
-	if err := m.ValidateChange(ctx, s, root.State, root.State, Delta{}); err != nil {
+	root := m.led.Initial(*state)
+	if err := m.ValidateChange(ctx, s, root.State, Delta{}, root.State); err != nil {
 		return nil, err
 	}
 	return &root, nil
@@ -164,7 +184,7 @@ func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State
 
 // ValidateChange checks the change between two states.
 // Prev is assumed to be a known good, valid state.
-func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, next State, delta Delta) error {
+func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev State, delta Delta, next State) error {
 	// TODO: first validate auth operations, ensure that all the differences are signed.
 	return nil
 }
@@ -179,6 +199,36 @@ func (m *Machine) Apply(ctx context.Context, s stores.RW, prev State, delta Delt
 		}
 	}
 	return state, nil
+}
+
+func (m *Machine) CreateGroup(ctx context.Context, s stores.RW, state State, group Group) (*State, error) {
+	groupState, err := m.gotkv.Mutate(ctx, s, state.Groups, createGroup(group))
+	if err != nil {
+		return nil, err
+	}
+	state.Groups = *groupState
+	return &state, nil
+}
+
+func (m *Machine) AddLeaf(ctx context.Context, s stores.RW, state State, leaf IdentityLeaf) (*State, error) {
+	if !leaf.Verify() {
+		return nil, fmt.Errorf("leaf's signature is invalid")
+	}
+	leafState, err := m.gotkv.Mutate(ctx, s, state.Leaves, addLeaf(leaf))
+	if err != nil {
+		return nil, err
+	}
+	state.Leaves = *leafState
+	return &state, nil
+}
+
+func (m *Machine) DropLeaf(ctx context.Context, s stores.RW, state State, group string, leafID inet256.ID) (*State, error) {
+	leafState, err := m.gotkv.Mutate(ctx, s, state.Leaves, dropLeaf(group, leafID))
+	if err != nil {
+		return nil, err
+	}
+	state.Leaves = *leafState
+	return &state, nil
 }
 
 // appendLP16 appends a length-prefixed byte slice to out.
@@ -216,4 +266,35 @@ func readLP(data []byte) (y []byte, rest []byte, _ error) {
 		return nil, nil, fmt.Errorf("length-prefixed data too short")
 	}
 	return data[n : n+int(dataLen)], data[n+int(dataLen):], nil
+}
+
+func createGroup(group Group) gotkv.Mutation {
+	return gotkv.Mutation{
+		Span: gotkv.SingleKeySpan(group.Key(nil)),
+		Entries: []gotkv.Entry{
+			{
+				Key:   group.Key(nil),
+				Value: group.Value(nil),
+			},
+		},
+	}
+}
+
+func addLeaf(leaf IdentityLeaf) gotkv.Mutation {
+	return gotkv.Mutation{
+		Span: gotkv.SingleKeySpan(leaf.Key(nil)),
+		Entries: []gotkv.Entry{
+			{
+				Key:   leaf.Key(nil),
+				Value: leaf.Value(nil),
+			},
+		},
+	}
+}
+
+func dropLeaf(group string, leafID inet256.ID) gotkv.Mutation {
+	return gotkv.Mutation{
+		Span:    gotkv.SingleKeySpan(leafKey(group, leafID)),
+		Entries: []gotkv.Entry{},
+	}
 }

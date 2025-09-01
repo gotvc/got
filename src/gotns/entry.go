@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"blobcache.io/blobcache/src/blobcache"
+	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
@@ -103,9 +104,15 @@ func PutEntry(entry Entry) gotkv.Mutation {
 	}
 }
 
-func (m *Machine) ListEntries(ctx context.Context, s stores.Reading, State State, limit int) ([]Entry, error) {
-	span := gotkv.PrefixSpan([]byte(""))
-	it := m.gotkv.NewIterator(s, State.Branches, span)
+func (m *Machine) ListEntries(ctx context.Context, s stores.Reading, State State, span branches.Span, limit int) ([]Entry, error) {
+	span2 := gotkv.TotalSpan()
+	if span.Begin != "" {
+		span2.Begin = []byte(span.Begin)
+	}
+	if span.End != "" {
+		span2.End = []byte(span.End)
+	}
+	it := m.gotkv.NewIterator(s, State.Branches, span2)
 	var ents []Entry
 	for {
 		ent, err := streams.Next(ctx, it)

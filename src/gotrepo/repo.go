@@ -103,7 +103,7 @@ func Init(p string) error {
 		return err
 	}
 	ctx := context.TODO()
-	if err := r.gnsc.Init(ctx, blobcache.Handle{}); err != nil {
+	if err := r.gnsc.Init(ctx, blobcache.Handle{}, nil); err != nil {
 		return err
 	}
 	if _, err := branches.CreateIfNotExists(ctx, r.space, nameMaster, branches.NewConfig(false)); err != nil {
@@ -170,11 +170,22 @@ func Open(p string) (*Repo, error) {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
 	}
+
+	// setup space
 	r.gnsc = &gotns.Client{
 		Blobcache: r.bc,
 		Machine:   gotns.New(),
 	}
-	r.space = gotns.NewSpace(r.gnsc, blobcache.Handle{})
+	spaceSpec := config.Spaces
+	spaceSpec = append(spaceSpec, SpaceLayerSpec{
+		Prefix: "",
+		Target: SpaceSpec{Local: &blobcache.OID{}},
+	})
+	space, err := r.MakeSpace(SpaceSpec{Multi: &spaceSpec})
+	if err != nil {
+		return nil, err
+	}
+	r.space = space
 	return r, nil
 }
 
@@ -209,14 +220,14 @@ func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
 		PrivateKey: r.privateKey.(ed25519.PrivateKey),
 		PacketConn: pc,
 		Schemas:    blobcacheSchemas(),
-		Root:       blobcacheRootSpec(),
+		Root:       *blobcacheRootSpec(),
 	})
 	r.bc = svc
 	return svc.Run(ctx)
 }
 
-func (r *Repo) GetEndpoint(ctx context.Context) blobcache.Endpoint {
-	ep, err := r.bc.Endpoint(ctx)
+func (r *Repo) Endpoint() blobcache.Endpoint {
+	ep, err := r.bc.Endpoint(context.TODO())
 	if err != nil {
 		panic(err)
 	}
@@ -263,7 +274,7 @@ func openLocalBlobcache(ctx context.Context, p string) (*bclocal.Service, *sqlx.
 	return bclocal.New(bclocal.Env{
 		DB:      db,
 		Schemas: blobcacheSchemas(),
-		Root:    blobcacheRootSpec(),
+		Root:    *blobcacheRootSpec(),
 	}), db, nil
 }
 
@@ -277,8 +288,8 @@ func blobcacheSchemas() map[blobcache.Schema]schema.Schema {
 	return schemas
 }
 
-func blobcacheRootSpec() blobcache.VolumeSpec {
+func blobcacheRootSpec() *blobcache.VolumeSpec {
 	rootSpec := blobcache.DefaultLocalSpec()
 	rootSpec.Local.Schema = schema_GOTNS
-	return rootSpec
+	return &rootSpec
 }

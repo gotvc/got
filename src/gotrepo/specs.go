@@ -10,15 +10,11 @@ import (
 	"blobcache.io/blobcache/src/schema/simplens"
 
 	"github.com/gotvc/got/src/branches"
+	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/internal/volumes"
 )
 
 type VolumeSpec = blobcache.VolumeSpec
-
-type BranchSpec struct {
-	Volume blobcache.VolumeSpec `json:"volume"`
-	branches.Info
-}
 
 func ParseVolumeSpec(data []byte) (*VolumeSpec, error) {
 	var spec VolumeSpec
@@ -44,16 +40,13 @@ func (r *Repo) MakeVolume(ctx context.Context, branchName string, spec VolumeSpe
 	return &volumes.Blobcache{Service: r.bc, Handle: *volh}, nil
 }
 
+// MultiSpaceSpec is a prefix-routed space made up of layers.
 type MultiSpaceSpec []SpaceLayerSpec
 
+// SpaceLayerSpec is a layer in a multi-layer space.
 type SpaceLayerSpec struct {
 	Prefix string    `json:"prefix"`
 	Target SpaceSpec `json:"target"`
-}
-
-type GRPCSpaceSpec struct {
-	Endpoint string            `json:"endpoint"`
-	Headers  map[string]string `json:"headers,omitempty"`
 }
 
 type CryptoSpaceSpec struct {
@@ -68,16 +61,36 @@ type PrefixSpaceSpec struct {
 }
 
 type SpaceSpec struct {
-	GRPC *GRPCSpaceSpec `json:"grpc,omitempty"`
-	// Mount is a Space encoded in a single volume.
-	Mount *VolumeSpec `json:"mount,omitempty"`
+	Local     *blobcache.OID `json:"local,omitempty"`
+	Blobcache *VolumeSpec    `json:"blobcache,omitempty"`
 
+	Multi  *MultiSpaceSpec  `json:"multi,omitempty"`
 	Crypto *CryptoSpaceSpec `json:"crypto,omitempty"`
 	Prefix *PrefixSpaceSpec `json:"prefix,omitempty"`
 }
 
 func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 	switch {
+	case spec.Local != nil:
+		volh, err := r.bc.OpenAs(r.ctx, nil, *spec.Local, blobcache.Action_ALL)
+		if err != nil {
+			return nil, err
+		}
+		return gotns.NewSpace(r.gnsc, *volh), nil
+	case spec.Blobcache != nil:
+		return nil, fmt.Errorf("blobcache spaces in arbitrary volumes are not yet supported")
+	case spec.Multi != nil:
+		var layers []branches.Layer
+		for _, spec := range *spec.Multi {
+			layer := branches.Layer{
+				Prefix: spec.Prefix,
+				Target: newLazySpace(func(ctx context.Context) (branches.Space, error) {
+					return r.MakeSpace(spec.Target)
+				}),
+			}
+			layers = append(layers, layer)
+		}
+		return branches.NewMultiSpace(layers)
 	case spec.Crypto != nil:
 		secret := spec.Crypto.Secret
 		if len(secret) != branches.SecretSize {
@@ -102,22 +115,4 @@ func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 	default:
 		return nil, fmt.Errorf("empty SpaceSpec")
 	}
-}
-
-func (r *Repo) spaceFromSpecs(specs []SpaceLayerSpec) (branches.Space, error) {
-	var layers []branches.Layer
-	for _, spec := range specs {
-		layer := branches.Layer{
-			Prefix: spec.Prefix,
-			Target: newLazySpace(func(ctx context.Context) (branches.Space, error) {
-				return r.MakeSpace(spec.Target)
-			}),
-		}
-		layers = append(layers, layer)
-	}
-	layers = append(layers, branches.Layer{
-		Prefix: "",
-		Target: r.space,
-	})
-	return branches.NewMultiSpace(layers)
 }

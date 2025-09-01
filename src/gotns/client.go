@@ -19,7 +19,7 @@ type Client struct {
 }
 
 // Init initializes a new GotNS instance in the given volume.
-func (c *Client) Init(ctx context.Context, volh blobcache.Handle) error {
+func (c *Client) Init(ctx context.Context, volh blobcache.Handle, admins []IdentityLeaf) error {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return err
@@ -36,7 +36,7 @@ func (c *Client) Init(ctx context.Context, volh blobcache.Handle) error {
 	if len(data) > 0 {
 		return errors.New("gotns: root already exists")
 	}
-	root, err := c.Machine.New(ctx, tx)
+	root, err := c.Machine.New(ctx, tx, admins)
 	if err != nil {
 		return err
 	}
@@ -81,27 +81,28 @@ func (c *Client) DeleteEntry(ctx context.Context, volh blobcache.Handle, name st
 	})
 }
 
-func (c *Client) ListEntries(ctx context.Context, volh blobcache.Handle, limit int) ([]string, error) {
+func (c *Client) ListEntries(ctx context.Context, volh blobcache.Handle, span branches.Span, limit int) ([]string, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return nil, err
 	}
-	tx, err := blobcache.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: true})
+	tx, err := blobcache.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: false})
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Abort(ctx)
-	root, err := loadState(ctx, tx)
+	state, err := loadState(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
-	entries, err := c.Machine.ListEntries(ctx, tx, *root, limit)
+	entries, err := c.Machine.ListEntries(ctx, tx, *state, span, limit)
 	if err != nil {
 		return nil, err
 	}
-	return slices2.Map(entries, func(e Entry) string {
+	names := slices2.Map(entries, func(e Entry) string {
 		return e.Name
-	}), nil
+	})
+	return names, nil
 }
 
 func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string) (*branches.Info, error) {
