@@ -1,21 +1,7 @@
 # Got Architecture
 
-## Data Infrastructure
-There is a lot that goes into just storing data, and moving it around, independent of the formats/protocols.
-
-### Cells
-Compare and swap cell. Anything that supports reading, and compare-and-swap can be used as a cell.
-The interface is in `./pkg/cells`
-
-### Stores
-Content-addressed store.
-You give it data, it gives you a hash.
-You give it a hash, it gives you the data.
-Data can be deleted by the hash.
-The set of hashes in the store can be listed.
-
-### Volume
-A volume is a (Cell, Store) pair.
+## Volumes
+Volumes are a mutable cell for storing data, paried with a content adressable store.
 The exact definition can be found in `pkg/branches`
 The cell stores the root of some data structure.
 The store stores the content-addressed blobs that make up the data structure.
@@ -26,28 +12,11 @@ There are no assumptions made about the contents of either the cell or the store
 This allows them to be encrypted, and operations on volumes to be truly protocol agnostic.
 It is still possible to define broadly useful operations on volumes even with this limitation.
 
-#### Sync
-The `Sync` operation is defined on two volumes.
-The sync operation first ensures the destination Store is a superset of the source Store.
-Then it performs a CAS on the destination cell informed by the contents of the source cell.
-The term "informed" is used here, intentionally vaugue, to indicate that whatever is calling the Sync operation
-should make a decision about the final value in the destination cell, it may not be appropriate to complete the CAS.
-The particular logic implemented by the caller is non-essential to the Sync operation.
-
-#### Cleanup
-The `Cleanup` operation is defined on a single volume
-The cleanup operation looks at the contents of the cell, and then deletes items from the Store.
-While a cleanup operation is happening, all attempts to Sync to the volume must fail.
-
-Sync and Cleanup can be run concurrently with themselves, but not each other.
-This essentially puts the volume in one of 2 modes: Expand mode and Contract mode.
-How this is implemented is not really important either; you can use locks, you can use MVCC, whatever.
-
 ## Branches
 Branches are named volumes, and associated metadata like creation time.
 Since they contain volumes, they function as a holder of a Got data structure.
 
-### Spaces
+## Spaces
 A Space is a namespace for addressing a set of Branches with the same implementation.
 The interface is defined in `pkg/branches`.
 

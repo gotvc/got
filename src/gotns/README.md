@@ -18,8 +18,22 @@ A KEM key pair is generated and then the public key is signed with the signing k
 ### Groups
 A group is uniquely defined by a user specified name.
 Names are unique within the namespace.
+A group contains a set of leaves, and a set of other groups.
 
-The simplest identity is a single signing key, which u
+Each Group has it's own KEM key.
+All members of the group have access to an encrypted version of the KEM private key.
+Everyone can see the KEM public key in the record for the Group.
 
 ## Rules
-The branch namespace
+The namespace has a set of rules, which are used to grant access to regions of the namespace.
+Each rule has 3 parts: a subject, a verb, and an ObjectSet.
+Subject refers to a Group by name.
+A Group cannot be deleted unless all rules referring to it are also deleted.
+
+Verb is the action being performed, viewing or editing the branch contents or metadata.
+
+ObjectSet is a type plus a regular exprssion.
+The Type can either be "group" or "branch".
+
+## Branches
+The namespace for branches is regulated by the rules

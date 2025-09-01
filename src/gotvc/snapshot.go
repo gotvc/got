@@ -25,8 +25,9 @@ type (
 
 type Snapshot struct {
 	N       uint64     `json:"n"`
-	Root    gotfs.Root `json:"root"`
 	Parents []gdat.Ref `json:"parents"`
+
+	Root gotfs.Root `json:"root"`
 
 	CreatedAt  tai64.TAI64 `json:"created_at"`
 	Creator    string      `json:"creator,omitempty"`
