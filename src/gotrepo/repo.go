@@ -226,6 +226,28 @@ func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
 	return svc.Run(ctx)
 }
 
+// Cleanup removes unreferenced data from the repo's local DB.
+func (r *Repo) Cleanup(ctx context.Context) error {
+	if err := dbutil.DoTx(ctx, r.db, func(tx *sqlx.Tx) error {
+		logctx.Infof(ctx, "removing blobs from staging areas")
+		if err := cleanupStagingBlobs(ctx, tx); err != nil {
+			return err
+		}
+		logctx.Infof(ctx, "removing unreferenced blobs")
+		if err := cleanupBlobs(tx); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	logctx.Infof(ctx, "running VACUUM")
+	if _, err := r.db.Exec(`VACUUM`); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (r *Repo) Endpoint() blobcache.Endpoint {
 	ep, err := r.bc.Endpoint(context.TODO())
 	if err != nil {
@@ -268,6 +290,9 @@ func openLocalBlobcache(ctx context.Context, p string) (*bclocal.Service, *sqlx.
 	if err != nil {
 		return nil, nil, err
 	}
+	// TODO: remove this.
+	// This prevents a sqlite BUSY error.
+	db.SetMaxOpenConns(1)
 	if err := bclocal.SetupDB(ctx, db); err != nil {
 		return nil, nil, err
 	}
@@ -285,11 +310,13 @@ func blobcacheSchemas() map[blobcache.Schema]schema.Schema {
 	schemas[schema_GOTNS] = gotns.Schema{}
 	rootSpec := blobcache.DefaultLocalSpec()
 	rootSpec.Local.Schema = schema_GOTNS
+	rootSpec.Local.MaxSize = 1 << 22
 	return schemas
 }
 
 func blobcacheRootSpec() *blobcache.VolumeSpec {
 	rootSpec := blobcache.DefaultLocalSpec()
 	rootSpec.Local.Schema = schema_GOTNS
+	rootSpec.Local.MaxSize = 1 << 22
 	return &rootSpec
 }

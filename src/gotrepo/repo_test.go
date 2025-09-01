@@ -141,6 +141,9 @@ func newTestRepo(t testing.TB) *Repo {
 	require.NoError(t, err)
 	require.NotNil(t, repo)
 	t.Cleanup(func() {
+		ctx := testutil.Context(t)
+		// also run cleanup after every test, to make sure that cleanup works after all the situations we are testing.
+		require.NoError(t, repo.Cleanup(ctx))
 		require.NoError(t, repo.Close())
 	})
 	return repo

@@ -65,3 +65,8 @@ func (ss *stagingStore) Hash(data []byte) CID {
 func (ss *stagingStore) MaxSize() int {
 	return ss.maxSize
 }
+
+func cleanupBlobs(tx *sqlx.Tx) error {
+	_, err := tx.Exec(`DELETE FROM blobs WHERE NOT EXISTS (SELECT 1 FROM staging_blobs WHERE cid = blobs.cid)`)
+	return err
+}

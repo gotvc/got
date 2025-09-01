@@ -22,6 +22,7 @@ import (
 	"github.com/gotvc/got/src/internal/porting"
 	"github.com/gotvc/got/src/internal/staging"
 	"github.com/gotvc/got/src/internal/stores"
+	"github.com/gotvc/got/src/internal/units"
 	"github.com/jmoiron/sqlx"
 )
 
@@ -205,7 +206,10 @@ func (r *Repo) Discard(ctx context.Context, paths ...string) error {
 // Clear clears all entries from the staging area
 func (r *Repo) Clear(ctx context.Context) error {
 	return r.modifyStaging(ctx, func(sctx stagingCtx) error {
-		return sctx.Stage.Reset(ctx)
+		if err := sctx.Stage.Reset(ctx); err != nil {
+			return err
+		}
+		return nil
 	})
 }
 
@@ -443,6 +447,24 @@ func (sa *stagingArea) Delete(ctx context.Context, p string) error {
 	defer sa.mu.Unlock()
 	_, err := sa.tx.Exec(`DELETE FROM staging_ops WHERE area_id = ? AND p = ?`, sa.id, p)
 	return err
+}
+
+// cleanupStagingBlobs removes blobs from staging areas which do not have ops that reference them.
+func cleanupStagingBlobs(ctx context.Context, tx *sqlx.Tx) error {
+	// get all of the ids for the empty staging areas
+	var areaIDs []int64
+	if err := tx.Select(&areaIDs, `SELECT rowid FROM staging_areas WHERE NOT EXISTS (SELECT 1 FROM staging_ops WHERE area_id = rowid)`); err != nil {
+		return err
+	}
+	metrics.SetDenom(ctx, "staging_areas", len(areaIDs), units.None)
+	// if the staging area has no ops, then it has no blobs either.
+	for _, areaID := range areaIDs {
+		if _, err := tx.Exec(`DELETE FROM staging_blobs WHERE area_id = ?`, areaID); err != nil {
+			return err
+		}
+		metrics.AddInt(ctx, "staging_areas", 1, units.None)
+	}
+	return nil
 }
 
 func saltFromBranch(b *branches.Info) *[32]byte {
