@@ -15,9 +15,13 @@ func newLocalIDCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		PreRunE:  loadRepo(&repo, open),
 		PostRunE: closeRepo(repo),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			id := repo.GetID()
+			leaf, err := repo.ActiveIdentity(ctx)
+			if err != nil {
+				return err
+			}
 			w := cmd.OutOrStdout()
-			fmt.Fprintf(w, "%v\n", id)
+			fmt.Fprintf(w, "%-40s\t%-10s\t%-10s\n", "ID", "SIG_ALGO", "KEM_ALGO")
+			fmt.Fprintf(w, "%-40v\t%-10s\t%-10s\n", leaf.ID, leaf.PublicKey.Scheme().Name(), leaf.KEMPublicKey.Scheme().Name())
 			return nil
 		},
 	}

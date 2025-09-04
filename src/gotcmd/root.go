@@ -48,6 +48,7 @@ func NewRootCmd() *cobra.Command {
 		newLocalIDCmd,
 		newHTTPCmd,
 		newFTPCmd,
+		newServeCmd,
 
 		newSlurpCmd,
 		newCleanupCmd,

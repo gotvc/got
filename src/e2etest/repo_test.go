@@ -12,14 +12,13 @@ import (
 
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/testutil"
 )
 
 func TestMultiRepoSync(t *testing.T) {
-
-	t.Skip("network protocols are still unstable")
 	ctx := testutil.Context(t)
 	ctx, cf := context.WithCancel(ctx)
 	t.Cleanup(cf)
@@ -55,26 +54,25 @@ func TestMultiRepoSync(t *testing.T) {
 	r1, r2 := openRepo(t, p1), openRepo(t, p2)
 
 	// IAM setup
-	// e := origin.GetHostEngine()
-	// err := e.ModifyPolicy(ctx, func(x gothost.Policy) gothost.Policy {
-	// 	return gothost.Policy{
-	// 		Rules: []gothost.Rule{
-	// 			{
-	// 				Identity: gothost.NewPeer(r1.GetID()),
-	// 				Role:     gothost.Everything(),
-	// 			},
-	// 			{
-	// 				Identity: gothost.NewPeer(r2.GetID()),
-	// 				Role:     gothost.Everything(),
-	// 			},
-	// 		},
-	// 	}
-	// })
-	// require.NoError(t, err)
-	// hostConfig, err := e.View(ctx)
-	// require.NoError(t, err)
-	// t.Log("RULES", hostConfig.Policy.Rules)
+	gnsc := origin.GotNSClient()
+	intro1, err := r1.IntroduceSelf(ctx)
+	require.NoError(t, err)
+	intro2, err := r2.IntroduceSelf(ctx)
+	require.NoError(t, err)
+	require.NoError(t, gnsc.Do(ctx, blobcache.Handle{}, func(tx *gotns.Txn) error {
+		for _, intro := range []gotns.Op_ChangeSet{intro1, intro2} {
+			if err := tx.ChangeSet(intro); err != nil {
+				return err
+			}
+			id := getOne(intro.Sigs)
+			if err := tx.AddLeaf(ctx, "admin", id); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
 
+	t.SkipNow() // TODO: need to be able to create blobcache volumes on the remote.
 	createBranch(t, r1, "origin/master")
 	createBranch(t, r1, "origin/mybranch")
 	require.Contains(t, listBranches(t, r2), "origin/master")
@@ -155,4 +153,11 @@ func listBranches(t testing.TB, r *gotrepo.Repo) (ret []string) {
 	})
 	require.NoError(t, err)
 	return ret
+}
+
+func getOne[K comparable, V any](m map[K]V) K {
+	for k := range m {
+		return k
+	}
+	panic("no keys in map")
 }

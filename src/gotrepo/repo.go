@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	bcclient "blobcache.io/blobcache/client/go"
 	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
@@ -17,9 +16,9 @@ import (
 	"go.brendoncarroll.net/state/kv"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
-	"go.inet256.org/inet256/src/inet256"
 	"go.uber.org/zap"
 
+	"github.com/cloudflare/circl/sign"
 	"github.com/cloudflare/circl/sign/ed25519"
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
@@ -37,7 +36,6 @@ const (
 	gotPrefix      = ".got"
 	configPath     = ".got/config"
 	privateKeyPath = ".got/private.pem"
-	specDirPath    = ".got/branches"
 
 	localDBPath      = ".got/got.db"
 	blobcacheDirPath = ".got/blobcache"
@@ -59,14 +57,14 @@ type Repo struct {
 	rootPath string
 	repoFS   FS // repoFS is the directory that the repo is in
 
-	bcDB       *sqlx.DB
-	bc         blobcache.Service
-	db         *sqlx.DB
-	config     Config
-	privateKey inet256.PrivateKey
+	bcDB   *sqlx.DB
+	bc     blobcache.Service
+	db     *sqlx.DB
+	config Config
 	// ctx is used as the background context for serving the repo
 	ctx context.Context
 
+	privateKey sign.PrivateKey
 	workingDir FS // workingDir is repoFS with reserved paths filtered.
 	gnsc       *gotns.Client
 	space      branches.Space
@@ -85,17 +83,9 @@ func Init(p string) error {
 	if err := repoDirFS.Mkdir(gotPrefix, 0o755); err != nil {
 		return err
 	}
-	// branches
-	if err := repoDirFS.Mkdir(specDirPath, 0o755); err != nil {
-		return err
-	}
 	// config
 	config := DefaultConfig()
 	if err := SaveConfig(repoDirFS, configPath, config); err != nil {
-		return err
-	}
-	privKey := generatePrivateKey()
-	if err := SavePrivateKey(repoDirFS, privateKeyPath, privKey); err != nil {
 		return err
 	}
 	r, err := Open(p)
@@ -103,7 +93,11 @@ func Init(p string) error {
 		return err
 	}
 	ctx := context.TODO()
-	if err := r.gnsc.Init(ctx, blobcache.Handle{}, nil); err != nil {
+	idenLeaf, err := r.ActiveIdentity(ctx)
+	if err != nil {
+		return err
+	}
+	if err := r.gnsc.Init(ctx, blobcache.Handle{}, []gotns.IdentityLeaf{idenLeaf}); err != nil {
 		return err
 	}
 	if _, err := branches.CreateIfNotExists(ctx, r.space, nameMaster, branches.NewConfig(false)); err != nil {
@@ -127,33 +121,30 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
+	var privateKey sign.PrivateKey
 	if err := dbutil.DoTx(ctx, db, func(tx *sqlx.Tx) error {
-		return migrations.EnsureAll(tx, dbmig.ListMigrations())
+		if err := migrations.EnsureAll(tx, dbmig.ListMigrations()); err != nil {
+			return err
+		}
+		if err := setupIdentity(tx); err != nil {
+			return err
+		}
+		privateKey, _, err = loadIdentity(tx)
+		if err != nil {
+			return err
+		}
+		return nil
 	}); err != nil {
 		return nil, err
 	}
 
-	privateKey, err := LoadPrivateKey(repoFS, privateKeyPath)
-	if err != nil {
+	// blobcache
+	if err := posixfs.MkdirAll(repoFS, blobcacheDirPath, 0o755); err != nil {
 		return nil, err
 	}
-
-	// blobcache
-	var bc blobcache.Service
-	var bcDB *sqlx.DB
-	switch {
-	case config.Blobcache.InProcess != nil:
-		if err := posixfs.MkdirAll(repoFS, blobcacheDirPath, 0o755); err != nil {
-			return nil, err
-		}
-		bc, bcDB, err = openLocalBlobcache(ctx, filepath.Join(p, blobcacheDirPath))
-		if err != nil {
-			return nil, err
-		}
-	case config.Blobcache.HTTP != nil:
-		bc = bcclient.NewClient(*config.Blobcache.HTTP)
-	default:
-		return nil, fmt.Errorf("must configure blobcache in .got/config.  It cannot be empty.")
+	bc, bcDB, err := openLocalBlobcache(ctx, filepath.Join(p, blobcacheDirPath))
+	if err != nil {
+		return nil, err
 	}
 
 	r := &Repo{
@@ -172,10 +163,8 @@ func Open(p string) (*Repo, error) {
 	}
 
 	// setup space
-	r.gnsc = &gotns.Client{
-		Blobcache: r.bc,
-		Machine:   gotns.New(),
-	}
+	gnsc := r.GotNSClient()
+	r.gnsc = &gnsc
 	spaceSpec := config.Spaces
 	spaceSpec = append(spaceSpec, SpaceLayerSpec{
 		Prefix: "",

@@ -208,8 +208,8 @@ func (m *Machine[State, Delta]) AndThen(ctx context.Context, s stores.RW, r Root
 		return Root[State, Delta]{}, err
 	}
 	r2 := r
-	r2.State = next
 	r2.Delta = delta
+	r2.State = next
 	if err := r2.History.Append(ctx, s, prevCID); err != nil {
 		return Root[State, Delta]{}, err
 	}

@@ -1,63 +1,97 @@
 package gotrepo
 
 import (
-	"bytes"
 	"context"
-	"io"
 
-	"go.brendoncarroll.net/state/posixfs"
+	"github.com/cloudflare/circl/kem"
+	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
+	"github.com/cloudflare/circl/sign"
+	"github.com/cloudflare/circl/sign/ed25519"
+	"github.com/gotvc/got/src/gotns"
+	"github.com/gotvc/got/src/internal/dbutil"
+	"github.com/jmoiron/sqlx"
 	"go.inet256.org/inet256/src/inet256"
 )
 
-func (r *Repo) GetID() inet256.ID {
-	return inet256.NewID(r.privateKey.Public().(inet256.PublicKey))
-}
-
-func (r *Repo) GetPrivateKey() inet256.PrivateKey {
-	return r.privateKey
-}
-
-func LoadPrivateKey(fsx posixfs.FS, p string) (inet256.PrivateKey, error) {
-	data, err := posixfs.ReadFile(context.TODO(), fsx, p)
-	if err != nil {
-		return nil, err
+func (r *Repo) GotNSClient() gotns.Client {
+	return gotns.Client{
+		Machine:   gotns.New(),
+		Blobcache: r.bc,
+		ActAs:     r.privateKey,
 	}
-	return parsePrivateKey(data)
 }
 
-func SavePrivateKey(fsx posixfs.FS, p string, privateKey inet256.PrivateKey) error {
-	data := marshalPrivateKey(privateKey)
-	return writeIfNotExists(fsx, p, 0o600, bytes.NewReader(data))
+func (r *Repo) ActiveIdentity(ctx context.Context) (gotns.IdentityLeaf, error) {
+	return dbutil.DoTx1(ctx, r.db, getActiveIdentity)
 }
 
-func writeIfNotExists(fsx posixfs.FS, p string, mode posixfs.FileMode, r io.Reader) error {
-	f, err := fsx.OpenFile(p, posixfs.O_EXCL|posixfs.O_CREATE|posixfs.O_WRONLY, mode)
+func (r *Repo) IntroduceSelf(ctx context.Context) (gotns.Op_ChangeSet, error) {
+	leaf, err := r.ActiveIdentity(ctx)
+	if err != nil {
+		return gotns.Op_ChangeSet{}, err
+	}
+	gnsc := r.GotNSClient()
+	return gnsc.IntroduceSelf(leaf.KEMPublicKey), nil
+}
+
+// setupIdentity creates a new identity with a new key pair, only if it does not already exist.
+func setupIdentity(tx *sqlx.Tx) error {
+	var exists bool
+	if err := tx.Get(&exists, `SELECT EXISTS(SELECT 1 FROM idens)`); err != nil {
+		return err
+	}
+	if exists {
+		return nil
+	}
+	pub, priv, err := ed25519.GenerateKey(nil)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	if _, err := io.Copy(f, r); err != nil {
+	id := inet256.NewID(pub)
+	sigPrivData, err := inet256.DefaultPKI.MarshalPrivateKey(nil, priv)
+	if err != nil {
 		return err
 	}
-	return f.Close()
-}
-
-func marshalPrivateKey(x inet256.PrivateKey) []byte {
-	data, err := inet256.DefaultPKI.MarshalPrivateKey(nil, x)
+	sigPubData, err := inet256.DefaultPKI.MarshalPublicKey(nil, pub)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	return data
-}
-
-func parsePrivateKey(data []byte) (inet256.PrivateKey, error) {
-	return inet256.DefaultPKI.ParsePrivateKey(data)
-}
-
-func generatePrivateKey() inet256.PrivateKey {
-	_, priv, err := inet256.GenerateKey()
+	kemPub, kemPriv, err := mlkem1024.GenerateKeyPair(nil)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	return priv
+	kemPubData := gotns.MarshalKEMPublicKey(nil, gotns.KEM_MLKEM1024, kemPub)
+	kemPrivData := gotns.MarshalKEMPrivateKey(nil, gotns.KEM_MLKEM1024, kemPriv)
+
+	_, err = tx.Exec(`INSERT INTO idens (id, sign_private_key, sign_public_key, kem_private_key, kem_public_key)
+		VALUES (?, ?, ?, ?, ?)`, id[:], sigPrivData, sigPubData, kemPrivData, kemPubData)
+	return err
+}
+
+func loadIdentity(tx *sqlx.Tx) (sign.PrivateKey, kem.PrivateKey, error) {
+	var row struct {
+		ID          []byte `db:"id"`
+		SigPrivData []byte `db:"sign_private_key"`
+		KemPrivData []byte `db:"kem_private_key"`
+	}
+	if err := tx.Get(&row, `SELECT id, sign_private_key, kem_private_key FROM idens`); err != nil {
+		return nil, nil, err
+	}
+	sigPriv, err := inet256.DefaultPKI.ParsePrivateKey(row.SigPrivData)
+	if err != nil {
+		return nil, nil, err
+	}
+	kemPriv, err := gotns.ParseKEMPrivateKey(row.KemPrivData)
+	if err != nil {
+		return nil, nil, err
+	}
+	return sigPriv, kemPriv, nil
+}
+
+func getActiveIdentity(tx *sqlx.Tx) (gotns.IdentityLeaf, error) {
+	sigPriv, kemPriv, err := loadIdentity(tx)
+	if err != nil {
+		return gotns.IdentityLeaf{}, err
+	}
+	return gotns.NewLeaf(sigPriv.Public().(sign.PublicKey), kemPriv.Public()), nil
 }

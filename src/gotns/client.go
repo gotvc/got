@@ -5,7 +5,9 @@ import (
 	"errors"
 
 	"blobcache.io/blobcache/src/blobcache"
+	"github.com/cloudflare/circl/kem"
 	"github.com/gotvc/got/src/branches"
+	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/exp/slices2"
 	"go.inet256.org/inet256/src/inet256"
@@ -46,6 +48,41 @@ func (c *Client) Init(ctx context.Context, volh blobcache.Handle, admins []Ident
 	return tx.Commit(ctx)
 }
 
+// Do calls fn with a transaction for manipulating the NS.
+func (c *Client) Do(ctx context.Context, volh blobcache.Handle, fn func(txb *Txn) error) error {
+	return c.doTx(ctx, volh, c.ActAs, fn)
+}
+
+func (c *Client) GetGroup(ctx context.Context, volh blobcache.Handle, name string) (*Group, error) {
+	var group *Group
+	if err := c.view(ctx, volh, func(s stores.Reading, state State) error {
+		var err error
+		group, err = c.Machine.GetGroup(ctx, s, state, name)
+		if err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return group, nil
+}
+
+func (c *Client) GetLeaf(ctx context.Context, volh blobcache.Handle, id inet256.ID) (*IdentityLeaf, error) {
+	var leaf *IdentityLeaf
+	if err := c.view(ctx, volh, func(s stores.Reading, state State) error {
+		var err error
+		leaf, err = c.Machine.GetLeaf(ctx, s, state, id)
+		if err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return leaf, nil
+}
+
 func (c *Client) GetEntry(ctx context.Context, volh blobcache.Handle, name string) (*Entry, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
@@ -64,7 +101,7 @@ func (c *Client) GetEntry(ctx context.Context, volh blobcache.Handle, name strin
 }
 
 func (c *Client) PutEntry(ctx context.Context, volh blobcache.Handle, ent Entry) error {
-	return c.doTx(ctx, volh, func(txb *Builder) error {
+	return c.doTx(ctx, volh, c.ActAs, func(txb *Txn) error {
 		txb.AddOp(&Op_PutEntry{
 			Entry: ent,
 		})
@@ -73,7 +110,7 @@ func (c *Client) PutEntry(ctx context.Context, volh blobcache.Handle, ent Entry)
 }
 
 func (c *Client) DeleteEntry(ctx context.Context, volh blobcache.Handle, name string) error {
-	return c.doTx(ctx, volh, func(txb *Builder) error {
+	return c.doTx(ctx, volh, c.ActAs, func(txb *Txn) error {
 		txb.AddOp(&Op_DeleteEntry{
 			Name: name,
 		})
@@ -119,6 +156,9 @@ func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string
 }
 
 func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string, aux []byte) error {
+	if c.ActAs == nil {
+		return errors.New("gotns.Client: ActAs cannot be nil")
+	}
 	nsh, err := c.adjustHandle(ctx, nsh)
 	if err != nil {
 		return err
@@ -145,7 +185,7 @@ func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string
 	if err != nil {
 		return err
 	}
-	b := c.Machine.NewBuilder(root)
+	b := c.Machine.NewTxn(root, tx, []inet256.PrivateKey{c.ActAs})
 	b.AddOp(&Op_PutEntry{
 		Entry: Entry{
 			Name:   name,
@@ -153,7 +193,7 @@ func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string
 			Rights: blobcache.Action_ALL,
 		},
 	})
-	root2, err := b.Finish(ctx, tx)
+	root2, err := b.Finish(ctx)
 	if err != nil {
 		return err
 	}
@@ -227,7 +267,10 @@ func (c *Client) adjustHandle(ctx context.Context, volh blobcache.Handle) (blobc
 	}
 }
 
-func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, fn func(txb *Builder) error) error {
+func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, privateKey inet256.PrivateKey, fn func(txb *Txn) error) error {
+	if c.ActAs == nil {
+		return errors.New("gotns.Client: ActAs cannot be nil")
+	}
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return err
@@ -245,11 +288,11 @@ func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, fn func(txb *B
 	if err != nil {
 		return err
 	}
-	builder := c.Machine.NewBuilder(root)
+	builder := c.Machine.NewTxn(root, tx, []inet256.PrivateKey{privateKey})
 	if err := fn(builder); err != nil {
 		return err
 	}
-	root2, err := builder.Finish(ctx, tx)
+	root2, err := builder.Finish(ctx)
 	if err != nil {
 		return err
 	}
@@ -257,6 +300,39 @@ func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, fn func(txb *B
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+func (c *Client) view(ctx context.Context, volh blobcache.Handle, fn func(s stores.Reading, state State) error) error {
+	volh, err := c.adjustHandle(ctx, volh)
+	if err != nil {
+		return err
+	}
+	tx, err := blobcache.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: false})
+	if err != nil {
+		return err
+	}
+	defer tx.Abort(ctx)
+	state, err := loadState(ctx, tx)
+	if err != nil {
+		return err
+	}
+	return fn(tx, *state)
+}
+
+// IntroduceSelf creates a signed change set that adds a leaf to the state.
+// Then it returns the signed change set data.
+// It does not contact Blobcache or perform any Volume operations.
+func (c *Client) IntroduceSelf(kemPub kem.PublicKey) Op_ChangeSet {
+	leaf := NewLeaf(c.ActAs.Public().(inet256.PublicKey), kemPub)
+	cs := Op_ChangeSet{
+		Ops: []Op{
+			&Op_CreateLeaf{
+				Leaf: leaf,
+			},
+		},
+	}
+	cs.Sign(c.ActAs)
+	return cs
 }
 
 func loadState(ctx context.Context, tx *blobcache.Tx) (*State, error) {
