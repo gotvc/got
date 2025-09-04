@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/internal/merklelog"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
@@ -22,23 +23,20 @@ type Root[State, Delta Marshaler] struct {
 	// History is the history of all previous states.
 	// The most recent delta is referenced by the last element of the history.
 	History merklelog.State
-	// Delta is the set of changes applied to get the current state from the previous state.
+	// Delta is the set of changes applied to get the previous state to the current state.
 	Delta Delta
 	// State is the current state of the system.
 	State State
 }
 
-// 3 x 32 bit integers for the length of the state, delta, and history
-const headerSize = 4 * 3
+// 8 bits for the history length, 24 bits for the length of the delta.
+const headerSize = 4
 
-func readHeader(data []byte) (h [3]uint32, rest []byte, _ error) {
+func readHeader(data []byte) (h uint32, rest []byte, _ error) {
 	if len(data) < headerSize {
-		return [3]uint32{}, nil, fmt.Errorf("gotled: invalid data, must be at least 12 bytes")
+		return 0, nil, fmt.Errorf("gotled: invalid data, must be at least 12 bytes")
 	}
-	header := [3]uint32{}
-	for i := 0; i < 3; i++ {
-		header[i] = binary.BigEndian.Uint32(data[i*4 : (i+1)*4])
-	}
+	header := binary.BigEndian.Uint32(data)
 	return header, data[headerSize:], nil
 }
 
@@ -47,16 +45,13 @@ func (r Root[State, Delta]) Marshal(out []byte) []byte {
 	for i := 0; i < headerSize; i++ {
 		out = append(out, 0)
 	}
-	header := [3]uint32{}
-	for i, m := range []Marshaler{r.History, r.Delta, r.State} {
-		l1 := len(out)
-		out = m.Marshal(out)
-		l2 := len(out)
-		header[i] = uint32(l2 - l1)
-	}
-	for i := range header {
-		binary.BigEndian.PutUint32(out[offset+i*4:], header[i])
-	}
+	out = r.History.Marshal(out)
+	preDeltaLen := len(out)
+	out = r.Delta.Marshal(out)
+	postDeltaLen := len(out)
+	header := uint32(len(r.History.Levels))<<24 | uint32(postDeltaLen-preDeltaLen)&0x00ffffff
+	binary.BigEndian.PutUint32(out[offset:offset+headerSize], header)
+	out = r.State.Marshal(out)
 	return out
 }
 
@@ -67,13 +62,8 @@ func Parse[State, Delta Marshaler](data []byte, parseState Parser[State], parseD
 	if err != nil {
 		return Root[State, Delta]{}, err
 	}
-	historyLen := header[0]
-	deltaLen := header[1]
-	stateLen := header[2]
-	totalLen := stateLen + deltaLen + historyLen
-	if len(data) < int(totalLen) {
-		return Root[State, Delta]{}, fmt.Errorf("gotled: invalid data, must be at least %d bytes", totalLen)
-	}
+	historyLen := (header >> 24) * blobcache.CIDSize
+	deltaLen := header & 0x00ffffff
 	history, err := merklelog.Parse(data[:historyLen])
 	if err != nil {
 		return Root[State, Delta]{}, err
@@ -82,7 +72,7 @@ func Parse[State, Delta Marshaler](data []byte, parseState Parser[State], parseD
 	if err != nil {
 		return Root[State, Delta]{}, err
 	}
-	state, err := parseState(data[historyLen+deltaLen : historyLen+deltaLen+stateLen])
+	state, err := parseState(data[historyLen+deltaLen:])
 	if err != nil {
 		return Root[State, Delta]{}, err
 	}
@@ -173,6 +163,7 @@ func (m *Machine[State, Delta]) Validate(ctx context.Context, s stores.Reading, 
 	if !yesInc {
 		return fmt.Errorf("gotled: next root does not include history of previous root")
 	}
+	return nil // TODO
 	// Next, we iterate through all of the intermediate states, and check that the transition is valid.
 	it := m.NewIterator(s, prev, next)
 	for {

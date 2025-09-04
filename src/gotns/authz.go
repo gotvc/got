@@ -26,13 +26,23 @@ const (
 	Verb_ADMIN Verb = "ADMIN"
 )
 
+type ObjectType string
+
+const (
+	ObjectType_GROUP  ObjectType = "group"
+	ObjectType_BRANCH ObjectType = "branch"
+	ObjectType_RULE   ObjectType = "rule"
+)
+
 type Rule struct {
 	// Subject is the name of the group that this rule applies to.
 	Subject string
 	// Action is the action granted by this rule.
 	Verb Verb
-	// Object is a regular expression that matches the names of the objects that this rule applies to.
-	Object ObjectSet
+	// ObjectType is the type of the object that this rule applies to.
+	ObjectType ObjectType
+	// Names is a regular expression that matches the names of the objects that this rule applies to.
+	Names *regexp.Regexp
 }
 
 func (r *Rule) Unmarshal(data []byte) error {
@@ -44,29 +54,35 @@ func (r *Rule) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	objectData, _, err := readLP(data)
+	objType, data, err := readLP(data)
 	if err != nil {
 		return err
 	}
-	var objSet ObjectSet
-	if err := objSet.Unmarshal(objectData); err != nil {
+	namesData, _, err := readLP(data)
+	if err != nil {
+		return err
+	}
+	namesRe, err := regexp.Compile(string(namesData))
+	if err != nil {
 		return err
 	}
 	r.Subject = string(subject)
 	r.Verb = Verb(verb)
-	r.Object = objSet
+	r.ObjectType = ObjectType(objType)
+	r.Names = namesRe
 	return nil
 }
 
 func (r Rule) Marshal(out []byte) []byte {
 	out = appendLP(out, []byte(r.Subject))
 	out = appendLP(out, []byte(r.Verb))
-	out = appendLP(out, r.Object.Marshal(nil))
+	out = appendLP(out, []byte(r.ObjectType))
+	out = appendLP(out, []byte(r.Names.String()))
 	return out
 }
 
-func (r Rule) Matches(subject string, verb Verb, objType, objName string) bool {
-	return r.Subject == subject && r.Verb == verb && r.Object.Contains(objType, objName)
+func (r Rule) Matches(subject string, verb Verb, objType ObjectType, objName string) bool {
+	return r.Subject == subject && r.Verb == verb && r.ObjectType == objType && r.Names.MatchString(objName)
 }
 
 func PostRule(ctx context.Context, s stores.RW, r *Rule) (CID, error) {
@@ -135,7 +151,7 @@ func (m *Machine) ForEachRule(ctx context.Context, s stores.Reading, state State
 }
 
 // CanDo returns true if the subject can perform the action on the object.
-func (m *Machine) CanDo(ctx context.Context, s stores.Reading, state State, actor inet256.ID, verb Verb, objType, objName string) (bool, error) {
+func (m *Machine) CanDo(ctx context.Context, s stores.Reading, state State, actor inet256.ID, verb Verb, objType ObjectType, objName string) (bool, error) {
 	var allowed bool
 	if err := m.gotkv.ForEach(ctx, s, state.Rules, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
 		var rule Rule
@@ -146,7 +162,11 @@ func (m *Machine) CanDo(ctx context.Context, s stores.Reading, state State, acto
 			// rule does not apply to this verb
 			return nil
 		}
-		if !rule.Object.Contains(objType, objName) {
+		if rule.ObjectType != objType {
+			// rule does not apply to this object type
+			return nil
+		}
+		if !rule.Names.MatchString(objName) {
 			// rule does not apply to this object
 			return nil
 		}
@@ -168,73 +188,34 @@ func (m *Machine) CanDo(ctx context.Context, s stores.Reading, state State, acto
 	return allowed, nil
 }
 
+func (m *Machine) CanAnyDo(ctx context.Context, s stores.Reading, state State, actors IDSet, verb Verb, objType ObjectType, objName string) (bool, error) {
+	for actor := range actors {
+		yes, err := m.CanDo(ctx, s, state, actor, verb, objType, objName)
+		if err != nil {
+			return false, err
+		}
+		if yes {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 type CID = cadata.ID
-
-// ObjectSet is a set of objects referred to in a Rule.
-// Type is either "group" or "branch"
-// Names is a regular expression that defines a set of names.
-type ObjectSet struct {
-	Type  string
-	Names *regexp.Regexp
-}
-
-func (o ObjectSet) Contains(objType, objName string) bool {
-	return o.Type == objType && o.Names.MatchString(objName)
-}
-
-// NewGroupSet refers to a set of groups.
-func NewGroupSet(names *regexp.Regexp) ObjectSet {
-	return ObjectSet{Type: "group", Names: names}
-}
-
-// NewBranchSet refers to a set of branches.
-func NewBranchSet(names *regexp.Regexp) ObjectSet {
-	return ObjectSet{Type: "branch", Names: names}
-}
-
-func AllGroups() ObjectSet {
-	return NewGroupSet(regexp.MustCompile(".*"))
-}
-
-func (o ObjectSet) Marshal(out []byte) []byte {
-	out = appendLP(out, []byte(o.Type))
-	out = appendLP(out, []byte(o.Names.String()))
-	return out
-}
-
-func (o *ObjectSet) Unmarshal(data []byte) error {
-	typeData, data, err := readLP(data)
-	if err != nil {
-		return err
-	}
-	o.Type = string(typeData)
-	namesData, _, err := readLP(data)
-	if err != nil {
-		return err
-	}
-	o.Names = regexp.MustCompile(string(namesData))
-	return nil
-}
-
-func (o ObjectSet) ContainsGroup(group string) bool {
-	return o.Type == "group" && o.Names.MatchString(group)
-}
-
-func (o ObjectSet) ContainsBranch(branch string) bool {
-	return o.Type == "branch" && o.Names.MatchString(branch)
-}
 
 func (m *Machine) addInitialRules(ctx context.Context, s stores.RW, state State, adminGroupName string) (*State, error) {
 	for _, rule := range []Rule{
 		{
-			Subject: adminGroupName,
-			Verb:    Verb_ADMIN,
-			Object:  NewGroupSet(regexp.MustCompile(".*")),
+			Subject:    adminGroupName,
+			Verb:       Verb_ADMIN,
+			ObjectType: ObjectType_GROUP,
+			Names:      regexp.MustCompile(".*"),
 		},
 		{
-			Subject: adminGroupName,
-			Verb:    Verb_ADMIN,
-			Object:  NewBranchSet(regexp.MustCompile(".*")),
+			Subject:    adminGroupName,
+			Verb:       Verb_ADMIN,
+			ObjectType: ObjectType_BRANCH,
+			Names:      regexp.MustCompile(".*"),
 		},
 	} {
 		next, err := m.AddRule(ctx, s, state, &rule)

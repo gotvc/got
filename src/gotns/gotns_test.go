@@ -60,7 +60,7 @@ func TestMarshalOp(t *testing.T) {
 		&Op_RemoveLeaf{Group: "a", ID: inet256.ID{}},
 		&Op_AddMember{Group: "a", Member: "b", EncryptedKEM: []byte{}},
 		&Op_RemoveMember{Group: "a", Member: "b"},
-		&Op_AddRule{Rule: Rule{Subject: "sub", Verb: "verb", Object: NewGroupSet(regexp.MustCompile(".*"))}},
+		&Op_AddRule{Rule: Rule{Subject: "sub", Verb: "verb", ObjectType: ObjectType_GROUP, Names: regexp.MustCompile(".*")}},
 		&Op_DropRule{RuleID: CID{}},
 		&Op_PutEntry{Entry: Entry{Name: "test", Aux: []byte{}}},
 		&Op_DeleteEntry{Name: "test"},

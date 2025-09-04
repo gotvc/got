@@ -126,6 +126,8 @@ func readHeader(data []byte) (OpHeader, []byte, error) {
 	return header, data[4:], nil
 }
 
+type IDSet = map[inet256.ID]struct{}
+
 // Op is a single operation on the ledger.
 // Ops are batched into Deltas, which represent an atomic state transition of the ledger.
 type Op interface {
@@ -137,7 +139,7 @@ type Op interface {
 	OpCode() OpCode
 
 	// perform applies the op to the state.
-	perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers map[inet256.ID]struct{}) (State, error)
+	perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error)
 
 	isOp()
 }
@@ -255,7 +257,7 @@ func (cs *Op_ChangeSet) Unmarshal(data []byte) error {
 	return nil
 }
 
-func (cs Op_ChangeSet) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers map[inet256.ID]struct{}) (State, error) {
+func (cs Op_ChangeSet) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
 	// collect all of the public keys that we need.
 	pubKeys := make(map[inet256.ID]inet256.PublicKey)
 	// Any create operations will provide public keys that are not yet in the state.
@@ -344,7 +346,7 @@ func (op Op_CreateGroup) OpCode() OpCode {
 	return OpCode_CreateGroup
 }
 
-func (op Op_CreateGroup) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers map[inet256.ID]struct{}) (State, error) {
+func (op Op_CreateGroup) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
 	_, err := m.GetGroup(ctx, s, state, op.Group.Name)
 	if err == nil {
 		return State{}, fmt.Errorf("group already exists")
@@ -390,7 +392,7 @@ func (op *Op_CreateLeaf) Unmarshal(data []byte) error {
 	return nil
 }
 
-func (op Op_CreateLeaf) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers map[inet256.ID]struct{}) (State, error) {
+func (op Op_CreateLeaf) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
 	if _, ok := approvers[op.Leaf.ID]; !ok {
 		return State{}, fmt.Errorf("cannot create leaf without approval from %v", op.Leaf.ID)
 	}
@@ -435,7 +437,7 @@ func (op Op_AddLeaf) OpCode() OpCode {
 	return OpCode_AddLeaf
 }
 
-func (op Op_AddLeaf) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers map[inet256.ID]struct{}) (State, error) {
+func (op Op_AddLeaf) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
 	_, err := m.GetLeaf(ctx, s, state, op.LeafID)
 	if err != nil {
 		return State{}, err
@@ -480,7 +482,7 @@ func (op Op_RemoveLeaf) OpCode() OpCode {
 	return OpCode_RemoveLeaf
 }
 
-func (op Op_RemoveLeaf) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers map[inet256.ID]struct{}) (State, error) {
+func (op Op_RemoveLeaf) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
 	next, err := m.DropLeaf(ctx, s, state, op.ID)
 	if err != nil {
 		return State{}, err
@@ -525,7 +527,7 @@ func (op Op_AddMember) OpCode() OpCode {
 	return OpCode_AddMember
 }
 
-func (op Op_AddMember) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers map[inet256.ID]struct{}) (State, error) {
+func (op Op_AddMember) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
 	_, err := m.GetGroup(ctx, s, state, op.Group)
 	if err != nil {
 		return State{}, err
@@ -567,7 +569,7 @@ func (op Op_RemoveMember) OpCode() OpCode {
 	return OpCode_RemoveMember
 }
 
-func (op Op_RemoveMember) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers map[inet256.ID]struct{}) (State, error) {
+func (op Op_RemoveMember) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
 	panic("not implemented")
 }
 
@@ -578,41 +580,31 @@ type Op_AddRule struct {
 func (op Op_AddRule) isOp() {}
 
 func (op Op_AddRule) Marshal(out []byte) []byte {
-	out = appendLP(out, []byte(op.Rule.Subject))
-	out = appendLP(out, []byte(op.Rule.Verb))
-	out = appendLP(out, op.Rule.Object.Marshal(nil))
+	out = op.Rule.Marshal(out)
 	return out
 }
 
 func (op *Op_AddRule) Unmarshal(data []byte) error {
-	subject, data, err := readLP(data)
-	if err != nil {
-		return err
-	}
-	verb, data, err := readLP(data)
-	if err != nil {
-		return err
-	}
-	objectData, _, err := readLP(data)
-	if err != nil {
-		return err
-	}
-	var objSet ObjectSet
-	if err := objSet.Unmarshal(objectData); err != nil {
-		return err
-	}
-	op.Rule.Subject = string(subject)
-	op.Rule.Verb = Verb(verb)
-	op.Rule.Object = objSet
-	return nil
+	return op.Rule.Unmarshal(data)
 }
 
 func (op Op_AddRule) OpCode() OpCode {
 	return OpCode_AddRule
 }
 
-func (op Op_AddRule) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers map[inet256.ID]struct{}) (State, error) {
-	panic("not implemented")
+func (op Op_AddRule) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
+	yes, err := m.CanAnyDo(ctx, s, state, approvers, "ADMIN", op.Rule.ObjectType, op.Rule.Names.String())
+	if err != nil {
+		return State{}, err
+	}
+	if !yes {
+		return State{}, fmt.Errorf("cannot add rule")
+	}
+	next, err := m.AddRule(ctx, s, state, &op.Rule)
+	if err != nil {
+		return State{}, err
+	}
+	return *next, nil
 }
 
 type Op_DropRule struct {
@@ -637,7 +629,19 @@ func (op Op_DropRule) OpCode() OpCode {
 	return OpCode_DropRule
 }
 
-func (op Op_DropRule) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers map[inet256.ID]struct{}) (State, error) {
+func (op Op_DropRule) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
+	rule, err := m.GetRule(ctx, s, state, op.RuleID)
+	if err != nil {
+		return State{}, err
+	}
+	// TODO: figure out the correct arguments for this.
+	yes, err := m.CanAnyDo(ctx, s, state, approvers, Verb_ADMIN, rule.ObjectType, "")
+	if err != nil {
+		return State{}, err
+	}
+	if !yes {
+		return State{}, fmt.Errorf("cannot drop rule")
+	}
 	next, err := m.DropRule(ctx, s, state, op.RuleID)
 	if err != nil {
 		return State{}, err
@@ -678,7 +682,8 @@ func (op Op_PutEntry) OpCode() OpCode {
 	return OpCode_PutEntry
 }
 
-func (op Op_PutEntry) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers map[inet256.ID]struct{}) (State, error) {
+func (op Op_PutEntry) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
+	// TODO: check permissions.
 	next, err := m.PutEntry(ctx, s, state, op.Entry)
 	if err != nil {
 		return State{}, err
@@ -706,7 +711,8 @@ func (op Op_DeleteEntry) OpCode() OpCode {
 	return OpCode_DeleteEntry
 }
 
-func (op Op_DeleteEntry) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers map[inet256.ID]struct{}) (State, error) {
+func (op Op_DeleteEntry) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
+	// TODO: check permissions.
 	next, err := m.DeleteEntry(ctx, s, state, op.Name)
 	if err != nil {
 		return State{}, err
