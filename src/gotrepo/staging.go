@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jmoiron/sqlx"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
@@ -17,13 +18,13 @@ import (
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/porting"
 	"github.com/gotvc/got/src/internal/staging"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/units"
-	"github.com/jmoiron/sqlx"
 )
 
 type stagingCtx struct {
@@ -36,6 +37,8 @@ type stagingCtx struct {
 	Stage    *staging.Stage
 	Importer *porting.Importer
 	Exporter *porting.Exporter
+
+	ActingAs gotns.IdentityLeaf
 }
 
 func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
@@ -45,6 +48,10 @@ func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error
 	}
 	defer tx.Rollback()
 	branchName, err := getActiveBranch(tx)
+	if err != nil {
+		return err
+	}
+	actAs, err := r.ActiveIdentity(ctx)
 	if err != nil {
 		return err
 	}
@@ -71,6 +78,7 @@ func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error
 		Store:    &stagingStore{tx: tx, areaID: sa.AreaID(), maxSize: maxSize},
 		Importer: imp,
 		Exporter: exp,
+		ActingAs: actAs,
 	}); err != nil {
 		return err
 	}
@@ -221,8 +229,8 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 			logctx.Warnf(ctx, "nothing to commit")
 			return nil
 		}
-		snapInfo.Creator = r.GetID().String()
-		snapInfo.Authors = append(snapInfo.Authors, r.GetID().String())
+		snapInfo.Creator = sctx.ActingAs.ID
+		snapInfo.Authors = append(snapInfo.Authors, sctx.ActingAs.ID)
 		ctx, cf := metrics.Child(ctx, "applying changes")
 		defer cf()
 		src := sctx.Store

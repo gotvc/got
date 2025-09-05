@@ -10,6 +10,7 @@ import (
 	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
+	"go.inet256.org/inet256/src/inet256"
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
@@ -29,10 +30,10 @@ type Snapshot struct {
 
 	Root gotfs.Root `json:"root"`
 
-	CreatedAt  tai64.TAI64 `json:"created_at"`
-	Creator    string      `json:"creator,omitempty"`
-	AuthoredAt tai64.TAI64 `json:"authored_at"`
-	Authors    []string    `json:"authors,omitempty"`
+	CreatedAt  tai64.TAI64  `json:"created_at"`
+	Creator    inet256.ID   `json:"creator,omitempty"`
+	AuthoredAt tai64.TAI64  `json:"authored_at"`
+	Authors    []inet256.ID `json:"authors,omitempty"`
 
 	Message string `json:"message"`
 }
@@ -57,9 +58,9 @@ func (a Snapshot) Equals(b Snapshot) bool {
 
 type SnapInfo struct {
 	CreatedAt  tai64.TAI64
-	Creator    string
+	Creator    inet256.ID
 	AuthoredAt tai64.TAI64
-	Authors    []string
+	Authors    []inet256.ID
 
 	Message string
 }

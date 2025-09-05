@@ -42,6 +42,17 @@ func DoTx1[T any](ctx context.Context, db *sqlx.DB, fn func(tx *sqlx.Tx) (T, err
 	return ret, err
 }
 
+func DoTx2[T1, T2 any](ctx context.Context, db *sqlx.DB, fn func(tx *sqlx.Tx) (T1, T2, error)) (T1, T2, error) {
+	var ret1 T1
+	var ret2 T2
+	err := DoTx(ctx, db, func(tx *sqlx.Tx) error {
+		var err error
+		ret1, ret2, err = fn(tx)
+		return err
+	})
+	return ret1, ret2, err
+}
+
 // DoTxRO is performs read-only transaction.
 func DoTxRO(ctx context.Context, db *sqlx.DB, fn func(tx *sqlx.Tx) error) error {
 	tx, err := db.BeginTxx(ctx, &sql.TxOptions{Isolation: sql.LevelSerializable, ReadOnly: true})

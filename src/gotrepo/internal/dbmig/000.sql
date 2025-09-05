@@ -26,3 +26,11 @@ CREATE TABLE branches (
     name TEXT NOT NULL PRIMARY KEY,
     active INTEGER NOT NULL DEFAULT 0
 ), WITHOUT ROWID, STRICT;
+
+CREATE TABLE idens (
+    id BLOB PRIMARY KEY,
+    sign_private_key BLOB NOT NULL,
+    sign_public_key BLOB NOT NULL,
+    kem_private_key BLOB NOT NULL,
+    kem_public_key BLOB NOT NULL
+), WITHOUT ROWID, STRICT;

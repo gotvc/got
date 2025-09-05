@@ -10,11 +10,11 @@ import (
 
 func TestMarshal(t *testing.T) {
 	type state = autoMarshal[int]
-	type delta = autoMarshal[int]
-	x := Root[state, delta]{
+	type proof = autoMarshal[int]
+	x := Root[state, proof]{
 		History: merklelog.State{Levels: []merklelog.CID{}},
 		State:   autoMarshal[int]{X: 1},
-		Delta:   autoMarshal[int]{X: 2},
+		Proof:   autoMarshal[int]{X: 2},
 	}
 	parseState := func(data []byte) (state, error) {
 		var x state
@@ -23,14 +23,14 @@ func TestMarshal(t *testing.T) {
 		}
 		return x, nil
 	}
-	parseDelta := func(data []byte) (delta, error) {
-		var x delta
+	parseProof := func(data []byte) (proof, error) {
+		var x proof
 		if err := x.Unmarshal(data); err != nil {
-			return delta{}, err
+			return proof{}, err
 		}
 		return x, nil
 	}
-	y, err := Parse(x.Marshal(nil), parseState, parseDelta)
+	y, err := Parse(x.Marshal(nil), parseState, parseProof)
 	require.NoError(t, err)
 	require.Equal(t, x, y)
 }

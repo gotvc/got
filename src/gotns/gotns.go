@@ -5,9 +5,11 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/gotled"
 	"github.com/gotvc/got/src/internal/stores"
+	"go.brendoncarroll.net/exp/slices2"
 	"go.inet256.org/inet256/src/inet256"
 )
 
@@ -20,23 +22,29 @@ func ParseRoot(data []byte) (Root, error) {
 
 // State represents the current state of a namespace.
 type State struct {
+	// Authentication tables.
+
+	// Leaves hold primitive identity elements.
+	// The key is the leaf ID, derived by hashing the public signing key.
+	// The value is the public signing key for the leaf, and a signed KEM key for the leaf to recieve messages
+	// The leaf KEM private keys are not store anywhere in the state.
+	Leaves gotkv.Root
 	// Groups maps group names to group information.
 	// Group information holds group's Owner list, and shared KEM key for the group
 	// to receive messages.
 	Groups gotkv.Root
-	// Leaves hold relationships between groups and primitive identity elements.
-	// The first part of the key is the group name, and the last 32 bytes are the Leaf's ID.
-	// The value is the public signing key for the leaf, and a signed KEM key for the leaf
-	// to recieve messages
-	Leaves gotkv.Root
 	// Memberships holds relationships between groups and other groups.
 	// The key is the containing group + the member group + len(member group name)
 	// The value is a KEM ciphertext sent by the containing group owner to the member.
 	// The ciphertext contains the containing group's KEM private key encrypted with the member's KEM public key.
 	Memberships gotkv.Root
 
+	// Authorization tables.
+
 	// Rules holds rules for the namespace, granting look or touch access to branches.
 	Rules gotkv.Root
+
+	// Content tables
 
 	// Branches holds the actual branch entries themselves.
 	// Branch entries contain a volume OID, and a set of rights (which is for Blobcache)
@@ -48,8 +56,8 @@ type State struct {
 func (s State) Marshal(out []byte) []byte {
 	const versionTag = 0
 	out = append(out, versionTag)
-	out = appendLP(out, s.Groups.Marshal())
 	out = appendLP(out, s.Leaves.Marshal())
+	out = appendLP(out, s.Groups.Marshal())
 	out = appendLP(out, s.Memberships.Marshal())
 	out = appendLP(out, s.Rules.Marshal())
 	out = appendLP(out, s.Branches.Marshal())
@@ -69,7 +77,7 @@ func (s *State) Unmarshal(data []byte) error {
 	data = data[1:]
 
 	// read all of the gotkv roots
-	for _, dst := range []*gotkv.Root{&s.Groups, &s.Leaves, &s.Memberships, &s.Rules, &s.Branches} {
+	for _, dst := range []*gotkv.Root{&s.Leaves, &s.Groups, &s.Memberships, &s.Rules, &s.Branches} {
 		kvrData, rest, err := readLP(data)
 		if err != nil {
 			return err
@@ -94,26 +102,18 @@ func parseState(x []byte) (State, error) {
 }
 
 // Delta can be applied to a State to produce a new State.
-type Delta []Op
+type Delta Op_ChangeSet
 
 func parseDelta(data []byte) (Delta, error) {
-	var ret Delta
-	for len(data) > 0 {
-		op, rest, err := ReadOp(data)
-		if err != nil {
-			return Delta{}, err
-		}
-		data = rest
-		ret = append(ret, op)
+	var cs Op_ChangeSet
+	if err := cs.Unmarshal(data); err != nil {
+		return Delta{}, err
 	}
-	return ret, nil
+	return Delta(cs), nil
 }
 
 func (d Delta) Marshal(out []byte) []byte {
-	for _, op := range d {
-		out = AppendOp(out, op)
-	}
-	return out
+	return Op_ChangeSet(d).Marshal(out)
 }
 
 type Machine struct {
@@ -126,10 +126,10 @@ func New() Machine {
 		gotkv: gotkv.NewMachine(1<<14, 1<<20),
 		led: gotled.Machine[State, Delta]{
 			ParseState: parseState,
-			ParseDelta: parseDelta,
+			ParseProof: parseDelta,
 		},
 	}
-	m.led.Apply = m.Apply
+	m.led.Verify = m.ValidateChange
 	return m
 }
 
@@ -143,32 +143,42 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 		}
 		*dst = *kvr
 	}
-	kemPub, _, err := GenerateKEM()
+
+	kemPub, kemPriv, err := mlkem1024.GenerateKeyPair(nil)
 	if err != nil {
 		return nil, err
 	}
-	g := Group{
-		Name: "admin",
-		KEM:  kemPub,
-	}
-	state, err = m.CreateGroup(ctx, s, *state, g)
-	if err != nil {
-		return nil, err
-	}
+	kemPrivCtext := MarshalKEMPrivateKey(nil, KEM_MLKEM1024, kemPriv)
+
+	leaves := map[inet256.ID][]byte{}
 	for _, leaf := range admins {
 		var err error
-		state, err = m.AddLeaf(ctx, s, *state, leaf)
+		state, err = m.PutLeaf(ctx, s, *state, leaf)
 		if err != nil {
 			return nil, err
 		}
+		leaves[leaf.ID] = asymEncrypt(nil, leaf.KEMPublicKey, kemPrivCtext)
 	}
+	const adminGroupName = "admin"
+	g := Group{
+		Name:     adminGroupName,
+		KEM:      kemPub,
+		LeafKEMs: leaves,
+		Owners:   slices2.Map(admins, func(leaf IdentityLeaf) inet256.ID { return leaf.ID }),
+	}
+	state, err = m.PutGroup(ctx, s, *state, g)
+	if err != nil {
+		return nil, err
+	}
+	state, err = m.addInitialRules(ctx, s, *state, adminGroupName)
+	if err != nil {
+		return nil, err
+	}
+
 	if err := m.ValidateState(ctx, s, *state); err != nil {
 		panic(err)
 	}
 	root := m.led.Initial(*state)
-	if err := m.ValidateChange(ctx, s, root.State, Delta{}, root.State); err != nil {
-		return nil, err
-	}
 	return &root, nil
 }
 
@@ -184,64 +194,30 @@ func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State
 
 // ValidateChange checks the change between two states.
 // Prev is assumed to be a known good, valid state.
-func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev State, delta Delta, next State) error {
+func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, next State, proof Delta) error {
+	if err := m.ValidateState(ctx, src, next); err != nil {
+		return err
+	}
 	// TODO: first validate auth operations, ensure that all the differences are signed.
 	return nil
 }
 
 func (m *Machine) Apply(ctx context.Context, s stores.RW, prev State, delta Delta) (State, error) {
-	state := prev
-	for _, op := range delta {
-		var err error
-		state, err = op.perform(ctx, m, s, state)
-		if err != nil {
-			return State{}, err
-		}
-	}
-	return state, nil
-}
-
-func (m *Machine) CreateGroup(ctx context.Context, s stores.RW, state State, group Group) (*State, error) {
-	groupState, err := m.gotkv.Mutate(ctx, s, state.Groups, createGroup(group))
-	if err != nil {
-		return nil, err
-	}
-	state.Groups = *groupState
-	return &state, nil
-}
-
-func (m *Machine) AddLeaf(ctx context.Context, s stores.RW, state State, leaf IdentityLeaf) (*State, error) {
-	if !leaf.Verify() {
-		return nil, fmt.Errorf("leaf's signature is invalid")
-	}
-	leafState, err := m.gotkv.Mutate(ctx, s, state.Leaves, addLeaf(leaf))
-	if err != nil {
-		return nil, err
-	}
-	state.Leaves = *leafState
-	return &state, nil
-}
-
-func (m *Machine) DropLeaf(ctx context.Context, s stores.RW, state State, group string, leafID inet256.ID) (*State, error) {
-	leafState, err := m.gotkv.Mutate(ctx, s, state.Leaves, dropLeaf(group, leafID))
-	if err != nil {
-		return nil, err
-	}
-	state.Leaves = *leafState
-	return &state, nil
+	cs := Op_ChangeSet(delta)
+	return cs.perform(ctx, m, s, prev, make(map[inet256.ID]struct{}))
 }
 
 // appendLP16 appends a length-prefixed byte slice to out.
 // the length is encoded as a 16-bit big-endian integer.
 func appendLP16(out []byte, data []byte) []byte {
-	out = binary.BigEndian.AppendUint16(out, uint16(len(data)))
+	out = binary.LittleEndian.AppendUint16(out, uint16(len(data)))
 	return append(out, data...)
 }
 
 // readLP16 reads a length-prefixed byte slice from data.
 // the length is encoded as a 16-bit big-endian integer.
 func readLP16(data []byte) ([]byte, error) {
-	dataLen := binary.BigEndian.Uint16(data)
+	dataLen := binary.LittleEndian.Uint16(data)
 	if len(data) < 2+int(dataLen) {
 		return nil, fmt.Errorf("length-prefixed data too short")
 	}
@@ -268,7 +244,8 @@ func readLP(data []byte) (y []byte, rest []byte, _ error) {
 	return data[n : n+int(dataLen)], data[n+int(dataLen):], nil
 }
 
-func createGroup(group Group) gotkv.Mutation {
+// putGroup returns a gotkv mutation that puts a group into the groups table.
+func putGroup(group Group) gotkv.Mutation {
 	return gotkv.Mutation{
 		Span: gotkv.SingleKeySpan(group.Key(nil)),
 		Entries: []gotkv.Entry{
@@ -277,24 +254,5 @@ func createGroup(group Group) gotkv.Mutation {
 				Value: group.Value(nil),
 			},
 		},
-	}
-}
-
-func addLeaf(leaf IdentityLeaf) gotkv.Mutation {
-	return gotkv.Mutation{
-		Span: gotkv.SingleKeySpan(leaf.Key(nil)),
-		Entries: []gotkv.Entry{
-			{
-				Key:   leaf.Key(nil),
-				Value: leaf.Value(nil),
-			},
-		},
-	}
-}
-
-func dropLeaf(group string, leafID inet256.ID) gotkv.Mutation {
-	return gotkv.Mutation{
-		Span:    gotkv.SingleKeySpan(leafKey(group, leafID)),
-		Entries: []gotkv.Entry{},
 	}
 }
