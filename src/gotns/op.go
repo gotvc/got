@@ -5,7 +5,6 @@ import (
 	"encoding/binary"
 	"fmt"
 
-	"github.com/gotvc/got/src/internal/gotled"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.inet256.org/inet256/src/inet256"
 )
@@ -13,7 +12,7 @@ import (
 // Txn allows a transction to be built up incrementally
 // And then turned into a single slot change to the ledger.
 type Txn struct {
-	m       gotled.Machine[State, Delta]
+	m       *Machine
 	prev    Root
 	s       stores.RW
 	signers []inet256.PrivateKey
@@ -26,7 +25,7 @@ type Txn struct {
 // It will be used to produce a signature at the end of the transaction.
 func (m *Machine) NewTxn(prev Root, s stores.RW, signers []inet256.PrivateKey) *Txn {
 	return &Txn{
-		m:       m.led,
+		m:       m,
 		prev:    prev,
 		s:       s,
 		signers: signers,
@@ -46,13 +45,12 @@ func (tx *Txn) Finish(ctx context.Context) (Root, error) {
 	for _, signer := range tx.signers {
 		cs.Sign(signer)
 	}
-	delta := Delta(cs)
 
-	next, err := tx.m.Apply(ctx, tx.s, tx.prev.State, delta)
+	next, err := cs.perform(ctx, tx.m, tx.s, tx.prev.State, IDSet{})
 	if err != nil {
 		return Root{}, err
 	}
-	return tx.m.AndThen(ctx, tx.s, tx.prev, delta, next)
+	return tx.m.led.AndThen(ctx, tx.s, tx.prev, Delta(cs), next)
 }
 
 // CreateLeaf creates a new leaf.
@@ -105,16 +103,16 @@ func NewOpHeader(code OpCode, payloadLen int) (ret OpHeader) {
 		panic(fmt.Errorf("payload length out of range: %d", payloadLen))
 	}
 	h := uint32(code)<<24 | uint32(payloadLen)&0x00ffffff
-	binary.BigEndian.PutUint32(ret[:], h)
+	binary.LittleEndian.PutUint32(ret[:], h)
 	return ret
 }
 
 func (h OpHeader) Code() OpCode {
-	return OpCode(binary.BigEndian.Uint32(h[:]) >> 24)
+	return OpCode(binary.LittleEndian.Uint32(h[:]) >> 24)
 }
 
 func (h OpHeader) PayloadLen() int {
-	return int(binary.BigEndian.Uint32(h[:]) & 0x00ffffff)
+	return int(binary.LittleEndian.Uint32(h[:]) & 0x00ffffff)
 }
 
 func readHeader(data []byte) (OpHeader, []byte, error) {

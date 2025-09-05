@@ -500,7 +500,7 @@ func (m *Membership) Value(out []byte) []byte {
 func memberKey(key []byte, group string, member string) []byte {
 	key = append(key, []byte(group)...)
 	key = append(key, []byte(member)...)
-	key = binary.BigEndian.AppendUint32(key, uint32(len(member)))
+	key = binary.LittleEndian.AppendUint32(key, uint32(len(member)))
 	return key
 }
 
@@ -508,7 +508,7 @@ func parseMemberKey(key []byte) (group string, member string, _ error) {
 	if len(key) < 4 {
 		return "", "", errors.New("key too short")
 	}
-	memberLen := binary.BigEndian.Uint32(key[:4])
+	memberLen := binary.LittleEndian.Uint32(key[:4])
 	group = string(key[0 : len(key)-4])
 	member = string(key[4+memberLen:])
 	return group, member, nil

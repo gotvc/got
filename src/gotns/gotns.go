@@ -126,10 +126,10 @@ func New() Machine {
 		gotkv: gotkv.NewMachine(1<<14, 1<<20),
 		led: gotled.Machine[State, Delta]{
 			ParseState: parseState,
-			ParseDelta: parseDelta,
+			ParseProof: parseDelta,
 		},
 	}
-	m.led.Apply = m.Apply
+	m.led.Verify = m.ValidateChange
 	return m
 }
 
@@ -179,9 +179,6 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 		panic(err)
 	}
 	root := m.led.Initial(*state)
-	if err := m.ValidateChange(ctx, s, root.State, Delta{}, root.State); err != nil {
-		return nil, err
-	}
 	return &root, nil
 }
 
@@ -197,7 +194,10 @@ func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State
 
 // ValidateChange checks the change between two states.
 // Prev is assumed to be a known good, valid state.
-func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev State, delta Delta, next State) error {
+func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, next State, proof Delta) error {
+	if err := m.ValidateState(ctx, src, next); err != nil {
+		return err
+	}
 	// TODO: first validate auth operations, ensure that all the differences are signed.
 	return nil
 }
@@ -210,14 +210,14 @@ func (m *Machine) Apply(ctx context.Context, s stores.RW, prev State, delta Delt
 // appendLP16 appends a length-prefixed byte slice to out.
 // the length is encoded as a 16-bit big-endian integer.
 func appendLP16(out []byte, data []byte) []byte {
-	out = binary.BigEndian.AppendUint16(out, uint16(len(data)))
+	out = binary.LittleEndian.AppendUint16(out, uint16(len(data)))
 	return append(out, data...)
 }
 
 // readLP16 reads a length-prefixed byte slice from data.
 // the length is encoded as a 16-bit big-endian integer.
 func readLP16(data []byte) ([]byte, error) {
-	dataLen := binary.BigEndian.Uint16(data)
+	dataLen := binary.LittleEndian.Uint16(data)
 	if len(data) < 2+int(dataLen) {
 		return nil, fmt.Errorf("length-prefixed data too short")
 	}
