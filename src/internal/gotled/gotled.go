@@ -18,6 +18,7 @@ type Marshaler interface {
 	Marshal(out []byte) []byte
 }
 
+// Root is contains transitive references to the entire history and current state of the system.
 type Root[State, Proof Marshaler] struct {
 	// History is the history of all previous states.
 	// The most recent delta is referenced by the last element of the history.
@@ -29,7 +30,7 @@ type Root[State, Proof Marshaler] struct {
 	Proof Proof
 }
 
-// 8 bits for the history length, 24 bits for the length of the delta.
+// 8 bits for the history length, 24 bits for the length of the state.
 const headerSize = 4
 
 func readHeader(data []byte) (h uint32, rest []byte, _ error) {
@@ -95,7 +96,7 @@ type Machine[State, Proof Marshaler] struct {
 	ParseState Parser[State]
 	// ParseProof parses a Proof from a byte slice.
 	ParseProof Parser[Proof]
-	// Verify verifies that prev -> next is a valid transition using the giver proof.
+	// Verify verifies that prev -> next is a valid transition using the given proof.
 	// Verify must return nil only if the transition is valid, and never needs to be considered again.
 	Verify func(ctx context.Context, s stores.Reading, prev, next State, proof Proof) error
 }
@@ -138,12 +139,12 @@ func (m *Machine[State, Delta]) Slot(ctx context.Context, s stores.Reading, root
 	case slot > root.History.Len():
 		return nil, fmt.Errorf("gotled: slot %d out of bounds (length %d)", slot, root.History.Len())
 	}
-	prevStateCID, err := merklelog.Get(ctx, s, root.History, slot)
+	cid, err := merklelog.Get(ctx, s, root.History, slot)
 	if err != nil {
 		return nil, err
 	}
 	buf := make([]byte, s.MaxSize())
-	n, err := s.Get(ctx, prevStateCID, buf)
+	n, err := s.Get(ctx, cid, buf)
 	if err != nil {
 		return nil, err
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/cloudflare/circl/kem"
 	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
 	"go.inet256.org/inet256/src/inet256"
+	"golang.org/x/crypto/chacha20"
 	"golang.org/x/crypto/chacha20poly1305"
 
 	"github.com/gotvc/got/src/gotkv"
@@ -120,6 +121,31 @@ func (m *Machine) GetGroup(ctx context.Context, s stores.Reading, State State, n
 	return ParseGroup(k, val)
 }
 
+// GetKEMPrivateKey returns a KEM private key for a given group.
+// id is the ID of the leaf that is requesting the KEM private key.
+// leafKEMPriv is the KEM private key for the leaf to decrypt messages sent to it by group operations.
+func (m *Machine) GetKEMPrivateKey(ctx context.Context, s stores.Reading, state State, groupPath []string, id inet256.ID, kemPriv kem.PrivateKey) (kem.PrivateKey, error) {
+	for len(groupPath) > 0 {
+		groupName := groupPath[len(groupPath)-1]
+		groupPath = groupPath[:len(groupPath)-1]
+		g, err := m.GetGroup(ctx, s, state, groupName)
+		if err != nil {
+			return nil, err
+		}
+		if ctext, ok := g.LeafKEMs[id]; ok {
+			ptext, err := asymDecrypt(nil, kemPriv, ctext)
+			if err != nil {
+				return nil, err
+			}
+			if len(ptext) != 32 {
+				return nil, fmt.Errorf("decrypted invalid KEM seed")
+			}
+			_, kemPriv = mlkem1024.Scheme().DeriveKeyPair(ptext)
+		}
+	}
+	return kemPriv, nil
+}
+
 // ForEachGroup calls fn for each group in the namespace.
 func (m *Machine) ForEachGroup(ctx context.Context, s stores.Reading, State State, fn func(group Group) error) error {
 	span := gotkv.TotalSpan()
@@ -132,6 +158,7 @@ func (m *Machine) ForEachGroup(ctx context.Context, s stores.Reading, State Stat
 	})
 }
 
+// ForEachMembership calls fn for each membership in the group.
 func (m *Machine) ForEachMembership(ctx context.Context, s stores.Reading, State State, group string, fn func(mem Membership) error) error {
 	span := gotkv.SingleKeySpan(memberKey(nil, group, ""))
 	return m.gotkv.ForEach(ctx, s, State.Memberships, span, func(ent gotkv.Entry) error {
@@ -181,30 +208,35 @@ func (m *Machine) RemoveMember(ctx context.Context, s stores.RW, State State, gr
 	return &State, nil
 }
 
+func (m *Machine) GetMembership(ctx context.Context, s stores.Reading, State State, group, mem string) (*Membership, error) {
+	k := memberKey(nil, group, mem)
+	val, err := m.gotkv.Get(ctx, s, State.Memberships, k)
+	if err != nil {
+		return nil, err
+	}
+	return ParseMembership(k, val)
+}
+
 // RekeyGroup creates a new KEM key pair for a group and
 // - changes the group's KEM public key
 // - re-encrypts the KEM private key for all leaves, using the leaves' KEM public key
 // - re-encrypts the KEM private key for all member groups, using those groups' KEM public keys
-func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, State State, name string) (*State, error) {
+func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, State State, name string, kemSeed *[32]byte) (*State, error) {
 	group, err := m.GetGroup(ctx, s, State, name)
 	if err != nil {
 		return nil, err
 	}
 	// generate new KEM key pair
-	kemPub, kemPriv, err := mlkem1024.GenerateKeyPair(nil)
-	if err != nil {
-		return nil, err
-	}
-	privPtext := MarshalKEMPrivateKey(nil, KEM_MLKEM1024, kemPriv)
+	kemPub, _ := mlkem1024.Scheme().DeriveKeyPair(kemSeed[:])
 
 	// update group record
 	group.KEM = kemPub
-	for leafID, _ := range group.LeafKEMs {
+	for leafID := range group.LeafKEMs {
 		leaf, err := m.GetLeaf(ctx, s, State, leafID)
 		if err != nil {
 			return nil, err
 		}
-		kemCtext := asymEncrypt(nil, leaf.KEMPublicKey, privPtext)
+		kemCtext := asymEncrypt(nil, leaf.KEMPublicKey, kemSeed[:])
 		group.LeafKEMs[leafID] = kemCtext
 	}
 	groupsRoot, err := m.gotkv.Mutate(ctx, s, State.Groups, putGroup(*group))
@@ -219,7 +251,7 @@ func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, State State, name
 		if err != nil {
 			return err
 		}
-		mem.EncryptedKEM = asymEncrypt(privPtext, subgroup.KEM, privPtext)
+		mem.EncryptedKEM = asymEncrypt(nil, subgroup.KEM, kemSeed[:])
 		memMuts = append(memMuts, putMember(mem))
 		return nil
 	}); err != nil {
@@ -470,11 +502,13 @@ func (il *IdentityLeaf) GenerateKEM(sigPriv inet256.PrivateKey) kem.PrivateKey {
 	return priv
 }
 
-// Membership contains the Group's KEM encrypted for the target member.
+// Membership contains the Group's KEM seed encrypted for the target member.
 type Membership struct {
 	Group  string
 	Member string
 
+	// EncryptedKEM contains a KEM ciphertext, and a symmetric ciphertext.
+	// The symmetric ciphertext contains the KEM seed for the Group's KEM private key.
 	EncryptedKEM []byte
 }
 
@@ -484,8 +518,9 @@ func ParseMembership(k, v []byte) (*Membership, error) {
 		return nil, err
 	}
 	return &Membership{
-		Group:  group,
-		Member: member,
+		Group:        group,
+		Member:       member,
+		EncryptedKEM: v,
 	}, nil
 }
 
@@ -666,4 +701,14 @@ func symDecrypt(out []byte, secret *[32]byte, nonce *[12]byte, ctext []byte, ad 
 		return nil, err
 	}
 	return cipher.Open(out, nonce[:], ctext, ad)
+}
+
+// cryptoXOR runs a chacha20 stream cipher over src, writing the result to dst.
+func cryptoXOR(key *[32]byte, dst, src []byte) {
+	var nonce [12]byte
+	cipher, err := chacha20.NewUnauthenticatedCipher(key[:], nonce[:])
+	if err != nil {
+		panic(err)
+	}
+	cipher.XORKeyStream(dst, src)
 }
