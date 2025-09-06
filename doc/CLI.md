@@ -14,7 +14,7 @@ Initializes a new Got repo in the directory dst with branches under `origin/` ma
 Prints information about the active branch, staging area, and untracked paths.
 
 ### `got commit [-m <message>]`
-Creates a new snapshot by applying any changes in tracked paths to the current branch.
+Creates a new snapshot by applying any changes in the staging area to the current branch.
 The current branch's head is updated to the new snapshot.
 
 ### `got fork <name>`
