@@ -2,6 +2,7 @@ package gotrepo
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cloudflare/circl/kem"
 	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
@@ -69,19 +70,28 @@ func setupIdentity(conn *dbutil.Conn) error {
 
 func loadIdentity(conn *dbutil.Conn) (sign.PrivateKey, kem.PrivateKey, error) {
 	stmt := conn.Prep(`SELECT id, sign_private_key, kem_private_key FROM idens`)
+	defer stmt.Finalize()
 
 	var row struct {
 		ID          []byte
 		SigPrivData []byte
 		KemPrivData []byte
 	}
+	ok, err := stmt.Step()
+	if err != nil {
+		return nil, nil, err
+	}
+	if !ok {
+		return nil, nil, fmt.Errorf("no identity found")
+	}
+	for i, dst := range []*[]byte{&row.ID, &row.SigPrivData, &row.KemPrivData} {
+		*dst = make([]byte, stmt.ColumnLen(i))
+		n := stmt.ColumnBytes(i, *dst)
+		if n != len(*dst) {
+			return nil, nil, fmt.Errorf("read wrong number of bytes")
+		}
+	}
 
-	row.ID = make([]byte, stmt.ColumnLen(0))
-	stmt.ColumnBytes(0, row.ID)
-	row.SigPrivData = make([]byte, stmt.ColumnLen(1))
-	stmt.ColumnBytes(1, row.SigPrivData)
-	row.KemPrivData = make([]byte, stmt.ColumnLen(2))
-	stmt.ColumnBytes(2, row.KemPrivData)
 	sigPriv, err := inet256.DefaultPKI.ParsePrivateKey(row.SigPrivData)
 	if err != nil {
 		return nil, nil, err

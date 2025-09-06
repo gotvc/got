@@ -122,7 +122,7 @@ func Open(p string) (*Repo, error) {
 		return nil, err
 	}
 	var privateKey sign.PrivateKey
-	if err := dbutil.DoTx(ctx, db, func(conn *dbutil.Conn) error {
+	if err := dbutil.Borrow(ctx, db, func(conn *dbutil.Conn) error {
 		if err := migrations.EnsureAll(conn, dbmig.ListMigrations()); err != nil {
 			return err
 		}

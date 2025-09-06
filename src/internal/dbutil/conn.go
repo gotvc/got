@@ -2,11 +2,13 @@ package dbutil
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"reflect"
+	"iter"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.brendoncarroll.net/state/cadata"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
@@ -38,6 +40,43 @@ func NewTestPool(t testing.TB) *Pool {
 	return pool
 }
 
+// Borrow retrieves a connection from the pool and calls fn with it.
+// The connection is returned to the pool after fn is called.
+func Borrow(ctx context.Context, pool *Pool, fn func(conn *Conn) error) error {
+	conn, err := pool.Take(ctx)
+	if err != nil {
+		return err
+	}
+	defer pool.Put(conn)
+	return fn(conn)
+}
+
+// Exec executes a query without returning rows
+func Exec(conn *Conn, query string, args ...interface{}) error {
+	stmt, err := conn.Prepare(query)
+	if err != nil {
+		return err
+	}
+	// Bind parameters
+	for i, arg := range args {
+		BindAny(stmt, i+1, arg)
+	}
+	if ok, err := stmt.Step(); err != nil {
+		stmt.Finalize()
+		return err
+	} else if ok {
+		stmt.Finalize()
+		return fmt.Errorf("dbutil.Exec: not expecting rows")
+	}
+	return stmt.Finalize()
+}
+
+var ErrNoRows = errors.New("no rows found")
+
+func IsErrNoRows(err error) bool {
+	return errors.Is(err, ErrNoRows)
+}
+
 // Get retrieves a single value from a query result
 func Get(conn *Conn, dest interface{}, query string, args ...interface{}) error {
 	stmt, err := conn.Prepare(query)
@@ -48,18 +87,7 @@ func Get(conn *Conn, dest interface{}, query string, args ...interface{}) error 
 
 	// Bind parameters
 	for i, arg := range args {
-		switch x := arg.(type) {
-		case string:
-			stmt.BindText(i+1, x)
-		case bool:
-			stmt.BindBool(i+1, x)
-		case int64:
-			stmt.BindInt64(i+1, x)
-		case []byte:
-			stmt.BindBytes(i+1, x)
-		default:
-			panic(x)
-		}
+		BindAny(stmt, i+1, arg)
 	}
 
 	hasRow, err := stmt.Step()
@@ -67,66 +95,63 @@ func Get(conn *Conn, dest interface{}, query string, args ...interface{}) error 
 		return err
 	}
 	if !hasRow {
-		return fmt.Errorf("no rows found")
+		return ErrNoRows
 	}
 
 	return scanValue(stmt, 0, dest)
 }
 
-// Select retrieves multiple rows from a query result
-func Select(conn *Conn, dest interface{}, query string, args ...interface{}) error {
+// Select returns an iterator over the results of the query.
+// scan is called for each row.
+func Select[T any](conn *Conn, scan func(stmt *sqlite.Stmt, dst *T) error, query string, args ...interface{}) iter.Seq2[T, error] {
 	stmt, err := conn.Prepare(query)
 	if err != nil {
-		return err
+		return func(yield func(T, error) bool) {
+			var zero T
+			yield(zero, err)
+		}
 	}
-	defer stmt.Finalize()
-
-	// Bind parameters
 	for i, arg := range args {
-		stmt.BindBytes(i+1, []byte(fmt.Sprint(arg)))
+		BindAny(stmt, i+1, arg)
 	}
-
-	return scanSlice(stmt, dest)
+	return func(yield func(T, error) bool) {
+		defer stmt.Finalize()
+		for {
+			var zero T
+			hasRow, err := stmt.Step()
+			if err != nil {
+				yield(zero, err)
+				return
+			}
+			if !hasRow {
+				return
+			}
+			var val T
+			if err := scan(stmt, &val); err != nil {
+				return
+			}
+			if !yield(val, nil) {
+				return
+			}
+		}
+	}
 }
 
-// Exec executes a query without returning rows
-func Exec(conn *Conn, query string, args ...interface{}) error {
-	stmt, err := conn.Prepare(query)
-	if err != nil {
-		return err
-	}
-	defer stmt.Finalize()
+func ScanInt64(stmt *sqlite.Stmt, dst *int64) error {
+	*dst = stmt.ColumnInt64(0)
+	return nil
+}
 
-	// Bind parameters
-	for i, arg := range args {
-		stmt.BindBytes(i+1, []byte(fmt.Sprint(arg)))
-	}
-
-	_, err = stmt.Step()
-	return err
+func ScanString(stmt *sqlite.Stmt, dst *string) error {
+	*dst = stmt.ColumnText(0)
+	return nil
 }
 
 func DoTx(ctx context.Context, pool *Pool, fn func(conn *Conn) error) error {
-	conn := pool.Get(ctx)
-	defer pool.Put(conn)
-
-	if err := Exec(conn, "BEGIN IMMEDIATE"); err != nil {
-		return err
-	}
-
-	defer func() {
-		if r := recover(); r != nil {
-			Exec(conn, "ROLLBACK")
-			panic(r)
-		}
-	}()
-
-	if err := fn(conn); err != nil {
-		Exec(conn, "ROLLBACK")
-		return err
-	}
-
-	return Exec(conn, "COMMIT")
+	return Borrow(ctx, pool, func(conn *Conn) (retErr error) {
+		defer sqlitex.Transaction(conn)(&retErr)
+		return fn(conn)
+	})
 }
 
 func DoTx1[T any](ctx context.Context, pool *Pool, fn func(conn *Conn) (T, error)) (T, error) {
@@ -152,15 +177,27 @@ func DoTx2[T1, T2 any](ctx context.Context, pool *Pool, fn func(conn *Conn) (T1,
 
 // DoTxRO performs read-only transaction.
 func DoTxRO(ctx context.Context, pool *Pool, fn func(conn *Conn) error) error {
-	conn := pool.Get(ctx)
-	defer pool.Put(conn)
+	return Borrow(ctx, pool, func(conn *Conn) error {
+		return fn(conn)
+	})
+}
 
-	if err := Exec(conn, "BEGIN"); err != nil {
-		return err
+// BindAny binds an argument to a statement.
+func BindAny(stmt *sqlite.Stmt, i int, arg interface{}) {
+	switch x := arg.(type) {
+	case string:
+		stmt.BindText(i, x)
+	case bool:
+		stmt.BindBool(i, x)
+	case int64:
+		stmt.BindInt64(i, x)
+	case []byte:
+		stmt.BindBytes(i, x)
+	case cadata.ID:
+		stmt.BindBytes(i, x[:])
+	default:
+		panic(arg)
 	}
-	defer Exec(conn, "ROLLBACK") // Always rollback for read-only
-
-	return fn(conn)
 }
 
 // scanValue scans a single value from a statement into dest
@@ -176,10 +213,11 @@ func scanValue(stmt *sqlite.Stmt, col int, dest interface{}) error {
 		*d = stmt.ColumnInt64(col)
 		return nil
 	case *[]byte:
-		blob := make([]byte, stmt.ColumnLen(col))
-		stmt.ColumnBytes(col, blob)
-		*d = make([]byte, len(blob))
-		copy(*d, blob)
+		*d = (*d)[:0]
+		*d = append(*d, make([]byte, stmt.ColumnLen(col))...)
+		if n := stmt.ColumnBytes(col, *d); n != len(*d) {
+			return fmt.Errorf("scanValue: short read for []byte")
+		}
 		return nil
 	case *bool:
 		*d = stmt.ColumnInt(col) != 0
@@ -189,45 +227,37 @@ func scanValue(stmt *sqlite.Stmt, col int, dest interface{}) error {
 	}
 }
 
-// scanSlice scans multiple rows from a statement into a slice
-func scanSlice(stmt *sqlite.Stmt, dest interface{}) error {
-	destValue := reflect.ValueOf(dest)
-	if destValue.Kind() != reflect.Ptr || destValue.Elem().Kind() != reflect.Slice {
-		return fmt.Errorf("dest must be a pointer to a slice")
+func scanAny(stmt *sqlite.Stmt, dest interface{}) error {
+	switch x := dest.(type) {
+	case *string:
+		return scanValue(stmt, 0, x)
+	case *int:
+		return scanValue(stmt, 0, x)
+	case *int64:
+		return scanValue(stmt, 0, x)
+	case *[]byte:
+		return scanValue(stmt, 0, x)
+	case *bool:
+		return scanValue(stmt, 0, x)
+	default:
 	}
+	return fmt.Errorf("unsupported type for scanning: %T", dest)
+}
 
-	sliceValue := destValue.Elem()
-	sliceType := sliceValue.Type()
-	elemType := sliceType.Elem()
-
-	// Create a new slice
-	newSlice := reflect.MakeSlice(sliceType, 0, 0)
-
+// scanSlice scans multiple rows from a statement into a slice
+func readIntoSlice[T any, S []T](stmt *sqlite.Stmt, dest *S) error {
 	for {
 		hasRow, err := stmt.Step()
 		if err != nil {
 			return err
 		}
 		if !hasRow {
-			break
+			return nil
 		}
-
-		// Create new element
-		elem := reflect.New(elemType).Elem()
-
-		// For basic types, scan directly
-		if elemType.Kind() == reflect.String {
-			elem.SetString(stmt.ColumnText(0))
-		} else if elemType.Kind() == reflect.Int64 {
-			elem.SetInt(stmt.ColumnInt64(0))
-		} else if elemType.Kind() == reflect.Int {
-			elem.SetInt(int64(stmt.ColumnInt(0)))
-		} else {
-			return fmt.Errorf("unsupported slice element type: %v", elemType)
+		var val T
+		if err := scanAny(stmt, &val); err != nil {
+			return err
 		}
-
-		newSlice = reflect.Append(newSlice, elem)
+		*dest = append(*dest, val)
 	}
-	sliceValue.Set(newSlice)
-	return nil
 }
