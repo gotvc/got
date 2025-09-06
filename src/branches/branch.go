@@ -11,6 +11,7 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/tai64"
+	"go.inet256.org/inet256/src/inet256"
 	"golang.org/x/exp/slices"
 )
 
@@ -178,7 +179,7 @@ func History(ctx context.Context, vcag *gotvc.Machine, v Volume, fn func(ref gda
 	if err := fn(ref, *snap); err != nil {
 		return err
 	}
-	return gotvc.ForEach(ctx, tx, snap.Parents, fn)
+	return vcag.ForEach(ctx, tx, snap.Parents, fn)
 }
 
 // NewGotFS creates a new gotfs.Machine suitable for writing to the branch
@@ -210,4 +211,13 @@ func saltFromBytes(x []byte) *[32]byte {
 	var salt [32]byte
 	copy(salt[:], x)
 	return &salt
+}
+
+// SnapInfo holds additional information about a snapshot.
+// This is stored as json in the snapshot.
+type SnapInfo struct {
+	AuthoredAt tai64.TAI64  `json:"authored_at"`
+	Authors    []inet256.ID `json:"authors"`
+
+	Message string `json:"message"`
 }

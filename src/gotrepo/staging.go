@@ -12,6 +12,7 @@ import (
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
+	"go.brendoncarroll.net/tai64"
 	"zombiezen.com/go/sqlite/sqlitex"
 
 	"github.com/gotvc/got/src/branches"
@@ -233,7 +234,7 @@ func (r *Repo) Clear(ctx context.Context) error {
 	})
 }
 
-func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
+func (r *Repo) Commit(ctx context.Context, snapInfo branches.SnapInfo) error {
 	return r.modifyStaging(ctx, func(sctx stagingCtx) error {
 		if yes, err := sctx.Stage.IsEmpty(ctx); err != nil {
 			return err
@@ -241,8 +242,8 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 			logctx.Warnf(ctx, "nothing to commit")
 			return nil
 		}
-		snapInfo.Creator = sctx.ActingAs.ID
 		snapInfo.Authors = append(snapInfo.Authors, sctx.ActingAs.ID)
+		snapInfo.AuthoredAt = tai64.Now().TAI64()
 		ctx, cf := metrics.Child(ctx, "applying changes")
 		defer cf()
 		src := sctx.Store
@@ -262,7 +263,15 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 			if x != nil {
 				parents = []Snap{*x}
 			}
-			return vcMach.NewSnapshot(ctx, src, parents, *nextRoot, snapInfo)
+			infoJSON, err := json.Marshal(snapInfo)
+			if err != nil {
+				return nil, err
+			}
+			return vcMach.NewSnapshot(ctx, src, parents, *nextRoot, gotvc.SnapParams{
+				Creator:   sctx.ActingAs.ID,
+				CreatedAt: tai64.Now().TAI64(),
+				Aux:       infoJSON,
+			})
 		}); err != nil {
 			return err
 		}

@@ -9,6 +9,7 @@ import (
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/gotkv/ptree"
+	"github.com/gotvc/got/src/internal/sbe"
 	"go.brendoncarroll.net/state"
 )
 
@@ -90,12 +91,6 @@ func (e *IndexEncoder) Reset() {
 	e.Encoder.Reset()
 }
 
-// writeLPBytes writes len(x) varint-encoded, followed by x, to buf
-func appendLPBytes(out []byte, x []byte) []byte {
-	out = binary.AppendUvarint(out, uint64(len(x)))
-	return append(out, x...)
-}
-
 func appendEntry(out []byte, prevKey []byte, ent Entry) []byte {
 	l := computeEntryInnerLen(prevKey, ent)
 	out = binary.AppendUvarint(out, uint64(l))
@@ -104,9 +99,9 @@ func appendEntry(out []byte, prevKey []byte, ent Entry) []byte {
 	keySuffix := ent.Key[cpLen:]
 	backspace := len(prevKey) - cpLen
 	out = binary.AppendUvarint(out, uint64(backspace))
-	out = appendLPBytes(out, keySuffix)
+	out = sbe.AppendLP(out, keySuffix)
 	// value
-	out = appendLPBytes(out, ent.Value)
+	out = sbe.AppendLP(out, ent.Value)
 
 	return out
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.inet256.org/inet256/src/inet256"
 )
@@ -318,17 +319,17 @@ type Op_CreateGroup struct {
 func (op Op_CreateGroup) isOp() {}
 
 func (op Op_CreateGroup) Marshal(out []byte) []byte {
-	out = appendLP(out, op.Group.Key(nil))
-	out = appendLP(out, op.Group.Value(nil))
+	out = sbe.AppendLP(out, op.Group.Key(nil))
+	out = sbe.AppendLP(out, op.Group.Value(nil))
 	return out
 }
 
 func (op *Op_CreateGroup) Unmarshal(data []byte) error {
-	k, data, err := readLP(data)
+	k, data, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
-	val, _, err := readLP(data)
+	val, _, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
@@ -368,17 +369,17 @@ func (op Op_CreateLeaf) OpCode() OpCode {
 }
 
 func (op Op_CreateLeaf) Marshal(out []byte) []byte {
-	out = appendLP(out, op.Leaf.Key(nil))
-	out = appendLP(out, op.Leaf.Value(nil))
+	out = sbe.AppendLP(out, op.Leaf.Key(nil))
+	out = sbe.AppendLP(out, op.Leaf.Value(nil))
 	return out
 }
 
 func (op *Op_CreateLeaf) Unmarshal(data []byte) error {
-	k, data, err := readLP(data)
+	k, data, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
-	val, _, err := readLP(data)
+	val, _, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
@@ -496,22 +497,22 @@ type Op_AddMember struct {
 func (op Op_AddMember) isOp() {}
 
 func (op Op_AddMember) Marshal(out []byte) []byte {
-	out = appendLP(out, []byte(op.Group))
-	out = appendLP(out, []byte(op.Member))
-	out = appendLP(out, op.EncryptedKEM)
+	out = sbe.AppendLP(out, []byte(op.Group))
+	out = sbe.AppendLP(out, []byte(op.Member))
+	out = sbe.AppendLP(out, op.EncryptedKEM)
 	return out
 }
 
 func (op *Op_AddMember) Unmarshal(data []byte) error {
-	group, data, err := readLP(data)
+	group, data, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
-	member, data, err := readLP(data)
+	member, data, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
-	encryptedKEM, _, err := readLP(data)
+	encryptedKEM, _, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
@@ -544,17 +545,17 @@ type Op_RemoveMember struct {
 func (op Op_RemoveMember) isOp() {}
 
 func (op Op_RemoveMember) Marshal(out []byte) []byte {
-	out = appendLP(out, []byte(op.Group))
-	out = appendLP(out, []byte(op.Member))
+	out = sbe.AppendLP(out, []byte(op.Group))
+	out = sbe.AppendLP(out, []byte(op.Member))
 	return out
 }
 
 func (op *Op_RemoveMember) Unmarshal(data []byte) error {
-	group, data, err := readLP(data)
+	group, data, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
-	member, _, err := readLP(data)
+	member, _, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
@@ -655,17 +656,17 @@ type Op_PutEntry struct {
 func (op Op_PutEntry) isOp() {}
 
 func (op Op_PutEntry) Marshal(out []byte) []byte {
-	out = appendLP(out, op.Entry.Key(nil))
-	out = appendLP(out, op.Entry.Value(nil))
+	out = sbe.AppendLP(out, op.Entry.Key(nil))
+	out = sbe.AppendLP(out, op.Entry.Value(nil))
 	return out
 }
 
 func (op *Op_PutEntry) Unmarshal(data []byte) error {
-	k, data, err := readLP(data)
+	k, data, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
-	val, _, err := readLP(data)
+	val, _, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}

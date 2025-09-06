@@ -7,6 +7,7 @@ import (
 	"math"
 
 	"github.com/dchest/siphash"
+	"github.com/gotvc/got/src/internal/sbe"
 )
 
 type IndexCallback[Ref any] func(context.Context, Index[Ref]) error
@@ -95,7 +96,7 @@ func appendEntry(out []byte, se StreamEntry) []byte {
 			uint64(lpEncodedLen(len(se.Value))),
 	)
 	out = appendWeight(out, se.Weight)
-	out = appendLP(out, se.Value)
+	out = sbe.AppendLP(out, se.Value)
 	return out
 }
 
@@ -123,13 +124,6 @@ func appendWeight(out []byte, w Weight) []byte {
 	for i := range w {
 		out = appendVarint(out, w[i])
 	}
-	return out
-}
-
-// appendLP appends a length prefixed x to out and returns the result
-func appendLP(out []byte, x []byte) []byte {
-	out = appendVarint(out, uint64(len(x)))
-	out = append(out, x...)
 	return out
 }
 

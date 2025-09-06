@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sort"
 
 	"go.brendoncarroll.net/state/cadata"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 )
 
@@ -25,17 +27,107 @@ type (
 )
 
 type Snapshot struct {
-	N       uint64     `json:"n"`
-	Parents []gdat.Ref `json:"parents"`
+	// N is the critical distance to the root.
+	// N is 0 if there are no parents.
+	// N is the max of the parents' N + 1.
+	N       uint64
+	Parents []gdat.Ref
 
-	Root gotfs.Root `json:"root"`
+	// Root is the root of the GotFS filesystem at the time of the snapshot.
+	Root gotfs.Root
+	// CreatedAt is the time the snapshot was created.
+	CreatedAt tai64.TAI64
+	// Creator is the ID of the user who created the snapshot.
+	Creator inet256.ID
+	// Aux holds auxiliary data associated with the snapshot.
+	Aux []byte
+}
 
-	CreatedAt  tai64.TAI64  `json:"created_at"`
-	Creator    inet256.ID   `json:"creator,omitempty"`
-	AuthoredAt tai64.TAI64  `json:"authored_at"`
-	Authors    []inet256.ID `json:"authors,omitempty"`
+func ParseSnapshot(data []byte) (*Snapshot, error) {
+	var a Snapshot
+	if err := a.Unmarshal(data); err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
 
-	Message string `json:"message"`
+func (a Snapshot) Marshal(out []byte) []byte {
+	out = sbe.AppendUint64(out, a.N)
+	// parents
+	if len(a.Parents) > 65535 {
+		panic(fmt.Errorf("too many parents: %d", len(a.Parents)))
+	}
+	out = sbe.AppendUint16(out, uint16(len(a.Parents)))
+	log.Println("len(out)", len(out))
+	for _, parent := range a.Parents {
+		out = gdat.AppendRef(out, parent)
+	}
+	log.Println("len(out)", len(out))
+	out = a.Root.Marshal(out)
+	out = append(out, a.CreatedAt.Marshal()...)
+	out = append(out, a.Creator[:]...)
+	out = sbe.AppendLP(out, a.Aux)
+	return out
+}
+
+func (a *Snapshot) Unmarshal(data []byte) error {
+	// N
+	n, data, err := sbe.ReadUint64(data)
+	if err != nil {
+		return err
+	}
+	a.N = n
+	// parents
+	numParents, data, err := sbe.ReadUint16(data)
+	if err != nil {
+		return err
+	}
+	a.Parents = make([]gdat.Ref, numParents)
+	for i := range a.Parents {
+		refData, rest, err := sbe.ReadN(data, gdat.RefSize)
+		if err != nil {
+			return err
+		}
+		ref, err := gdat.ParseRef(refData)
+		if err != nil {
+			return err
+		}
+		a.Parents[i] = ref
+		data = rest
+	}
+	// root
+	rootData, data, err := sbe.ReadN(data, gotfs.RootSize)
+	if err != nil {
+		return err
+	}
+	root, err := gotfs.ParseRoot(rootData)
+	if err != nil {
+		return err
+	}
+	a.Root = *root
+	// createdAt
+	createdAtData, data, err := sbe.ReadN(data, 8)
+	if err != nil {
+		return err
+	}
+	createdAt, err := tai64.Parse(createdAtData)
+	if err != nil {
+		return err
+	}
+	a.CreatedAt = createdAt
+	// creator
+	creatorData, data, err := sbe.ReadN(data, inet256.AddrSize)
+	if err != nil {
+		return err
+	}
+	a.Creator = inet256.ID(creatorData)
+	// aux
+	auxData, _, err := sbe.ReadLP(data)
+	if err != nil {
+		return err
+	}
+	a.Aux = auxData
+	return nil
 }
 
 func (a Snapshot) Equals(b Snapshot) bool {
@@ -56,16 +148,14 @@ func (a Snapshot) Equals(b Snapshot) bool {
 		parentsEqual
 }
 
-type SnapInfo struct {
-	CreatedAt  tai64.TAI64
-	Creator    inet256.ID
-	AuthoredAt tai64.TAI64
-	Authors    []inet256.ID
-
-	Message string
+// SnapParams are the parameters required to create a new snapshot.
+type SnapParams struct {
+	Creator   inet256.ID
+	CreatedAt tai64.TAI64
+	Aux       []byte
 }
 
-func (a *Machine) NewSnapshot(ctx context.Context, s stores.Writing, parents []Snapshot, root Root, sinfo SnapInfo) (*Snapshot, error) {
+func (a *Machine) NewSnapshot(ctx context.Context, s stores.Writing, parents []Snapshot, root Root, sp SnapParams) (*Snapshot, error) {
 	var n uint64
 	parentRefs := make([]Ref, len(parents))
 	for i, parent := range parents {
@@ -87,18 +177,15 @@ func (a *Machine) NewSnapshot(ctx context.Context, s stores.Writing, parents []S
 		Root:    root,
 		Parents: parentRefs,
 
-		CreatedAt:  sinfo.CreatedAt,
-		Creator:    sinfo.Creator,
-		AuthoredAt: sinfo.AuthoredAt,
-		Authors:    sinfo.Authors,
-
-		Message: sinfo.Message,
+		CreatedAt: sp.CreatedAt,
+		Creator:   sp.Creator,
+		Aux:       sp.Aux,
 	}, nil
 }
 
 // NewZero creates a new snapshot with no parent
-func (ag *Machine) NewZero(ctx context.Context, s cadata.Store, root Root, sinfo SnapInfo) (*Snapshot, error) {
-	return ag.NewSnapshot(ctx, s, nil, root, sinfo)
+func (mach *Machine) NewZero(ctx context.Context, s cadata.Store, root Root, sp SnapParams) (*Snapshot, error) {
+	return mach.NewSnapshot(ctx, s, nil, root, sp)
 }
 
 // PostSnapshot marshals the snapshot and posts it to the store

@@ -2,12 +2,12 @@ package gotns
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 
 	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/gotled"
+	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/slices2"
 	"go.inet256.org/inet256/src/inet256"
@@ -56,11 +56,11 @@ type State struct {
 func (s State) Marshal(out []byte) []byte {
 	const versionTag = 0
 	out = append(out, versionTag)
-	out = appendLP(out, s.Leaves.Marshal())
-	out = appendLP(out, s.Groups.Marshal())
-	out = appendLP(out, s.Memberships.Marshal())
-	out = appendLP(out, s.Rules.Marshal())
-	out = appendLP(out, s.Branches.Marshal())
+	out = sbe.AppendLP(out, s.Leaves.Marshal())
+	out = sbe.AppendLP(out, s.Groups.Marshal())
+	out = sbe.AppendLP(out, s.Memberships.Marshal())
+	out = sbe.AppendLP(out, s.Rules.Marshal())
+	out = sbe.AppendLP(out, s.Branches.Marshal())
 	return out
 }
 
@@ -78,7 +78,7 @@ func (s *State) Unmarshal(data []byte) error {
 
 	// read all of the gotkv roots
 	for _, dst := range []*gotkv.Root{&s.Leaves, &s.Groups, &s.Memberships, &s.Rules, &s.Branches} {
-		kvrData, rest, err := readLP(data)
+		kvrData, rest, err := sbe.ReadLP(data)
 		if err != nil {
 			return err
 		}
@@ -205,43 +205,6 @@ func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, 
 func (m *Machine) Apply(ctx context.Context, s stores.RW, prev State, delta Delta) (State, error) {
 	cs := Op_ChangeSet(delta)
 	return cs.perform(ctx, m, s, prev, make(map[inet256.ID]struct{}))
-}
-
-// appendLP16 appends a length-prefixed byte slice to out.
-// the length is encoded as a 16-bit big-endian integer.
-func appendLP16(out []byte, data []byte) []byte {
-	out = binary.LittleEndian.AppendUint16(out, uint16(len(data)))
-	return append(out, data...)
-}
-
-// readLP16 reads a length-prefixed byte slice from data.
-// the length is encoded as a 16-bit big-endian integer.
-func readLP16(data []byte) ([]byte, error) {
-	dataLen := binary.LittleEndian.Uint16(data)
-	if len(data) < 2+int(dataLen) {
-		return nil, fmt.Errorf("length-prefixed data too short")
-	}
-	return data[2 : 2+int(dataLen)], nil
-}
-
-// appendLP appends a length-prefixed byte slice to out.
-// the length is encoded as a varint.
-func appendLP(out []byte, data []byte) []byte {
-	out = binary.AppendUvarint(out, uint64(len(data)))
-	return append(out, data...)
-}
-
-// readLP reads a length-prefixed byte slice from data.
-// the length is encoded as a varint.
-func readLP(data []byte) (y []byte, rest []byte, _ error) {
-	dataLen, n := binary.Uvarint(data)
-	if n <= 0 {
-		return nil, nil, fmt.Errorf("invalid length-prefixed data")
-	}
-	if len(data) < n+int(dataLen) {
-		return nil, nil, fmt.Errorf("length-prefixed data too short")
-	}
-	return data[n : n+int(dataLen)], data[n+int(dataLen):], nil
 }
 
 // putGroup returns a gotkv mutation that puts a group into the groups table.

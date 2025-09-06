@@ -6,6 +6,7 @@ import (
 	"regexp"
 
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/state/cadata"
 	"go.inet256.org/inet256/src/inet256"
@@ -46,19 +47,19 @@ type Rule struct {
 }
 
 func (r *Rule) Unmarshal(data []byte) error {
-	subject, data, err := readLP(data)
+	subject, data, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
-	verb, data, err := readLP(data)
+	verb, data, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
-	objType, data, err := readLP(data)
+	objType, data, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
-	namesData, _, err := readLP(data)
+	namesData, _, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
@@ -74,10 +75,10 @@ func (r *Rule) Unmarshal(data []byte) error {
 }
 
 func (r Rule) Marshal(out []byte) []byte {
-	out = appendLP(out, []byte(r.Subject))
-	out = appendLP(out, []byte(r.Verb))
-	out = appendLP(out, []byte(r.ObjectType))
-	out = appendLP(out, []byte(r.Names.String()))
+	out = sbe.AppendLP(out, []byte(r.Subject))
+	out = sbe.AppendLP(out, []byte(r.Verb))
+	out = sbe.AppendLP(out, []byte(r.ObjectType))
+	out = sbe.AppendLP(out, []byte(r.Names.String()))
 	return out
 }
 
