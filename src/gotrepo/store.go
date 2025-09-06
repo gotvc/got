@@ -29,10 +29,12 @@ type stagingStore struct {
 }
 
 func newStagingStore(conn *dbutil.Conn, areaID int64) *stagingStore {
+	const maxSize = 1 << 21
 	return &stagingStore{
-		conn:         conn,
-		areaID:       areaID,
-		maxSize:      1 << 21,
+		conn:    conn,
+		areaID:  areaID,
+		maxSize: maxSize,
+
 		postBlobStmt: conn.Prep(`INSERT INTO blobs (cid, data) VALUES (?, ?) ON CONFLICT DO NOTHING`),
 		addBlobStmt:  conn.Prep(`INSERT INTO staging_blobs (area_id, cid) VALUES (?, ?) ON CONFLICT DO NOTHING`),
 	}

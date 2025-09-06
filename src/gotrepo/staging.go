@@ -72,8 +72,7 @@ func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error
 		imp := porting.NewImporter(branches.NewGotFS(&branch.Info), dirState, [2]stores.RW{sa.getStore(), sa.getStore()})
 		exp := porting.NewExporter(branches.NewGotFS(&branch.Info), dirState, r.workingDir)
 		fsMach := branches.NewGotFS(&branch.Info)
-		const maxSize = 1 << 21
-		stagingStore := &stagingStore{conn: conn, areaID: sa.AreaID(), maxSize: maxSize}
+		stagingStore := newStagingStore(conn, sa.AreaID())
 		defer stagingStore.Close()
 		if err := fn(stagingCtx{
 			BranchName: branchName,
@@ -110,7 +109,8 @@ func (r *Repo) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) 
 		}
 		dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
 		exp := porting.NewExporter(branches.NewGotFS(&branch.Info), dirState, r.workingDir)
-		const maxSize = 1 << 21
+		stagingStore := newStagingStore(conn, sa.AreaID())
+		defer stagingStore.Close()
 		return fn(stagingCtx{
 			BranchName: branchName,
 			BranchInfo: &branch.Info,
@@ -120,7 +120,7 @@ func (r *Repo) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) 
 			VCMach: branches.NewGotVC(&branch.Info),
 
 			Stage:    staging.New(sa),
-			Store:    &stagingStore{conn: conn, areaID: sa.AreaID(), maxSize: maxSize},
+			Store:    stagingStore,
 			Exporter: exp,
 		})
 	})
@@ -407,7 +407,7 @@ func (sa *stagingArea) getSalt() *[32]byte {
 }
 
 func (sa *stagingArea) getStore() stores.RW {
-	return &stagingStore{conn: sa.conn, areaID: sa.rowid, maxSize: 1 << 21}
+	return newStagingStore(sa.conn, sa.rowid)
 }
 
 func (sa *stagingArea) Put(ctx context.Context, p string, op staging.Operation) error {
