@@ -4,9 +4,9 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/gotvc/got/src/internal/dbutil"
 	"github.com/gotvc/got/src/internal/porting"
 	"github.com/gotvc/got/src/internal/stores"
-	"github.com/jmoiron/sqlx"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/kv"
 )
@@ -20,13 +20,13 @@ func (r *Repo) DoWithStore(ctx context.Context, branchName string, fn func(dst s
 
 // dirState tracks the state of the working directory.
 type dirState struct {
-	tx       *sqlx.Tx
+	conn     *dbutil.Conn
 	saltHash [32]byte
 }
 
-func newDirState(tx *sqlx.Tx, saltHash [32]byte) *dirState {
+func newDirState(conn *dbutil.Conn, saltHash [32]byte) *dirState {
 	return &dirState{
-		tx:       tx,
+		conn:     conn,
 		saltHash: saltHash,
 	}
 }

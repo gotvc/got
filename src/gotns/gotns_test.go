@@ -92,7 +92,7 @@ func TestCreateAt(t *testing.T) {
 
 func newTestService(t *testing.T) *bclocal.Service {
 	ctx := testutil.Context(t)
-	db := dbutil.NewTestDB(t)
+	db := dbutil.NewTestSQLxDB(t)
 	require.NoError(t, bclocal.SetupDB(ctx, db))
 	schemas := bclocal.DefaultSchemas()
 	schemas["gotns"] = Schema{}

@@ -2,6 +2,7 @@ package gotrepo
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cloudflare/circl/kem"
 	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
@@ -9,7 +10,6 @@ import (
 	"github.com/cloudflare/circl/sign/ed25519"
 	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/internal/dbutil"
-	"github.com/jmoiron/sqlx"
 	"go.inet256.org/inet256/src/inet256"
 )
 
@@ -35,9 +35,9 @@ func (r *Repo) IntroduceSelf(ctx context.Context) (gotns.Op_ChangeSet, error) {
 }
 
 // setupIdentity creates a new identity with a new key pair, only if it does not already exist.
-func setupIdentity(tx *sqlx.Tx) error {
+func setupIdentity(conn *dbutil.Conn) error {
 	var exists bool
-	if err := tx.Get(&exists, `SELECT EXISTS(SELECT 1 FROM idens)`); err != nil {
+	if err := dbutil.Get(conn, &exists, `SELECT EXISTS(SELECT 1 FROM idens)`); err != nil {
 		return err
 	}
 	if exists {
@@ -63,20 +63,35 @@ func setupIdentity(tx *sqlx.Tx) error {
 	kemPubData := gotns.MarshalKEMPublicKey(nil, gotns.KEM_MLKEM1024, kemPub)
 	kemPrivData := gotns.MarshalKEMPrivateKey(nil, gotns.KEM_MLKEM1024, kemPriv)
 
-	_, err = tx.Exec(`INSERT INTO idens (id, sign_private_key, sign_public_key, kem_private_key, kem_public_key)
+	err = dbutil.Exec(conn, `INSERT INTO idens (id, sign_private_key, sign_public_key, kem_private_key, kem_public_key)
 		VALUES (?, ?, ?, ?, ?)`, id[:], sigPrivData, sigPubData, kemPrivData, kemPubData)
 	return err
 }
 
-func loadIdentity(tx *sqlx.Tx) (sign.PrivateKey, kem.PrivateKey, error) {
+func loadIdentity(conn *dbutil.Conn) (sign.PrivateKey, kem.PrivateKey, error) {
+	stmt := conn.Prep(`SELECT id, sign_private_key, kem_private_key FROM idens`)
+	defer stmt.Finalize()
+
 	var row struct {
-		ID          []byte `db:"id"`
-		SigPrivData []byte `db:"sign_private_key"`
-		KemPrivData []byte `db:"kem_private_key"`
+		ID          []byte
+		SigPrivData []byte
+		KemPrivData []byte
 	}
-	if err := tx.Get(&row, `SELECT id, sign_private_key, kem_private_key FROM idens`); err != nil {
+	ok, err := stmt.Step()
+	if err != nil {
 		return nil, nil, err
 	}
+	if !ok {
+		return nil, nil, fmt.Errorf("no identity found")
+	}
+	for i, dst := range []*[]byte{&row.ID, &row.SigPrivData, &row.KemPrivData} {
+		*dst = make([]byte, stmt.ColumnLen(i))
+		n := stmt.ColumnBytes(i, *dst)
+		if n != len(*dst) {
+			return nil, nil, fmt.Errorf("read wrong number of bytes")
+		}
+	}
+
 	sigPriv, err := inet256.DefaultPKI.ParsePrivateKey(row.SigPrivData)
 	if err != nil {
 		return nil, nil, err
@@ -88,8 +103,8 @@ func loadIdentity(tx *sqlx.Tx) (sign.PrivateKey, kem.PrivateKey, error) {
 	return sigPriv, kemPriv, nil
 }
 
-func getActiveIdentity(tx *sqlx.Tx) (gotns.IdentityLeaf, error) {
-	sigPriv, kemPriv, err := loadIdentity(tx)
+func getActiveIdentity(conn *dbutil.Conn) (gotns.IdentityLeaf, error) {
+	sigPriv, kemPriv, err := loadIdentity(conn)
 	if err != nil {
 		return gotns.IdentityLeaf{}, err
 	}
