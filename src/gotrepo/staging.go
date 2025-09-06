@@ -28,7 +28,8 @@ import (
 
 type stagingCtx struct {
 	BranchName string
-	Branch     Branch
+	BranchInfo *branches.Info
+	Volume     branches.Volume
 
 	FSMach   *gotfs.Machine
 	VCMach   *gotvc.Machine
@@ -40,50 +41,61 @@ type stagingCtx struct {
 	ActingAs gotns.IdentityLeaf
 }
 
-func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error) (retErr error) {
+func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
 	conn, err := r.db.Take(ctx)
 	if err != nil {
 		return err
 	}
 	defer r.db.Put(conn)
-	defer sqlitex.Transaction(conn)(&retErr)
 
-	branchName, err := getActiveBranch(conn)
-	if err != nil {
-		return err
-	}
-	actAs, err := r.ActiveIdentity(ctx)
-	if err != nil {
-		return err
-	}
-	branch, err := r.getBranch(ctx, branchName)
-	if err != nil {
-		return err
-	}
-	sa, err := newStagingArea(conn, &branch.Info)
-	if err != nil {
-		return err
-	}
-	dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
-	imp := porting.NewImporter(branches.NewGotFS(&branch.Info), dirState, [2]stores.RW{sa.getStore(), sa.getStore()})
-	exp := porting.NewExporter(branches.NewGotFS(&branch.Info), dirState, r.workingDir)
-	fsMach := branches.NewGotFS(&branch.Info)
-	const maxSize = 1 << 21
-	if err := fn(stagingCtx{
-		BranchName: branchName,
-		Branch:     *branch,
-		FSMach:     fsMach,
-		VCMach:     branches.NewGotVC(&branch.Info),
+	// this function is to easily defer the transaction and cleanup.
+	if err := func() (retErr error) {
+		defer sqlitex.Transaction(conn)(&retErr)
 
-		Stage:    staging.New(sa),
-		Store:    &stagingStore{conn: conn, areaID: sa.AreaID(), maxSize: maxSize},
-		Importer: imp,
-		Exporter: exp,
-		ActingAs: actAs,
-	}); err != nil {
+		branchName, err := getActiveBranch(conn)
+		if err != nil {
+			return err
+		}
+		actAs, err := r.ActiveIdentity(ctx)
+		if err != nil {
+			return err
+		}
+		branch, err := r.getBranch(ctx, branchName)
+		if err != nil {
+			return err
+		}
+		sa, err := newStagingArea(conn, &branch.Info)
+		if err != nil {
+			return err
+		}
+		dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
+		imp := porting.NewImporter(branches.NewGotFS(&branch.Info), dirState, [2]stores.RW{sa.getStore(), sa.getStore()})
+		exp := porting.NewExporter(branches.NewGotFS(&branch.Info), dirState, r.workingDir)
+		fsMach := branches.NewGotFS(&branch.Info)
+		const maxSize = 1 << 21
+		stagingStore := &stagingStore{conn: conn, areaID: sa.AreaID(), maxSize: maxSize}
+		defer stagingStore.Close()
+		if err := fn(stagingCtx{
+			BranchName: branchName,
+			BranchInfo: &branch.Info,
+			Volume:     branch.Volume,
+			FSMach:     fsMach,
+			VCMach:     branches.NewGotVC(&branch.Info),
+
+			Stage:    staging.New(sa),
+			Store:    stagingStore,
+			Importer: imp,
+			Exporter: exp,
+			ActingAs: actAs,
+		}); err != nil {
+			return err
+		}
+		return nil
+	}(); err != nil {
 		return err
 	}
-	return nil
+	// This has to be done outside of the transaction.
+	return dbutil.WALCheckpoint(conn)
 }
 
 func (r *Repo) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
@@ -101,9 +113,11 @@ func (r *Repo) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) 
 		const maxSize = 1 << 21
 		return fn(stagingCtx{
 			BranchName: branchName,
-			Branch:     *branch,
-			FSMach:     branches.NewGotFS(&branch.Info),
-			VCMach:     branches.NewGotVC(&branch.Info),
+			BranchInfo: &branch.Info,
+			Volume:     branch.Volume,
+
+			FSMach: branches.NewGotFS(&branch.Info),
+			VCMach: branches.NewGotVC(&branch.Info),
 
 			Stage:    staging.New(sa),
 			Store:    &stagingStore{conn: conn, areaID: sa.AreaID(), maxSize: maxSize},
@@ -174,7 +188,7 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 // Rm deletes a path known to version control.
 func (r *Repo) Rm(ctx context.Context, paths ...string) error {
 	return r.modifyStaging(ctx, func(sctx stagingCtx) error {
-		vol := sctx.Branch.Volume
+		vol := sctx.Volume
 		snap, voltx, err := branches.GetHead(ctx, vol)
 		if err != nil {
 			return err
@@ -232,11 +246,10 @@ func (r *Repo) Commit(ctx context.Context, snapInfo gotvc.SnapInfo) error {
 		ctx, cf := metrics.Child(ctx, "applying changes")
 		defer cf()
 		src := sctx.Store
-		branch := sctx.Branch
 		stage := sctx.Stage
 		fsMach := sctx.FSMach
 		vcMach := sctx.VCMach
-		if err := branches.Apply(ctx, branch.Volume, src, func(dst stores.RW, x *Snap) (*Snap, error) {
+		if err := branches.Apply(ctx, sctx.Volume, src, func(dst stores.RW, x *Snap) (*Snap, error) {
 			var root *Root
 			if x != nil {
 				root = &x.Root
@@ -271,7 +284,7 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 	return r.viewStaging(ctx, func(sctx stagingCtx) error {
 		stage := sctx.Stage
 		fsag := sctx.FSMach
-		vol := sctx.Branch.Volume
+		vol := sctx.Volume
 		snap, voltx, err := branches.GetHead(ctx, vol)
 		if err != nil {
 			return err
@@ -313,7 +326,7 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 //  2. the active branch head
 func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) error {
 	return r.viewStaging(ctx, func(sctx stagingCtx) error {
-		snap, voltx, err := branches.GetHead(ctx, sctx.Branch.Volume)
+		snap, voltx, err := branches.GetHead(ctx, sctx.Volume)
 		if err != nil {
 			return err
 		}
@@ -404,7 +417,7 @@ func (sa *stagingArea) Put(ctx context.Context, p string, op staging.Operation) 
 	if err != nil {
 		return err
 	}
-	err = dbutil.Exec(sa.conn, `INSERT INTO staging_ops (area_id, p, data) VALUES (?, ?, ?)`, sa.rowid, p, data)
+	err = dbutil.Exec(sa.conn, `INSERT INTO staging_ops (area_id, p, data) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`, sa.rowid, p, data)
 	return err
 }
 

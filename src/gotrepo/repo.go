@@ -180,6 +180,11 @@ func Open(p string) (*Repo, error) {
 
 func (r *Repo) Close() (retErr error) {
 	for _, fn := range []func() error{
+		func() error {
+			return dbutil.Borrow(context.TODO(), r.db, func(conn *dbutil.Conn) error {
+				return dbutil.WALCheckpoint(conn)
+			})
+		},
 		r.db.Close,
 		func() error {
 			if r.bcDB != nil {
@@ -224,6 +229,19 @@ func (r *Repo) Cleanup(ctx context.Context) error {
 		}
 		logctx.Infof(ctx, "removing unreferenced blobs")
 		if err := cleanupBlobs(conn); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if err := dbutil.Borrow(ctx, r.db, func(conn *dbutil.Conn) error {
+		logctx.Infof(ctx, "truncating WAL...")
+		if err := dbutil.WALCheckpoint(conn); err != nil {
+			return err
+		}
+		logctx.Infof(ctx, "running VACUUM...")
+		if err := dbutil.Vacuum(conn); err != nil {
 			return err
 		}
 		return nil

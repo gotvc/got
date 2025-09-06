@@ -19,7 +19,7 @@ type Conn = sqlite.Conn
 
 func OpenPool(p string) (*Pool, error) {
 	// Set up connection options with WAL mode and foreign keys
-	uri := "file:" + p + "?_pragma=journal_mode(WAL)&_pragma=foreign_keys(1)"
+	uri := "file:" + p + "?_pragma=foreign_keys(1)"
 
 	pool, err := sqlitex.NewPool(uri, sqlitex.PoolOptions{
 		PoolSize: 10, // Allow up to 10 concurrent connections
@@ -57,18 +57,19 @@ func Exec(conn *Conn, query string, args ...interface{}) error {
 	if err != nil {
 		return err
 	}
+	defer stmt.Finalize()
+
 	// Bind parameters
 	for i, arg := range args {
 		BindAny(stmt, i+1, arg)
 	}
+
 	if ok, err := stmt.Step(); err != nil {
-		stmt.Finalize()
 		return err
 	} else if ok {
-		stmt.Finalize()
 		return fmt.Errorf("dbutil.Exec: not expecting rows")
 	}
-	return stmt.Finalize()
+	return nil
 }
 
 var ErrNoRows = errors.New("no rows found")
@@ -185,6 +186,8 @@ func DoTxRO(ctx context.Context, pool *Pool, fn func(conn *Conn) error) error {
 // BindAny binds an argument to a statement.
 func BindAny(stmt *sqlite.Stmt, i int, arg interface{}) {
 	switch x := arg.(type) {
+	case nil:
+		stmt.BindNull(i)
 	case string:
 		stmt.BindText(i, x)
 	case bool:
@@ -192,6 +195,9 @@ func BindAny(stmt *sqlite.Stmt, i int, arg interface{}) {
 	case int64:
 		stmt.BindInt64(i, x)
 	case []byte:
+		if len(x) == 0 {
+			x = []byte{}
+		}
 		stmt.BindBytes(i, x)
 	case cadata.ID:
 		stmt.BindBytes(i, x[:])
@@ -260,4 +266,16 @@ func readIntoSlice[T any, S []T](stmt *sqlite.Stmt, dest *S) error {
 		}
 		*dest = append(*dest, val)
 	}
+}
+
+// WALCheckpoint checkpoints the Write Ahead Log.
+// It must not be called inside a transaction.
+func WALCheckpoint(conn *Conn) error {
+	return sqlitex.Execute(conn, "PRAGMA wal_checkpoint(TRUNCATE)", nil)
+}
+
+// Vacuum performs a full database vacuum.
+// It must not be called inside a transaction.
+func Vacuum(conn *Conn) error {
+	return sqlitex.Execute(conn, `VACUUM`, nil)
 }

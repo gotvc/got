@@ -213,7 +213,7 @@ func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
 func getActiveBranch(conn *dbutil.Conn) (string, error) {
 	var ret string
 	if err := dbutil.Get(conn, &ret, `SELECT name FROM branches WHERE active > 0 LIMIT 1`); err != nil {
-		if err.Error() == "no rows found" {
+		if dbutil.IsErrNoRows(err) {
 			return nameMaster, nil
 		}
 		return "", err
