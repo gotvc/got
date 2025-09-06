@@ -25,6 +25,7 @@ require (
 	golang.org/x/sync v0.16.0
 	google.golang.org/protobuf v1.35.1
 	modernc.org/sqlite v1.38.2
+	zombiezen.com/go/sqlite v1.4.2
 )
 
 require (

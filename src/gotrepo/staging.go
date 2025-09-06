@@ -2,7 +2,6 @@ package gotrepo
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jmoiron/sqlx"
+	"github.com/gotvc/got/src/internal/dbutil"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
@@ -42,12 +41,13 @@ type stagingCtx struct {
 }
 
 func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
-	tx, err := r.db.BeginTxx(ctx, nil)
+	conn, err := r.db.Take(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
-	branchName, err := getActiveBranch(tx)
+	defer r.db.Put(conn)
+
+	branchName, err := getActiveBranch(conn)
 	if err != nil {
 		return err
 	}
@@ -59,11 +59,11 @@ func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error
 	if err != nil {
 		return err
 	}
-	sa, err := newStagingArea(tx, &branch.Info)
+	sa, err := newStagingArea(conn, &branch.Info)
 	if err != nil {
 		return err
 	}
-	dirState := newDirState(sa.tx, gdat.Hash(sa.getSalt()[:]))
+	dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
 	imp := porting.NewImporter(branches.NewGotFS(&branch.Info), dirState, [2]stores.RW{sa.getStore(), sa.getStore()})
 	exp := porting.NewExporter(branches.NewGotFS(&branch.Info), dirState, r.workingDir)
 	fsMach := branches.NewGotFS(&branch.Info)
@@ -75,31 +75,31 @@ func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error
 		VCMach:     branches.NewGotVC(&branch.Info),
 
 		Stage:    staging.New(sa),
-		Store:    &stagingStore{tx: tx, areaID: sa.AreaID(), maxSize: maxSize},
+		Store:    &stagingStore{conn: conn, areaID: sa.AreaID(), maxSize: maxSize},
 		Importer: imp,
 		Exporter: exp,
 		ActingAs: actAs,
 	}); err != nil {
 		return err
 	}
-	return tx.Commit()
+	return conn.Close()
 }
 
 func (r *Repo) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
-	tx, err := r.db.BeginTxx(ctx, &sql.TxOptions{ReadOnly: true})
+	conn, err := r.db.Take(ctx)
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback()
+	defer r.db.Put(conn)
 	branchName, branch, err := r.GetActiveBranch(ctx)
 	if err != nil {
 		return err
 	}
-	sa, err := newStagingArea(tx, &branch.Info)
+	sa, err := newStagingArea(conn, &branch.Info)
 	if err != nil {
 		return err
 	}
-	dirState := newDirState(sa.tx, gdat.Hash(sa.getSalt()[:]))
+	dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
 	exp := porting.NewExporter(branches.NewGotFS(&branch.Info), dirState, r.workingDir)
 	const maxSize = 1 << 21
 	return fn(stagingCtx{
@@ -109,7 +109,7 @@ func (r *Repo) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) 
 		VCMach:     branches.NewGotVC(&branch.Info),
 
 		Stage:    staging.New(sa),
-		Store:    &stagingStore{tx: tx, areaID: sa.AreaID(), maxSize: maxSize},
+		Store:    &stagingStore{conn: conn, areaID: sa.AreaID(), maxSize: maxSize},
 		Exporter: exp,
 	})
 }
@@ -344,9 +344,9 @@ func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) er
 }
 
 // createStagingArea creates a new staging area and returns its id.
-func createStagingArea(tx *sqlx.Tx, salt *[32]byte) (int64, error) {
+func createStagingArea(conn *dbutil.Conn, salt *[32]byte) (int64, error) {
 	var rowid int64
-	err := tx.Get(&rowid, `INSERT INTO staging_areas (salt) VALUES (?) RETURNING rowid`, salt[:])
+	err := dbutil.Get(conn, &rowid, `INSERT INTO staging_areas (salt) VALUES (?) RETURNING rowid`, salt[:])
 	if err != nil {
 		return 0, err
 	}
@@ -354,12 +354,12 @@ func createStagingArea(tx *sqlx.Tx, salt *[32]byte) (int64, error) {
 }
 
 // ensureStagingArea finds the staging area with the given salt, or creates a new one if it doesn't exist.
-func ensureStagingArea(tx *sqlx.Tx, salt *[32]byte) (int64, error) {
+func ensureStagingArea(conn *dbutil.Conn, salt *[32]byte) (int64, error) {
 	var id int64
-	err := tx.Get(&id, `SELECT rowid FROM staging_areas WHERE salt = ?`, salt[:])
+	err := dbutil.Get(conn, &id, `SELECT rowid FROM staging_areas WHERE salt = ?`, salt[:])
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return createStagingArea(tx, salt)
+		if err.Error() == "no rows found" {
+			return createStagingArea(conn, salt)
 		}
 		return id, err
 	}
@@ -369,8 +369,8 @@ func ensureStagingArea(tx *sqlx.Tx, salt *[32]byte) (int64, error) {
 var _ staging.Storage = (*stagingArea)(nil)
 
 type stagingArea struct {
-	tx *sqlx.Tx
-	id int64
+	conn *dbutil.Conn
+	id   int64
 
 	info *branches.Info
 	mu   sync.Mutex
@@ -378,13 +378,13 @@ type stagingArea struct {
 
 // newStagingArea returns a stagingArea for the given salt.
 // If the staging area does not exist, it will be created.
-func newStagingArea(tx *sqlx.Tx, info *branches.Info) (*stagingArea, error) {
+func newStagingArea(conn *dbutil.Conn, info *branches.Info) (*stagingArea, error) {
 	salt := saltFromBranch(info)
-	rowid, err := ensureStagingArea(tx, salt)
+	rowid, err := ensureStagingArea(conn, salt)
 	if err != nil {
 		return nil, err
 	}
-	return &stagingArea{tx: tx, id: rowid, info: info}, nil
+	return &stagingArea{conn: conn, id: rowid, info: info}, nil
 }
 
 func (sa *stagingArea) AreaID() int64 {
@@ -396,7 +396,7 @@ func (sa *stagingArea) getSalt() *[32]byte {
 }
 
 func (sa *stagingArea) getStore() stores.RW {
-	return &stagingStore{tx: sa.tx, areaID: sa.id, maxSize: 1 << 21}
+	return &stagingStore{conn: sa.conn, areaID: sa.id, maxSize: 1 << 21}
 }
 
 func (sa *stagingArea) Put(ctx context.Context, p string, op staging.Operation) error {
@@ -406,7 +406,7 @@ func (sa *stagingArea) Put(ctx context.Context, p string, op staging.Operation) 
 	if err != nil {
 		return err
 	}
-	_, err = sa.tx.ExecContext(ctx, `INSERT INTO staging_ops (area_id, p, data) VALUES (?, ?, ?)`, sa.id, p, data)
+	err = dbutil.Exec(sa.conn, `INSERT INTO staging_ops (area_id, p, data) VALUES (?, ?, ?)`, sa.id, p, data)
 	return err
 }
 
@@ -414,8 +414,8 @@ func (sa *stagingArea) Get(ctx context.Context, p string, dst *staging.Operation
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
 	var data []byte
-	if err := sa.tx.GetContext(ctx, &data, `SELECT data FROM staging_ops WHERE area_id = ? AND p = ?`, sa.id, p); err != nil {
-		if err == sql.ErrNoRows {
+	if err := dbutil.Get(sa.conn, &data, `SELECT data FROM staging_ops WHERE area_id = ? AND p = ?`, sa.id, p); err != nil {
+		if err.Error() == "no rows found" {
 			return state.ErrNotFound[string]{Key: p}
 		}
 		return err
@@ -427,8 +427,8 @@ func (sa *stagingArea) List(ctx context.Context, span state.Span[string], buf []
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
 	var buf2 []string
-	if err := sa.tx.SelectContext(ctx, &buf2, `SELECT p FROM staging_ops WHERE area_id = ? ORDER BY p`, sa.id); err != nil {
-		if err == sql.ErrNoRows {
+	if err := dbutil.Select(sa.conn, &buf2, `SELECT p FROM staging_ops WHERE area_id = ? ORDER BY p`, sa.id); err != nil {
+		if err.Error() == "no rows found" {
 			return 0, nil
 		}
 		return 0, err
@@ -444,7 +444,7 @@ func (sa *stagingArea) Exists(ctx context.Context, p string) (bool, error) {
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
 	var exists bool
-	err := sa.tx.Get(&exists, `SELECT EXISTS (
+	err := dbutil.Get(sa.conn, &exists, `SELECT EXISTS (
 		SELECT 1 FROM staging_ops WHERE area_id = ? AND p = ?
 	)`, sa.id, p)
 	return exists, err
@@ -453,21 +453,21 @@ func (sa *stagingArea) Exists(ctx context.Context, p string) (bool, error) {
 func (sa *stagingArea) Delete(ctx context.Context, p string) error {
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
-	_, err := sa.tx.Exec(`DELETE FROM staging_ops WHERE area_id = ? AND p = ?`, sa.id, p)
+	err := dbutil.Exec(sa.conn, `DELETE FROM staging_ops WHERE area_id = ? AND p = ?`, sa.id, p)
 	return err
 }
 
 // cleanupStagingBlobs removes blobs from staging areas which do not have ops that reference them.
-func cleanupStagingBlobs(ctx context.Context, tx *sqlx.Tx) error {
+func cleanupStagingBlobs(ctx context.Context, conn *dbutil.Conn) error {
 	// get all of the ids for the empty staging areas
 	var areaIDs []int64
-	if err := tx.Select(&areaIDs, `SELECT rowid FROM staging_areas WHERE NOT EXISTS (SELECT 1 FROM staging_ops WHERE area_id = rowid)`); err != nil {
+	if err := dbutil.Select(conn, &areaIDs, `SELECT rowid FROM staging_areas WHERE NOT EXISTS (SELECT 1 FROM staging_ops WHERE area_id = rowid)`); err != nil {
 		return err
 	}
 	metrics.SetDenom(ctx, "staging_areas", len(areaIDs), units.None)
 	// if the staging area has no ops, then it has no blobs either.
 	for _, areaID := range areaIDs {
-		if _, err := tx.Exec(`DELETE FROM staging_blobs WHERE area_id = ?`, areaID); err != nil {
+		if err := dbutil.Exec(conn, `DELETE FROM staging_blobs WHERE area_id = ?`, areaID); err != nil {
 			return err
 		}
 		metrics.AddInt(ctx, "staging_areas", 1, units.None)
