@@ -5,8 +5,7 @@ Volumes are a mutable cell for storing data, paried with a content adressable st
 The exact definition can be found in `pkg/branches`
 The cell stores the root of some data structure.
 The store stores the content-addressed blobs that make up the data structure.
-
-Got actually uses multiple stores per volume, so that data and different levels of metadata can be treated differently.
+Got uses [Blobcache's](https://github.com/blobcache/blobcache) volume implementation.
 
 There are no assumptions made about the contents of either the cell or the store.
 This allows them to be encrypted, and operations on volumes to be truly protocol agnostic.

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotvc"
@@ -27,9 +28,8 @@ func newCommitCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 			r := metrics.NewTTYRenderer(collector, cmd.OutOrStdout())
 			defer r.Close()
 			now := tai64.Now().TAI64()
-			return repo.Commit(ctx, gotvc.SnapInfo{
+			return repo.Commit(ctx, branches.SnapInfo{
 				Message:    "",
-				CreatedAt:  now,
 				AuthoredAt: now,
 			})
 		},
@@ -51,7 +51,7 @@ func newHistoryCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 				err := repo.History(ctx, "", func(ref gdat.Ref, c gotvc.Snap) error {
 					fmt.Fprintf(pw, "#%04d\t%v\n", c.N, ref.CID)
 					fmt.Fprintf(pw, "Created At: %v\n", c.CreatedAt.GoTime().Local().String())
-					fmt.Fprintf(pw, "Message: %s\n", c.Message)
+					fmt.Fprintf(pw, "Message: %s\n", c.Aux)
 					fmt.Fprintln(pw)
 					return nil
 				})

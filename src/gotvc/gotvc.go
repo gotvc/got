@@ -11,15 +11,13 @@ import (
 )
 
 // ForEach calls fn once for each Ref in the snapshot graph.
-func ForEach(ctx context.Context, s stores.Reading, xs []Ref, fn func(Ref, Snapshot) error) error {
-	o := NewMachine()
-	o.readOnly = true
+func (m *Machine) ForEach(ctx context.Context, s stores.Reading, xs []Ref, fn func(Ref, Snapshot) error) error {
 	visited := map[Ref]struct{}{}
 	refs := newRefQueue()
 	refs.push(xs...)
 	for refs.len() > 0 {
 		ref := refs.pop()
-		snap, err := o.GetSnapshot(ctx, s, ref)
+		snap, err := m.GetSnapshot(ctx, s, ref)
 		if err != nil {
 			return err
 		}
@@ -67,24 +65,24 @@ func (rq *refQueue) len() int {
 // IsDescendentOf returns true if any of x's parents are equal to a.
 func IsDescendentOf(ctx context.Context, s stores.Reading, x, a Snapshot) (bool, error) {
 	m := map[Ref]struct{}{}
-	return isDescendentOf(ctx, m, s, x, a)
+	var mach Machine
+	mach.readOnly = true
+	return mach.isDescendentOf(ctx, m, s, x, a)
 }
 
-func isDescendentOf(ctx context.Context, m map[Ref]struct{}, s stores.Reading, x, a Snapshot) (bool, error) {
-	ag := NewMachine()
-	ag.readOnly = true
+func (mach *Machine) isDescendentOf(ctx context.Context, m map[Ref]struct{}, s stores.Reading, x, a Snapshot) (bool, error) {
 	for _, parentRef := range x.Parents {
 		if _, exists := m[parentRef]; exists {
 			continue
 		}
-		parent, err := ag.GetSnapshot(ctx, s, parentRef)
+		parent, err := mach.GetSnapshot(ctx, s, parentRef)
 		if err != nil {
 			return false, err
 		}
 		if parent.Equals(a) {
 			return true, nil
 		}
-		yes, err := IsDescendentOf(ctx, s, *parent, a)
+		yes, err := mach.isDescendentOf(ctx, m, s, *parent, a)
 		if err != nil {
 			return false, err
 		}

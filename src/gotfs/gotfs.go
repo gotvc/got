@@ -6,6 +6,7 @@ import (
 	"path"
 	"strings"
 
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs/gotlob"
 	"github.com/gotvc/got/src/gotkv"
 )
@@ -20,6 +21,35 @@ type (
 type Root struct {
 	Ref   Ref   `json:"ref"`
 	Depth uint8 `json:"depth"`
+}
+
+const RootSize = gdat.RefSize + 1
+
+func ParseRoot(data []byte) (*Root, error) {
+	var r Root
+	if err := r.Unmarshal(data); err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+// Marshal appends the root data to out and returns the new slice.
+func (r Root) Marshal(out []byte) []byte {
+	out = append(out, r.Ref.Marshal()...)
+	out = append(out, r.Depth)
+	return out
+}
+
+// Unmarshal parses the root data from data and returns an error if the data is invalid.
+func (r *Root) Unmarshal(data []byte) error {
+	if len(data) < RootSize {
+		return fmt.Errorf("invalid root length: %d", len(data))
+	}
+	if err := r.Ref.Unmarshal(data[:gdat.RefSize]); err != nil {
+		return err
+	}
+	r.Depth = data[gdat.RefSize]
+	return nil
 }
 
 func (r Root) ToGotKV() gotkv.Root {

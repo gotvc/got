@@ -14,7 +14,6 @@ import (
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/gotrepo"
-	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/testutil"
 )
 
@@ -115,7 +114,7 @@ func createBranch(t testing.TB, r *gotrepo.Repo, name string) {
 
 func commit(t testing.TB, r *gotrepo.Repo) {
 	ctx := testutil.Context(t)
-	err := r.Commit(ctx, gotvc.SnapInfo{})
+	err := r.Commit(ctx, branches.SnapInfo{})
 	require.NoError(t, err)
 }
 

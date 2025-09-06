@@ -11,8 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.brendoncarroll.net/state/posixfs"
 
+	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/testutil"
 )
 
@@ -45,7 +45,7 @@ func TestCommit(t *testing.T) {
 	err = repo.Put(ctx, p)
 	require.NoError(t, err)
 
-	err = repo.Commit(ctx, gotvc.SnapInfo{})
+	err = repo.Commit(ctx, branches.SnapInfo{})
 	require.NoError(t, err)
 
 	checkFileContent(t, repo, p, strings.NewReader(fileContents))
@@ -56,7 +56,7 @@ func TestCommit(t *testing.T) {
 	// track both
 	require.NoError(t, repo.Put(ctx, p))
 	require.NoError(t, repo.Put(ctx, p2))
-	err = repo.Commit(ctx, gotvc.SnapInfo{})
+	err = repo.Commit(ctx, branches.SnapInfo{})
 	require.NoError(t, err)
 
 	checkNotExists(t, repo, p)
@@ -76,7 +76,7 @@ func TestCommitLargeFile(t *testing.T) {
 	const size = 1e9
 	require.NoError(t, posixfs.PutFile(ctx, fs, p, 0o644, testutil.RandomStream(0, size)))
 	require.NoError(t, repo.Put(ctx, p))
-	require.NoError(t, repo.Commit(ctx, gotvc.SnapInfo{}))
+	require.NoError(t, repo.Commit(ctx, branches.SnapInfo{}))
 	checkExists(t, repo, p)
 	checkFileContent(t, repo, p, testutil.RandomStream(0, size))
 }
@@ -102,7 +102,7 @@ func TestCommitDir(t *testing.T) {
 		require.NoError(t, posixfs.PutFile(ctx, fs, p, 0o644, strings.NewReader(content)))
 	}
 	require.NoError(t, repo.Put(ctx, dirpath))
-	require.NoError(t, repo.Commit(ctx, gotvc.SnapInfo{}))
+	require.NoError(t, repo.Commit(ctx, branches.SnapInfo{}))
 	for i := 0; i < N; i++ {
 		p := getPath(i)
 		content := getContent(i)
@@ -122,7 +122,7 @@ func TestFork(t *testing.T) {
 	for i := 0; i < N; i++ {
 		posixfs.PutFile(ctx, fs, filePath, 0o644, strings.NewReader("test-"+strconv.Itoa(i)))
 		require.NoError(t, repo.Put(ctx, filePath))
-		require.NoError(t, repo.Commit(ctx, gotvc.SnapInfo{}))
+		require.NoError(t, repo.Commit(ctx, branches.SnapInfo{}))
 	}
 
 	require.NoError(t, repo.Fork(ctx, "", "branch2"))

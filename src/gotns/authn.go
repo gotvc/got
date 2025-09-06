@@ -18,6 +18,7 @@ import (
 	"golang.org/x/crypto/chacha20poly1305"
 
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 )
 
@@ -318,7 +319,7 @@ func GenerateKEM() (kem.PublicKey, kem.PrivateKey, error) {
 }
 
 func ParseGroup(key, value []byte) (*Group, error) {
-	kemPubData, data, err := readLP(value)
+	kemPubData, data, err := sbe.ReadLP(value)
 	if err != nil {
 		return nil, err
 	}
@@ -327,7 +328,7 @@ func ParseGroup(key, value []byte) (*Group, error) {
 		return nil, err
 	}
 	// leaves
-	leavesData, data, err := readLP(data)
+	leavesData, data, err := sbe.ReadLP(data)
 	if err != nil {
 		return nil, err
 	}
@@ -336,7 +337,7 @@ func ParseGroup(key, value []byte) (*Group, error) {
 		return nil, err
 	}
 	// owners
-	ownersData, _, err := readLP(data)
+	ownersData, _, err := sbe.ReadLP(data)
 	if err != nil {
 		return nil, err
 	}
@@ -357,9 +358,9 @@ func (g *Group) Key(out []byte) []byte {
 }
 
 func (g *Group) Value(out []byte) []byte {
-	out = appendLP(out, MarshalKEMPublicKey(nil, KEM_MLKEM1024, g.KEM))
-	out = appendLP(out, marshalIDMap(nil, g.LeafKEMs))
-	out = appendLP(out, marshalGroupOwners(nil, g.Owners))
+	out = sbe.AppendLP(out, MarshalKEMPublicKey(nil, KEM_MLKEM1024, g.KEM))
+	out = sbe.AppendLP(out, marshalIDMap(nil, g.LeafKEMs))
+	out = sbe.AppendLP(out, marshalGroupOwners(nil, g.Owners))
 	return out
 }
 
@@ -372,7 +373,7 @@ func marshalIDMap(out []byte, leaves map[inet256.ID][]byte) []byte {
 		ent = append(ent, leafID[:]...)
 		ent = append(ent, leafKEM...)
 
-		out = appendLP(out, ent)
+		out = sbe.AppendLP(out, ent)
 	}
 	return out
 }
@@ -381,7 +382,7 @@ func unmarshalIDMap(data []byte, dst map[inet256.ID][]byte) error {
 	clear(dst)
 	var lastID inet256.ID
 	for len(data) > 0 {
-		ent, rest, err := readLP(data)
+		ent, rest, err := sbe.ReadLP(data)
 		if err != nil {
 			return err
 		}
@@ -449,7 +450,7 @@ func ParseIdentityLeaf(key, value []byte) (*IdentityLeaf, error) {
 	if err != nil {
 		return nil, err
 	}
-	pkData, data, err := readLP(value)
+	pkData, data, err := sbe.ReadLP(value)
 	if err != nil {
 		return nil, err
 	}
@@ -457,7 +458,7 @@ func ParseIdentityLeaf(key, value []byte) (*IdentityLeaf, error) {
 	if err != nil {
 		return nil, err
 	}
-	kemPubData, _, err := readLP(data)
+	kemPubData, _, err := sbe.ReadLP(data)
 	if err != nil {
 		return nil, err
 	}
@@ -488,8 +489,8 @@ func (il IdentityLeaf) Key(out []byte) []byte {
 
 // Value returns the value portion of the GotKV entry in the Leaves table.
 func (il *IdentityLeaf) Value(out []byte) []byte {
-	out = appendLP(out, inet256.MarshalPublicKey(nil, il.PublicKey))
-	out = appendLP(out, MarshalKEMPublicKey(nil, KEM_MLKEM1024, il.KEMPublicKey))
+	out = sbe.AppendLP(out, inet256.MarshalPublicKey(nil, il.PublicKey))
+	out = sbe.AppendLP(out, MarshalKEMPublicKey(nil, KEM_MLKEM1024, il.KEMPublicKey))
 	return out
 }
 
@@ -585,7 +586,7 @@ func putLeaf(leaf IdentityLeaf) gotkv.Mutation {
 
 // MarshalKEMPublicKey marshals a KEM public key with a scheme tag.
 func MarshalKEMPublicKey(out []byte, tag string, kem kem.PublicKey) []byte {
-	out = appendLP16(out, []byte(tag))
+	out = sbe.AppendLP16(out, []byte(tag))
 	kemData, err := kem.MarshalBinary()
 	if err != nil {
 		panic(err)
@@ -596,7 +597,7 @@ func MarshalKEMPublicKey(out []byte, tag string, kem kem.PublicKey) []byte {
 
 // ParseKEMPublicKey unmarshals a KEM public key with a scheme tag.
 func ParseKEMPublicKey(data []byte) (kem.PublicKey, error) {
-	tag, err := readLP16(data)
+	tag, rest, err := sbe.ReadLP16(data)
 	if err != nil {
 		return nil, err
 	}
@@ -604,7 +605,7 @@ func ParseKEMPublicKey(data []byte) (kem.PublicKey, error) {
 	if scheme == nil {
 		return nil, fmt.Errorf("unknown kem scheme: %s", string(tag))
 	}
-	data = data[2+len(tag):]
+	data = rest
 	pubKey, err := scheme.UnmarshalBinaryPublicKey(data)
 	if err != nil {
 		return nil, err
@@ -614,7 +615,7 @@ func ParseKEMPublicKey(data []byte) (kem.PublicKey, error) {
 
 func MarshalKEMPrivateKey(out []byte, tag string, privKey kem.PrivateKey) []byte {
 	tag = tag + ".private"
-	out = appendLP16(out, []byte(tag))
+	out = sbe.AppendLP16(out, []byte(tag))
 	kemData, err := privKey.MarshalBinary()
 	if err != nil {
 		panic(err)
@@ -624,7 +625,7 @@ func MarshalKEMPrivateKey(out []byte, tag string, privKey kem.PrivateKey) []byte
 }
 
 func ParseKEMPrivateKey(data []byte) (kem.PrivateKey, error) {
-	tag, err := readLP16(data)
+	tag, rest, err := sbe.ReadLP16(data)
 	if err != nil {
 		return nil, err
 	}
@@ -632,7 +633,7 @@ func ParseKEMPrivateKey(data []byte) (kem.PrivateKey, error) {
 	if !ok {
 		return nil, fmt.Errorf("kem private key tag does not end with .private")
 	}
-	data = data[2+len(tag):]
+	data = rest
 	scheme := getKEMScheme(schemeName)
 	if scheme == nil {
 		return nil, fmt.Errorf("unknown kem scheme: %s", tag)
