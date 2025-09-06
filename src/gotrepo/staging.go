@@ -369,7 +369,7 @@ func ensureStagingArea(conn *dbutil.Conn, salt *[32]byte) (int64, error) {
 	var id int64
 	err := dbutil.Get(conn, &id, `SELECT rowid FROM staging_areas WHERE salt = ?`, salt[:])
 	if err != nil {
-		if err.Error() == "no rows found" {
+		if dbutil.IsErrNoRows(err) {
 			return createStagingArea(conn, salt)
 		}
 		return id, err
@@ -426,7 +426,7 @@ func (sa *stagingArea) Get(ctx context.Context, p string, dst *staging.Operation
 	defer sa.mu.Unlock()
 	var data []byte
 	if err := dbutil.Get(sa.conn, &data, `SELECT data FROM staging_ops WHERE area_id = ? AND p = ?`, sa.rowid, p); err != nil {
-		if err.Error() == "no rows found" {
+		if dbutil.IsErrNoRows(err) {
 			return state.ErrNotFound[string]{Key: p}
 		}
 		return err

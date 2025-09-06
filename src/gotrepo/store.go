@@ -96,7 +96,7 @@ func (ss *stagingStore) Get(ctx context.Context, cid CID, buf []byte) (int, erro
 		WHERE sb.area_id = ? AND sb.cid = ?
 	`, ss.areaID, cid)
 	if err != nil {
-		if err.Error() == "no rows found" {
+		if dbutil.IsErrNoRows(err) {
 			return 0, cadata.ErrNotFound{Key: cid}
 		}
 		return 0, err
