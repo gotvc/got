@@ -3,14 +3,12 @@ package gotrepo
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"fmt"
 
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/internal/dbutil"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/staging"
-	"github.com/jmoiron/sqlx"
 )
 
 const (
@@ -87,8 +85,8 @@ func (r *Repo) SetActiveBranch(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	return dbutil.DoTx(ctx, r.db, func(tx *sqlx.Tx) error {
-		activeName, err := getActiveBranch(tx)
+	return dbutil.DoTx(ctx, r.db, func(conn *dbutil.Conn) error {
+		activeName, err := getActiveBranch(conn)
 		if err != nil {
 			return err
 		}
@@ -100,7 +98,7 @@ func (r *Repo) SetActiveBranch(ctx context.Context, name string) error {
 		// there is no check to do.
 		// If they have different salts, then we need to check if the staging area is empty.
 		if !bytes.Equal(desiredBranch.Salt, activeBranch.Salt) {
-			sa, err := newStagingArea(tx, &activeBranch.Info)
+			sa, err := newStagingArea(conn, &activeBranch.Info)
 			if err != nil {
 				return err
 			}
@@ -113,14 +111,14 @@ func (r *Repo) SetActiveBranch(ctx context.Context, name string) error {
 				return fmt.Errorf("staging must be empty to change to a branch with a different salt")
 			}
 		}
-		return setActiveBranch(tx, name)
+		return setActiveBranch(conn, name)
 	})
 }
 
 // GetActiveBranch returns the name of the active branch, and the branch
 func (r *Repo) GetActiveBranch(ctx context.Context) (string, *Branch, error) {
-	name, err := dbutil.DoTx1(ctx, r.db, func(tx *sqlx.Tx) (string, error) {
-		return getActiveBranch(tx)
+	name, err := dbutil.DoTx1(ctx, r.db, func(conn *dbutil.Conn) (string, error) {
+		return getActiveBranch(conn)
 	})
 	if err != nil {
 		return "", nil, err
@@ -142,8 +140,8 @@ func (r *Repo) SetBranchHead(ctx context.Context, name string, snap Snap) error 
 	if err != nil {
 		return err
 	}
-	return dbutil.DoTxRO(ctx, r.db, func(tx *sqlx.Tx) error {
-		sa, err := newStagingArea(tx, &branch.Info)
+	return dbutil.DoTxRO(ctx, r.db, func(conn *dbutil.Conn) error {
+		sa, err := newStagingArea(conn, &branch.Info)
 		if err != nil {
 			return err
 		}
@@ -212,10 +210,10 @@ func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
 	return nil
 }
 
-func getActiveBranch(tx *sqlx.Tx) (string, error) {
+func getActiveBranch(conn *dbutil.Conn) (string, error) {
 	var ret string
-	if err := tx.Get(&ret, `SELECT name FROM branches WHERE active > 0 LIMIT 1`); err != nil {
-		if err == sql.ErrNoRows {
+	if err := dbutil.Get(conn, &ret, `SELECT name FROM branches WHERE active > 0 LIMIT 1`); err != nil {
+		if dbutil.IsErrNoRows(err) {
 			return nameMaster, nil
 		}
 		return "", err
@@ -223,11 +221,11 @@ func getActiveBranch(tx *sqlx.Tx) (string, error) {
 	return ret, nil
 }
 
-func setActiveBranch(tx *sqlx.Tx, name string) error {
-	if _, err := tx.Exec(`DELETE FROM branches`); err != nil {
+func setActiveBranch(conn *dbutil.Conn, name string) error {
+	if err := dbutil.Exec(conn, `DELETE FROM branches`); err != nil {
 		return err
 	}
-	if _, err := tx.Exec(`INSERT INTO branches (name, active) VALUES (?, 1)`, name); err != nil {
+	if err := dbutil.Exec(conn, `INSERT INTO branches (name, active) VALUES (?, 1)`, name); err != nil {
 		return err
 	}
 	return nil

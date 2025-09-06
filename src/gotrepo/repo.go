@@ -12,14 +12,15 @@ import (
 	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
+	"github.com/cloudflare/circl/sign"
+	"github.com/cloudflare/circl/sign/ed25519"
+	"github.com/jmoiron/sqlx"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/kv"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.uber.org/zap"
 
-	"github.com/cloudflare/circl/sign"
-	"github.com/cloudflare/circl/sign/ed25519"
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv"
@@ -28,7 +29,6 @@ import (
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/dbutil"
 	"github.com/gotvc/got/src/internal/migrations"
-	"github.com/jmoiron/sqlx"
 )
 
 // fs paths
@@ -59,7 +59,7 @@ type Repo struct {
 
 	bcDB   *sqlx.DB
 	bc     blobcache.Service
-	db     *sqlx.DB
+	db     *dbutil.Pool
 	config Config
 	// ctx is used as the background context for serving the repo
 	ctx context.Context
@@ -117,19 +117,19 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	db, err := dbutil.OpenDB(filepath.Join(p, localDBPath))
+	db, err := dbutil.OpenPool(filepath.Join(p, localDBPath))
 	if err != nil {
 		return nil, err
 	}
 	var privateKey sign.PrivateKey
-	if err := dbutil.DoTx(ctx, db, func(tx *sqlx.Tx) error {
-		if err := migrations.EnsureAll(tx, dbmig.ListMigrations()); err != nil {
+	if err := dbutil.Borrow(ctx, db, func(conn *dbutil.Conn) error {
+		if err := migrations.EnsureAll(conn, dbmig.ListMigrations()); err != nil {
 			return err
 		}
-		if err := setupIdentity(tx); err != nil {
+		if err := setupIdentity(conn); err != nil {
 			return err
 		}
-		privateKey, _, err = loadIdentity(tx)
+		privateKey, _, err = loadIdentity(conn)
 		if err != nil {
 			return err
 		}
@@ -180,6 +180,11 @@ func Open(p string) (*Repo, error) {
 
 func (r *Repo) Close() (retErr error) {
 	for _, fn := range []func() error{
+		func() error {
+			return dbutil.Borrow(context.TODO(), r.db, func(conn *dbutil.Conn) error {
+				return dbutil.WALCheckpoint(conn)
+			})
+		},
 		r.db.Close,
 		func() error {
 			if r.bcDB != nil {
@@ -217,21 +222,30 @@ func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
 
 // Cleanup removes unreferenced data from the repo's local DB.
 func (r *Repo) Cleanup(ctx context.Context) error {
-	if err := dbutil.DoTx(ctx, r.db, func(tx *sqlx.Tx) error {
+	if err := dbutil.DoTx(ctx, r.db, func(conn *dbutil.Conn) error {
 		logctx.Infof(ctx, "removing blobs from staging areas")
-		if err := cleanupStagingBlobs(ctx, tx); err != nil {
+		if err := cleanupStagingBlobs(ctx, conn); err != nil {
 			return err
 		}
 		logctx.Infof(ctx, "removing unreferenced blobs")
-		if err := cleanupBlobs(tx); err != nil {
+		if err := cleanupBlobs(conn); err != nil {
 			return err
 		}
 		return nil
 	}); err != nil {
 		return err
 	}
-	logctx.Infof(ctx, "running VACUUM")
-	if _, err := r.db.Exec(`VACUUM`); err != nil {
+	if err := dbutil.Borrow(ctx, r.db, func(conn *dbutil.Conn) error {
+		logctx.Infof(ctx, "truncating WAL...")
+		if err := dbutil.WALCheckpoint(conn); err != nil {
+			return err
+		}
+		logctx.Infof(ctx, "running VACUUM...")
+		if err := dbutil.Vacuum(conn); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
 	return nil
@@ -275,7 +289,7 @@ func (r *Repo) defaultVolumeSpec(_ context.Context) (VolumeSpec, error) {
 }
 
 func openLocalBlobcache(ctx context.Context, p string) (*bclocal.Service, *sqlx.DB, error) {
-	db, err := dbutil.OpenDB(filepath.Join(p, "blobcache.db"))
+	db, err := dbutil.OpenSQLxDB(filepath.Join(p, "blobcache.db"))
 	if err != nil {
 		return nil, nil, err
 	}

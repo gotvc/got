@@ -59,6 +59,7 @@ func (r *Repo) Stat(ctx context.Context, p string) (*gotfs.Info, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer tx.Abort(ctx)
 	if snap == nil {
 		return nil, fmt.Errorf("branch is empty")
 	}
@@ -75,6 +76,7 @@ func (r *Repo) Check(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	defer tx.Abort(ctx)
 	if snap == nil {
 		return nil
 	}
