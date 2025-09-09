@@ -72,7 +72,7 @@ func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error
 		if err != nil {
 			return err
 		}
-		stagingStore, err := r.beginStagingTx(ctx, sa.getSalt())
+		stagingStore, err := r.beginStagingTx(ctx, sa.getSalt(), true)
 		if err != nil {
 			return err
 		}
@@ -117,7 +117,7 @@ func (r *Repo) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) 
 		}
 		dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
 		exp := porting.NewExporter(branches.NewGotFS(&branch.Info), dirState, r.workingDir)
-		stagingStore, err := r.beginStagingTx(ctx, sa.getSalt())
+		stagingStore, err := r.beginStagingTx(ctx, sa.getSalt(), false)
 		if err != nil {
 			return err
 		}
@@ -489,12 +489,12 @@ func (sa *stagingArea) Delete(ctx context.Context, p string) error {
 
 // beginStagingTx begins a new transaction for the staging area with the given paramHash.
 // It is up to the caller to commit or abort the transaction.
-func (r *Repo) beginStagingTx(ctx context.Context, paramHash *[32]byte) (volumes.Tx, error) {
+func (r *Repo) beginStagingTx(ctx context.Context, paramHash *[32]byte, mutate bool) (volumes.Tx, error) {
 	h, err := r.repoc.StagingArea(ctx, paramHash)
 	if err != nil {
 		return nil, err
 	}
-	return blobcache.BeginTx(ctx, r.bc, *h, blobcache.TxParams{Mutate: false})
+	return blobcache.BeginTx(ctx, r.bc, *h, blobcache.TxParams{Mutate: mutate})
 }
 
 // cleanupStagingBlobs removes blobs from staging areas which do not have ops that reference them.
@@ -510,7 +510,7 @@ func (r *Repo) cleanupStagingBlobs(ctx context.Context, conn *dbutil.Conn) error
 	metrics.SetDenom(ctx, "staging_areas", len(areaIDs), units.None)
 	// if the staging area has no ops, then it has no blobs either.
 	for _, areaID := range areaIDs {
-		store, err := r.beginStagingTx(ctx, &areaID)
+		store, err := r.beginStagingTx(ctx, &areaID, true)
 		if err != nil {
 			return err
 		}

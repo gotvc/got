@@ -145,7 +145,7 @@ func (r *Repo) SetBranchHead(ctx context.Context, name string, snap Snap) error 
 		if err != nil {
 			return err
 		}
-		stageTxn, err := r.beginStagingTx(ctx, sa.getSalt())
+		stageTxn, err := r.beginStagingTx(ctx, sa.getSalt(), true)
 		if err != nil {
 			return err
 		}

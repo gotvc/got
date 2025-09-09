@@ -270,14 +270,21 @@ func (r *Repo) Endpoint() blobcache.Endpoint {
 	return ep
 }
 
-func (r *Repo) GetFQOID() blobcache.FQOID {
+// GotNSVolume returns the FQOID of the namespace volume.
+// This can be used to access the namespace from another Blobcache node.
+func (r *Repo) GotNSVolume(ctx context.Context) (blobcache.FQOID, error) {
 	ep, err := r.bc.Endpoint(r.ctx)
 	if err != nil {
-		panic(err)
+		return blobcache.FQOID{}, err
+	}
+	nsh, err := r.repoc.Namespace(r.ctx)
+	if err != nil {
+		return blobcache.FQOID{}, err
 	}
 	return blobcache.FQOID{
 		Peer: ep.Peer,
-	}
+		OID:  nsh.OID,
+	}, nil
 }
 
 func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) error {
