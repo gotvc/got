@@ -37,7 +37,7 @@ func (r *MemSpace) Get(ctx context.Context, name string) (*Info, error) {
 	return &info, nil
 }
 
-func (r *MemSpace) Create(ctx context.Context, name string, cfg Config) (*Info, error) {
+func (r *MemSpace) Create(ctx context.Context, name string, cfg Params) (*Info, error) {
 	if err := CheckName(name); err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (r *MemSpace) Create(ctx context.Context, name string, cfg Config) (*Info, 
 	return &info, nil
 }
 
-func (r *MemSpace) Set(ctx context.Context, name string, cfg Config) error {
+func (r *MemSpace) Set(ctx context.Context, name string, cfg Params) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.infos[name]; !exists {

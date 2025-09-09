@@ -20,7 +20,7 @@ func newLazySpace(fn func(ctx context.Context) (branches.Space, error)) *lazySpa
 	return &lazySpace{newSpace: fn}
 }
 
-func (ls *lazySpace) Create(ctx context.Context, name string, params branches.Config) (*branches.Info, error) {
+func (ls *lazySpace) Create(ctx context.Context, name string, params branches.Params) (*branches.Info, error) {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -36,7 +36,7 @@ func (ls *lazySpace) Get(ctx context.Context, name string) (*branches.Info, erro
 	return space.Get(ctx, name)
 }
 
-func (ls *lazySpace) Set(ctx context.Context, name string, md branches.Config) error {
+func (ls *lazySpace) Set(ctx context.Context, name string, md branches.Params) error {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return err

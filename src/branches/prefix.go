@@ -18,7 +18,7 @@ func NewPrefixSpace(inner Space, prefix string) PrefixSpace {
 	}
 }
 
-func (s PrefixSpace) Create(ctx context.Context, k string, cfg Config) (*Info, error) {
+func (s PrefixSpace) Create(ctx context.Context, k string, cfg Params) (*Info, error) {
 	return s.Target.Create(ctx, s.downward(k), cfg)
 }
 
@@ -26,7 +26,7 @@ func (s PrefixSpace) Get(ctx context.Context, k string) (*Info, error) {
 	return s.Target.Get(ctx, s.downward(k))
 }
 
-func (s PrefixSpace) Set(ctx context.Context, k string, cfg Config) error {
+func (s PrefixSpace) Set(ctx context.Context, k string, cfg Params) error {
 	return s.Target.Set(ctx, s.downward(k), cfg)
 }
 

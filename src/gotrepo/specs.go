@@ -14,6 +14,7 @@ import (
 	"github.com/gotvc/got/src/internal/volumes"
 )
 
+// VolumeSpec explains how to create a Volume in blobcache.
 type VolumeSpec = blobcache.VolumeSpec
 
 func ParseVolumeSpec(data []byte) (*VolumeSpec, error) {
@@ -49,12 +50,6 @@ type SpaceLayerSpec struct {
 	Target SpaceSpec `json:"target"`
 }
 
-type CryptoSpaceSpec struct {
-	Inner       SpaceSpec `json:"inner"`
-	Secret      []byte    `json:"secret"`
-	Passthrough []string  `json:"passthrough,omitempty"`
-}
-
 type PrefixSpaceSpec struct {
 	Inner  SpaceSpec `json:"inner"`
 	Prefix string    `json:"prefix"`
@@ -65,7 +60,6 @@ type SpaceSpec struct {
 	Blobcache *VolumeSpec    `json:"blobcache,omitempty"`
 
 	Multi  *MultiSpaceSpec  `json:"multi,omitempty"`
-	Crypto *CryptoSpaceSpec `json:"crypto,omitempty"`
 	Prefix *PrefixSpaceSpec `json:"prefix,omitempty"`
 }
 
@@ -91,21 +85,6 @@ func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 			layers = append(layers, layer)
 		}
 		return branches.NewMultiSpace(layers)
-	case spec.Crypto != nil:
-		secret := spec.Crypto.Secret
-		if len(secret) != branches.SecretSize {
-			return nil, fmt.Errorf("crypto secret key is wrong size. HAVE: %d WANT: %d", len(secret), branches.SecretSize)
-		}
-		innerSpec := spec.Crypto.Inner
-		inner, err := r.MakeSpace(innerSpec)
-		if err != nil {
-			return nil, err
-		}
-		var opts []branches.CryptoSpaceOption
-		if spec.Crypto.Passthrough != nil {
-			opts = append(opts, branches.WithPassthrough(spec.Crypto.Passthrough))
-		}
-		return branches.NewCryptoSpace(inner, (*[32]byte)(secret), opts...), nil
 	case spec.Prefix != nil:
 		inner, err := r.MakeSpace(spec.Prefix.Inner)
 		if err != nil {
