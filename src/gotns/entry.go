@@ -29,6 +29,7 @@ type Entry struct {
 	Rights blobcache.ActionSet
 
 	// Aux is extra data associated with the volume.
+	// This will be filled with branches.Info JSON.
 	Aux []byte
 }
 

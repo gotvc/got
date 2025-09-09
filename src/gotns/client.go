@@ -6,7 +6,9 @@ import (
 
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/cloudflare/circl/kem"
+	dilithium3 "github.com/cloudflare/circl/sign/dilithium/mode3"
 	"github.com/gotvc/got/src/branches"
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/exp/slices2"
@@ -214,15 +216,22 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string) 
 	if err != nil {
 		return nil, err
 	}
-	return &volumes.Blobcache{
+	innerVol := &volumes.Blobcache{
 		Handle:  *volh,
 		Service: c.Blobcache,
-	}, nil
+	}
+	// TODO: get the secret from the entry.
+	var secret [32]byte
+	pubKey, privKey := dilithium3.Scheme().DeriveKey(secret[:])
+	signedVol := volumes.NewSignedVolume(innerVol, pubKey, privKey)
+	secret2 := [32]byte(gdat.Hash(secret[:]))
+	vol := volumes.NewChaCha20Poly1305(signedVol, &secret2)
+	return vol, nil
 }
 
 // AddLeaf adds a new primitive identity to a group.
 func (c *Client) AddLeaf(ctx context.Context, volh blobcache.Handle, leaf IdentityLeaf) error {
-	return nil
+	panic("not implemented")
 }
 
 // AddMember adds a named identity to a group.
@@ -353,6 +362,7 @@ func loadState(ctx context.Context, tx *blobcache.Tx) (*State, error) {
 	return &root.State, nil
 }
 
+// BranchVolumeSpec is the volume spec used for new branches.
 func BranchVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
