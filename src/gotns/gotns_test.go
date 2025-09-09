@@ -10,7 +10,6 @@ import (
 	"blobcache.io/blobcache/src/schema/simplens"
 	"github.com/cloudflare/circl/kem"
 	"github.com/cloudflare/circl/sign"
-	"github.com/cloudflare/circl/sign/ed25519"
 	"github.com/stretchr/testify/require"
 	"go.inet256.org/inet256/src/inet256"
 
@@ -108,13 +107,11 @@ func newTestService(t *testing.T) *bclocal.Service {
 }
 
 func newTestSigner(t *testing.T) (sign.PublicKey, sign.PrivateKey) {
-	pub, priv, err := ed25519.GenerateKey(nil)
-	require.NoError(t, err)
+	pub, priv := DeriveSign([32]byte{})
 	return pub, priv
 }
 
-func newTestKEM(t *testing.T) (kem.PublicKey, kem.PrivateKey) {
-	pub, priv, err := GenerateKEM()
-	require.NoError(t, err)
+func newTestKEM(_ *testing.T) (kem.PublicKey, kem.PrivateKey) {
+	pub, priv := DeriveKEM([64]byte{})
 	return pub, priv
 }

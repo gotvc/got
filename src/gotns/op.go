@@ -279,7 +279,7 @@ func (cs Op_ChangeSet) perform(ctx context.Context, m *Machine, s stores.RW, sta
 	target := cs.OpData(nil)
 	for id, sig := range cs.Sigs {
 		pubKey := pubKeys[id]
-		if !inet256.DefaultPKI.Verify(&sigCtxTxn, pubKey, target, sig) {
+		if !pki.Verify(&sigCtxTxn, pubKey, target, sig) {
 			return State{}, fmt.Errorf("invalid signature for %v", id)
 		}
 		approvers[id] = struct{}{}
@@ -299,7 +299,6 @@ var sigCtxTxn = inet256.SigCtxString("gotns/txn")
 
 // Sign signs the change set with the private key and adds the signature to the sigs map.
 func (op *Op_ChangeSet) Sign(pk inet256.PrivateKey) {
-	pki := inet256.DefaultPKI
 	id := pki.NewID(pk.Public().(inet256.PublicKey))
 	data := op.OpData(nil)
 	sig := pki.Sign(&sigCtxTxn, pk, data, nil)

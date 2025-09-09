@@ -48,11 +48,11 @@ func setupIdentity(conn *dbutil.Conn) error {
 		return err
 	}
 	id := inet256.NewID(pub)
-	sigPrivData, err := inet256.DefaultPKI.MarshalPrivateKey(nil, priv)
+	sigPrivData, err := pki.MarshalPrivateKey(nil, priv)
 	if err != nil {
 		return err
 	}
-	sigPubData, err := inet256.DefaultPKI.MarshalPublicKey(nil, pub)
+	sigPubData, err := pki.MarshalPublicKey(nil, pub)
 	if err != nil {
 		return err
 	}
@@ -92,7 +92,7 @@ func loadIdentity(conn *dbutil.Conn) (sign.PrivateKey, kem.PrivateKey, error) {
 		}
 	}
 
-	sigPriv, err := inet256.DefaultPKI.ParsePrivateKey(row.SigPrivData)
+	sigPriv, err := pki.ParsePrivateKey(row.SigPrivData)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -110,3 +110,5 @@ func getActiveIdentity(conn *dbutil.Conn) (gotns.IdentityLeaf, error) {
 	}
 	return gotns.NewLeaf(sigPriv.Public().(sign.PublicKey), kemPriv.Public()), nil
 }
+
+var pki = gotns.PKI()

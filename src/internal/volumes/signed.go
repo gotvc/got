@@ -6,7 +6,7 @@ import (
 
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/cloudflare/circl/sign"
-	dilithium3 "github.com/cloudflare/circl/sign/dilithium/mode3"
+	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 	"go.inet256.org/inet256/src/inet256"
 )
 
@@ -106,8 +106,8 @@ func (tx *SignedTx) Hash(data []byte) blobcache.CID {
 var sigCtxVolume = inet256.SigCtxString("blobcache/volume-root")
 
 var pki = inet256.PKI{
-	Default: "dilithium3",
+	Default: "mldsa87",
 	Schemes: map[string]sign.Scheme{
-		"dilithium3": dilithium3.Scheme(),
+		"mldsa87": mldsa87.Scheme(),
 	},
 }

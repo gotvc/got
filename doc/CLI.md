@@ -1,4 +1,4 @@
-# CLI
+# CLI Reference
 
 ## Setup
 
