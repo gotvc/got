@@ -33,11 +33,11 @@ type Root struct {
 	First []byte   `json:"first,omitempty"`
 }
 
-func (r Root) Marshal() (ret []byte) {
-	ret = append(ret, r.Ref.Marshal()...)
-	ret = append(ret, r.Depth)
-	ret = append(ret, r.First...)
-	return ret
+func (r Root) Marshal(out []byte) []byte {
+	out = append(out, r.Ref.Marshal()...)
+	out = append(out, r.Depth)
+	out = append(out, r.First...)
+	return out
 }
 
 func (r *Root) Unmarshal(data []byte) error {

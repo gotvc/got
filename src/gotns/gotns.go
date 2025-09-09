@@ -56,11 +56,11 @@ type State struct {
 func (s State) Marshal(out []byte) []byte {
 	const versionTag = 0
 	out = append(out, versionTag)
-	out = sbe.AppendLP(out, s.Leaves.Marshal())
-	out = sbe.AppendLP(out, s.Groups.Marshal())
-	out = sbe.AppendLP(out, s.Memberships.Marshal())
-	out = sbe.AppendLP(out, s.Rules.Marshal())
-	out = sbe.AppendLP(out, s.Branches.Marshal())
+	out = sbe.AppendLP(out, s.Leaves.Marshal(nil))
+	out = sbe.AppendLP(out, s.Groups.Marshal(nil))
+	out = sbe.AppendLP(out, s.Memberships.Marshal(nil))
+	out = sbe.AppendLP(out, s.Rules.Marshal(nil))
+	out = sbe.AppendLP(out, s.Branches.Marshal(nil))
 	return out
 }
 

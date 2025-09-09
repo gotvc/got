@@ -26,6 +26,7 @@ import (
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/gotrepo/internal/dbmig"
+	"github.com/gotvc/got/src/gotrepo/internal/reposchema"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/dbutil"
 	"github.com/gotvc/got/src/internal/migrations"
@@ -66,7 +67,8 @@ type Repo struct {
 
 	privateKey sign.PrivateKey
 	workingDir FS // workingDir is repoFS with reserved paths filtered.
-	gnsc       *gotns.Client
+	repoc      reposchema.Client
+	gnsc       gotns.Client
 	space      branches.Space
 }
 
@@ -97,7 +99,12 @@ func Init(p string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.gnsc.Init(ctx, blobcache.Handle{}, []gotns.IdentityLeaf{idenLeaf}); err != nil {
+
+	nsh, err := r.repoc.Namespace(ctx)
+	if err != nil {
+		return err
+	}
+	if err := r.gnsc.Init(ctx, *nsh, []gotns.IdentityLeaf{idenLeaf}); err != nil {
 		return err
 	}
 	if _, err := branches.CreateIfNotExists(ctx, r.space, nameMaster, branches.NewConfig(false)); err != nil {
@@ -156,19 +163,27 @@ func Open(p string) (*Repo, error) {
 		config:     *config,
 		privateKey: privateKey,
 		ctx:        ctx,
-
+		repoc:      reposchema.NewClient(bc),
+		gnsc: gotns.Client{
+			Machine:   gotns.New(),
+			Blobcache: bc,
+			ActAs:     privateKey,
+		},
 		workingDir: posixfs.NewFiltered(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
 	}
 
+	nsh, err := r.repoc.Namespace(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	// setup space
-	gnsc := r.GotNSClient()
-	r.gnsc = &gnsc
 	spaceSpec := config.Spaces
 	spaceSpec = append(spaceSpec, SpaceLayerSpec{
 		Prefix: "",
-		Target: SpaceSpec{Local: &blobcache.OID{}},
+		Target: SpaceSpec{Local: &nsh.OID},
 	})
 	space, err := r.MakeSpace(SpaceSpec{Multi: &spaceSpec})
 	if err != nil {
@@ -224,11 +239,7 @@ func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
 func (r *Repo) Cleanup(ctx context.Context) error {
 	if err := dbutil.DoTx(ctx, r.db, func(conn *dbutil.Conn) error {
 		logctx.Infof(ctx, "removing blobs from staging areas")
-		if err := cleanupStagingBlobs(ctx, conn); err != nil {
-			return err
-		}
-		logctx.Infof(ctx, "removing unreferenced blobs")
-		if err := cleanupBlobs(conn); err != nil {
+		if err := r.cleanupStagingBlobs(ctx, conn); err != nil {
 			return err
 		}
 		return nil
@@ -281,13 +292,6 @@ func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) err
 	return err
 }
 
-func (r *Repo) defaultVolumeSpec(_ context.Context) (VolumeSpec, error) {
-	spec := blobcache.DefaultLocalSpec()
-	spec.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
-	spec.Local.MaxSize = 1 << 21
-	return spec, nil
-}
-
 func openLocalBlobcache(ctx context.Context, p string) (*bclocal.Service, *sqlx.DB, error) {
 	db, err := dbutil.OpenSQLxDB(filepath.Join(p, "blobcache.db"))
 	if err != nil {
@@ -306,20 +310,16 @@ func openLocalBlobcache(ctx context.Context, p string) (*bclocal.Service, *sqlx.
 	}), db, nil
 }
 
-const schema_GOTNS = blobcache.Schema("gotns")
-
 func blobcacheSchemas() map[blobcache.Schema]schema.Schema {
 	schemas := bclocal.DefaultSchemas()
-	schemas[schema_GOTNS] = gotns.Schema{}
-	rootSpec := blobcache.DefaultLocalSpec()
-	rootSpec.Local.Schema = schema_GOTNS
-	rootSpec.Local.MaxSize = 1 << 22
+	schemas[reposchema.SchemaName_GotRepo] = reposchema.NewSchema()
+	schemas[reposchema.SchemaName_GotNS] = gotns.Schema{}
 	return schemas
 }
 
 func blobcacheRootSpec() *blobcache.VolumeSpec {
 	rootSpec := blobcache.DefaultLocalSpec()
-	rootSpec.Local.Schema = schema_GOTNS
+	rootSpec.Local.Schema = reposchema.SchemaName_GotRepo
 	rootSpec.Local.MaxSize = 1 << 22
 	return &rootSpec
 }

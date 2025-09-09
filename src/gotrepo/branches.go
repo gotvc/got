@@ -145,8 +145,12 @@ func (r *Repo) SetBranchHead(ctx context.Context, name string, snap Snap) error 
 		if err != nil {
 			return err
 		}
-		src := sa.getStore()
-		return branches.SetHead(ctx, branch.Volume, src, snap)
+		stageTxn, err := r.beginStagingTx(ctx, sa.getSalt())
+		if err != nil {
+			return err
+		}
+		defer stageTxn.Abort(ctx)
+		return branches.SetHead(ctx, branch.Volume, stageTxn, snap)
 	})
 }
 

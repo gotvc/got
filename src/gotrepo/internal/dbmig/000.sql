@@ -1,19 +1,8 @@
 
-CREATE TABLE blobs (
-    cid BLOB NOT NULL PRIMARY KEY,
-    data BLOB NOT NULL
-), WITHOUT ROWID, STRICT;
-
 CREATE TABLE staging_areas (
     rowid INTEGER PRIMARY KEY AUTOINCREMENT,
     salt BLOB NOT NULL UNIQUE
 ), STRICT;
-
-CREATE TABLE staging_blobs (
-    area_id INTEGER NOT NULL REFERENCES staging_areas(rowid),
-    cid BLOB NOT NULL REFERENCES blobs(cid),
-    PRIMARY KEY (area_id, cid)
-), WITHOUT ROWID, STRICT;
 
 CREATE TABLE staging_ops (
     area_id INTEGER NOT NULL REFERENCES staging_areas(rowid),

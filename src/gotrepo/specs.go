@@ -76,7 +76,7 @@ func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 		if err != nil {
 			return nil, err
 		}
-		return gotns.NewSpace(r.gnsc, *volh), nil
+		return gotns.NewSpace(&r.gnsc, *volh), nil
 	case spec.Blobcache != nil:
 		return nil, fmt.Errorf("blobcache spaces in arbitrary volumes are not yet supported")
 	case spec.Multi != nil:

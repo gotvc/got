@@ -168,13 +168,8 @@ func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string
 		return err
 	}
 	defer tx.Abort(ctx)
-	spec := blobcache.DefaultLocalSpec()
-	spec.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
-	volh, err := c.Blobcache.CreateVolume(ctx, nil, spec)
+	subVolh, err := c.createSubVolume(ctx, tx)
 	if err != nil {
-		return err
-	}
-	if err := tx.AllowLink(ctx, *volh); err != nil {
 		return err
 	}
 	var rootData []byte
@@ -189,7 +184,7 @@ func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string
 	b.AddOp(&Op_PutEntry{
 		Entry: Entry{
 			Name:   name,
-			Volume: volh.OID,
+			Volume: subVolh.OID,
 			Rights: blobcache.Action_ALL,
 		},
 	})
@@ -319,6 +314,17 @@ func (c *Client) view(ctx context.Context, volh blobcache.Handle, fn func(s stor
 	return fn(tx, *state)
 }
 
+func (c *Client) createSubVolume(ctx context.Context, tx *blobcache.Tx) (*blobcache.Handle, error) {
+	volh, err := c.Blobcache.CreateVolume(ctx, nil, BranchVolumeSpec())
+	if err != nil {
+		return nil, err
+	}
+	if err := tx.AllowLink(ctx, *volh); err != nil {
+		return nil, err
+	}
+	return volh, nil
+}
+
 // IntroduceSelf creates a signed change set that adds a leaf to the state.
 // Then it returns the signed change set data.
 // It does not contact Blobcache or perform any Volume operations.
@@ -345,4 +351,17 @@ func loadState(ctx context.Context, tx *blobcache.Tx) (*State, error) {
 		return nil, err
 	}
 	return &root.State, nil
+}
+
+func BranchVolumeSpec() blobcache.VolumeSpec {
+	return blobcache.VolumeSpec{
+		Local: &blobcache.VolumeBackend_Local{
+			VolumeParams: blobcache.VolumeParams{
+				Schema:   blobcache.Schema_NONE,
+				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
+				MaxSize:  1 << 22,
+				Salted:   false,
+			},
+		},
+	}
 }
