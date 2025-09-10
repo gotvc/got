@@ -19,7 +19,7 @@ import (
 type Client struct {
 	Blobcache blobcache.Service
 	Machine   Machine
-	ActAs     inet256.PrivateKey
+	ActAs     LeafPrivate
 }
 
 // Init initializes a new GotNS instance in the given volume.
@@ -104,19 +104,13 @@ func (c *Client) GetEntry(ctx context.Context, volh blobcache.Handle, name strin
 
 func (c *Client) PutEntry(ctx context.Context, volh blobcache.Handle, ent Entry) error {
 	return c.doTx(ctx, volh, c.ActAs, func(txb *Txn) error {
-		txb.AddOp(&Op_PutEntry{
-			Entry: ent,
-		})
-		return nil
+		return txb.PutEntry(ctx, ent)
 	})
 }
 
 func (c *Client) DeleteEntry(ctx context.Context, volh blobcache.Handle, name string) error {
 	return c.doTx(ctx, volh, c.ActAs, func(txb *Txn) error {
-		txb.AddOp(&Op_DeleteEntry{
-			Name: name,
-		})
-		return nil
+		return txb.DeleteEntry(ctx, name)
 	})
 }
 
@@ -158,8 +152,8 @@ func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string
 }
 
 func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string, aux []byte) error {
-	if c.ActAs == nil {
-		return errors.New("gotns.Client: ActAs cannot be nil")
+	if c.ActAs == (LeafPrivate{}) {
+		return errors.New("gotns.Client: ActAs cannot be empty")
 	}
 	nsh, err := c.adjustHandle(ctx, nsh)
 	if err != nil {
@@ -182,15 +176,15 @@ func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string
 	if err != nil {
 		return err
 	}
-	b := c.Machine.NewTxn(root, tx, []inet256.PrivateKey{c.ActAs})
-	b.AddOp(&Op_PutEntry{
-		Entry: Entry{
-			Name:   name,
-			Volume: subVolh.OID,
-			Rights: blobcache.Action_ALL,
-		},
-	})
-	root2, err := b.Finish(ctx)
+	tx2 := c.Machine.NewTxn(root, tx, []LeafPrivate{c.ActAs})
+	if err := tx2.PutEntry(ctx, Entry{
+		Name:   name,
+		Volume: subVolh.OID,
+		Rights: blobcache.Action_ALL,
+	}); err != nil {
+		return err
+	}
+	root2, err := tx2.Finish(ctx)
 	if err != nil {
 		return err
 	}
@@ -271,8 +265,8 @@ func (c *Client) adjustHandle(ctx context.Context, volh blobcache.Handle) (blobc
 	}
 }
 
-func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, privateKey inet256.PrivateKey, fn func(txb *Txn) error) error {
-	if c.ActAs == nil {
+func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv LeafPrivate, fn func(txb *Txn) error) error {
+	if c.ActAs == (LeafPrivate{}) {
 		return errors.New("gotns.Client: ActAs cannot be nil")
 	}
 	volh, err := c.adjustHandle(ctx, volh)
@@ -292,7 +286,7 @@ func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, privateKey ine
 	if err != nil {
 		return err
 	}
-	builder := c.Machine.NewTxn(root, tx, []inet256.PrivateKey{privateKey})
+	builder := c.Machine.NewTxn(root, tx, []LeafPrivate{leafPriv})
 	if err := fn(builder); err != nil {
 		return err
 	}
@@ -338,7 +332,7 @@ func (c *Client) createSubVolume(ctx context.Context, tx *blobcache.Tx) (*blobca
 // Then it returns the signed change set data.
 // It does not contact Blobcache or perform any Volume operations.
 func (c *Client) IntroduceSelf(kemPub kem.PublicKey) Op_ChangeSet {
-	leaf := NewLeaf(c.ActAs.Public().(inet256.PublicKey), kemPub)
+	leaf := NewLeaf(c.ActAs.SigPrivateKey.Public().(inet256.PublicKey), kemPub)
 	cs := Op_ChangeSet{
 		Ops: []Op{
 			&Op_CreateLeaf{
@@ -346,7 +340,7 @@ func (c *Client) IntroduceSelf(kemPub kem.PublicKey) Op_ChangeSet {
 			},
 		},
 	}
-	cs.Sign(c.ActAs)
+	cs.Sign(c.ActAs.SigPrivateKey)
 	return cs
 }
 

@@ -12,7 +12,6 @@ import (
 	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
-	"github.com/cloudflare/circl/sign"
 	"github.com/cloudflare/circl/sign/ed25519"
 	"github.com/jmoiron/sqlx"
 	"go.brendoncarroll.net/state"
@@ -65,11 +64,11 @@ type Repo struct {
 	// ctx is used as the background context for serving the repo
 	ctx context.Context
 
-	privateKey sign.PrivateKey
-	workingDir FS // workingDir is repoFS with reserved paths filtered.
-	repoc      reposchema.Client
-	gnsc       gotns.Client
-	space      branches.Space
+	leafPrivate gotns.LeafPrivate
+	workingDir  FS // workingDir is repoFS with reserved paths filtered.
+	repoc       reposchema.Client
+	gnsc        gotns.Client
+	space       branches.Space
 }
 
 // Init initializes a new repo at the given path.
@@ -128,7 +127,7 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	var privateKey sign.PrivateKey
+	var leafPrivate *gotns.LeafPrivate
 	if err := dbutil.Borrow(ctx, db, func(conn *dbutil.Conn) error {
 		if err := migrations.EnsureAll(conn, dbmig.ListMigrations()); err != nil {
 			return err
@@ -136,7 +135,7 @@ func Open(p string) (*Repo, error) {
 		if err := setupIdentity(conn); err != nil {
 			return err
 		}
-		privateKey, _, err = loadIdentity(conn)
+		leafPrivate, err = loadIdentity(conn)
 		if err != nil {
 			return err
 		}
@@ -155,19 +154,19 @@ func Open(p string) (*Repo, error) {
 	}
 
 	r := &Repo{
-		rootPath:   p,
-		repoFS:     repoFS,
-		db:         db,
-		bc:         bc,
-		bcDB:       bcDB,
-		config:     *config,
-		privateKey: privateKey,
-		ctx:        ctx,
-		repoc:      reposchema.NewClient(bc),
+		rootPath:    p,
+		repoFS:      repoFS,
+		db:          db,
+		bc:          bc,
+		bcDB:        bcDB,
+		config:      *config,
+		leafPrivate: *leafPrivate,
+		ctx:         ctx,
+		repoc:       reposchema.NewClient(bc),
 		gnsc: gotns.Client{
 			Machine:   gotns.New(),
 			Blobcache: bc,
-			ActAs:     privateKey,
+			ActAs:     *leafPrivate,
 		},
 		workingDir: posixfs.NewFiltered(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)
@@ -224,9 +223,13 @@ func (r *Repo) GetSpace() Space {
 }
 
 func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
+	edPriv, ok := r.leafPrivate.SigPrivateKey.(ed25519.PrivateKey)
+	if !ok {
+		return fmt.Errorf("repo.Serve: signing key must be ed25519")
+	}
 	svc := bclocal.New(bclocal.Env{
 		DB:         r.bcDB,
-		PrivateKey: r.privateKey.(ed25519.PrivateKey),
+		PrivateKey: edPriv,
 		PacketConn: pc,
 		Schemas:    blobcacheSchemas(),
 		Root:       *blobcacheRootSpec(),

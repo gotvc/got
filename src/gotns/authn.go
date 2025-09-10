@@ -63,7 +63,7 @@ func (m *Machine) DropLeaf(ctx context.Context, s stores.RW, state State, leafID
 }
 
 // AddGroupLeaf adds a leaf to a group.
-func (m *Machine) AddGroupLeaf(ctx context.Context, s stores.RW, State State, groupName string, leafID inet256.ID) (*State, error) {
+func (m *Machine) AddGroupLeaf(ctx context.Context, s stores.RW, State State, kemSeed *[64]byte, groupName string, leafID inet256.ID) (*State, error) {
 	group, err := m.GetGroup(ctx, s, State, groupName)
 	if err != nil {
 		return nil, err
@@ -71,12 +71,16 @@ func (m *Machine) AddGroupLeaf(ctx context.Context, s stores.RW, State State, gr
 	if len(group.LeafKEMs) >= MaxLeavesPerGroup {
 		return nil, fmt.Errorf("group %s has too many leaves (%d) to add another", groupName, len(group.LeafKEMs))
 	}
+	kemPub, _ := DeriveKEM(*kemSeed)
+	if !kemPub.Equal(group.KEM) {
+		return nil, fmt.Errorf("group %s has a different KEM public key than the one provided. %v != %v", groupName, kemPub, group.KEM)
+	}
 	// ensure the leaf exists
 	leaf, err := m.GetLeaf(ctx, s, State, leafID)
 	if err != nil {
 		return nil, err
 	}
-	group.LeafKEMs[leafID] = asymEncrypt(nil, leaf.KEMPublicKey, leaf.Value(nil))
+	group.LeafKEMs[leafID] = encryptSeed(nil, leaf.KEMPublicKey, kemSeed)
 	groupState, err := m.gotkv.Mutate(ctx, s, State.Groups, putGroup(*group))
 	if err != nil {
 		return nil, err
@@ -122,10 +126,12 @@ func (m *Machine) GetGroup(ctx context.Context, s stores.Reading, State State, n
 	return ParseGroup(k, val)
 }
 
-// GetKEMPrivateKey returns a KEM private key for a given group.
+// GetKEMSeed returns a KEM seed used to derive the key pair for a given group.
 // id is the ID of the leaf that is requesting the KEM private key.
-// leafKEMPriv is the KEM private key for the leaf to decrypt messages sent to it by group operations.
-func (m *Machine) GetKEMPrivateKey(ctx context.Context, s stores.Reading, state State, groupPath []string, id inet256.ID, kemPriv kem.PrivateKey) (kem.PrivateKey, error) {
+// kemPriv is the KEM private key for the leaf to decrypt messages sent to it by group operations.
+// groupPath should go from the largest group to the smallest group.
+func (m *Machine) GetKEMSeed(ctx context.Context, s stores.Reading, state State, groupPath []string, id inet256.ID, kemPriv kem.PrivateKey) (*[64]byte, error) {
+	var kemSeed *[64]byte
 	for len(groupPath) > 0 {
 		groupName := groupPath[len(groupPath)-1]
 		groupPath = groupPath[:len(groupPath)-1]
@@ -134,17 +140,18 @@ func (m *Machine) GetKEMPrivateKey(ctx context.Context, s stores.Reading, state 
 			return nil, err
 		}
 		if ctext, ok := g.LeafKEMs[id]; ok {
-			ptext, err := asymDecrypt(nil, kemPriv, ctext)
+			seed, err := decryptSeed(kemPriv, ctext)
 			if err != nil {
 				return nil, err
 			}
-			if len(ptext) != 64 {
-				return nil, fmt.Errorf("decrypted invalid KEM seed")
-			}
-			_, kemPriv = DeriveKEM([64]byte(ptext))
+			kemSeed = seed
+			_, kemPriv = DeriveKEM(*seed)
 		}
 	}
-	return kemPriv, nil
+	if kemSeed == nil {
+		return nil, fmt.Errorf("KEM seed not found")
+	}
+	return kemSeed, nil
 }
 
 // ForEachGroup calls fn for each group in the namespace.
@@ -236,7 +243,7 @@ func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, State State, name
 		if err != nil {
 			return nil, err
 		}
-		kemCtext := asymEncrypt(nil, leaf.KEMPublicKey, kemSeed[:])
+		kemCtext := encryptSeed(nil, leaf.KEMPublicKey, kemSeed)
 		group.LeafKEMs[leafID] = kemCtext
 	}
 	groupsRoot, err := m.gotkv.Mutate(ctx, s, State.Groups, putGroup(*group))
@@ -251,7 +258,7 @@ func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, State State, name
 		if err != nil {
 			return err
 		}
-		mem.EncryptedKEM = asymEncrypt(nil, subgroup.KEM, kemSeed[:])
+		mem.EncryptedKEM = encryptSeed(nil, subgroup.KEM, kemSeed)
 		memMuts = append(memMuts, putMember(mem))
 		return nil
 	}); err != nil {
@@ -497,6 +504,11 @@ func (il *IdentityLeaf) GenerateKEM(sigPriv inet256.PrivateKey) kem.PrivateKey {
 	return priv
 }
 
+type LeafPrivate struct {
+	SigPrivateKey inet256.PrivateKey
+	KEMPrivateKey kem.PrivateKey
+}
+
 // Membership contains the Group's KEM seed encrypted for the target member.
 type Membership struct {
 	Group  string
@@ -578,34 +590,32 @@ func putLeaf(leaf IdentityLeaf) gotkv.Mutation {
 	}
 }
 
-// asymEncrypt encrypts a message to a KEM public key.
-func asymEncrypt(out []byte, recvKEM kem.PublicKey, ptext []byte) []byte {
+// encryptSeed encryptes a secret seed
+func encryptSeed(out []byte, recvKEM kem.PublicKey, secretSeed *[64]byte) []byte {
 	kemCtext, ss, err := recvKEM.Scheme().Encapsulate(recvKEM)
 	if err != nil {
 		panic(err)
 	}
 	out = append(out, kemCtext...)
-	secret := ([32]byte)(ss)
-	nonce := [12]byte{}
-	out = symEncrypt(out, &secret, &nonce, ptext, kemCtext)
+	out = appendXOR(out, (*[32]byte)(ss), secretSeed[:])
 	return out
 }
 
-func asymDecrypt(out []byte, recvKEM kem.PrivateKey, ctext []byte) ([]byte, error) {
+// decryptSeed decrypts a secret seed
+func decryptSeed(recvKEM kem.PrivateKey, ctext []byte) (*[64]byte, error) {
 	kemCtextSize := recvKEM.Scheme().CiphertextSize()
 	if len(ctext) < kemCtextSize {
 		return nil, fmt.Errorf("ctext too short to contain KEM ciphertext")
 	}
 	kemCtext := ctext[:kemCtextSize]
-	symCtext := ctext[kemCtextSize:]
-
 	ss, err := recvKEM.Scheme().Decapsulate(recvKEM, kemCtext)
 	if err != nil {
 		return nil, err
 	}
-	secret := ([32]byte)(ss)
-	nonce := [12]byte{}
-	return symDecrypt(out, &secret, &nonce, symCtext, kemCtext)
+	var seed [64]byte
+	copy(seed[:], ctext[kemCtextSize:])
+	cryptoXOR((*[32]byte)(ss), seed[:], seed[:])
+	return &seed, nil
 }
 
 func symEncrypt(out []byte, secret *[32]byte, nonce *[12]byte, ptext []byte, ad []byte) []byte {

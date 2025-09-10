@@ -25,8 +25,8 @@ func TestInit(t *testing.T) {
 	require.NoError(t, err)
 
 	signPub, sigPriv := newTestSigner(t)
-	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: sigPriv}
-	kemPub, _ := newTestKEM(t)
+	kemPub, kemPriv := newTestKEM(t)
+	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: LeafPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}}
 	adminLeaf := NewLeaf(signPub, kemPub)
 	admins := []IdentityLeaf{adminLeaf}
 	err = gnsc.Init(ctx, *volh, admins)
@@ -81,8 +81,8 @@ func TestCreateAt(t *testing.T) {
 	ctx := testutil.Context(t)
 	bc := newTestService(t)
 	sigPub, sigPriv := newTestSigner(t)
-	kemPub, _ := newTestKEM(t)
-	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: sigPriv}
+	kemPub, kemPriv := newTestKEM(t)
+	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: LeafPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}}
 	require.NoError(t, gnsc.Init(ctx, blobcache.Handle{}, []IdentityLeaf{NewLeaf(sigPub, kemPub)}))
 
 	err := gnsc.CreateAt(ctx, blobcache.Handle{}, "test", nil)

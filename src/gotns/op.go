@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"log"
 
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
@@ -13,29 +14,32 @@ import (
 // Txn allows a transction to be built up incrementally
 // And then turned into a single slot change to the ledger.
 type Txn struct {
-	m       *Machine
-	prev    Root
-	s       stores.RW
-	signers []inet256.PrivateKey
+	m     *Machine
+	prev  Root
+	s     stores.RW
+	actAs []LeafPrivate
 
-	changes []Op
+	curState State
+	changes  []Op
 }
 
 // NewBuilder creates a new delta builder.
 // privateKey is the private key of the actor performing the transaction.
 // It will be used to produce a signature at the end of the transaction.
-func (m *Machine) NewTxn(prev Root, s stores.RW, signers []inet256.PrivateKey) *Txn {
+func (m *Machine) NewTxn(prev Root, s stores.RW, actAs []LeafPrivate) *Txn {
 	return &Txn{
-		m:       m,
-		prev:    prev,
-		s:       s,
-		signers: signers,
-		changes: []Op{},
+		m:     m,
+		prev:  prev,
+		s:     s,
+		actAs: actAs,
+
+		curState: prev.State,
+		changes:  []Op{},
 	}
 }
 
-func (b *Txn) AddOp(op Op) {
-	b.changes = append(b.changes, op)
+func (tx *Txn) addOp(op Op) {
+	tx.changes = append(tx.changes, op)
 }
 
 // Finish applies the changes to the previous root, and returns the new root.
@@ -43,20 +47,25 @@ func (tx *Txn) Finish(ctx context.Context) (Root, error) {
 	cs := Op_ChangeSet{
 		Ops: tx.changes,
 	}
-	for _, signer := range tx.signers {
-		cs.Sign(signer)
+	for _, signer := range tx.actAs {
+		cs.Sign(signer.SigPrivateKey)
 	}
 
-	next, err := cs.perform(ctx, tx.m, tx.s, tx.prev.State, IDSet{})
-	if err != nil {
+	s2 := stores.AddWriteLayer(tx.s, stores.NewMem())
+	if err := cs.validate(ctx, tx.m, s2, tx.prev.State, tx.curState, IDSet{}); err != nil {
 		return Root{}, err
 	}
-	return tx.m.led.AndThen(ctx, tx.s, tx.prev, Delta(cs), next)
+	return tx.m.led.AndThen(ctx, tx.s, tx.prev, Delta(cs), tx.curState)
 }
 
 // CreateLeaf creates a new leaf.
 func (tx *Txn) CreateLeaf(ctx context.Context, leaf IdentityLeaf) error {
-	tx.AddOp(&Op_CreateLeaf{
+	state, err := tx.m.PutLeaf(ctx, tx.s, tx.curState, leaf)
+	if err != nil {
+		return err
+	}
+	tx.curState = *state
+	tx.addOp(&Op_CreateLeaf{
 		Leaf: leaf,
 	})
 	return nil
@@ -64,15 +73,67 @@ func (tx *Txn) CreateLeaf(ctx context.Context, leaf IdentityLeaf) error {
 
 // AddLeaf adds a leaf in a transaction.
 func (tx *Txn) AddLeaf(ctx context.Context, group string, leafID inet256.ID) error {
-	tx.AddOp(&Op_AddMember{
+	if len(tx.actAs) > 1 {
+		return fmt.Errorf("cannot add leaf in a transaction with multiple signers")
+	}
+	actAs := tx.actAs[0]
+	ownerID := pki.NewID(actAs.SigPrivateKey.Public().(inet256.PublicKey))
+	kemSeed, err := tx.m.GetKEMSeed(ctx, tx.s, tx.curState, []string{group}, ownerID, actAs.KEMPrivateKey)
+	if err != nil {
+		return err
+	}
+	nextState, err := tx.m.AddGroupLeaf(ctx, tx.s, tx.curState, kemSeed, group, leafID)
+	if err != nil {
+		return err
+	}
+	tx.curState = *nextState
+	tx.addOp(&Op_AddMember{
 		Group:  group,
 		Member: leafID.String(),
 	})
 	return nil
 }
 
-func (tx *Txn) ChangeSet(cs Op_ChangeSet) error {
-	tx.AddOp(&cs)
+func (tx *Txn) PutEntry(ctx context.Context, entry Entry) error {
+	state, err := tx.m.PutEntry(ctx, tx.s, tx.curState, entry)
+	if err != nil {
+		return err
+	}
+	tx.curState = *state
+	tx.addOp(&Op_PutEntry{
+		Entry: entry,
+	})
+	return nil
+}
+
+func (tx *Txn) DeleteEntry(ctx context.Context, name string) error {
+	state, err := tx.m.DeleteEntry(ctx, tx.s, tx.curState, name)
+	if err != nil {
+		return err
+	}
+	tx.curState = *state
+	tx.addOp(&Op_DeleteEntry{
+		Name: name,
+	})
+	return nil
+}
+
+func (tx *Txn) ChangeSet(ctx context.Context, cs Op_ChangeSet) error {
+	for _, op := range cs.Ops {
+		// TODO: this is not great, we should only implement this once in CreateLeaf.
+		switch op := op.(type) {
+		case *Op_CreateLeaf:
+			state, err := tx.m.PutLeaf(ctx, tx.s, tx.curState, op.Leaf)
+			if err != nil {
+				return err
+			}
+			tx.curState = *state
+
+		default:
+			return fmt.Errorf("cannot apply op in change set: %T", op)
+		}
+	}
+	tx.addOp(&cs)
 	return nil
 }
 
@@ -137,8 +198,8 @@ type Op interface {
 	// OpCode returns the op code.
 	OpCode() OpCode
 
-	// perform applies the op to the state.
-	perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error)
+	// validate checks if the op was correctly applied from prev to next.
+	validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error
 
 	isOp()
 }
@@ -256,9 +317,10 @@ func (cs *Op_ChangeSet) Unmarshal(data []byte) error {
 	return nil
 }
 
-func (cs Op_ChangeSet) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
+func (cs Op_ChangeSet) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
 	// collect all of the public keys that we need.
 	pubKeys := make(map[inet256.ID]inet256.PublicKey)
+
 	// Any create operations will provide public keys that are not yet in the state.
 	for _, op := range cs.Ops {
 		switch op := op.(type) {
@@ -268,9 +330,9 @@ func (cs Op_ChangeSet) perform(ctx context.Context, m *Machine, s stores.RW, sta
 	}
 	for id := range cs.Sigs {
 		if _, ok := pubKeys[id]; !ok {
-			leaf, err := m.GetLeaf(ctx, s, state, id)
+			leaf, err := m.GetLeaf(ctx, s, prev, id)
 			if err != nil {
-				return State{}, err
+				return err
 			}
 			pubKeys[id] = leaf.PublicKey
 		}
@@ -280,19 +342,19 @@ func (cs Op_ChangeSet) perform(ctx context.Context, m *Machine, s stores.RW, sta
 	for id, sig := range cs.Sigs {
 		pubKey := pubKeys[id]
 		if !pki.Verify(&sigCtxTxn, pubKey, target, sig) {
-			return State{}, fmt.Errorf("invalid signature for %v", id)
+			return fmt.Errorf("invalid signature for %v", id)
 		}
+		// add to approvers.
 		approvers[id] = struct{}{}
 	}
-	// apply the ops.
+	// validate the ops.
+	state := prev
 	for _, op := range cs.Ops {
-		var err error
-		state, err = op.perform(ctx, m, s, state, approvers)
-		if err != nil {
-			return State{}, err
+		if err := op.validate(ctx, m, s, state, next, approvers); err != nil {
+			return err
 		}
 	}
-	return state, nil
+	return nil
 }
 
 var sigCtxTxn = inet256.SigCtxString("gotns/txn")
@@ -344,16 +406,19 @@ func (op Op_CreateGroup) OpCode() OpCode {
 	return OpCode_CreateGroup
 }
 
-func (op Op_CreateGroup) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
-	_, err := m.GetGroup(ctx, s, state, op.Group.Name)
+func (op Op_CreateGroup) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
+	_, err := m.GetGroup(ctx, s, prev, op.Group.Name)
 	if err == nil {
-		return State{}, fmt.Errorf("group already exists")
+		return fmt.Errorf("group already exists")
 	}
-	next, err := m.PutGroup(ctx, s, state, op.Group)
+	g, err := m.GetGroup(ctx, s, prev, op.Group.Name)
 	if err != nil {
-		return State{}, err
+		return err
 	}
-	return *next, nil
+	if g.KEM.Equal(op.Group.KEM) {
+		return fmt.Errorf("group KEM mismatch")
+	}
+	return nil
 }
 
 // Op_CreateLeaf creates a new leaf, or fails if the leaf already exists.
@@ -390,18 +455,22 @@ func (op *Op_CreateLeaf) Unmarshal(data []byte) error {
 	return nil
 }
 
-func (op Op_CreateLeaf) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
-	if _, ok := approvers[op.Leaf.ID]; !ok {
-		return State{}, fmt.Errorf("cannot create leaf without approval from %v", op.Leaf.ID)
+func (op Op_CreateLeaf) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
+	if _, err := m.GetLeaf(ctx, s, prev, op.Leaf.ID); err == nil {
+		return fmt.Errorf("leaf already exists")
 	}
-	if _, err := m.GetLeaf(ctx, s, state, op.Leaf.ID); err == nil {
-		return State{}, fmt.Errorf("leaf already exists")
-	}
-	next, err := m.PutLeaf(ctx, s, state, op.Leaf)
+	leaf, err := m.GetLeaf(ctx, s, next, op.Leaf.ID)
 	if err != nil {
-		return State{}, err
+		return err
 	}
-	return *next, nil
+	if !leaf.PublicKey.Equal(op.Leaf.PublicKey) {
+		return fmt.Errorf("leaf public key mismatch")
+	}
+	if _, ok := approvers[op.Leaf.ID]; !ok {
+		log.Println("approvers", approvers)
+		return fmt.Errorf("cannot create leaf without approval from %v", op.Leaf.ID)
+	}
+	return nil
 }
 
 // Op_AddLeaf adds a leaf to a group.
@@ -435,16 +504,12 @@ func (op Op_AddLeaf) OpCode() OpCode {
 	return OpCode_AddLeaf
 }
 
-func (op Op_AddLeaf) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
-	_, err := m.GetLeaf(ctx, s, state, op.LeafID)
+func (op Op_AddLeaf) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
+	_, err := m.GetLeaf(ctx, s, prev, op.LeafID)
 	if err != nil {
-		return State{}, err
+		return err
 	}
-	next, err := m.AddGroupLeaf(ctx, s, state, op.Group, op.LeafID)
-	if err != nil {
-		return State{}, err
-	}
-	return *next, nil
+	panic("not implemented")
 }
 
 // Op_RemoveLeaf removes a leaf from a group.
@@ -480,12 +545,8 @@ func (op Op_RemoveLeaf) OpCode() OpCode {
 	return OpCode_RemoveLeaf
 }
 
-func (op Op_RemoveLeaf) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
-	next, err := m.DropLeaf(ctx, s, state, op.ID)
-	if err != nil {
-		return State{}, err
-	}
-	return *next, nil
+func (op Op_RemoveLeaf) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
+	return nil
 }
 
 type Op_AddMember struct {
@@ -525,16 +586,27 @@ func (op Op_AddMember) OpCode() OpCode {
 	return OpCode_AddMember
 }
 
-func (op Op_AddMember) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
-	_, err := m.GetGroup(ctx, s, state, op.Group)
+func (op Op_AddMember) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
+	g, err := m.GetGroup(ctx, s, prev, op.Group)
 	if err != nil {
-		return State{}, err
+		return err
 	}
-	next, err := m.AddMember(ctx, s, state, op.Group, op.Member)
+	foundOwner := false
+	for _, owner := range g.Owners {
+		if _, exists := approvers[owner]; exists {
+			foundOwner = true
+			break
+		}
+	}
+	if !foundOwner {
+		return fmt.Errorf("cannot add member without approval from an owner")
+	}
+
+	g, err = m.GetGroup(ctx, s, next, op.Group)
 	if err != nil {
-		return State{}, err
+		return err
 	}
-	return *next, nil
+	return nil
 }
 
 type Op_RemoveMember struct {
@@ -567,7 +639,7 @@ func (op Op_RemoveMember) OpCode() OpCode {
 	return OpCode_RemoveMember
 }
 
-func (op Op_RemoveMember) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
+func (op Op_RemoveMember) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
 	panic("not implemented")
 }
 
@@ -590,19 +662,15 @@ func (op Op_AddRule) OpCode() OpCode {
 	return OpCode_AddRule
 }
 
-func (op Op_AddRule) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
-	yes, err := m.CanAnyDo(ctx, s, state, approvers, "ADMIN", op.Rule.ObjectType, op.Rule.Names.String())
+func (op Op_AddRule) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
+	yes, err := m.CanAnyDo(ctx, s, prev, approvers, "ADMIN", op.Rule.ObjectType, op.Rule.Names.String())
 	if err != nil {
-		return State{}, err
+		return err
 	}
 	if !yes {
-		return State{}, fmt.Errorf("cannot add rule")
+		return fmt.Errorf("cannot add rule")
 	}
-	next, err := m.AddRule(ctx, s, state, &op.Rule)
-	if err != nil {
-		return State{}, err
-	}
-	return *next, nil
+	return nil
 }
 
 type Op_DropRule struct {
@@ -627,24 +695,8 @@ func (op Op_DropRule) OpCode() OpCode {
 	return OpCode_DropRule
 }
 
-func (op Op_DropRule) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
-	rule, err := m.GetRule(ctx, s, state, op.RuleID)
-	if err != nil {
-		return State{}, err
-	}
-	// TODO: figure out the correct arguments for this.
-	yes, err := m.CanAnyDo(ctx, s, state, approvers, Verb_ADMIN, rule.ObjectType, "")
-	if err != nil {
-		return State{}, err
-	}
-	if !yes {
-		return State{}, fmt.Errorf("cannot drop rule")
-	}
-	next, err := m.DropRule(ctx, s, state, op.RuleID)
-	if err != nil {
-		return State{}, err
-	}
-	return next, nil
+func (op Op_DropRule) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
+	return nil
 }
 
 // Op_PutEntry creates or overwrites a Branch entry.
@@ -680,13 +732,8 @@ func (op Op_PutEntry) OpCode() OpCode {
 	return OpCode_PutEntry
 }
 
-func (op Op_PutEntry) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
-	// TODO: check permissions.
-	next, err := m.PutEntry(ctx, s, state, op.Entry)
-	if err != nil {
-		return State{}, err
-	}
-	return *next, nil
+func (op Op_PutEntry) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
+	return nil
 }
 
 // Op_DeleteEntry deletes a Branch entry.
@@ -709,11 +756,6 @@ func (op Op_DeleteEntry) OpCode() OpCode {
 	return OpCode_DeleteEntry
 }
 
-func (op Op_DeleteEntry) perform(ctx context.Context, m *Machine, s stores.RW, state State, approvers IDSet) (State, error) {
-	// TODO: check permissions.
-	next, err := m.DeleteEntry(ctx, s, state, op.Name)
-	if err != nil {
-		return State{}, err
-	}
-	return *next, nil
+func (op Op_DeleteEntry) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
+	return nil
 }

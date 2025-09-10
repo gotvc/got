@@ -2,9 +2,9 @@ package gotns
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 
-	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/gotled"
 	"github.com/gotvc/got/src/internal/sbe"
@@ -144,11 +144,12 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 		*dst = *kvr
 	}
 
-	kemPub, kemPriv, err := mlkem1024.GenerateKeyPair(nil)
-	if err != nil {
+	// create initial KEM seed
+	var kemSeed [64]byte
+	if _, err := rand.Read(kemSeed[:]); err != nil {
 		return nil, err
 	}
-	kemPrivCtext := MarshalKEMPrivateKey(nil, KEM_MLKEM1024, kemPriv)
+	groupKEMPub, _ := DeriveKEM(kemSeed)
 
 	leaves := map[inet256.ID][]byte{}
 	for _, leaf := range admins {
@@ -157,15 +158,16 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 		if err != nil {
 			return nil, err
 		}
-		leaves[leaf.ID] = asymEncrypt(nil, leaf.KEMPublicKey, kemPrivCtext)
+		leaves[leaf.ID] = encryptSeed(nil, leaf.KEMPublicKey, &kemSeed)
 	}
 	const adminGroupName = "admin"
 	g := Group{
 		Name:     adminGroupName,
-		KEM:      kemPub,
+		KEM:      groupKEMPub,
 		LeafKEMs: leaves,
 		Owners:   slices2.Map(admins, func(leaf IdentityLeaf) inet256.ID { return leaf.ID }),
 	}
+	var err error
 	state, err = m.PutGroup(ctx, s, *state, g)
 	if err != nil {
 		return nil, err
@@ -202,10 +204,10 @@ func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, 
 	return nil
 }
 
-func (m *Machine) Apply(ctx context.Context, s stores.RW, prev State, delta Delta) (State, error) {
-	cs := Op_ChangeSet(delta)
-	return cs.perform(ctx, m, s, prev, make(map[inet256.ID]struct{}))
-}
+// func (m *Machine) Apply(ctx context.Context, s stores.RW, prev State, delta Delta) (State, error) {
+// 	cs := Op_ChangeSet(delta)
+// 	return cs.perform(ctx, m, s, prev, make(map[inet256.ID]struct{}))
+// }
 
 // putGroup returns a gotkv mutation that puts a group into the groups table.
 func putGroup(group Group) gotkv.Mutation {

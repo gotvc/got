@@ -23,7 +23,7 @@ func TestClient(t *testing.T) {
 	require.NotNil(t, vh)
 
 	// Initialize GotNS
-	gnsc := gotns.Client{Blobcache: bc, Machine: gotns.New(), ActAs: nil}
+	gnsc := gotns.Client{Blobcache: bc, Machine: gotns.New(), ActAs: gotns.LeafPrivate{}}
 	require.NoError(t, gnsc.Init(ctx, *nsh, []gotns.IdentityLeaf{}))
 }
 
