@@ -38,6 +38,18 @@ func ReadUint16(data []byte) (uint16, []byte, error) {
 	return binary.LittleEndian.Uint16(data[:2]), data[2:], nil
 }
 
+func AppendUVarint(out []byte, x uint64) []byte {
+	return binary.AppendUvarint(out, x)
+}
+
+func ReadUVarint(data []byte) (uint64, []byte, error) {
+	x, n := binary.Uvarint(data)
+	if n <= 0 {
+		return 0, nil, fmt.Errorf("too short to contain uvarint")
+	}
+	return x, data[n:], nil
+}
+
 // AppendLP appends a length-prefixed byte slice to out.
 // the length is encoded as a varint
 func AppendLP(out []byte, x []byte) []byte {

@@ -60,11 +60,9 @@ func (tx *Txn) Finish(ctx context.Context) (Root, error) {
 
 // CreateLeaf creates a new leaf.
 func (tx *Txn) CreateLeaf(ctx context.Context, leaf IdentityLeaf) error {
-	state, err := tx.m.PutLeaf(ctx, tx.s, tx.curState, leaf)
-	if err != nil {
+	if err := tx.createLeaf(ctx, leaf); err != nil {
 		return err
 	}
-	tx.curState = *state
 	tx.addOp(&Op_CreateLeaf{
 		Leaf: leaf,
 	})
@@ -123,17 +121,24 @@ func (tx *Txn) ChangeSet(ctx context.Context, cs Op_ChangeSet) error {
 		// TODO: this is not great, we should only implement this once in CreateLeaf.
 		switch op := op.(type) {
 		case *Op_CreateLeaf:
-			state, err := tx.m.PutLeaf(ctx, tx.s, tx.curState, op.Leaf)
-			if err != nil {
+			if err := tx.createLeaf(ctx, op.Leaf); err != nil {
 				return err
 			}
-			tx.curState = *state
 
 		default:
 			return fmt.Errorf("cannot apply op in change set: %T", op)
 		}
 	}
 	tx.addOp(&cs)
+	return nil
+}
+
+func (tx *Txn) createLeaf(ctx context.Context, leaf IdentityLeaf) error {
+	state, err := tx.m.PutLeaf(ctx, tx.s, tx.curState, leaf)
+	if err != nil {
+		return err
+	}
+	tx.curState = *state
 	return nil
 }
 

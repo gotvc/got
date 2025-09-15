@@ -2,9 +2,11 @@ package gotns
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"regexp"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
@@ -133,7 +135,7 @@ func (m *Machine) GetRule(ctx context.Context, s stores.Reading, state State, ci
 }
 
 // ForEachRule calls fn for each rule.
-func (m *Machine) ForEachRule(ctx context.Context, s stores.Reading, state State, fn func(rule Rule) error) (State, error) {
+func (m *Machine) ForEachRule(ctx context.Context, s stores.Reading, state State, fn func(rule Rule) error) error {
 	if err := m.gotkv.ForEach(ctx, s, state.Rules, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
 		k := ent.Key
 		if len(k) != 32 {
@@ -146,9 +148,9 @@ func (m *Machine) ForEachRule(ctx context.Context, s stores.Reading, state State
 		}
 		return fn(rule)
 	}); err != nil {
-		return State{}, err
+		return err
 	}
-	return state, nil
+	return nil
 }
 
 // CanDo returns true if the subject can perform the action on the object.
@@ -201,6 +203,99 @@ func (m *Machine) CanAnyDo(ctx context.Context, s stores.Reading, state State, a
 	}
 	return false, nil
 }
+
+// Obligation associates encrypted secret keys with Volumes, according to rules.
+type Obligation struct {
+	// Volume is the volume that the obligation is for.
+	// Accessing the data in this volume requires the seed encrypted in the obligation value.
+	Volume blobcache.OID
+	// KEMHash is the hash of the KEM public key that the obligation is for.
+	KEMHash [32]byte
+	// Nonce is increased each time the volume keys change.
+	Nonce uint64
+
+	// The seed can be decrypted with the corresponding private key for the KEMHash.
+	// The seed will decrypt to a 64 byte seed, which is used for the volume's Signing Key.
+	// The hash of the seed will be used for the symmetric cipher.
+	EncryptedSeed []byte
+	// RuleIDs is the rule that required the obligation.
+	RuleIDs []RuleID
+}
+
+func (o *Obligation) Key(out []byte) []byte {
+	out = append(out, o.Volume[:]...)
+	out = append(out, o.KEMHash[:]...)
+	out = binary.BigEndian.AppendUint64(out, o.Nonce)
+	return out
+}
+
+func (o *Obligation) Value(out []byte) []byte {
+	out = sbe.AppendLP(out, o.EncryptedSeed)
+	out = binary.AppendUvarint(out, uint64(len(o.RuleIDs)))
+	for _, ruleID := range o.RuleIDs {
+		out = append(out, ruleID[:]...)
+	}
+	return out
+}
+
+func ParseObligation(key []byte, value []byte) (*Obligation, error) {
+	// key
+	if len(key) < blobcache.OIDSize+32+8 {
+		return nil, fmt.Errorf("key too short")
+	}
+	volID := blobcache.OID(key[:blobcache.OIDSize])
+	kemHash := [32]byte(key[blobcache.OIDSize : blobcache.OIDSize+32])
+	nonce := binary.BigEndian.Uint64(key[blobcache.OIDSize+32:])
+
+	// value
+	encryptedSeed, value, err := sbe.ReadLP(value)
+	if err != nil {
+		return nil, err
+	}
+	ruleIDsLen, value, err := sbe.ReadUVarint(value[len(encryptedSeed):])
+	if err != nil {
+		return nil, err
+	}
+	var ruleIDs []RuleID
+	for range ruleIDsLen {
+		var ruleID RuleID
+		copy(ruleID[:], value)
+		value = value[32:]
+		ruleIDs = append(ruleIDs, ruleID)
+	}
+	return &Obligation{
+		Volume:  volID,
+		KEMHash: kemHash,
+		Nonce:   nonce,
+
+		EncryptedSeed: encryptedSeed,
+		RuleIDs:       ruleIDs,
+	}, nil
+}
+
+func (m *Machine) PutObligation(ctx context.Context, s stores.RW, state State, o *Obligation) (*State, error) {
+	kvr, err := m.gotkv.Put(ctx, s, state.Obligations, o.Key(nil), o.Value(nil))
+	if err != nil {
+		return nil, err
+	}
+	state.Obligations = *kvr
+	return &state, nil
+}
+
+// EnsureObligations ensures that obligations for the entry are satisfied.
+func (m *Machine) EnsureObligations(ctx context.Context, s stores.Reading, state State, ent Entry, secret *[32]byte) (bool, error) {
+	if err := m.ForEachRule(ctx, s, state, func(rule Rule) error {
+		if rule.ObjectType != ObjectType_BRANCH || !rule.Names.MatchString(ent.Name) {
+			return nil
+		}
+		return nil
+	}); err != nil {
+		return false, err
+	}
+	return false, nil
+}
+
+type RuleID = CID
 
 type CID = cadata.ID
 
