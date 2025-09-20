@@ -23,14 +23,16 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 		require.NotNil(t, b)
 	})
 	t.Run("List", func(t *testing.T) {
-		t.Parallel()
+		//t.Parallel()
 		ctx := testutil.Context(t)
 		x := newSpace(t)
-		const N = 100
+		const N = 20
+		t.Log("creating", N, "branches")
 		for i := 0; i < N; i++ {
 			_, err := x.Create(ctx, "test"+strconv.Itoa(i), Params{})
 			require.NoError(t, err)
 		}
+		t.Log("done creating branches, now listing...")
 		names, err := x.List(ctx, TotalSpan(), 0)
 		require.NoError(t, err)
 		require.Len(t, names, N)

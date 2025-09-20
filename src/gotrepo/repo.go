@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -13,7 +14,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
 	"github.com/cloudflare/circl/sign/ed25519"
-	"github.com/jmoiron/sqlx"
+	"github.com/cockroachdb/pebble"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/kv"
 	"go.brendoncarroll.net/state/posixfs"
@@ -57,7 +58,7 @@ type Repo struct {
 	rootPath string
 	repoFS   FS // repoFS is the directory that the repo is in
 
-	bcDB   *sqlx.DB
+	bcDB   *pebble.DB
 	bc     blobcache.Service
 	db     *dbutil.Pool
 	config Config
@@ -148,7 +149,7 @@ func Open(p string) (*Repo, error) {
 	if err := posixfs.MkdirAll(repoFS, blobcacheDirPath, 0o755); err != nil {
 		return nil, err
 	}
-	bc, bcDB, err := openLocalBlobcache(ctx, filepath.Join(p, blobcacheDirPath))
+	bc, bcDB, err := openLocalBlobcache(filepath.Join(p, blobcacheDirPath))
 	if err != nil {
 		return nil, err
 	}
@@ -193,6 +194,7 @@ func Open(p string) (*Repo, error) {
 }
 
 func (r *Repo) Close() (retErr error) {
+	ctx := context.TODO()
 	for _, fn := range []func() error{
 		func() error {
 			return dbutil.Borrow(context.TODO(), r.db, func(conn *dbutil.Conn) error {
@@ -201,7 +203,13 @@ func (r *Repo) Close() (retErr error) {
 		},
 		r.db.Close,
 		func() error {
+			// close the blobcache database, if it exists
+			// r.bcDB is only set if the in-process blobcache is used.
 			if r.bcDB != nil {
+				if err := r.bc.(*bclocal.Service).AbortAll(ctx); err != nil {
+					logctx.Warn(ctx, "error aborting blobcache transactions", zap.Error(err))
+				}
+				logctx.Infof(ctx, "closing pebble db")
 				return r.bcDB.Close()
 			}
 			return nil
@@ -232,7 +240,7 @@ func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
 		PrivateKey: edPriv,
 		PacketConn: pc,
 		Schemas:    blobcacheSchemas(),
-		Root:       *blobcacheRootSpec(),
+		Root:       reposchema.GotRepoVolumeSpec(),
 	})
 	r.bc = svc
 	return svc.Run(ctx)
@@ -302,21 +310,30 @@ func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) err
 	return err
 }
 
-func openLocalBlobcache(ctx context.Context, p string) (*bclocal.Service, *sqlx.DB, error) {
-	db, err := dbutil.OpenSQLxDB(filepath.Join(p, "blobcache.db"))
+func openLocalBlobcache(p string) (*bclocal.Service, *pebble.DB, error) {
+	pebbleDirPath := filepath.Join(p, "pebble")
+	blobDirPath := filepath.Join(p, "blob")
+	for _, dir := range []string{pebbleDirPath, blobDirPath} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, nil, err
+		}
+	}
+	db, err := pebble.Open(pebbleDirPath, &pebble.Options{
+		Logger: zap.NewNop().Sugar(),
+	})
 	if err != nil {
 		return nil, nil, err
 	}
-	// TODO: remove this.
-	// This prevents a sqlite BUSY error.
-	db.SetMaxOpenConns(1)
-	if err := bclocal.SetupDB(ctx, db); err != nil {
+	blobDir, err := os.OpenRoot(blobDirPath)
+	if err != nil {
 		return nil, nil, err
 	}
+
 	return bclocal.New(bclocal.Env{
 		DB:      db,
+		BlobDir: blobDir,
 		Schemas: blobcacheSchemas(),
-		Root:    *blobcacheRootSpec(),
+		Root:    reposchema.GotRepoVolumeSpec(),
 	}), db, nil
 }
 
@@ -325,11 +342,4 @@ func blobcacheSchemas() map[blobcache.Schema]schema.Schema {
 	schemas[reposchema.SchemaName_GotRepo] = reposchema.NewSchema()
 	schemas[reposchema.SchemaName_GotNS] = gotns.Schema{}
 	return schemas
-}
-
-func blobcacheRootSpec() *blobcache.VolumeSpec {
-	rootSpec := blobcache.DefaultLocalSpec()
-	rootSpec.Local.Schema = reposchema.SchemaName_GotRepo
-	rootSpec.Local.MaxSize = 1 << 22
-	return &rootSpec
 }

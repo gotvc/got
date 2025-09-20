@@ -1,6 +1,8 @@
 package gotns
 
 import (
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"testing"
@@ -10,10 +12,10 @@ import (
 	"blobcache.io/blobcache/src/schema/simplens"
 	"github.com/cloudflare/circl/kem"
 	"github.com/cloudflare/circl/sign"
+	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 	"go.inet256.org/inet256/src/inet256"
 
-	"github.com/gotvc/got/src/internal/dbutil"
 	"github.com/gotvc/got/src/internal/testutil"
 )
 
@@ -90,20 +92,39 @@ func TestCreateAt(t *testing.T) {
 }
 
 func newTestService(t *testing.T) *bclocal.Service {
-	ctx := testutil.Context(t)
-	db := dbutil.NewTestSQLxDB(t)
-	require.NoError(t, bclocal.SetupDB(ctx, db))
+	dir := t.TempDir()
+	blobDirPath := filepath.Join(dir, "blob")
+	pebbleDirPath := filepath.Join(dir, "pebble")
+	for _, dir := range []string{blobDirPath, pebbleDirPath} {
+		require.NoError(t, os.MkdirAll(dir, 0o755))
+	}
+
+	db, err := pebble.Open(pebbleDirPath, &pebble.Options{})
+	require.NoError(t, err)
+	blobDir, err := os.OpenRoot(blobDirPath)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+		require.NoError(t, blobDir.Close())
+	})
+
 	schemas := bclocal.DefaultSchemas()
 	schemas["gotns"] = Schema{}
 	rootSpec := blobcache.DefaultLocalSpec()
 	rootSpec.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
 	rootSpec.Local.Schema = "gotns"
-	return bclocal.New(bclocal.Env{
+	s := bclocal.New(bclocal.Env{
 		DB:         db,
+		BlobDir:    blobDir,
 		Schemas:    schemas,
 		Root:       rootSpec,
 		PacketConn: testutil.PacketConn(t),
 	})
+	t.Cleanup(func() {
+		// This is required to avoid panics when closing the database.
+		s.AbortAll(testutil.Context(t))
+	})
+	return s
 }
 
 func newTestSigner(t *testing.T) (sign.PublicKey, sign.PrivateKey) {

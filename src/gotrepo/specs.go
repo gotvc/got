@@ -14,6 +14,23 @@ import (
 	"github.com/gotvc/got/src/internal/volumes"
 )
 
+// BlobcacheSpec describes how to access a Blobcache Service.
+type BlobcacheSpec struct {
+	// InProcess uses an in-process Blobcache service.
+	// The state will be stored in the .got/blobcache directory.
+	// This is the default.
+	// The state can get quite large for large datasets, so it is recommended to use the system's Blobcache.
+	InProcess *struct{} `json:"in_process,omitempty"`
+	// HTTP uses an HTTP Blobcache service.
+	// This is plaintext, non-encrypted HTTP, and it does not require authentication.
+	// This should only be used for connecting on local host or via a unix socket.
+	HTTP *string `json:"http,omitempty"`
+	// Remote uses the Blobcache Protocol (BCP), and Got will appear as a Blobcache Node to the service.
+	// This is a binary protocol and has less overhead than HTTP.
+	// Got will not serve any requests that it receieves while acting as a dummy Node.
+	Remote *blobcache.Endpoint `json:"remote,omitempty"`
+}
+
 // VolumeSpec explains how to create a Volume in blobcache.
 type VolumeSpec = blobcache.VolumeSpec
 

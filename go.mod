@@ -5,12 +5,12 @@ go 1.24
 toolchain go1.24.1
 
 require (
-	blobcache.io/blobcache v0.0.0-20250909160718-f04f375a632e
+	blobcache.io/blobcache v0.0.0-20250916002104-71a9fb3e6a0b
 	github.com/cloudflare/circl v1.6.1
+	github.com/cockroachdb/pebble v1.1.5
 	github.com/dchest/siphash v1.2.3
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/golang-lru v1.0.2
-	github.com/jmoiron/sqlx v1.4.0
 	github.com/spf13/cobra v1.0.0
 	github.com/stretchr/testify v1.10.0
 	go.brendoncarroll.net/exp v0.0.0-20250112210235-9d4b62bdbd02
@@ -24,7 +24,6 @@ require (
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
 	golang.org/x/sync v0.16.0
 	google.golang.org/protobuf v1.35.1
-	modernc.org/sqlite v1.38.0
 	zombiezen.com/go/sqlite v1.4.2
 )
 
@@ -35,7 +34,6 @@ require (
 	github.com/cockroachdb/errors v1.11.3 // indirect
 	github.com/cockroachdb/fifo v0.0.0-20240606204812-0bbfbd93a7ce // indirect
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
-	github.com/cockroachdb/pebble v1.1.5 // indirect
 	github.com/cockroachdb/redact v1.1.5 // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -81,4 +79,5 @@ require (
 	modernc.org/libc v1.65.10 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
+	modernc.org/sqlite v1.38.0 // indirect
 )

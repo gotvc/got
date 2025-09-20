@@ -90,7 +90,7 @@ func (c *Client) GetEntry(ctx context.Context, volh blobcache.Handle, name strin
 	if err != nil {
 		return nil, err
 	}
-	tx, err := blobcache.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: true})
+	tx, err := blobcache.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -143,7 +143,7 @@ func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string
 	if err != nil {
 		return nil, err
 	}
-	tx, err := blobcache.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: true})
+	tx, err := blobcache.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: false})
 	if err != nil {
 		return nil, err
 	}

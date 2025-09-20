@@ -309,11 +309,14 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 			return err
 		}
 		defer voltx.Abort(ctx)
+
+		// NewEmpty makes a Post which will fail because this is a read-only transaction.
+		s := stores.AddWriteLayer(voltx, stores.NewMem())
 		var root gotfs.Root
 		if snap != nil {
 			root = snap.Root
 		} else {
-			rootPtr, err := fsag.NewEmpty(ctx, voltx)
+			rootPtr, err := fsag.NewEmpty(ctx, s)
 			if err != nil {
 				return err
 			}
@@ -325,7 +328,7 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 			case sop.Delete != nil:
 				op.Delete = sop.Delete
 			case sop.Put != nil:
-				md, err := fsag.GetInfo(ctx, voltx, root, p)
+				md, err := fsag.GetInfo(ctx, s, root, p)
 				if err != nil && !posixfs.IsErrNotExist(err) {
 					return err
 				}

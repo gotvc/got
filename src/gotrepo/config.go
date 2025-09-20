@@ -6,16 +6,28 @@ import (
 	"encoding/json"
 	"path/filepath"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"go.brendoncarroll.net/state/posixfs"
 )
 
 type Config struct {
 	Spaces MultiSpaceSpec `json:"spaces"`
+	// Blobcache configures access to a Blobcache service.
+	// Got stores most of it's data in Blobcache.
+	Blobcache BlobcacheSpec `json:"blobcache"`
+	// RepoVolume is the OID of the volume that stores the repo's data.
+	// This is different than the volume for the namespace.
+	// This volume will have a link to the namespace volume.
+	RepoVolume blobcache.OID `json:"repo_volume"`
 }
 
 func DefaultConfig() Config {
 	return Config{
 		Spaces: []SpaceLayerSpec{},
+		Blobcache: BlobcacheSpec{
+			InProcess: &struct{}{},
+		},
+		RepoVolume: blobcache.OID{},
 	}
 }
 

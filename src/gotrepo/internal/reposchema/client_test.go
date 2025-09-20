@@ -1,12 +1,12 @@
 package reposchema
 
 import (
+	"fmt"
 	"testing"
 
 	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gotns"
-	"github.com/gotvc/got/src/internal/dbutil"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -25,22 +25,35 @@ func TestClient(t *testing.T) {
 	// Initialize GotNS
 	gnsc := gotns.Client{Blobcache: bc, Machine: gotns.New(), ActAs: gotns.LeafPrivate{}}
 	require.NoError(t, gnsc.Init(ctx, *nsh, []gotns.IdentityLeaf{}))
+
+	// Write some blobs to a staging area
+	txn, err := blobcache.BeginTx(ctx, bc, *vh, blobcache.TxParams{Mutate: true})
+	require.NoError(t, err)
+	defer txn.Abort(ctx)
+	var cids []blobcache.CID
+	for i := 0; i < 10; i++ {
+		cid, err := txn.Post(ctx, fmt.Appendf(nil, "hello %d", i))
+		require.NoError(t, err)
+		cids = append(cids, cid)
+	}
+	require.NoError(t, txn.Commit(ctx))
+
+	// Check that the blobs exist
+	txn, err = blobcache.BeginTx(ctx, bc, *vh, blobcache.TxParams{})
+	require.NoError(t, err)
+	defer txn.Abort(ctx)
+	for _, cid := range cids {
+		yes, err := txn.Exists(ctx, cid)
+		require.NoError(t, err)
+		require.True(t, yes)
+	}
 }
 
 func newBlobcache(t testing.TB) blobcache.Service {
-	ctx := testutil.Context(t)
+	env := bclocal.NewTestEnv(t)
 
-	db := dbutil.NewTestSQLxDB(t)
-	require.NoError(t, bclocal.SetupDB(ctx, db))
-
-	schemas := bclocal.DefaultSchemas()
-	schemas[SchemaName_GotRepo] = NewSchema()
-	schemas[SchemaName_GotNS] = gotns.Schema{}
-
-	svc := bclocal.New(bclocal.Env{
-		DB:      db,
-		Schemas: schemas,
-		Root:    GotRepoVolumeSpec(),
-	})
-	return svc
+	env.Schemas[SchemaName_GotRepo] = NewSchema()
+	env.Schemas[SchemaName_GotNS] = gotns.Schema{}
+	env.Root = GotRepoVolumeSpec()
+	return bclocal.NewTestServiceFromEnv(t, env)
 }
