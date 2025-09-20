@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"blobcache.io/blobcache/src/blobcache"
-	"blobcache.io/blobcache/src/schema/simplens"
+	"blobcache.io/blobcache/src/schema/basicns"
 
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotns"
@@ -43,7 +43,7 @@ func ParseVolumeSpec(data []byte) (*VolumeSpec, error) {
 }
 
 func (r *Repo) MakeVolume(ctx context.Context, branchName string, spec VolumeSpec) (branches.Volume, error) {
-	nsc := simplens.Client{Service: r.bc}
+	nsc := basicns.Client{Service: r.bc}
 	volh, err := nsc.OpenAt(ctx, blobcache.Handle{}, branchName, blobcache.Action_ALL)
 	if err != nil {
 		if strings.Contains(err.Error(), "entry not found") {

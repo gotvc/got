@@ -235,13 +235,21 @@ func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
 	if !ok {
 		return fmt.Errorf("repo.Serve: signing key must be ed25519")
 	}
+	blobDirPath := filepath.Join(r.rootPath, blobcacheDirPath, "blob")
+	blobDir, err := os.OpenRoot(blobDirPath)
+	if err != nil {
+		return err
+	}
 	svc := bclocal.New(bclocal.Env{
-		DB:         r.bcDB,
+		DB:      r.bcDB,
+		BlobDir: blobDir,
+
 		PrivateKey: edPriv,
 		PacketConn: pc,
-		Schemas:    blobcacheSchemas(),
-		Root:       reposchema.GotRepoVolumeSpec(),
-	})
+
+		Schemas: blobcacheSchemas(),
+		Root:    reposchema.GotRepoVolumeSpec(),
+	}, bclocal.Config{})
 	r.bc = svc
 	return svc.Run(ctx)
 }
@@ -334,7 +342,7 @@ func openLocalBlobcache(p string) (*bclocal.Service, *pebble.DB, error) {
 		BlobDir: blobDir,
 		Schemas: blobcacheSchemas(),
 		Root:    reposchema.GotRepoVolumeSpec(),
-	}), db, nil
+	}, bclocal.Config{}), db, nil
 }
 
 func blobcacheSchemas() map[blobcache.Schema]schema.Schema {

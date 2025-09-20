@@ -9,7 +9,7 @@ import (
 
 	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/blobcache"
-	"blobcache.io/blobcache/src/schema/simplens"
+	"blobcache.io/blobcache/src/schema/basicns"
 	"github.com/cloudflare/circl/kem"
 	"github.com/cloudflare/circl/sign"
 	"github.com/cockroachdb/pebble"
@@ -22,7 +22,7 @@ import (
 func TestInit(t *testing.T) {
 	ctx := testutil.Context(t)
 	bc := bclocal.NewTestService(t)
-	nsc := simplens.Client{Service: bc}
+	nsc := basicns.Client{Service: bc}
 	volh, err := nsc.CreateAt(ctx, blobcache.Handle{}, "test", blobcache.DefaultLocalSpec())
 	require.NoError(t, err)
 
@@ -119,7 +119,7 @@ func newTestService(t *testing.T) *bclocal.Service {
 		Schemas:    schemas,
 		Root:       rootSpec,
 		PacketConn: testutil.PacketConn(t),
-	})
+	}, bclocal.Config{})
 	t.Cleanup(func() {
 		// This is required to avoid panics when closing the database.
 		s.AbortAll(testutil.Context(t))
