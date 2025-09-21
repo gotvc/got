@@ -151,7 +151,7 @@ func GetHead(ctx context.Context, v Volume) (*Snap, Tx, error) {
 	return getSnapshot(ctx, v)
 }
 
-// Apply applies fn to branch, any missing data will be pulled from scratch
+// Apply applies fn to branch, any missing data will be pulled from src.
 func Apply(ctx context.Context, dstVol Volume, src stores.Reading, fn func(stores.RW, *Snap) (*Snap, error)) error {
 	return applySnapshot(ctx, dstVol, func(dst stores.RW, x *Snap) (*Snap, error) {
 		y, err := fn(dst, x)

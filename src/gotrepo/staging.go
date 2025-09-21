@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"strings"
 	"sync"
@@ -77,8 +78,9 @@ func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error
 			return err
 		}
 		defer stagingStore.Abort(ctx)
+		storePair := [2]stores.RW{stagingStore, stagingStore}
 		dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
-		imp := porting.NewImporter(branches.NewGotFS(&branch.Info), dirState, [2]stores.RW{stagingStore, stagingStore})
+		imp := porting.NewImporter(branches.NewGotFS(&branch.Info), dirState, storePair)
 		exp := porting.NewExporter(branches.NewGotFS(&branch.Info), dirState, r.workingDir)
 		fsMach := branches.NewGotFS(&branch.Info)
 
@@ -256,16 +258,18 @@ func (r *Repo) Commit(ctx context.Context, snapInfo branches.SnapInfo) error {
 		snapInfo.AuthoredAt = tai64.Now().TAI64()
 		ctx, cf := metrics.Child(ctx, "applying changes")
 		defer cf()
-		src := sctx.Store
+		scratch := sctx.Store
 		stage := sctx.Stage
 		fsMach := sctx.FSMach
 		vcMach := sctx.VCMach
-		if err := branches.Apply(ctx, sctx.Volume, src, func(dst stores.RW, x *Snap) (*Snap, error) {
+		if err := branches.Apply(ctx, sctx.Volume, scratch, func(dst stores.RW, x *Snap) (*Snap, error) {
 			var root *Root
 			if x != nil {
 				root = &x.Root
 			}
-			nextRoot, err := stage.Apply(ctx, fsMach, [2]stores.RW{src, src}, root)
+			s := stores.AddWriteLayer(dst, scratch)
+			ss := [2]stores.RW{s, s}
+			nextRoot, err := stage.Apply(ctx, fsMach, ss, root)
 			if err != nil {
 				return nil, err
 			}
@@ -277,7 +281,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo branches.SnapInfo) error {
 			if err != nil {
 				return nil, err
 			}
-			return vcMach.NewSnapshot(ctx, src, parents, *nextRoot, gotvc.SnapParams{
+			return vcMach.NewSnapshot(ctx, s, parents, *nextRoot, gotvc.SnapParams{
 				Creator:   sctx.ActingAs.ID,
 				CreatedAt: tai64.Now().TAI64(),
 				Aux:       infoJSON,
@@ -497,7 +501,9 @@ func (r *Repo) beginStagingTx(ctx context.Context, paramHash *[32]byte, mutate b
 	if err != nil {
 		return nil, err
 	}
-	return blobcache.BeginTx(ctx, r.bc, *h, blobcache.TxParams{Mutate: mutate})
+	log.Println("beginStagingTx", h.OID)
+	vol := volumes.Blobcache{Service: r.bc, Handle: *h}
+	return vol.BeginTx(ctx, blobcache.TxParams{Mutate: mutate})
 }
 
 // cleanupStagingBlobs removes blobs from staging areas which do not have ops that reference them.

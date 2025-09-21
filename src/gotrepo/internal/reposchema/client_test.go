@@ -17,17 +17,25 @@ func TestClient(t *testing.T) {
 	client := NewClient(bc)
 	nsh, err := client.Namespace(ctx)
 	require.NoError(t, err)
-	vh, err := client.StagingArea(ctx, new([32]byte))
-	require.NoError(t, err)
-	require.NotNil(t, nsh)
-	require.NotNil(t, vh)
+
+	var vh blobcache.Handle
+	for i := 0; i < 3; i++ {
+		vh2, err := client.StagingArea(ctx, new([32]byte))
+		require.NoError(t, err)
+		if vh != (blobcache.Handle{}) {
+			// Check that the same OID comes back each time.
+			require.Equal(t, vh.OID, vh2.OID)
+		}
+		vh = *vh2
+	}
+	require.NotEqual(t, vh, (blobcache.Handle{}))
 
 	// Initialize GotNS
 	gnsc := gotns.Client{Blobcache: bc, Machine: gotns.New(), ActAs: gotns.LeafPrivate{}}
 	require.NoError(t, gnsc.Init(ctx, *nsh, []gotns.IdentityLeaf{}))
 
 	// Write some blobs to a staging area
-	txn, err := blobcache.BeginTx(ctx, bc, *vh, blobcache.TxParams{Mutate: true})
+	txn, err := blobcache.BeginTx(ctx, bc, vh, blobcache.TxParams{Mutate: true})
 	require.NoError(t, err)
 	defer txn.Abort(ctx)
 	var cids []blobcache.CID
@@ -39,7 +47,7 @@ func TestClient(t *testing.T) {
 	require.NoError(t, txn.Commit(ctx))
 
 	// Check that the blobs exist
-	txn, err = blobcache.BeginTx(ctx, bc, *vh, blobcache.TxParams{})
+	txn, err = blobcache.BeginTx(ctx, bc, vh, blobcache.TxParams{})
 	require.NoError(t, err)
 	defer txn.Abort(ctx)
 	for _, cid := range cids {

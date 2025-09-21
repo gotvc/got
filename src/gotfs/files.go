@@ -29,7 +29,7 @@ func (a *Machine) FileFromReaders(ctx context.Context, ss [2]stores.RW, mode pos
 		eg.Go(func() error {
 			defer cf()
 			var err error
-			exts[i], err = a.lob.CreateExtents(ctx, ss[1], r)
+			exts[i], err = a.lob.CreateExtents(ctx, ss[0], r)
 			return err
 		})
 	}

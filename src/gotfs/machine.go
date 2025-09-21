@@ -326,7 +326,7 @@ func (a *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (
 
 		var root gotkv.Root
 		if seg.Contents.Root.Ref.IsZero() {
-			r, err := a.gotkv.NewEmpty(ctx, ss[0])
+			r, err := a.gotkv.NewEmpty(ctx, ss[1])
 			if err != nil {
 				return nil, err
 			}

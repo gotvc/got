@@ -1,5 +1,5 @@
-blobcache.io/blobcache v0.0.0-20250918233731-af41a5a29a0f h1:AT/Jrj3MvrIEzb/MxcPvt6eHqmgrVH3+Pd4ZIj2tTRE=
-blobcache.io/blobcache v0.0.0-20250918233731-af41a5a29a0f/go.mod h1:MnHcXXl8RdF+cdeu4fb0baeC6ygbZ63J1ILUHo4Il9w=
+blobcache.io/blobcache v0.0.0-20250921182839-f19bbb53bbb0 h1:B9TaQ2zZl+wFxVP5j2cDXPnohQI/nkDgP+aot3RO45I=
+blobcache.io/blobcache v0.0.0-20250921182839-f19bbb53bbb0/go.mod h1:MnHcXXl8RdF+cdeu4fb0baeC6ygbZ63J1ILUHo4Il9w=
 cloud.google.com/go v0.26.0/go.mod h1:aQUYkXzVsufM+DwF1aE+0xfcU+56JwCaLick0ClmMTw=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/DataDog/zstd v1.4.5 h1:EndNeuB0l9syBZhut0wns3gV1hL8zX8LIu6ZiVHWLIQ=

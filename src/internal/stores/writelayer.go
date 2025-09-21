@@ -8,10 +8,10 @@ import (
 
 type writeLayer struct {
 	base    Reading
-	writeTo RWD
+	writeTo RW
 }
 
-func AddWriteLayer(base Reading, writeTo RWD) RW {
+func AddWriteLayer(base Reading, writeTo RW) RW {
 	if base.Hash(nil) != writeTo.Hash(nil) {
 		panic("write layer has different hash function than base")
 	}
@@ -48,9 +48,9 @@ func (wl writeLayer) Exists(ctx context.Context, id cadata.ID) (bool, error) {
 	}
 }
 
-func (wl writeLayer) Delete(ctx context.Context, id cadata.ID) error {
-	return wl.writeTo.Delete(ctx, id)
-}
+// func (wl writeLayer) Delete(ctx context.Context, id cadata.ID) error {
+// 	return wl.writeTo.Delete(ctx, id)
+// }
 
 func (wl writeLayer) MaxSize() int {
 	size := wl.base.MaxSize()
