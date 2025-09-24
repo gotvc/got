@@ -501,7 +501,6 @@ func (r *Repo) beginStagingTx(ctx context.Context, paramHash *[32]byte, mutate b
 	if err != nil {
 		return nil, err
 	}
-	log.Println("beginStagingTx", h.OID)
 	vol := volumes.Blobcache{Service: r.bc, Handle: *h}
 	return vol.BeginTx(ctx, blobcache.TxParams{Mutate: mutate})
 }

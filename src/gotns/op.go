@@ -472,7 +472,6 @@ func (op Op_CreateLeaf) validate(ctx context.Context, m *Machine, s stores.RW, p
 		return fmt.Errorf("leaf public key mismatch")
 	}
 	if _, ok := approvers[op.Leaf.ID]; !ok {
-		log.Println("approvers", approvers)
 		return fmt.Errorf("cannot create leaf without approval from %v", op.Leaf.ID)
 	}
 	return nil
