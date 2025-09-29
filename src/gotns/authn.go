@@ -63,7 +63,7 @@ func (m *Machine) DropLeaf(ctx context.Context, s stores.RW, state State, leafID
 }
 
 // AddGroupLeaf adds a leaf to a group.
-func (m *Machine) AddGroupLeaf(ctx context.Context, s stores.RW, State State, groupName string, leafID inet256.ID) (*State, error) {
+func (m *Machine) AddGroupLeaf(ctx context.Context, s stores.RW, State State, kemSeed *[64]byte, groupName string, leafID inet256.ID) (*State, error) {
 	group, err := m.GetGroup(ctx, s, State, groupName)
 	if err != nil {
 		return nil, err
@@ -71,12 +71,16 @@ func (m *Machine) AddGroupLeaf(ctx context.Context, s stores.RW, State State, gr
 	if len(group.LeafKEMs) >= MaxLeavesPerGroup {
 		return nil, fmt.Errorf("group %s has too many leaves (%d) to add another", groupName, len(group.LeafKEMs))
 	}
+	kemPub, _ := DeriveKEM(*kemSeed)
+	if !kemPub.Equal(group.KEM) {
+		return nil, fmt.Errorf("group %s has a different KEM public key than the one provided. %v != %v", groupName, kemPub, group.KEM)
+	}
 	// ensure the leaf exists
 	leaf, err := m.GetLeaf(ctx, s, State, leafID)
 	if err != nil {
 		return nil, err
 	}
-	group.LeafKEMs[leafID] = asymEncrypt(nil, leaf.KEMPublicKey, leaf.Value(nil))
+	group.LeafKEMs[leafID] = encryptSeed(nil, leaf.KEMPublicKey, kemSeed)
 	groupState, err := m.gotkv.Mutate(ctx, s, State.Groups, putGroup(*group))
 	if err != nil {
 		return nil, err
@@ -122,10 +126,12 @@ func (m *Machine) GetGroup(ctx context.Context, s stores.Reading, State State, n
 	return ParseGroup(k, val)
 }
 
-// GetKEMPrivateKey returns a KEM private key for a given group.
+// GetKEMSeed returns a KEM seed used to derive the key pair for a given group.
 // id is the ID of the leaf that is requesting the KEM private key.
-// leafKEMPriv is the KEM private key for the leaf to decrypt messages sent to it by group operations.
-func (m *Machine) GetKEMPrivateKey(ctx context.Context, s stores.Reading, state State, groupPath []string, id inet256.ID, kemPriv kem.PrivateKey) (kem.PrivateKey, error) {
+// kemPriv is the KEM private key for the leaf to decrypt messages sent to it by group operations.
+// groupPath should go from the largest group to the smallest group.
+func (m *Machine) GetKEMSeed(ctx context.Context, s stores.Reading, state State, groupPath []string, id inet256.ID, kemPriv kem.PrivateKey) (*[64]byte, error) {
+	var kemSeed *[64]byte
 	for len(groupPath) > 0 {
 		groupName := groupPath[len(groupPath)-1]
 		groupPath = groupPath[:len(groupPath)-1]
@@ -134,17 +140,18 @@ func (m *Machine) GetKEMPrivateKey(ctx context.Context, s stores.Reading, state 
 			return nil, err
 		}
 		if ctext, ok := g.LeafKEMs[id]; ok {
-			ptext, err := asymDecrypt(nil, kemPriv, ctext)
+			seed, err := decryptSeed(kemPriv, ctext)
 			if err != nil {
 				return nil, err
 			}
-			if len(ptext) != 32 {
-				return nil, fmt.Errorf("decrypted invalid KEM seed")
-			}
-			_, kemPriv = mlkem1024.Scheme().DeriveKeyPair(ptext)
+			kemSeed = seed
+			_, kemPriv = DeriveKEM(*seed)
 		}
 	}
-	return kemPriv, nil
+	if kemSeed == nil {
+		return nil, fmt.Errorf("KEM seed not found")
+	}
+	return kemSeed, nil
 }
 
 // ForEachGroup calls fn for each group in the namespace.
@@ -222,14 +229,13 @@ func (m *Machine) GetMembership(ctx context.Context, s stores.Reading, State Sta
 // - changes the group's KEM public key
 // - re-encrypts the KEM private key for all leaves, using the leaves' KEM public key
 // - re-encrypts the KEM private key for all member groups, using those groups' KEM public keys
-func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, State State, name string, kemSeed *[32]byte) (*State, error) {
+func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, State State, name string, kemSeed *[64]byte) (*State, error) {
 	group, err := m.GetGroup(ctx, s, State, name)
 	if err != nil {
 		return nil, err
 	}
-	// generate new KEM key pair
-	kemPub, _ := mlkem1024.Scheme().DeriveKeyPair(kemSeed[:])
 
+	kemPub, _ := DeriveKEM([64]byte(*kemSeed))
 	// update group record
 	group.KEM = kemPub
 	for leafID := range group.LeafKEMs {
@@ -237,7 +243,7 @@ func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, State State, name
 		if err != nil {
 			return nil, err
 		}
-		kemCtext := asymEncrypt(nil, leaf.KEMPublicKey, kemSeed[:])
+		kemCtext := encryptSeed(nil, leaf.KEMPublicKey, kemSeed)
 		group.LeafKEMs[leafID] = kemCtext
 	}
 	groupsRoot, err := m.gotkv.Mutate(ctx, s, State.Groups, putGroup(*group))
@@ -252,7 +258,7 @@ func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, State State, name
 		if err != nil {
 			return err
 		}
-		mem.EncryptedKEM = asymEncrypt(nil, subgroup.KEM, kemSeed[:])
+		mem.EncryptedKEM = encryptSeed(nil, subgroup.KEM, kemSeed)
 		memMuts = append(memMuts, putMember(mem))
 		return nil
 	}); err != nil {
@@ -307,15 +313,6 @@ type Group struct {
 	// Owners are the identities that can add and remove members from the group.
 	// Owners must also be members of the group.
 	Owners []inet256.ID
-}
-
-// GenerateKEM generates a new KEM key pair.
-func GenerateKEM() (kem.PublicKey, kem.PrivateKey, error) {
-	pub, priv, err := mlkem1024.GenerateKeyPair(rand.Reader)
-	if err != nil {
-		return nil, nil, err
-	}
-	return pub, priv, nil
 }
 
 func ParseGroup(key, value []byte) (*Group, error) {
@@ -439,7 +436,7 @@ type IdentityLeaf struct {
 // NewLeaf creates a new IdentityLeaf with a new KEM key pair.
 func NewLeaf(pubKey inet256.PublicKey, kemPub kem.PublicKey) IdentityLeaf {
 	return IdentityLeaf{
-		ID:           inet256.NewID(pubKey),
+		ID:           pki.NewID(pubKey),
 		PublicKey:    pubKey,
 		KEMPublicKey: kemPub,
 	}
@@ -454,7 +451,7 @@ func ParseIdentityLeaf(key, value []byte) (*IdentityLeaf, error) {
 	if err != nil {
 		return nil, err
 	}
-	pubKey, err := inet256.ParsePublicKey(pkData)
+	pubKey, err := pki.ParsePublicKey(pkData)
 	if err != nil {
 		return nil, err
 	}
@@ -489,7 +486,11 @@ func (il IdentityLeaf) Key(out []byte) []byte {
 
 // Value returns the value portion of the GotKV entry in the Leaves table.
 func (il *IdentityLeaf) Value(out []byte) []byte {
-	out = sbe.AppendLP(out, inet256.MarshalPublicKey(nil, il.PublicKey))
+	pubKeyData, err := pki.MarshalPublicKey(nil, il.PublicKey)
+	if err != nil {
+		panic(err)
+	}
+	out = sbe.AppendLP(out, pubKeyData)
 	out = sbe.AppendLP(out, MarshalKEMPublicKey(nil, KEM_MLKEM1024, il.KEMPublicKey))
 	return out
 }
@@ -501,6 +502,11 @@ func (il *IdentityLeaf) GenerateKEM(sigPriv inet256.PrivateKey) kem.PrivateKey {
 	}
 	il.KEMPublicKey = pub
 	return priv
+}
+
+type LeafPrivate struct {
+	SigPrivateKey inet256.PrivateKey
+	KEMPrivateKey kem.PrivateKey
 }
 
 // Membership contains the Group's KEM seed encrypted for the target member.
@@ -584,108 +590,32 @@ func putLeaf(leaf IdentityLeaf) gotkv.Mutation {
 	}
 }
 
-// MarshalKEMPublicKey marshals a KEM public key with a scheme tag.
-func MarshalKEMPublicKey(out []byte, tag string, kem kem.PublicKey) []byte {
-	out = sbe.AppendLP16(out, []byte(tag))
-	kemData, err := kem.MarshalBinary()
-	if err != nil {
-		panic(err)
-	}
-	out = append(out, kemData...)
-	return out
-}
-
-// ParseKEMPublicKey unmarshals a KEM public key with a scheme tag.
-func ParseKEMPublicKey(data []byte) (kem.PublicKey, error) {
-	tag, rest, err := sbe.ReadLP16(data)
-	if err != nil {
-		return nil, err
-	}
-	scheme := getKEMScheme(string(tag))
-	if scheme == nil {
-		return nil, fmt.Errorf("unknown kem scheme: %s", string(tag))
-	}
-	data = rest
-	pubKey, err := scheme.UnmarshalBinaryPublicKey(data)
-	if err != nil {
-		return nil, err
-	}
-	return pubKey, nil
-}
-
-func MarshalKEMPrivateKey(out []byte, tag string, privKey kem.PrivateKey) []byte {
-	tag = tag + ".private"
-	out = sbe.AppendLP16(out, []byte(tag))
-	kemData, err := privKey.MarshalBinary()
-	if err != nil {
-		panic(err)
-	}
-	out = append(out, kemData...)
-	return out
-}
-
-func ParseKEMPrivateKey(data []byte) (kem.PrivateKey, error) {
-	tag, rest, err := sbe.ReadLP16(data)
-	if err != nil {
-		return nil, err
-	}
-	schemeName, ok := strings.CutSuffix(string(tag), ".private")
-	if !ok {
-		return nil, fmt.Errorf("kem private key tag does not end with .private")
-	}
-	data = rest
-	scheme := getKEMScheme(schemeName)
-	if scheme == nil {
-		return nil, fmt.Errorf("unknown kem scheme: %s", tag)
-	}
-	privKey, err := scheme.UnmarshalBinaryPrivateKey(data)
-	if err != nil {
-		return nil, err
-	}
-	return privKey, nil
-}
-
-const (
-	KEM_MLKEM1024 = "mlkem1024"
-)
-
-func getKEMScheme(tag string) kem.Scheme {
-	switch tag {
-	case KEM_MLKEM1024:
-		return mlkem1024.Scheme()
-	default:
-		return nil
-	}
-}
-
-// asymEncrypt encrypts a message to a KEM public key.
-func asymEncrypt(out []byte, recvKEM kem.PublicKey, ptext []byte) []byte {
+// encryptSeed encryptes a secret seed
+func encryptSeed(out []byte, recvKEM kem.PublicKey, secretSeed *[64]byte) []byte {
 	kemCtext, ss, err := recvKEM.Scheme().Encapsulate(recvKEM)
 	if err != nil {
 		panic(err)
 	}
 	out = append(out, kemCtext...)
-	secret := ([32]byte)(ss)
-	nonce := [12]byte{}
-	out = symEncrypt(out, &secret, &nonce, ptext, kemCtext)
+	out = appendXOR(out, (*[32]byte)(ss), secretSeed[:])
 	return out
 }
 
-func asymDecrypt(out []byte, recvKEM kem.PrivateKey, ctext []byte) ([]byte, error) {
+// decryptSeed decrypts a secret seed
+func decryptSeed(recvKEM kem.PrivateKey, ctext []byte) (*[64]byte, error) {
 	kemCtextSize := recvKEM.Scheme().CiphertextSize()
 	if len(ctext) < kemCtextSize {
 		return nil, fmt.Errorf("ctext too short to contain KEM ciphertext")
 	}
 	kemCtext := ctext[:kemCtextSize]
-	symCtext := ctext[kemCtextSize:]
-
 	ss, err := recvKEM.Scheme().Decapsulate(recvKEM, kemCtext)
 	if err != nil {
 		return nil, err
 	}
-	secret := ([32]byte)(ss)
-	nonce := [12]byte{}
-	return symDecrypt(out, &secret, &nonce, symCtext, kemCtext)
+	var seed [64]byte
+	copy(seed[:], ctext[kemCtextSize:])
+	cryptoXOR((*[32]byte)(ss), seed[:], seed[:])
+	return &seed, nil
 }
 
 func symEncrypt(out []byte, secret *[32]byte, nonce *[12]byte, ptext []byte, ad []byte) []byte {
@@ -712,4 +642,12 @@ func cryptoXOR(key *[32]byte, dst, src []byte) {
 		panic(err)
 	}
 	cipher.XORKeyStream(dst, src)
+}
+
+// appendXOR appends src XOR'd with a chacha20 stream cipher to out.
+func appendXOR(out []byte, key *[32]byte, src []byte) []byte {
+	offset := len(out)
+	out = append(out, src...)
+	cryptoXOR(key, out[offset:], out[offset:])
+	return out
 }

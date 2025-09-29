@@ -6,7 +6,6 @@ import (
 
 	"github.com/cloudflare/circl/kem"
 	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
-	"github.com/cloudflare/circl/sign"
 	"github.com/cloudflare/circl/sign/ed25519"
 	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/internal/dbutil"
@@ -17,7 +16,7 @@ func (r *Repo) GotNSClient() gotns.Client {
 	return gotns.Client{
 		Machine:   gotns.New(),
 		Blobcache: r.bc,
-		ActAs:     r.privateKey,
+		ActAs:     r.leafPrivate,
 	}
 }
 
@@ -48,11 +47,11 @@ func setupIdentity(conn *dbutil.Conn) error {
 		return err
 	}
 	id := inet256.NewID(pub)
-	sigPrivData, err := inet256.DefaultPKI.MarshalPrivateKey(nil, priv)
+	sigPrivData, err := pki.MarshalPrivateKey(nil, priv)
 	if err != nil {
 		return err
 	}
-	sigPubData, err := inet256.DefaultPKI.MarshalPublicKey(nil, pub)
+	sigPubData, err := pki.MarshalPublicKey(nil, pub)
 	if err != nil {
 		return err
 	}
@@ -68,7 +67,7 @@ func setupIdentity(conn *dbutil.Conn) error {
 	return err
 }
 
-func loadIdentity(conn *dbutil.Conn) (sign.PrivateKey, kem.PrivateKey, error) {
+func loadIdentity(conn *dbutil.Conn) (*gotns.LeafPrivate, error) {
 	stmt := conn.Prep(`SELECT id, sign_private_key, kem_private_key FROM idens`)
 	defer stmt.Finalize()
 
@@ -79,34 +78,39 @@ func loadIdentity(conn *dbutil.Conn) (sign.PrivateKey, kem.PrivateKey, error) {
 	}
 	ok, err := stmt.Step()
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	if !ok {
-		return nil, nil, fmt.Errorf("no identity found")
+		return nil, fmt.Errorf("no identity found")
 	}
 	for i, dst := range []*[]byte{&row.ID, &row.SigPrivData, &row.KemPrivData} {
 		*dst = make([]byte, stmt.ColumnLen(i))
 		n := stmt.ColumnBytes(i, *dst)
 		if n != len(*dst) {
-			return nil, nil, fmt.Errorf("read wrong number of bytes")
+			return nil, fmt.Errorf("read wrong number of bytes")
 		}
 	}
 
-	sigPriv, err := inet256.DefaultPKI.ParsePrivateKey(row.SigPrivData)
+	sigPriv, err := pki.ParsePrivateKey(row.SigPrivData)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 	kemPriv, err := gotns.ParseKEMPrivateKey(row.KemPrivData)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return sigPriv, kemPriv, nil
+	return &gotns.LeafPrivate{
+		SigPrivateKey: sigPriv,
+		KEMPrivateKey: kemPriv,
+	}, nil
 }
 
 func getActiveIdentity(conn *dbutil.Conn) (gotns.IdentityLeaf, error) {
-	sigPriv, kemPriv, err := loadIdentity(conn)
+	leafPrivate, err := loadIdentity(conn)
 	if err != nil {
 		return gotns.IdentityLeaf{}, err
 	}
-	return gotns.NewLeaf(sigPriv.Public().(sign.PublicKey), kemPriv.Public()), nil
+	return gotns.NewLeaf(leafPrivate.SigPrivateKey.Public().(inet256.PublicKey), leafPrivate.KEMPrivateKey.Public().(kem.PublicKey)), nil
 }
+
+var pki = gotns.PKI()

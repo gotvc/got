@@ -2,6 +2,7 @@ package branches
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"strings"
 
@@ -29,34 +30,34 @@ func (i Info) Clone() Info {
 	return i2
 }
 
-func (i Info) AsConfig() Config {
-	return Config{Salt: i.Salt, Annotations: i.Annotations}
+func (i Info) AsConfig() Params {
+	return Params{Salt: i.Salt, Annotations: i.Annotations}
 }
 
-// Config is non-volume, user-modifiable information associated with a branch.
-type Config struct {
+// Params is non-volume, user-modifiable information associated with a branch.
+type Params struct {
 	Salt        []byte       `json:"salt"`
 	Annotations []Annotation `json:"annotations"`
 }
 
-func (c Config) AsInfo() Info {
+func (c Params) AsInfo() Info {
 	return Info{Salt: c.Salt, Annotations: c.Annotations}
 }
 
-func NewConfig(public bool) Config {
+func NewConfig(public bool) Params {
 	var salt []byte
 	if !public {
 		salt = make([]byte, 32)
 		readRandom(salt)
 	}
-	return Config{
+	return Params{
 		Salt: salt,
 	}
 }
 
 // Clone returns a deep copy of md
-func (c Config) Clone() Config {
-	return Config{
+func (c Params) Clone() Params {
+	return Params{
 		Salt:        slices.Clone(c.Salt),
 		Annotations: slices.Clone(c.Annotations),
 	}
@@ -150,7 +151,7 @@ func GetHead(ctx context.Context, v Volume) (*Snap, Tx, error) {
 	return getSnapshot(ctx, v)
 }
 
-// Apply applies fn to branch, any missing data will be pulled from scratch
+// Apply applies fn to branch, any missing data will be pulled from src.
 func Apply(ctx context.Context, dstVol Volume, src stores.Reading, fn func(stores.RW, *Snap) (*Snap, error)) error {
 	return applySnapshot(ctx, dstVol, func(dst stores.RW, x *Snap) (*Snap, error) {
 		y, err := fn(dst, x)
@@ -220,4 +221,10 @@ type SnapInfo struct {
 	Authors    []inet256.ID `json:"authors"`
 
 	Message string `json:"message"`
+}
+
+func readRandom(out []byte) {
+	if _, err := rand.Read(out); err != nil {
+		panic(err)
+	}
 }

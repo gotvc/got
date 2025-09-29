@@ -23,7 +23,7 @@ type Branch struct {
 }
 
 // CreateBranch creates a branch using the default spec.
-func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Config) (*BranchInfo, error) {
+func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Params) (*BranchInfo, error) {
 	return r.space.Create(ctx, name, params)
 }
 
@@ -63,7 +63,7 @@ func (r *Repo) getBranch(ctx context.Context, name string) (*Branch, error) {
 }
 
 // SetBranch sets branch metadata
-func (r *Repo) SetBranch(ctx context.Context, name string, md branches.Config) error {
+func (r *Repo) SetBranch(ctx context.Context, name string, md branches.Params) error {
 	if name == "" {
 		name2, _, err := r.GetActiveBranch(ctx)
 		if err != nil {
@@ -145,8 +145,12 @@ func (r *Repo) SetBranchHead(ctx context.Context, name string, snap Snap) error 
 		if err != nil {
 			return err
 		}
-		src := sa.getStore()
-		return branches.SetHead(ctx, branch.Volume, src, snap)
+		stageTxn, err := r.beginStagingTx(ctx, sa.getSalt(), true)
+		if err != nil {
+			return err
+		}
+		defer stageTxn.Abort(ctx)
+		return branches.SetHead(ctx, branch.Volume, stageTxn, snap)
 	})
 }
 
@@ -171,7 +175,7 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	if err != nil {
 		return err
 	}
-	_, err = r.CreateBranch(ctx, next, branches.Config{
+	_, err = r.CreateBranch(ctx, next, branches.Params{
 		Salt: baseBranch.Salt,
 	})
 	if err != nil {

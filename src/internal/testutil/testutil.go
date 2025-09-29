@@ -35,7 +35,7 @@ func StreamsEqual(t testing.TB, expected, actual io.Reader) {
 		}
 		b2, err2 := br2.ReadByte()
 		if err2 != nil && err2 != io.EOF {
-			require.NoError(t, err1)
+			require.NoError(t, err2)
 		}
 		if err1 != err2 {
 			if err1 == io.EOF {

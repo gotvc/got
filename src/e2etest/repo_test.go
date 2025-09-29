@@ -21,29 +21,24 @@ func TestMultiRepoSync(t *testing.T) {
 	ctx := testutil.Context(t)
 	ctx, cf := context.WithCancel(ctx)
 	t.Cleanup(cf)
-	secretKey := [32]byte{}
 	p1, p2, pOrigin := initRepo(t), initRepo(t), initRepo(t)
 	origin := openRepo(t, pOrigin)
 	go origin.Serve(ctx, testutil.PacketConn(t))
+	originNS, err := origin.GotNSVolume(ctx)
+	require.NoError(t, err)
 	for _, p := range []string{p1, p2} {
 		err := gotrepo.ConfigureRepo(p, func(x gotrepo.Config) gotrepo.Config {
 			originEP := origin.Endpoint()
-			fqid := origin.GetFQOID()
 
 			x.Spaces = []gotrepo.SpaceLayerSpec{
 				{
 					Prefix: "origin/",
-					Target: gotrepo.SpaceSpec{
-						Crypto: &gotrepo.CryptoSpaceSpec{
-							Inner: gotrepo.SpaceSpec{Blobcache: &gotrepo.VolumeSpec{
-								Remote: &blobcache.VolumeBackend_Remote{
-									Endpoint: originEP,
-									Volume:   fqid.OID,
-								},
-							}},
-							Secret: secretKey[:],
+					Target: gotrepo.SpaceSpec{Blobcache: &gotrepo.VolumeSpec{
+						Remote: &blobcache.VolumeBackend_Remote{
+							Endpoint: originEP,
+							Volume:   originNS.OID,
 						},
-					},
+					}},
 				},
 			}
 			return x
@@ -58,9 +53,10 @@ func TestMultiRepoSync(t *testing.T) {
 	require.NoError(t, err)
 	intro2, err := r2.IntroduceSelf(ctx)
 	require.NoError(t, err)
-	require.NoError(t, gnsc.Do(ctx, blobcache.Handle{}, func(tx *gotns.Txn) error {
+	// Handles with empty secrets cause OpenAs to be called instead of OpenFrom.
+	require.NoError(t, gnsc.Do(ctx, blobcache.Handle{OID: originNS.OID}, func(tx *gotns.Txn) error {
 		for _, intro := range []gotns.Op_ChangeSet{intro1, intro2} {
-			if err := tx.ChangeSet(intro); err != nil {
+			if err := tx.ChangeSet(ctx, intro); err != nil {
 				return err
 			}
 			id := getOne(intro.Sigs)
@@ -108,7 +104,7 @@ func createFile(t testing.TB, repoPath, p string, data []byte) {
 
 func createBranch(t testing.TB, r *gotrepo.Repo, name string) {
 	ctx := testutil.Context(t)
-	_, err := r.CreateBranch(ctx, name, branches.Config{})
+	_, err := r.CreateBranch(ctx, name, branches.Params{})
 	require.NoError(t, err)
 }
 

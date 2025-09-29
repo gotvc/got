@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"sort"
 
 	"go.brendoncarroll.net/state/cadata"
@@ -58,11 +57,9 @@ func (a Snapshot) Marshal(out []byte) []byte {
 		panic(fmt.Errorf("too many parents: %d", len(a.Parents)))
 	}
 	out = sbe.AppendUint16(out, uint16(len(a.Parents)))
-	log.Println("len(out)", len(out))
 	for _, parent := range a.Parents {
 		out = gdat.AppendRef(out, parent)
 	}
-	log.Println("len(out)", len(out))
 	out = a.Root.Marshal(out)
 	out = append(out, a.CreatedAt.Marshal()...)
 	out = append(out, a.Creator[:]...)

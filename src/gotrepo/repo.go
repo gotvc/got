@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"path/filepath"
 	"strings"
 
 	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
-	"github.com/cloudflare/circl/sign"
 	"github.com/cloudflare/circl/sign/ed25519"
-	"github.com/jmoiron/sqlx"
+	"github.com/cockroachdb/pebble"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/kv"
 	"go.brendoncarroll.net/state/posixfs"
@@ -26,6 +26,7 @@ import (
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/gotrepo/internal/dbmig"
+	"github.com/gotvc/got/src/gotrepo/internal/reposchema"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/dbutil"
 	"github.com/gotvc/got/src/internal/migrations"
@@ -57,17 +58,18 @@ type Repo struct {
 	rootPath string
 	repoFS   FS // repoFS is the directory that the repo is in
 
-	bcDB   *sqlx.DB
+	bcDB   *pebble.DB
 	bc     blobcache.Service
 	db     *dbutil.Pool
 	config Config
 	// ctx is used as the background context for serving the repo
 	ctx context.Context
 
-	privateKey sign.PrivateKey
-	workingDir FS // workingDir is repoFS with reserved paths filtered.
-	gnsc       *gotns.Client
-	space      branches.Space
+	leafPrivate gotns.LeafPrivate
+	workingDir  FS // workingDir is repoFS with reserved paths filtered.
+	repoc       reposchema.Client
+	gnsc        gotns.Client
+	space       branches.Space
 }
 
 // Init initializes a new repo at the given path.
@@ -97,7 +99,12 @@ func Init(p string) error {
 	if err != nil {
 		return err
 	}
-	if err := r.gnsc.Init(ctx, blobcache.Handle{}, []gotns.IdentityLeaf{idenLeaf}); err != nil {
+
+	nsh, err := r.repoc.Namespace(ctx)
+	if err != nil {
+		return err
+	}
+	if err := r.gnsc.Init(ctx, *nsh, []gotns.IdentityLeaf{idenLeaf}); err != nil {
 		return err
 	}
 	if _, err := branches.CreateIfNotExists(ctx, r.space, nameMaster, branches.NewConfig(false)); err != nil {
@@ -121,7 +128,7 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	var privateKey sign.PrivateKey
+	var leafPrivate *gotns.LeafPrivate
 	if err := dbutil.Borrow(ctx, db, func(conn *dbutil.Conn) error {
 		if err := migrations.EnsureAll(conn, dbmig.ListMigrations()); err != nil {
 			return err
@@ -129,7 +136,7 @@ func Open(p string) (*Repo, error) {
 		if err := setupIdentity(conn); err != nil {
 			return err
 		}
-		privateKey, _, err = loadIdentity(conn)
+		leafPrivate, err = loadIdentity(conn)
 		if err != nil {
 			return err
 		}
@@ -142,33 +149,41 @@ func Open(p string) (*Repo, error) {
 	if err := posixfs.MkdirAll(repoFS, blobcacheDirPath, 0o755); err != nil {
 		return nil, err
 	}
-	bc, bcDB, err := openLocalBlobcache(ctx, filepath.Join(p, blobcacheDirPath))
+	bc, bcDB, err := openLocalBlobcache(filepath.Join(p, blobcacheDirPath))
 	if err != nil {
 		return nil, err
 	}
 
 	r := &Repo{
-		rootPath:   p,
-		repoFS:     repoFS,
-		db:         db,
-		bc:         bc,
-		bcDB:       bcDB,
-		config:     *config,
-		privateKey: privateKey,
-		ctx:        ctx,
-
+		rootPath:    p,
+		repoFS:      repoFS,
+		db:          db,
+		bc:          bc,
+		bcDB:        bcDB,
+		config:      *config,
+		leafPrivate: *leafPrivate,
+		ctx:         ctx,
+		repoc:       reposchema.NewClient(bc),
+		gnsc: gotns.Client{
+			Machine:   gotns.New(),
+			Blobcache: bc,
+			ActAs:     *leafPrivate,
+		},
 		workingDir: posixfs.NewFiltered(repoFS, func(x string) bool {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
 	}
 
+	nsh, err := r.repoc.Namespace(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	// setup space
-	gnsc := r.GotNSClient()
-	r.gnsc = &gnsc
 	spaceSpec := config.Spaces
 	spaceSpec = append(spaceSpec, SpaceLayerSpec{
 		Prefix: "",
-		Target: SpaceSpec{Local: &blobcache.OID{}},
+		Target: SpaceSpec{Local: &nsh.OID},
 	})
 	space, err := r.MakeSpace(SpaceSpec{Multi: &spaceSpec})
 	if err != nil {
@@ -179,6 +194,7 @@ func Open(p string) (*Repo, error) {
 }
 
 func (r *Repo) Close() (retErr error) {
+	ctx := context.TODO()
 	for _, fn := range []func() error{
 		func() error {
 			return dbutil.Borrow(context.TODO(), r.db, func(conn *dbutil.Conn) error {
@@ -187,7 +203,13 @@ func (r *Repo) Close() (retErr error) {
 		},
 		r.db.Close,
 		func() error {
+			// close the blobcache database, if it exists
+			// r.bcDB is only set if the in-process blobcache is used.
 			if r.bcDB != nil {
+				if err := r.bc.(*bclocal.Service).AbortAll(ctx); err != nil {
+					logctx.Warn(ctx, "error aborting blobcache transactions", zap.Error(err))
+				}
+				logctx.Infof(ctx, "closing pebble db")
 				return r.bcDB.Close()
 			}
 			return nil
@@ -209,13 +231,25 @@ func (r *Repo) GetSpace() Space {
 }
 
 func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
+	edPriv, ok := r.leafPrivate.SigPrivateKey.(ed25519.PrivateKey)
+	if !ok {
+		return fmt.Errorf("repo.Serve: signing key must be ed25519")
+	}
+	blobDirPath := filepath.Join(r.rootPath, blobcacheDirPath, "blob")
+	blobDir, err := os.OpenRoot(blobDirPath)
+	if err != nil {
+		return err
+	}
 	svc := bclocal.New(bclocal.Env{
-		DB:         r.bcDB,
-		PrivateKey: r.privateKey.(ed25519.PrivateKey),
+		DB:      r.bcDB,
+		BlobDir: blobDir,
+
+		PrivateKey: edPriv,
 		PacketConn: pc,
-		Schemas:    blobcacheSchemas(),
-		Root:       *blobcacheRootSpec(),
-	})
+
+		Schemas: blobcacheSchemas(),
+		Root:    reposchema.GotRepoVolumeSpec(),
+	}, bclocal.Config{})
 	r.bc = svc
 	return svc.Run(ctx)
 }
@@ -224,11 +258,7 @@ func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
 func (r *Repo) Cleanup(ctx context.Context) error {
 	if err := dbutil.DoTx(ctx, r.db, func(conn *dbutil.Conn) error {
 		logctx.Infof(ctx, "removing blobs from staging areas")
-		if err := cleanupStagingBlobs(ctx, conn); err != nil {
-			return err
-		}
-		logctx.Infof(ctx, "removing unreferenced blobs")
-		if err := cleanupBlobs(conn); err != nil {
+		if err := r.cleanupStagingBlobs(ctx, conn); err != nil {
 			return err
 		}
 		return nil
@@ -259,14 +289,21 @@ func (r *Repo) Endpoint() blobcache.Endpoint {
 	return ep
 }
 
-func (r *Repo) GetFQOID() blobcache.FQOID {
+// GotNSVolume returns the FQOID of the namespace volume.
+// This can be used to access the namespace from another Blobcache node.
+func (r *Repo) GotNSVolume(ctx context.Context) (blobcache.FQOID, error) {
 	ep, err := r.bc.Endpoint(r.ctx)
 	if err != nil {
-		panic(err)
+		return blobcache.FQOID{}, err
+	}
+	nsh, err := r.repoc.Namespace(r.ctx)
+	if err != nil {
+		return blobcache.FQOID{}, err
 	}
 	return blobcache.FQOID{
 		Peer: ep.Peer,
-	}
+		OID:  nsh.OID,
+	}, nil
 }
 
 func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) error {
@@ -281,45 +318,36 @@ func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) err
 	return err
 }
 
-func (r *Repo) defaultVolumeSpec(_ context.Context) (VolumeSpec, error) {
-	spec := blobcache.DefaultLocalSpec()
-	spec.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
-	spec.Local.MaxSize = 1 << 21
-	return spec, nil
-}
-
-func openLocalBlobcache(ctx context.Context, p string) (*bclocal.Service, *sqlx.DB, error) {
-	db, err := dbutil.OpenSQLxDB(filepath.Join(p, "blobcache.db"))
+func openLocalBlobcache(p string) (*bclocal.Service, *pebble.DB, error) {
+	pebbleDirPath := filepath.Join(p, "pebble")
+	blobDirPath := filepath.Join(p, "blob")
+	for _, dir := range []string{pebbleDirPath, blobDirPath} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return nil, nil, err
+		}
+	}
+	db, err := pebble.Open(pebbleDirPath, &pebble.Options{
+		Logger: zap.NewNop().Sugar(),
+	})
 	if err != nil {
 		return nil, nil, err
 	}
-	// TODO: remove this.
-	// This prevents a sqlite BUSY error.
-	db.SetMaxOpenConns(1)
-	if err := bclocal.SetupDB(ctx, db); err != nil {
+	blobDir, err := os.OpenRoot(blobDirPath)
+	if err != nil {
 		return nil, nil, err
 	}
+
 	return bclocal.New(bclocal.Env{
 		DB:      db,
+		BlobDir: blobDir,
 		Schemas: blobcacheSchemas(),
-		Root:    *blobcacheRootSpec(),
-	}), db, nil
+		Root:    reposchema.GotRepoVolumeSpec(),
+	}, bclocal.Config{}), db, nil
 }
-
-const schema_GOTNS = blobcache.Schema("gotns")
 
 func blobcacheSchemas() map[blobcache.Schema]schema.Schema {
 	schemas := bclocal.DefaultSchemas()
-	schemas[schema_GOTNS] = gotns.Schema{}
-	rootSpec := blobcache.DefaultLocalSpec()
-	rootSpec.Local.Schema = schema_GOTNS
-	rootSpec.Local.MaxSize = 1 << 22
+	schemas[reposchema.SchemaName_GotRepo] = reposchema.NewSchema()
+	schemas[reposchema.SchemaName_GotNS] = gotns.Schema{}
 	return schemas
-}
-
-func blobcacheRootSpec() *blobcache.VolumeSpec {
-	rootSpec := blobcache.DefaultLocalSpec()
-	rootSpec.Local.Schema = schema_GOTNS
-	rootSpec.Local.MaxSize = 1 << 22
-	return &rootSpec
 }

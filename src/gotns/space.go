@@ -21,7 +21,7 @@ func NewSpace(client *Client, volh blobcache.Handle) *Space {
 	return &Space{client: client, volh: volh}
 }
 
-func (bs *Space) Create(ctx context.Context, name string, config branches.Config) (*branches.Info, error) {
+func (bs *Space) Create(ctx context.Context, name string, config branches.Params) (*branches.Info, error) {
 	info := branches.Info{
 		Salt:        config.Salt,
 		Annotations: config.Annotations,
@@ -59,6 +59,6 @@ func (bs *Space) List(ctx context.Context, span branches.Span, limit int) ([]str
 	return bs.client.ListEntries(ctx, bs.volh, span, limit)
 }
 
-func (bs *Space) Set(ctx context.Context, name string, config branches.Config) error {
+func (bs *Space) Set(ctx context.Context, name string, config branches.Params) error {
 	return fmt.Errorf("not implemented")
 }

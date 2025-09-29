@@ -8,11 +8,14 @@ import (
 	"strings"
 	"sync"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/internal/dbutil"
+	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
+	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 
 	"github.com/gotvc/got/src/branches"
@@ -69,12 +72,17 @@ func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error
 		if err != nil {
 			return err
 		}
+		stagingStore, err := r.beginStagingTx(ctx, sa.getSalt(), true)
+		if err != nil {
+			return err
+		}
+		defer stagingStore.Abort(ctx)
+		storePair := [2]stores.RW{stagingStore, stagingStore}
 		dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
-		imp := porting.NewImporter(branches.NewGotFS(&branch.Info), dirState, [2]stores.RW{sa.getStore(), sa.getStore()})
+		imp := porting.NewImporter(branches.NewGotFS(&branch.Info), dirState, storePair)
 		exp := porting.NewExporter(branches.NewGotFS(&branch.Info), dirState, r.workingDir)
 		fsMach := branches.NewGotFS(&branch.Info)
-		stagingStore := newStagingStore(conn, sa.AreaID())
-		defer stagingStore.Close()
+
 		if err := fn(stagingCtx{
 			BranchName: branchName,
 			BranchInfo: &branch.Info,
@@ -90,7 +98,7 @@ func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error
 		}); err != nil {
 			return err
 		}
-		return nil
+		return stagingStore.Commit(ctx)
 	}(); err != nil {
 		return err
 	}
@@ -110,8 +118,11 @@ func (r *Repo) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) 
 		}
 		dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
 		exp := porting.NewExporter(branches.NewGotFS(&branch.Info), dirState, r.workingDir)
-		stagingStore := newStagingStore(conn, sa.AreaID())
-		defer stagingStore.Close()
+		stagingStore, err := r.beginStagingTx(ctx, sa.getSalt(), false)
+		if err != nil {
+			return err
+		}
+		defer stagingStore.Abort(ctx)
 		return fn(stagingCtx{
 			BranchName: branchName,
 			BranchInfo: &branch.Info,
@@ -246,16 +257,18 @@ func (r *Repo) Commit(ctx context.Context, snapInfo branches.SnapInfo) error {
 		snapInfo.AuthoredAt = tai64.Now().TAI64()
 		ctx, cf := metrics.Child(ctx, "applying changes")
 		defer cf()
-		src := sctx.Store
+		scratch := sctx.Store
 		stage := sctx.Stage
 		fsMach := sctx.FSMach
 		vcMach := sctx.VCMach
-		if err := branches.Apply(ctx, sctx.Volume, src, func(dst stores.RW, x *Snap) (*Snap, error) {
+		if err := branches.Apply(ctx, sctx.Volume, scratch, func(dst stores.RW, x *Snap) (*Snap, error) {
 			var root *Root
 			if x != nil {
 				root = &x.Root
 			}
-			nextRoot, err := stage.Apply(ctx, fsMach, [2]stores.RW{src, src}, root)
+			s := stores.AddWriteLayer(dst, scratch)
+			ss := [2]stores.RW{s, s}
+			nextRoot, err := stage.Apply(ctx, fsMach, ss, root)
 			if err != nil {
 				return nil, err
 			}
@@ -267,7 +280,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo branches.SnapInfo) error {
 			if err != nil {
 				return nil, err
 			}
-			return vcMach.NewSnapshot(ctx, src, parents, *nextRoot, gotvc.SnapParams{
+			return vcMach.NewSnapshot(ctx, s, parents, *nextRoot, gotvc.SnapParams{
 				Creator:   sctx.ActingAs.ID,
 				CreatedAt: tai64.Now().TAI64(),
 				Aux:       infoJSON,
@@ -299,11 +312,14 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 			return err
 		}
 		defer voltx.Abort(ctx)
+
+		// NewEmpty makes a Post which will fail because this is a read-only transaction.
+		s := stores.AddWriteLayer(voltx, stores.NewMem())
 		var root gotfs.Root
 		if snap != nil {
 			root = snap.Root
 		} else {
-			rootPtr, err := fsag.NewEmpty(ctx, voltx)
+			rootPtr, err := fsag.NewEmpty(ctx, s)
 			if err != nil {
 				return err
 			}
@@ -315,7 +331,7 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 			case sop.Delete != nil:
 				op.Delete = sop.Delete
 			case sop.Put != nil:
-				md, err := fsag.GetInfo(ctx, voltx, root, p)
+				md, err := fsag.GetInfo(ctx, s, root, p)
 				if err != nil && !posixfs.IsErrNotExist(err) {
 					return err
 				}
@@ -415,10 +431,6 @@ func (sa *stagingArea) getSalt() *[32]byte {
 	return saltFromBranch(sa.info)
 }
 
-func (sa *stagingArea) getStore() stores.RW {
-	return newStagingStore(sa.conn, sa.rowid)
-}
-
 func (sa *stagingArea) Put(ctx context.Context, p string, op staging.Operation) error {
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
@@ -481,11 +493,22 @@ func (sa *stagingArea) Delete(ctx context.Context, p string) error {
 	return err
 }
 
+// beginStagingTx begins a new transaction for the staging area with the given paramHash.
+// It is up to the caller to commit or abort the transaction.
+func (r *Repo) beginStagingTx(ctx context.Context, paramHash *[32]byte, mutate bool) (volumes.Tx, error) {
+	h, err := r.repoc.StagingArea(ctx, paramHash)
+	if err != nil {
+		return nil, err
+	}
+	vol := volumes.Blobcache{Service: r.bc, Handle: *h}
+	return vol.BeginTx(ctx, blobcache.TxParams{Mutate: mutate})
+}
+
 // cleanupStagingBlobs removes blobs from staging areas which do not have ops that reference them.
-func cleanupStagingBlobs(ctx context.Context, conn *dbutil.Conn) error {
+func (r *Repo) cleanupStagingBlobs(ctx context.Context, conn *dbutil.Conn) error {
 	// get all of the ids for the empty staging areas
-	var areaIDs []int64
-	for areaID, err := range dbutil.Select(conn, dbutil.ScanInt64, `SELECT rowid FROM staging_areas WHERE NOT EXISTS (SELECT 1 FROM staging_ops WHERE area_id = rowid)`) {
+	var areaIDs [][32]byte
+	for areaID, err := range dbutil.Select(conn, scan32Bytes, `SELECT salt FROM staging_areas WHERE NOT EXISTS (SELECT 1 FROM staging_ops WHERE area_id = rowid)`) {
 		if err != nil {
 			return err
 		}
@@ -494,11 +517,19 @@ func cleanupStagingBlobs(ctx context.Context, conn *dbutil.Conn) error {
 	metrics.SetDenom(ctx, "staging_areas", len(areaIDs), units.None)
 	// if the staging area has no ops, then it has no blobs either.
 	for _, areaID := range areaIDs {
-		if err := dbutil.Exec(conn, `DELETE FROM staging_blobs WHERE area_id = ?`, areaID); err != nil {
+		store, err := r.beginStagingTx(ctx, &areaID, true)
+		if err != nil {
 			return err
 		}
+		defer store.Abort(ctx)
+		// TODO: need GC transaction type in Blobcache.
 		metrics.AddInt(ctx, "staging_areas", 1, units.None)
 	}
+	return nil
+}
+
+func scan32Bytes(stmt *sqlite.Stmt, dst *[32]byte) error {
+	stmt.ColumnBytes(0, dst[:])
 	return nil
 }
 

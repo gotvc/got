@@ -2,9 +2,9 @@ package gotns
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 
-	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/gotled"
 	"github.com/gotvc/got/src/internal/sbe"
@@ -44,6 +44,9 @@ type State struct {
 	// Rules holds rules for the namespace, granting look or touch access to branches.
 	Rules gotkv.Root
 
+	// Obligations holds obligations for the namespace, granting access to volumes.
+	Obligations gotkv.Root
+
 	// Content tables
 
 	// Branches holds the actual branch entries themselves.
@@ -56,11 +59,12 @@ type State struct {
 func (s State) Marshal(out []byte) []byte {
 	const versionTag = 0
 	out = append(out, versionTag)
-	out = sbe.AppendLP(out, s.Leaves.Marshal())
-	out = sbe.AppendLP(out, s.Groups.Marshal())
-	out = sbe.AppendLP(out, s.Memberships.Marshal())
-	out = sbe.AppendLP(out, s.Rules.Marshal())
-	out = sbe.AppendLP(out, s.Branches.Marshal())
+	out = sbe.AppendLP(out, s.Leaves.Marshal(nil))
+	out = sbe.AppendLP(out, s.Groups.Marshal(nil))
+	out = sbe.AppendLP(out, s.Memberships.Marshal(nil))
+	out = sbe.AppendLP(out, s.Rules.Marshal(nil))
+	out = sbe.AppendLP(out, s.Obligations.Marshal(nil))
+	out = sbe.AppendLP(out, s.Branches.Marshal(nil))
 	return out
 }
 
@@ -77,7 +81,7 @@ func (s *State) Unmarshal(data []byte) error {
 	data = data[1:]
 
 	// read all of the gotkv roots
-	for _, dst := range []*gotkv.Root{&s.Leaves, &s.Groups, &s.Memberships, &s.Rules, &s.Branches} {
+	for _, dst := range []*gotkv.Root{&s.Leaves, &s.Groups, &s.Memberships, &s.Rules, &s.Obligations, &s.Branches} {
 		kvrData, rest, err := sbe.ReadLP(data)
 		if err != nil {
 			return err
@@ -136,7 +140,7 @@ func New() Machine {
 // New creates a new root.
 func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (*Root, error) {
 	state := new(State)
-	for _, dst := range []*gotkv.Root{&state.Groups, &state.Leaves, &state.Memberships, &state.Rules, &state.Branches} {
+	for _, dst := range []*gotkv.Root{&state.Groups, &state.Leaves, &state.Memberships, &state.Rules, &state.Obligations, &state.Branches} {
 		kvr, err := m.gotkv.NewEmpty(ctx, s)
 		if err != nil {
 			return nil, err
@@ -144,11 +148,12 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 		*dst = *kvr
 	}
 
-	kemPub, kemPriv, err := mlkem1024.GenerateKeyPair(nil)
-	if err != nil {
+	// create initial KEM seed
+	var kemSeed [64]byte
+	if _, err := rand.Read(kemSeed[:]); err != nil {
 		return nil, err
 	}
-	kemPrivCtext := MarshalKEMPrivateKey(nil, KEM_MLKEM1024, kemPriv)
+	groupKEMPub, _ := DeriveKEM(kemSeed)
 
 	leaves := map[inet256.ID][]byte{}
 	for _, leaf := range admins {
@@ -157,15 +162,16 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 		if err != nil {
 			return nil, err
 		}
-		leaves[leaf.ID] = asymEncrypt(nil, leaf.KEMPublicKey, kemPrivCtext)
+		leaves[leaf.ID] = encryptSeed(nil, leaf.KEMPublicKey, &kemSeed)
 	}
 	const adminGroupName = "admin"
 	g := Group{
 		Name:     adminGroupName,
-		KEM:      kemPub,
+		KEM:      groupKEMPub,
 		LeafKEMs: leaves,
 		Owners:   slices2.Map(admins, func(leaf IdentityLeaf) inet256.ID { return leaf.ID }),
 	}
+	var err error
 	state, err = m.PutGroup(ctx, s, *state, g)
 	if err != nil {
 		return nil, err
@@ -200,11 +206,6 @@ func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, 
 	}
 	// TODO: first validate auth operations, ensure that all the differences are signed.
 	return nil
-}
-
-func (m *Machine) Apply(ctx context.Context, s stores.RW, prev State, delta Delta) (State, error) {
-	cs := Op_ChangeSet(delta)
-	return cs.perform(ctx, m, s, prev, make(map[inet256.ID]struct{}))
 }
 
 // putGroup returns a gotkv mutation that puts a group into the groups table.

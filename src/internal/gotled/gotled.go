@@ -71,6 +71,9 @@ func Parse[State, Proof Marshaler](data []byte, parseState Parser[State], parseP
 	}
 	historyLen := (header & 0xff) * blobcache.CIDSize
 	stateLen := header >> 8
+	if int(historyLen) > len(data) {
+		return Root[State, Proof]{}, fmt.Errorf("gotled: history length %d is greater than data length %d", historyLen, len(data))
+	}
 	history, err := merklelog.Parse(data[:historyLen])
 	if err != nil {
 		return Root[State, Proof]{}, err

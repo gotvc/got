@@ -158,7 +158,7 @@ func (it *Iterator[T, Ref]) getLevel(ctx context.Context, level int) (iterLevel[
 	if it.levels[level].IsZero() {
 		il, err := it.makeLevel(ctx, level)
 		if err != nil {
-			return iterLevel[T, Ref]{}, nil
+			return iterLevel[T, Ref]{}, err
 		}
 		it.levels[level] = il
 	}
