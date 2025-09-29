@@ -48,10 +48,6 @@ func (wl writeLayer) Exists(ctx context.Context, id cadata.ID) (bool, error) {
 	}
 }
 
-// func (wl writeLayer) Delete(ctx context.Context, id cadata.ID) error {
-// 	return wl.writeTo.Delete(ctx, id)
-// }
-
 func (wl writeLayer) MaxSize() int {
 	size := wl.base.MaxSize()
 	if size2 := wl.writeTo.MaxSize(); size2 < size {
