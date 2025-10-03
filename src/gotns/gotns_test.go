@@ -1,8 +1,6 @@
 package gotns
 
 import (
-	"os"
-	"path/filepath"
 	"regexp"
 	"strconv"
 	"testing"
@@ -12,7 +10,6 @@ import (
 	"blobcache.io/blobcache/src/schema/basicns"
 	"github.com/cloudflare/circl/kem"
 	"github.com/cloudflare/circl/sign"
-	"github.com/cockroachdb/pebble"
 	"github.com/stretchr/testify/require"
 	"go.inet256.org/inet256/src/inet256"
 
@@ -23,7 +20,7 @@ func TestInit(t *testing.T) {
 	ctx := testutil.Context(t)
 	bc := bclocal.NewTestService(t)
 	nsc := basicns.Client{Service: bc}
-	volh, err := nsc.CreateAt(ctx, blobcache.Handle{}, "test", blobcache.DefaultLocalSpec())
+	volh, err := nsc.CreateAt(ctx, blobcache.Handle{}, "test", BranchVolumeSpec())
 	require.NoError(t, err)
 
 	signPub, sigPriv := newTestSigner(t)
@@ -92,39 +89,13 @@ func TestCreateAt(t *testing.T) {
 }
 
 func newTestService(t *testing.T) *bclocal.Service {
-	dir := t.TempDir()
-	blobDirPath := filepath.Join(dir, "blob")
-	pebbleDirPath := filepath.Join(dir, "pebble")
-	for _, dir := range []string{blobDirPath, pebbleDirPath} {
-		require.NoError(t, os.MkdirAll(dir, 0o755))
-	}
+	env := bclocal.NewTestEnv(t)
+	env.Schemas["gotns"] = Schema{}
+	env.Root = blobcache.DefaultLocalSpec()
+	env.Root.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
+	env.Root.Local.Schema = "gotns"
 
-	db, err := pebble.Open(pebbleDirPath, &pebble.Options{})
-	require.NoError(t, err)
-	blobDir, err := os.OpenRoot(blobDirPath)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, db.Close())
-		require.NoError(t, blobDir.Close())
-	})
-
-	schemas := bclocal.DefaultSchemas()
-	schemas["gotns"] = Schema{}
-	rootSpec := blobcache.DefaultLocalSpec()
-	rootSpec.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
-	rootSpec.Local.Schema = "gotns"
-	s := bclocal.New(bclocal.Env{
-		DB:         db,
-		BlobDir:    blobDir,
-		Schemas:    schemas,
-		Root:       rootSpec,
-		PacketConn: testutil.PacketConn(t),
-	}, bclocal.Config{})
-	t.Cleanup(func() {
-		// This is required to avoid panics when closing the database.
-		s.AbortAll(testutil.Context(t))
-	})
-	return s
+	return bclocal.NewTestServiceFromEnv(t, env)
 }
 
 func newTestSigner(t *testing.T) (sign.PublicKey, sign.PrivateKey) {

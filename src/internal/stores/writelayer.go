@@ -12,9 +12,6 @@ type writeLayer struct {
 }
 
 func AddWriteLayer(base Reading, writeTo RW) RW {
-	if base.Hash(nil) != writeTo.Hash(nil) {
-		panic("write layer has different hash function than base")
-	}
 	return writeLayer{base: base, writeTo: writeTo}
 }
 
@@ -54,8 +51,4 @@ func (wl writeLayer) MaxSize() int {
 		size = size2
 	}
 	return size
-}
-
-func (wl writeLayer) Hash(x []byte) cadata.ID {
-	return wl.base.Hash(x)
 }

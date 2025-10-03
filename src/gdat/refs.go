@@ -7,19 +7,21 @@ import (
 	"encoding/base64"
 	"fmt"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/internal/metrics"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/state/cadata"
 )
 
 const (
 	Base64Alphabet = cadata.Base64Alphabet
-	RefSize        = cadata.IDSize + DEKSize
+	RefSize        = blobcache.CIDSize + DEKSize
 )
 
 var codec = base64.NewEncoding(Base64Alphabet).WithPadding(base64.NoPadding)
 
 type Ref struct {
-	CID cadata.ID
+	CID blobcache.CID
 	DEK DEK
 }
 
@@ -34,8 +36,8 @@ func (r *Ref) Unmarshal(data []byte) error {
 	if len(data) != RefSize {
 		return fmt.Errorf("invalid ref length: %d", len(data))
 	}
-	copy(r.CID[:], data[:cadata.IDSize])
-	copy(r.DEK[:], data[cadata.IDSize:])
+	copy(r.CID[:], data[:blobcache.CIDSize])
+	copy(r.DEK[:], data[blobcache.CIDSize:])
 	return nil
 }
 
@@ -120,7 +122,7 @@ func Equal(a, b Ref) bool {
 }
 
 // Copy copies the data at ref from src to dst.
-func Copy(ctx context.Context, src cadata.Getter, dst cadata.Poster, ref *Ref) error {
+func Copy(ctx context.Context, src stores.Reading, dst stores.Writing, ref *Ref) error {
 	defer metrics.AddInt(ctx, "blob_copy", 1, "blobs")
-	return cadata.Copy(ctx, dst, src, ref.CID)
+	return stores.Copy(ctx, src, dst, ref.CID)
 }

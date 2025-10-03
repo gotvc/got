@@ -4,15 +4,14 @@ import (
 	"bytes"
 	"context"
 
-	"github.com/gotvc/got/src/gdat"
+	"blobcache.io/blobcache/src/blobcache"
 	"go.brendoncarroll.net/state/cadata"
-	"go.brendoncarroll.net/state/cadata/fsstore"
-	"go.brendoncarroll.net/state/posixfs"
+	"golang.org/x/crypto/blake2b"
 )
 
 type (
 	Store = cadata.Store
-	ID    = cadata.ID
+	ID    = blobcache.CID
 	Set   = cadata.Set
 )
 
@@ -39,7 +38,7 @@ func (ms MemSet) Count() int {
 	return len(ms)
 }
 
-func (ms MemSet) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (int, error) {
+func (ms MemSet) List(ctx context.Context, span cadata.Span, ids []blobcache.CID) (int, error) {
 	var n int
 	for id := range ms {
 		if n >= len(ids) {
@@ -59,26 +58,29 @@ func (ms MemSet) List(ctx context.Context, span cadata.Span, ids []cadata.ID) (i
 	return n, nil
 }
 
-func NewFSStore(x posixfs.FS, maxSize int) cadata.Store {
-	return fsstore.New(x, gdat.Hash, maxSize)
+func Hash(x []byte) blobcache.CID {
+	return blake2b.Sum256(x)
 }
 
-func NewMem() cadata.Store {
-	return cadata.NewMem(gdat.Hash, 1<<22)
+func NewMem() *cadata.MemStore {
+	return cadata.NewMem(Hash, 1<<22)
 }
 
 func NewVoid() cadata.Store {
-	return cadata.NewVoid(gdat.Hash, 1<<22)
+	return cadata.NewVoid(Hash, 1<<22)
 }
 
 // Reading is used for read-only operations.
 type Reading interface {
-	cadata.Getter
+	Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, error)
+	MaxSize() int
 }
 
 // Writing is used for additive copy-on-write operations.
 type Writing interface {
-	cadata.PostExister
+	Post(ctx context.Context, data []byte) (blobcache.CID, error)
+	Exists(ctx context.Context, cid blobcache.CID) (bool, error)
+	MaxSize() int
 }
 
 // Writing is used for read-write operations.
@@ -91,4 +93,45 @@ type RWD interface {
 	Reading
 	Writing
 	cadata.Deleter
+}
+
+type Exister interface {
+	Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error
+}
+
+func ExistsUnit(ctx context.Context, s Exister, cid blobcache.CID) (bool, error) {
+	var dst [1]bool
+	if err := s.Exists(ctx, []blobcache.CID{cid}, dst[:]); err != nil {
+		return false, err
+	}
+	return dst[0], nil
+}
+
+type CopyFrom interface {
+	CopyFrom(ctx context.Context, src Reading, cids []blobcache.CID, success []bool) error
+}
+
+// Copy copies a set of CIDs from src to dst.
+func Copy(ctx context.Context, src Reading, dst Writing, cids ...blobcache.CID) error {
+	success := make([]bool, len(cids))
+	if cf, ok := dst.(CopyFrom); ok {
+		if err := cf.CopyFrom(ctx, src, cids, success); err != nil {
+			return err
+		}
+	}
+	buf := make([]byte, src.MaxSize())
+	for i, cid := range cids {
+		if success[i] {
+			continue
+		}
+		n, err := src.Get(ctx, cid, buf)
+		if err != nil {
+			return err
+		}
+		_, err = dst.Post(ctx, buf[:n])
+		if err != nil {
+			return err
+		}
+	}
+	return nil
 }

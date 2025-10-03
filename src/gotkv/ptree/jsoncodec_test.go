@@ -6,8 +6,8 @@ import (
 	"errors"
 	"fmt"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"go.brendoncarroll.net/state"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 type Entry struct {
@@ -58,11 +58,11 @@ func (dec *JSONDecoder[T]) Peek(src []byte, dst *T) error {
 	return err
 }
 
-func (dec *JSONDecoder[T]) Reset(idx Index[T, cadata.ID]) {}
+func (dec *JSONDecoder[T]) Reset(idx Index[T, blobcache.CID]) {}
 
 type JSONIndexDecoder struct{}
 
-func (dec *JSONIndexDecoder) Read(src []byte, dst *Index[Entry, cadata.ID]) (int, error) {
+func (dec *JSONIndexDecoder) Read(src []byte, dst *Index[Entry, blobcache.CID]) (int, error) {
 	var ient indexEntry
 	n, err := readJSONEntry(src, &ient)
 	if err != nil {
@@ -72,7 +72,7 @@ func (dec *JSONIndexDecoder) Read(src []byte, dst *Index[Entry, cadata.ID]) (int
 	return n, nil
 }
 
-func (dec *JSONIndexDecoder) Peek(src []byte, dst *Index[Entry, cadata.ID]) error {
+func (dec *JSONIndexDecoder) Peek(src []byte, dst *Index[Entry, blobcache.CID]) error {
 	var ient indexEntry
 	_, err := readJSONEntry(src, &ient)
 	if err != nil {
@@ -82,7 +82,7 @@ func (dec *JSONIndexDecoder) Peek(src []byte, dst *Index[Entry, cadata.ID]) erro
 	return nil
 }
 
-func (dec *JSONIndexDecoder) Reset(idx Index[Entry, cadata.ID]) {}
+func (dec *JSONIndexDecoder) Reset(idx Index[Entry, blobcache.CID]) {}
 
 func readJSONEntry(src []byte, dst any) (int, error) {
 	parts := bytes.SplitN(src, []byte{'\n'}, 2)
@@ -97,13 +97,13 @@ func readJSONEntry(src []byte, dst any) (int, error) {
 }
 
 type indexEntry struct {
-	Ref       cadata.ID
+	Ref       blobcache.CID
 	First     []byte
 	Last      []byte
 	IsNatural bool
 }
 
-func newIndexEntry(idx Index[Entry, cadata.ID]) indexEntry {
+func newIndexEntry(idx Index[Entry, blobcache.CID]) indexEntry {
 	lb, _ := idx.Span.LowerBound()
 	ub, _ := idx.Span.UpperBound()
 	return indexEntry{
@@ -114,11 +114,11 @@ func newIndexEntry(idx Index[Entry, cadata.ID]) indexEntry {
 	}
 }
 
-func indexFromEntry(x indexEntry) Index[Entry, cadata.ID] {
+func indexFromEntry(x indexEntry) Index[Entry, blobcache.CID] {
 	span := state.TotalSpan[Entry]().
 		WithLowerIncl(Entry{Key: x.First}).
 		WithUpperIncl(Entry{Key: x.Last})
-	return Index[Entry, cadata.ID]{
+	return Index[Entry, blobcache.CID]{
 		Ref:       x.Ref,
 		IsNatural: x.IsNatural,
 		Span:      span,
@@ -129,21 +129,21 @@ func NewEntryEncoder() Encoder[Entry] {
 	return &JSONEncoder[Entry]{}
 }
 
-func NewIndexEncoder() IndexEncoder[Entry, cadata.ID] {
+func NewIndexEncoder() IndexEncoder[Entry, blobcache.CID] {
 	e := &JSONEncoder[indexEntry]{}
-	return mapEncoder[indexEntry, Index[Entry, cadata.ID]]{
+	return mapEncoder[indexEntry, Index[Entry, blobcache.CID]]{
 		inner: e,
-		fn: func(idx Index[Entry, cadata.ID]) indexEntry {
+		fn: func(idx Index[Entry, blobcache.CID]) indexEntry {
 			return newIndexEntry(idx)
 		},
 	}
 }
 
-func NewEntryDecoder() Decoder[Entry, cadata.ID] {
+func NewEntryDecoder() Decoder[Entry, blobcache.CID] {
 	return &JSONDecoder[Entry]{}
 }
 
-func NewIndexDecoder() IndexDecoder[Entry, cadata.ID] {
+func NewIndexDecoder() IndexDecoder[Entry, blobcache.CID] {
 	return &JSONIndexDecoder{}
 }
 

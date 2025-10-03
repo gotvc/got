@@ -3,13 +3,14 @@ package ptree
 import (
 	"testing"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/stretchr/testify/require"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/cadata"
 )
 
 func TestIndex(t *testing.T) {
-	idx := Index[Entry, cadata.ID]{
+	idx := Index[Entry, blobcache.CID]{
 		Ref:       cadata.DefaultHash([]byte("hello")),
 		IsNatural: true,
 		Span: state.TotalSpan[Entry]().

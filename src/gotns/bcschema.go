@@ -17,7 +17,7 @@ var (
 // Schema implements a blobcache Schema for Got Namespaces.
 type Schema struct{}
 
-func (s Schema) Validate(ctx context.Context, src cadata.Getter, prev, next []byte) error {
+func (s Schema) Validate(ctx context.Context, src schema.RO, prev, next []byte) error {
 	mach := New()
 	if len(prev) == 0 {
 		nextRoot, err := ParseRoot(next)
@@ -37,7 +37,7 @@ func (s Schema) Validate(ctx context.Context, src cadata.Getter, prev, next []by
 	return mach.led.Validate(ctx, src, prevRoot, nextRoot)
 }
 
-func (s Schema) ReadLinks(ctx context.Context, src cadata.Getter, rootData []byte, dst map[blobcache.OID]blobcache.ActionSet) error {
+func (s Schema) ReadLinks(ctx context.Context, src schema.RO, rootData []byte, dst map[blobcache.OID]blobcache.ActionSet) error {
 	if len(rootData) == 0 {
 		return nil
 	}

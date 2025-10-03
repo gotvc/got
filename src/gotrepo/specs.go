@@ -83,7 +83,7 @@ type SpaceSpec struct {
 func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 	switch {
 	case spec.Local != nil:
-		volh, err := r.bc.OpenAs(r.ctx, nil, *spec.Local, blobcache.Action_ALL)
+		volh, err := r.bc.OpenFiat(r.ctx, *spec.Local, blobcache.Action_ALL)
 		if err != nil {
 			return nil, err
 		}
