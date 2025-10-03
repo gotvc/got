@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/gotkv/ptree"
@@ -18,9 +19,9 @@ import (
 )
 
 type (
-	Getter = cadata.Getter
-	Store  = cadata.Store
-	ID     = cadata.ID
+	Getter = stores.Reading
+	Store  = stores.RWD
+	ID     = blobcache.CID
 	Ref    = gdat.Ref
 
 	Entry = kvstreams.Entry
@@ -197,7 +198,7 @@ func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x ptree.Root[Entry
 
 type ptreeGetter struct {
 	ag *gdat.Machine
-	s  cadata.Getter
+	s  stores.Reading
 }
 
 func (s *ptreeGetter) Get(ctx context.Context, ref Ref, buf []byte) (int, error) {

@@ -255,8 +255,8 @@ func parseSnapshot(data []byte) (*Snapshot, error) {
 
 // RefFromSnapshot computes a ref for snap if it was posted to s.
 // It only calls s.Hash and s.MaxSize; it does not mutate s.
-func (ag *Machine) RefFromSnapshot(snap Snapshot, s cadata.Getter) Ref {
-	s2 := cadata.NewVoid(s.Hash, s.MaxSize())
+func (ag *Machine) RefFromSnapshot(snap Snapshot, s stores.Reading) Ref {
+	s2 := cadata.NewVoid(stores.Hash, s.MaxSize())
 	ref, err := ag.PostSnapshot(context.TODO(), s2, snap)
 	if err != nil {
 		panic(err)

@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"path/filepath"
 	"strings"
 
+	"blobcache.io/blobcache/src/bchttp"
 	"blobcache.io/blobcache/src/bclocal"
+	"blobcache.io/blobcache/src/bcremote"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
 	"github.com/cloudflare/circl/sign/ed25519"
-	"github.com/cockroachdb/pebble"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/kv"
 	"go.brendoncarroll.net/state/posixfs"
@@ -58,7 +58,6 @@ type Repo struct {
 	rootPath string
 	repoFS   FS // repoFS is the directory that the repo is in
 
-	bcDB   *pebble.DB
 	bc     blobcache.Service
 	db     *dbutil.Pool
 	config Config
@@ -144,22 +143,39 @@ func Open(p string) (*Repo, error) {
 	}); err != nil {
 		return nil, err
 	}
-
+	sigPrivKey := leafPrivate.SigPrivateKey.(ed25519.PrivateKey)
 	// blobcache
-	if err := posixfs.MkdirAll(repoFS, blobcacheDirPath, 0o755); err != nil {
-		return nil, err
+	var bc blobcache.Service
+	switch {
+	case config.Blobcache.InProcess != nil:
+		if err := posixfs.MkdirAll(repoFS, blobcacheDirPath, 0o755); err != nil {
+			return nil, err
+		}
+		bc, err = openLocalBlobcache(ctx, sigPrivKey, filepath.Join(p, blobcacheDirPath))
+		if err != nil {
+			return nil, err
+		}
+	case config.Blobcache.HTTP != nil:
+		bc, err = openHTTPBlobcache(*config.Blobcache.HTTP)
+		if err != nil {
+			return nil, err
+		}
+	case config.Blobcache.Remote != nil:
+		pc, err := net.ListenUDP("udp", nil)
+		if err != nil {
+			return nil, err
+		}
+		bc, err = openRemoteBlobcache(sigPrivKey, pc, *config.Blobcache.Remote)
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("remote blobcache is not yet supported")
 	}
-	bc, bcDB, err := openLocalBlobcache(filepath.Join(p, blobcacheDirPath))
-	if err != nil {
-		return nil, err
-	}
-
 	r := &Repo{
 		rootPath:    p,
 		repoFS:      repoFS,
 		db:          db,
 		bc:          bc,
-		bcDB:        bcDB,
 		config:      *config,
 		leafPrivate: *leafPrivate,
 		ctx:         ctx,
@@ -203,14 +219,9 @@ func (r *Repo) Close() (retErr error) {
 		},
 		r.db.Close,
 		func() error {
-			// close the blobcache database, if it exists
-			// r.bcDB is only set if the in-process blobcache is used.
-			if r.bcDB != nil {
-				if err := r.bc.(*bclocal.Service).AbortAll(ctx); err != nil {
-					logctx.Warn(ctx, "error aborting blobcache transactions", zap.Error(err))
-				}
-				logctx.Infof(ctx, "closing pebble db")
-				return r.bcDB.Close()
+			if lsvc, ok := r.bc.(*bclocal.Service); ok {
+				logctx.Infof(ctx, "closing in-process blobcache")
+				return lsvc.Close()
 			}
 			return nil
 		},
@@ -231,27 +242,11 @@ func (r *Repo) GetSpace() Space {
 }
 
 func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
-	edPriv, ok := r.leafPrivate.SigPrivateKey.(ed25519.PrivateKey)
+	svc, ok := r.bc.(*bclocal.Service)
 	if !ok {
-		return fmt.Errorf("repo.Serve: signing key must be ed25519")
+		return fmt.Errorf("Serve called on repo without in-process Blobcache: %T", r.bc)
 	}
-	blobDirPath := filepath.Join(r.rootPath, blobcacheDirPath, "blob")
-	blobDir, err := os.OpenRoot(blobDirPath)
-	if err != nil {
-		return err
-	}
-	svc := bclocal.New(bclocal.Env{
-		DB:      r.bcDB,
-		BlobDir: blobDir,
-
-		PrivateKey: edPriv,
-		PacketConn: pc,
-
-		Schemas: blobcacheSchemas(),
-		Root:    reposchema.GotRepoVolumeSpec(),
-	}, bclocal.Config{})
-	r.bc = svc
-	return svc.Run(ctx)
+	return svc.Serve(ctx, pc)
 }
 
 // Cleanup removes unreferenced data from the repo's local DB.
@@ -318,31 +313,23 @@ func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) err
 	return err
 }
 
-func openLocalBlobcache(p string) (*bclocal.Service, *pebble.DB, error) {
-	pebbleDirPath := filepath.Join(p, "pebble")
-	blobDirPath := filepath.Join(p, "blob")
-	for _, dir := range []string{pebbleDirPath, blobDirPath} {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return nil, nil, err
-		}
-	}
-	db, err := pebble.Open(pebbleDirPath, &pebble.Options{
-		Logger: zap.NewNop().Sugar(),
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-	blobDir, err := os.OpenRoot(blobDirPath)
-	if err != nil {
-		return nil, nil, err
-	}
-
+func openLocalBlobcache(bgCtx context.Context, privKey ed25519.PrivateKey, p string) (*bclocal.Service, error) {
 	return bclocal.New(bclocal.Env{
-		DB:      db,
-		BlobDir: blobDir,
-		Schemas: blobcacheSchemas(),
-		Root:    reposchema.GotRepoVolumeSpec(),
-	}, bclocal.Config{}), db, nil
+		Background: bgCtx,
+		StateDir:   p,
+		PrivateKey: privKey,
+		Schemas:    blobcacheSchemas(),
+		Root:       reposchema.GotRepoVolumeSpec(),
+		Policy:     &bclocal.AllOrNothingPolicy{},
+	}, bclocal.Config{})
+}
+
+func openHTTPBlobcache(ep string) (*bchttp.Client, error) {
+	return bchttp.NewClient(nil, ep), nil
+}
+
+func openRemoteBlobcache(privateKey ed25519.PrivateKey, pc net.PacketConn, ep blobcache.Endpoint) (*bcremote.Service, error) {
+	return bcremote.New(privateKey, pc, ep), nil
 }
 
 func blobcacheSchemas() map[blobcache.Schema]schema.Schema {

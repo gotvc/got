@@ -105,7 +105,7 @@ func (a *Machine) MaxSize() int {
 
 // GetF calls fn with the value corresponding to key in the instance x.
 // The value must not be used outside the callback.
-func (a *Machine) GetF(ctx context.Context, s cadata.Getter, x Root, key []byte, fn func([]byte) error) error {
+func (a *Machine) GetF(ctx context.Context, s stores.Reading, x Root, key []byte, fn func([]byte) error) error {
 	it := a.NewIterator(s, x, kvstreams.SingleItemSpan(key))
 	var ent Entry
 	err := it.Next(ctx, &ent)
@@ -119,7 +119,7 @@ func (a *Machine) GetF(ctx context.Context, s cadata.Getter, x Root, key []byte,
 }
 
 // Get returns the value corresponding to key in the instance x.
-func (a *Machine) Get(ctx context.Context, s cadata.Getter, x Root, key []byte) ([]byte, error) {
+func (a *Machine) Get(ctx context.Context, s stores.Reading, x Root, key []byte) ([]byte, error) {
 	var ret []byte
 	if err := a.GetF(ctx, s, x, key, func(data []byte) error {
 		ret = append([]byte{}, data...)
@@ -159,7 +159,7 @@ func (a *Machine) NewEmpty(ctx context.Context, s stores.RW) (*Root, error) {
 }
 
 // MaxEntry returns the entry in the instance x, within span, with the greatest lexicographic value.
-func (a *Machine) MaxEntry(ctx context.Context, s cadata.Getter, x Root, span Span) (*Entry, error) {
+func (a *Machine) MaxEntry(ctx context.Context, s stores.Reading, x Root, span Span) (*Entry, error) {
 	rp := ptree.ReadParams[Entry, Ref]{
 		Store:           &ptreeGetter{ag: a.da, s: s},
 		Compare:         compareEntries,
@@ -231,7 +231,7 @@ func (a *Machine) NewBuilder(s stores.RW) *Builder {
 
 // NewIterator returns an iterator for the instance rooted at x, which
 // will emit all keys within span in the instance.
-func (a *Machine) NewIterator(s Getter, root Root, span Span) *Iterator {
+func (a *Machine) NewIterator(s stores.Reading, root Root, span Span) *Iterator {
 	if span.End != nil && bytes.Compare(span.Begin, span.End) > 0 {
 		panic(fmt.Sprintf("cannot iterate over descending span. begin=%q end=%q", span.Begin, span.End))
 	}

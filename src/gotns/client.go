@@ -255,7 +255,7 @@ func (c *Client) AddMember(ctx context.Context, volh blobcache.Handle, name stri
 
 func (c *Client) adjustHandle(ctx context.Context, volh blobcache.Handle) (blobcache.Handle, error) {
 	if volh.Secret == ([16]byte{}) {
-		volh, err := c.Blobcache.OpenAs(ctx, nil, volh.OID, blobcache.Action_ALL)
+		volh, err := c.Blobcache.OpenFiat(ctx, volh.OID, blobcache.Action_ALL)
 		if err != nil {
 			return blobcache.Handle{}, err
 		}

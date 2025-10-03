@@ -227,11 +227,11 @@ func (a *Machine) addPrefix(root Root, p string) gotkv.Root {
 
 // MaxInfo returns the maximum path and the corresponding Info for the path.
 // If no Info entry can be found MaxInfo returns ("", nil, nil)
-func (a *Machine) MaxInfo(ctx context.Context, ms cadata.Store, root Root, span Span) (string, *Info, error) {
+func (a *Machine) MaxInfo(ctx context.Context, ms stores.RW, root Root, span Span) (string, *Info, error) {
 	return a.maxInfo(ctx, ms, root.ToGotKV(), span)
 }
 
-func (a *Machine) maxInfo(ctx context.Context, ms cadata.Getter, root gotkv.Root, span Span) (string, *Info, error) {
+func (a *Machine) maxInfo(ctx context.Context, ms stores.RW, root gotkv.Root, span Span) (string, *Info, error) {
 	ent, err := a.gotkv.MaxEntry(ctx, ms, root, span)
 	if err != nil {
 		return "", nil, err
