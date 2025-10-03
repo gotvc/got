@@ -314,6 +314,11 @@ func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) err
 }
 
 func openLocalBlobcache(bgCtx context.Context, privKey ed25519.PrivateKey, p string) (*bclocal.Service, error) {
+	// TODO: we should probably let the caller do this.
+	logger := zap.NewNop()
+	logger.Core().Enabled(zap.PanicLevel)
+	bgCtx = logctx.NewContext(bgCtx, logger)
+
 	return bclocal.New(bclocal.Env{
 		Background: bgCtx,
 		StateDir:   p,
