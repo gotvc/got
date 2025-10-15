@@ -14,6 +14,9 @@ install: protobuf
 protobuf:
 	cd ./src/gotfs && ./build_protobuf.sh
 
+install-protoc-gen-go:
+	go install github.com/golang/protobuf/protoc-gen-go
+
 build: protobuf
 	rm -r ./out/*
 	GOOS=darwin GOARCH=amd64 ./etc/build_go_binary.sh out/got_darwin-amd64_$(TAG) ./cmd/got
