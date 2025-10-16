@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotvc/got/src/gotfs/gotlob"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/state/cadata"
 )
 
@@ -20,13 +21,13 @@ type GetPostExister interface {
 type Builder struct {
 	a   *Machine
 	ctx context.Context
-	ms  GetPostExister
+	ms  stores.RW
 
 	dirStack []string
 	b        *gotlob.Builder
 }
 
-func (a *Machine) NewBuilder(ctx context.Context, ms, ds GetPostExister) *Builder {
+func (a *Machine) NewBuilder(ctx context.Context, ms, ds stores.RW) *Builder {
 	b := &Builder{
 		a:   a,
 		ctx: ctx,

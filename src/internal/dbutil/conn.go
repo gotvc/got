@@ -7,8 +7,8 @@ import (
 	"iter"
 	"testing"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/stretchr/testify/require"
-	"go.brendoncarroll.net/state/cadata"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 )
@@ -199,7 +199,7 @@ func BindAny(stmt *sqlite.Stmt, i int, arg interface{}) {
 			x = []byte{}
 		}
 		stmt.BindBytes(i, x)
-	case cadata.ID:
+	case blobcache.CID:
 		stmt.BindBytes(i, x[:])
 	default:
 		panic(arg)

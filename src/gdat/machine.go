@@ -4,13 +4,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/gotvc/got/src/internal/stores"
 	lru "github.com/hashicorp/golang-lru"
-	"go.brendoncarroll.net/state/cadata"
-)
-
-type (
-	Getter = cadata.Getter
-	Store  = cadata.Store
 )
 
 type Option = func(*Machine)
@@ -56,7 +51,7 @@ func NewMachine(opts ...Option) *Machine {
 	return o
 }
 
-func (a *Machine) Post(ctx context.Context, s cadata.Poster, data []byte) (*Ref, error) {
+func (a *Machine) Post(ctx context.Context, s stores.Writing, data []byte) (*Ref, error) {
 	id, dek, err := a.postEncrypt(ctx, s, a.kf, data)
 	if err != nil {
 		return nil, err
@@ -67,7 +62,7 @@ func (a *Machine) Post(ctx context.Context, s cadata.Poster, data []byte) (*Ref,
 	}, nil
 }
 
-func (a *Machine) GetF(ctx context.Context, s Getter, ref Ref, fn func(data []byte) error) error {
+func (a *Machine) GetF(ctx context.Context, s stores.Reading, ref Ref, fn func(data []byte) error) error {
 	if data := a.checkCache(ref); data != nil {
 		return fn(data)
 	}
@@ -81,7 +76,7 @@ func (a *Machine) GetF(ctx context.Context, s Getter, ref Ref, fn func(data []by
 	return fn(data)
 }
 
-func (a *Machine) Read(ctx context.Context, s Getter, ref Ref, buf []byte) (int, error) {
+func (a *Machine) Read(ctx context.Context, s stores.Reading, ref Ref, buf []byte) (int, error) {
 	return getDecrypt(ctx, s, ref.DEK, ref.CID, buf)
 }
 

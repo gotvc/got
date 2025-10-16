@@ -8,6 +8,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/cadata"
 )
@@ -34,7 +35,7 @@ func NewSchema() *Schema {
 	return &Schema{GotKV: mach}
 }
 
-func (sch *Schema) Validate(ctx context.Context, s cadata.Getter, prev, next []byte) error {
+func (sch *Schema) Validate(ctx context.Context, s schema.RO, prev, next []byte) error {
 	var prevRoot, nextRoot gotkv.Root
 	if len(prev) > 0 {
 		if err := prevRoot.Unmarshal(prev); err != nil {
@@ -47,7 +48,7 @@ func (sch *Schema) Validate(ctx context.Context, s cadata.Getter, prev, next []b
 	return nil
 }
 
-func (sch *Schema) ReadLinks(ctx context.Context, s cadata.Getter, rootData []byte, dst map[blobcache.OID]blobcache.ActionSet) error {
+func (sch *Schema) ReadLinks(ctx context.Context, s schema.RO, rootData []byte, dst map[blobcache.OID]blobcache.ActionSet) error {
 	if len(rootData) == 0 {
 		return nil
 	}
@@ -55,7 +56,7 @@ func (sch *Schema) ReadLinks(ctx context.Context, s cadata.Getter, rootData []by
 	if err := root.Unmarshal(rootData); err != nil {
 		return err
 	}
-	it := sch.GotKV.NewIterator(s, root, gotkv.Span{})
+	it := sch.GotKV.NewIterator(s.(stores.Reading), root, gotkv.Span{})
 	return streams.ForEach(ctx, it, func(ent gotkv.Entry) error {
 		oid := blobcache.OID(ent.Value)
 		dst[oid] = blobcache.Action_ALL

@@ -5,9 +5,8 @@ go 1.24
 toolchain go1.24.1
 
 require (
-	blobcache.io/blobcache v0.0.0-20250921182839-f19bbb53bbb0
+	blobcache.io/blobcache v0.0.0-20250930200349-575026beb251
 	github.com/cloudflare/circl v1.6.1
-	github.com/cockroachdb/pebble v1.1.5
 	github.com/dchest/siphash v1.2.3
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/golang-lru v1.0.2
@@ -34,6 +33,7 @@ require (
 	github.com/cockroachdb/errors v1.11.3 // indirect
 	github.com/cockroachdb/fifo v0.0.0-20240606204812-0bbfbd93a7ce // indirect
 	github.com/cockroachdb/logtags v0.0.0-20230118201751-21c54148d20b // indirect
+	github.com/cockroachdb/pebble v1.1.5 // indirect
 	github.com/cockroachdb/redact v1.1.5 // indirect
 	github.com/cockroachdb/tokenbucket v0.0.0-20230807174530-cc333fc44b06 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -48,6 +48,7 @@ require (
 	github.com/google/btree v1.1.2 // indirect
 	github.com/google/pprof v0.0.0-20250317173921-a4b03ec1a45e // indirect
 	github.com/google/uuid v1.6.0 // indirect
+	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/klauspost/compress v1.16.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.5 // indirect

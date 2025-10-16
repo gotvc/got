@@ -127,7 +127,7 @@ func Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Snap
 	return sync(snap)
 }
 
-// Populate adds all the cadata.IDs reachable from start to set.
+// Populate adds all the blobcache.CIDs reachable from start to set.
 // This will not include the CID for start itself, which has not yet been computed.
 func Populate(ctx context.Context, s stores.Reading, start Snapshot, set stores.Set, rootFn func(gotfs.Root) error) error {
 	for _, parentRef := range start.Parents {

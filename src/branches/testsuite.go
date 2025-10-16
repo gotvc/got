@@ -10,7 +10,6 @@ import (
 
 func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 	t.Run("CreateGet", func(t *testing.T) {
-		t.Parallel()
 		ctx := testutil.Context(t)
 		x := newSpace(t)
 		b, err := x.Get(ctx, "test")
@@ -23,7 +22,6 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 		require.NotNil(t, b)
 	})
 	t.Run("List", func(t *testing.T) {
-		//t.Parallel()
 		ctx := testutil.Context(t)
 		x := newSpace(t)
 		const N = 20
@@ -38,7 +36,6 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 		require.Len(t, names, N)
 	})
 	t.Run("Delete", func(t *testing.T) {
-		t.Parallel()
 		ctx := testutil.Context(t)
 		x := newSpace(t)
 		var err error

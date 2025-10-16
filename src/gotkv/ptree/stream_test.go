@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"testing"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 	"go.brendoncarroll.net/exp/streams"
@@ -40,11 +41,11 @@ func TestEntry(t *testing.T) {
 func TestStreamRW(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	var refs []cadata.ID
-	var idxs []Index[Entry, cadata.ID]
+	var refs []blobcache.CID
+	var idxs []Index[Entry, blobcache.CID]
 
 	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
-	sw := NewStreamWriter(StreamWriterParams[Entry, cadata.ID]{
+	sw := NewStreamWriter(StreamWriterParams[Entry, blobcache.CID]{
 		Store:    s,
 		Compare:  compareEntries,
 		MeanSize: defaultAvgSize,
@@ -52,7 +53,7 @@ func TestStreamRW(t *testing.T) {
 		Seed:     nil,
 		Encoder:  NewEntryEncoder(),
 		Copy:     copyEntry,
-		OnIndex: func(idx Index[Entry, cadata.ID]) error {
+		OnIndex: func(idx Index[Entry, blobcache.CID]) error {
 			idxs = append(idxs, cloneIndex(idx))
 			refs = append(refs, idx.Ref)
 			return nil
@@ -67,7 +68,7 @@ func TestStreamRW(t *testing.T) {
 	err := sw.Flush(ctx)
 	require.NoError(t, err)
 
-	sr := NewStreamReader(StreamReaderParams[Entry, cadata.ID]{
+	sr := NewStreamReader(StreamReaderParams[Entry, blobcache.CID]{
 		Store:     s,
 		Compare:   compareEntries,
 		NextIndex: NextIndexFromSlice(idxs),
@@ -86,17 +87,17 @@ func TestStreamRW(t *testing.T) {
 func TestStreamWriterChunkSize(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	var refs []cadata.ID
+	var refs []blobcache.CID
 
 	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
-	sw := NewStreamWriter(StreamWriterParams[Entry, cadata.ID]{
+	sw := NewStreamWriter(StreamWriterParams[Entry, blobcache.CID]{
 		Store:    s,
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
 		Compare:  compareEntries,
 		Encoder:  NewEntryEncoder(),
-		OnIndex: func(idx Index[Entry, cadata.ID]) error {
+		OnIndex: func(idx Index[Entry, blobcache.CID]) error {
 			refs = append(refs, idx.Ref)
 			return nil
 		},
@@ -127,11 +128,11 @@ func TestStreamWriterChunkSize(t *testing.T) {
 func TestStreamSeek(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	var refs []cadata.ID
-	var idxs []Index[Entry, cadata.ID]
+	var refs []blobcache.CID
+	var idxs []Index[Entry, blobcache.CID]
 
 	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
-	sw := NewStreamWriter(StreamWriterParams[Entry, cadata.ID]{
+	sw := NewStreamWriter(StreamWriterParams[Entry, blobcache.CID]{
 		Store:    s,
 		Compare:  compareEntries,
 		MeanSize: defaultAvgSize,
@@ -139,7 +140,7 @@ func TestStreamSeek(t *testing.T) {
 		Seed:     nil,
 		Encoder:  NewEntryEncoder(),
 		Copy:     copyEntry,
-		OnIndex: func(idx Index[Entry, cadata.ID]) error {
+		OnIndex: func(idx Index[Entry, blobcache.CID]) error {
 			idxs = append(idxs, cloneIndex(idx))
 			refs = append(refs, idx.Ref)
 			return nil
@@ -154,7 +155,7 @@ func TestStreamSeek(t *testing.T) {
 	err := sw.Flush(ctx)
 	require.NoError(t, err)
 
-	sr := NewStreamReader(StreamReaderParams[Entry, cadata.ID]{
+	sr := NewStreamReader(StreamReaderParams[Entry, blobcache.CID]{
 		Store:     s,
 		Compare:   compareEntries,
 		NextIndex: NextIndexFromSlice(idxs),
@@ -192,13 +193,13 @@ func BenchmarkStreamWriter(b *testing.B) {
 	b.ReportAllocs()
 	ctx := testutil.Context(b)
 	s := cadata.NewVoid(cadata.DefaultHash, defaultMaxSize)
-	sw := NewStreamWriter(StreamWriterParams[Entry, cadata.ID]{
+	sw := NewStreamWriter(StreamWriterParams[Entry, blobcache.CID]{
 		Store:    s,
 		MeanSize: defaultAvgSize,
 		MaxSize:  defaultMaxSize,
 		Seed:     nil,
 		Encoder:  NewEntryEncoder(),
-		OnIndex:  func(idx Index[Entry, cadata.ID]) error { return nil },
+		OnIndex:  func(idx Index[Entry, blobcache.CID]) error { return nil },
 		Copy:     copyEntry,
 		Compare:  compareEntries,
 	})
@@ -230,8 +231,8 @@ func refSimilarity[Ref comparable](as, bs []Ref) int {
 	return count
 }
 
-func cloneIndex(x Index[Entry, cadata.ID]) Index[Entry, cadata.ID] {
-	return Index[Entry, cadata.ID]{
+func cloneIndex(x Index[Entry, blobcache.CID]) Index[Entry, blobcache.CID] {
+	return Index[Entry, blobcache.CID]{
 		Ref:       x.Ref,
 		IsNatural: x.IsNatural,
 		Span:      cloneSpan(x.Span, copyEntry),

@@ -155,7 +155,7 @@ func (c *Client) createSubVolume(ctx context.Context, txn *blobcache.Tx, spec bl
 }
 
 func (c *Client) rootHandle(ctx context.Context) (*blobcache.Handle, error) {
-	return c.Service.OpenAs(ctx, nil, blobcache.OID{}, blobcache.Action_ALL)
+	return c.Service.OpenFiat(ctx, blobcache.OID{}, blobcache.Action_ALL)
 }
 
 func (c *Client) getRoot(ctx context.Context, txn *blobcache.Tx) (*gotkv.Root, error) {
