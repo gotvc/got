@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv"
 )
@@ -15,7 +14,7 @@ func (r *Repo) DebugFS(ctx context.Context, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	x, tx, err := branches.GetHead(ctx, b.Volume)
+	x, tx, err := b.GetHead(ctx)
 	if err != nil {
 		return err
 	}
@@ -31,7 +30,7 @@ func (r *Repo) DebugKV(ctx context.Context, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	x, tx, err := branches.GetHead(ctx, b.Volume)
+	x, tx, err := b.GetHead(ctx)
 	if err != nil {
 		return err
 	}

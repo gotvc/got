@@ -32,7 +32,7 @@ func newHTTPCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		if err != nil {
 			return err
 		}
-		fs := gotiofs.New(ctx, b.Info, b.Volume)
+		fs := gotiofs.New(ctx, *b)
 		h := http.FileServer(http.FS(fs))
 		l, err := net.Listen("tcp", *laddr)
 		if err != nil {
@@ -71,7 +71,7 @@ func newFTPCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		defer l.Close()
 		s, err := ftpserver.NewServer(&ftpserver.Options{
 			Auth:   ftpAuth{},
-			Driver: gotftp.NewDriver(ctx, b.Info, b.Volume),
+			Driver: gotftp.NewDriver(ctx, *b),
 			Perm:   ftpserver.NewSimplePerm("owner", "group"),
 		})
 		if err != nil {

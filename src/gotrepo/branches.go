@@ -1,7 +1,6 @@
 package gotrepo
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 
@@ -17,10 +16,7 @@ const (
 
 type BranchInfo = branches.Info
 
-type Branch struct {
-	branches.Info
-	branches.Volume
-}
+type Branch = branches.Branch
 
 // CreateBranch creates a branch using the default spec.
 func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Params) (*BranchInfo, error) {
@@ -51,15 +47,7 @@ func (r *Repo) getBranch(ctx context.Context, name string) (*Branch, error) {
 	if name == "" {
 		return nil, fmt.Errorf("branch name cannot be empty")
 	}
-	info, err := r.space.Get(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	vol, err := r.space.Open(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	return &Branch{Info: *info, Volume: vol}, nil
+	return r.space.Open(ctx, name)
 }
 
 // SetBranch sets branch metadata
@@ -97,7 +85,7 @@ func (r *Repo) SetActiveBranch(ctx context.Context, name string) error {
 		// if active branch has the same salt as the desired branch, then
 		// there is no check to do.
 		// If they have different salts, then we need to check if the staging area is empty.
-		if !bytes.Equal(desiredBranch.Salt, activeBranch.Salt) {
+		if desiredBranch.Info.Salt != activeBranch.Info.Salt {
 			sa, err := newStagingArea(conn, &activeBranch.Info)
 			if err != nil {
 				return err
@@ -123,15 +111,11 @@ func (r *Repo) GetActiveBranch(ctx context.Context) (string, *Branch, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	info, err := r.GetSpace().Get(ctx, name)
+	branch, err := r.GetSpace().Open(ctx, name)
 	if err != nil {
 		return "", nil, err
 	}
-	vol, err := r.GetSpace().Open(ctx, name)
-	if err != nil {
-		return "", nil, err
-	}
-	return name, &Branch{Info: *info, Volume: vol}, nil
+	return name, branch, nil
 }
 
 // SetBranchHead
@@ -150,7 +134,7 @@ func (r *Repo) SetBranchHead(ctx context.Context, name string, snap Snap) error 
 			return err
 		}
 		defer stageTxn.Abort(ctx)
-		return branches.SetHead(ctx, branch.Volume, stageTxn, snap)
+		return branch.SetHead(ctx, stageTxn, snap)
 	})
 }
 
@@ -159,7 +143,7 @@ func (r *Repo) GetBranchHead(ctx context.Context, name string) (*Snap, error) {
 	if err != nil {
 		return nil, err
 	}
-	snap, tx, err := branches.GetHead(ctx, b.Volume)
+	snap, tx, err := b.GetHead(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -176,7 +160,7 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 		return err
 	}
 	_, err = r.CreateBranch(ctx, next, branches.Params{
-		Salt: baseBranch.Salt,
+		Salt: baseBranch.Info.Salt,
 	})
 	if err != nil {
 		return err
@@ -198,7 +182,7 @@ func (r *Repo) History(ctx context.Context, name string, fn func(ref Ref, s Snap
 	if err != nil {
 		return err
 	}
-	return branches.History(ctx, branches.NewGotVC(&branch.Info), branch.Volume, fn)
+	return branch.History(ctx, fn)
 }
 
 func (r *Repo) CleanupBranch(ctx context.Context, name string) error {

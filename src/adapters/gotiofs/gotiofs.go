@@ -11,7 +11,6 @@ import (
 
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/state/posixfs"
@@ -22,31 +21,27 @@ var _ iofs.FS = &FS{}
 
 // FS implements io/fs.FS
 type FS struct {
-	ctx   context.Context
-	gotvc *gotvc.Machine
-	gotfs *gotfs.Machine
-	vol   branches.Volume
+	ctx    context.Context
+	branch branches.Branch
 }
 
-func New(ctx context.Context, info branches.Info, v branches.Volume) *FS {
+func New(ctx context.Context, b branches.Branch) *FS {
 	return &FS{
-		ctx:   ctx,
-		gotvc: branches.NewGotVC(&info),
-		gotfs: branches.NewGotFS(&info, gotfs.WithMetaCacheSize(128), gotfs.WithContentCacheSize(16)),
-		vol:   v,
+		ctx:    ctx,
+		branch: b,
 	}
 }
 
 func (s *FS) Open(name string) (iofs.File, error) {
 	logctx.Infof(s.ctx, "open %q", name)
-	snap, tx, err := branches.GetHead(s.ctx, s.vol)
+	snap, tx, err := s.branch.GetHead(s.ctx)
 	if err != nil {
 		return nil, err
 	}
 	if snap == nil {
 		return nil, iofs.ErrNotExist
 	}
-	fsag := s.gotfs
+	fsag := s.branch.GotFS()
 	if _, err := fsag.GetInfo(s.ctx, tx, snap.Root, name); err != nil {
 		return nil, convertError(err)
 	}

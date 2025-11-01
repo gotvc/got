@@ -15,8 +15,6 @@ import (
 	"github.com/gotvc/got/src/internal/volumes"
 )
 
-const maxRetries = 10
-
 type Snap = gotvc.Snap
 
 type (

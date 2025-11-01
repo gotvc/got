@@ -53,13 +53,13 @@ func (r layered) Set(ctx context.Context, k string, cfg Params) error {
 	return layer.Target.Set(ctx, k[l:], cfg)
 }
 
-func (r layered) Get(ctx context.Context, k string) (*Info, error) {
+func (r layered) Inspect(ctx context.Context, k string) (*Info, error) {
 	layer, err := r.find(k)
 	if err != nil {
 		return nil, ErrNotExist
 	}
 	l := len(layer.Prefix)
-	return layer.Target.Get(ctx, k[l:])
+	return layer.Target.Inspect(ctx, k[l:])
 }
 
 func (r layered) List(ctx context.Context, span Span, limit int) (ret []string, _ error) {
@@ -89,7 +89,7 @@ func (r layered) List(ctx context.Context, span Span, limit int) (ret []string, 
 	return ret, err
 }
 
-func (s layered) Open(ctx context.Context, k string) (Volume, error) {
+func (s layered) Open(ctx context.Context, k string) (*Branch, error) {
 	layer, err := s.find(k)
 	if err != nil {
 		return nil, err

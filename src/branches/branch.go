@@ -3,7 +3,7 @@ package branches
 import (
 	"context"
 	"crypto/rand"
-	"fmt"
+	"encoding/hex"
 	"strings"
 
 	"github.com/gotvc/got/src/gdat"
@@ -15,16 +15,18 @@ import (
 	"golang.org/x/exp/slices"
 )
 
+// Info is the metadata associated with a branch.
 type Info struct {
-	Salt        []byte       `json:"salt"`
+	// Salt is a 32-byte salt used to derive the cryptographic keys for the branch.
+	Salt Salt `json:"salt"`
+	// Annotations are arbitrary metadata associated with the branch.
 	Annotations []Annotation `json:"annotations"`
-
+	// CreatedAt is the time the branch was created.
 	CreatedAt tai64.TAI64 `json:"created_at"`
 }
 
 func (i Info) Clone() Info {
 	i2 := i
-	i2.Salt = slices.Clone(i2.Salt)
 	i2.Annotations = slices.Clone(i2.Annotations)
 	return i2
 }
@@ -33,9 +35,25 @@ func (i Info) AsConfig() Params {
 	return Params{Salt: i.Salt, Annotations: i.Annotations}
 }
 
+// Salt is a 32-byte salt
+type Salt [32]byte
+
+func (s Salt) MarshalText() ([]byte, error) {
+	return []byte(hex.EncodeToString(s[:])), nil
+}
+
+func (s *Salt) UnmarshalText(data []byte) error {
+	_, err := hex.Decode(s[:], data)
+	return err
+}
+
+func (s *Salt) String() string {
+	return hex.EncodeToString(s[:])
+}
+
 // Params is non-volume, user-modifiable information associated with a branch.
 type Params struct {
-	Salt        []byte       `json:"salt"`
+	Salt        Salt         `json:"salt"`
 	Annotations []Annotation `json:"annotations"`
 }
 
@@ -44,10 +62,9 @@ func (c Params) AsInfo() Info {
 }
 
 func NewConfig(public bool) Params {
-	var salt []byte
+	var salt Salt
 	if !public {
-		salt = make([]byte, 32)
-		readRandom(salt)
+		readRandom(salt[:])
 	}
 	return Params{
 		Salt: salt,
@@ -57,7 +74,7 @@ func NewConfig(public bool) Params {
 // Clone returns a deep copy of md
 func (c Params) Clone() Params {
 	return Params{
-		Salt:        slices.Clone(c.Salt),
+		Salt:        c.Salt,
 		Annotations: slices.Clone(c.Annotations),
 	}
 }
@@ -87,57 +104,48 @@ func GetAnnotation(as []Annotation, key string) (ret []Annotation) {
 	return ret
 }
 
-type Mode uint8
+// Branch associates metadata with a Volume.
+type Branch struct {
+	Volume Volume
+	Info   Info
 
-const (
-	ModeFrozen = iota
-	ModeExpand
-	ModeShrink
-)
+	gotvc *gotvc.Machine
+	gotfs *gotfs.Machine
+}
 
-func (m Mode) MarshalText() ([]byte, error) {
-	switch m {
-	case ModeFrozen:
-		return []byte("FROZEN"), nil
-	case ModeExpand:
-		return []byte("EXPAND"), nil
-	case ModeShrink:
-		return []byte("SHRINK"), nil
-	default:
-		return nil, fmt.Errorf("Mode(INVALID, %d)", m)
+func (b *Branch) init() {
+	if b.gotvc == nil {
+		b.gotvc = newGotVC(&b.Info)
+	}
+	if b.gotfs == nil {
+		b.gotfs = newGotFS(&b.Info)
 	}
 }
 
-func (m *Mode) UnmarshalText(data []byte) error {
-	switch string(data) {
-	case "FROZEN":
-		*m = ModeFrozen
-	case "EXPAND":
-		*m = ModeExpand
-	case "SHRINK":
-		*m = ModeShrink
-	default:
-		return fmt.Errorf("invalid mode %q", data)
-	}
-	return nil
+func (b *Branch) GotFS() *gotfs.Machine {
+	b.init()
+	return b.gotfs
 }
 
-func (m Mode) String() string {
-	switch m {
-	case ModeFrozen:
-		return "FROZEN"
-	case ModeExpand:
-		return "EXPAND"
-	case ModeShrink:
-		return "SHRINK"
-	default:
-		return fmt.Sprintf("Mode(INVALID, %d)", m)
+func (b *Branch) GotVC() *gotvc.Machine {
+	b.init()
+	return b.gotvc
+}
+
+func (b *Branch) AsParams() Params {
+	return Params{
+		Salt:        b.Info.Salt,
+		Annotations: b.Info.Annotations,
 	}
+}
+
+func (b *Branch) GetHead(ctx context.Context) (*Snap, Tx, error) {
+	return getSnapshot(ctx, b.Volume)
 }
 
 // SetHead forcibly sets the head of the branch.
-func SetHead(ctx context.Context, dst Volume, src stores.Reading, snap Snap) error {
-	return applySnapshot(ctx, dst, func(dst stores.RW, x *Snap) (*Snap, error) {
+func (b *Branch) SetHead(ctx context.Context, src stores.Reading, snap Snap) error {
+	return applySnapshot(ctx, b.Volume, func(dst stores.RW, x *Snap) (*Snap, error) {
 		if err := syncStores(ctx, src, dst, snap); err != nil {
 			return nil, err
 		}
@@ -145,15 +153,23 @@ func SetHead(ctx context.Context, dst Volume, src stores.Reading, snap Snap) err
 	})
 }
 
-// GetHead returns the branch head
-func GetHead(ctx context.Context, v Volume) (*Snap, Tx, error) {
-	return getSnapshot(ctx, v)
+// ModifyCtx is the context passed to the modify function.
+type ModifyCtx struct {
+	Store stores.RW
+	Head  *Snap
+	GotVC *gotvc.Machine
+	GotFS *gotfs.Machine
 }
 
-// Apply applies fn to branch, any missing data will be pulled from src.
-func Apply(ctx context.Context, dstVol Volume, src stores.Reading, fn func(stores.RW, *Snap) (*Snap, error)) error {
-	return applySnapshot(ctx, dstVol, func(dst stores.RW, x *Snap) (*Snap, error) {
-		y, err := fn(dst, x)
+func (b *Branch) Modify(ctx context.Context, src stores.Reading, fn func(mctx ModifyCtx) (*Snap, error)) error {
+	b.init()
+	return applySnapshot(ctx, b.Volume, func(dst stores.RW, x *Snap) (*Snap, error) {
+		y, err := fn(ModifyCtx{
+			Store: dst,
+			Head:  x,
+			GotVC: b.gotvc,
+			GotFS: b.gotfs,
+		})
 		if err != nil {
 			return nil, err
 		}
@@ -166,8 +182,9 @@ func Apply(ctx context.Context, dstVol Volume, src stores.Reading, fn func(store
 	})
 }
 
-func History(ctx context.Context, vcag *gotvc.Machine, v Volume, fn func(ref gdat.Ref, snap Snap) error) error {
-	snap, tx, err := GetHead(ctx, v)
+func (b *Branch) History(ctx context.Context, fn func(ref gdat.Ref, snap Snap) error) error {
+	b.init()
+	snap, tx, err := b.GetHead(ctx)
 	if err != nil {
 		return err
 	}
@@ -175,42 +192,46 @@ func History(ctx context.Context, vcag *gotvc.Machine, v Volume, fn func(ref gda
 	if snap == nil {
 		return nil
 	}
-	ref := vcag.RefFromSnapshot(*snap)
+	ref := b.gotvc.RefFromSnapshot(*snap)
 	if err := fn(ref, *snap); err != nil {
 		return err
 	}
-	return vcag.ForEach(ctx, tx, snap.Parents, fn)
+	return b.gotvc.ForEach(ctx, tx, snap.Parents, fn)
+}
+
+func (b *Branch) ViewFS(ctx context.Context, fn func(mach *gotfs.Machine, stores stores.Reading, root gotfs.Root) error) error {
+	b.init()
+	snap, tx, err := b.GetHead(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Abort(ctx)
+	return fn(b.gotfs, tx, snap.Root)
 }
 
 // NewGotFS creates a new gotfs.Machine suitable for writing to the branch
-func NewGotFS(b *Info, opts ...gotfs.Option) *gotfs.Machine {
+func newGotFS(b *Info, opts ...gotfs.Option) *gotfs.Machine {
 	opts = append(opts, gotfs.WithSalt(deriveFSSalt(b)))
 	fsag := gotfs.NewMachine(opts...)
 	return fsag
 }
 
 // NewGotVC creates a new gotvc.Machine suitable for writing to the branch
-func NewGotVC(b *Info, opts ...gotvc.Option) *gotvc.Machine {
+func newGotVC(b *Info, opts ...gotvc.Option) *gotvc.Machine {
 	opts = append(opts, gotvc.WithSalt(deriveVCSalt(b)))
 	return gotvc.NewMachine(opts...)
 }
 
 func deriveFSSalt(b *Info) *[32]byte {
 	var out [32]byte
-	gdat.DeriveKey(out[:], saltFromBytes(b.Salt), []byte("gotfs"))
+	gdat.DeriveKey(out[:], (*[32]byte)(&b.Salt), []byte("gotfs"))
 	return &out
 }
 
 func deriveVCSalt(b *Info) *[32]byte {
 	var out [32]byte
-	gdat.DeriveKey(out[:], saltFromBytes(b.Salt), []byte("gotvc"))
+	gdat.DeriveKey(out[:], (*[32]byte)(&b.Salt), []byte("gotvc"))
 	return &out
-}
-
-func saltFromBytes(x []byte) *[32]byte {
-	var salt [32]byte
-	copy(salt[:], x)
-	return &salt
 }
 
 // SnapInfo holds additional information about a snapshot.

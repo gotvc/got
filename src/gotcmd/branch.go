@@ -101,8 +101,8 @@ func newBranchCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cfg := dstInfo.AsConfig()
-			cfg.Salt = srcInfo.Salt
+			cfg := dstInfo.AsParams()
+			cfg.Salt = srcInfo.Info.Salt
 			return repo.SetBranch(ctx, dst, cfg)
 		},
 	}

@@ -2,10 +2,8 @@ package gotrepo
 
 import (
 	"context"
-	"fmt"
 	"io"
 
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/stores"
@@ -16,15 +14,9 @@ func (r *Repo) Ls(ctx context.Context, p string, fn func(gotfs.DirEnt) error) er
 	if err != nil {
 		return err
 	}
-	snap, tx, err := branches.GetHead(ctx, branch.Volume)
-	if err != nil {
-		return err
-	}
-	defer tx.Abort(ctx)
-	if snap == nil {
-		return nil
-	}
-	return branches.NewGotFS(&branch.Info).ReadDir(ctx, tx, snap.Root, p, fn)
+	return branch.ViewFS(ctx, func(mach *gotfs.Machine, stores stores.Reading, root gotfs.Root) error {
+		return mach.ReadDir(ctx, stores, root, p, fn)
+	})
 }
 
 func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
@@ -32,22 +24,14 @@ func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	snap, tx, err := branches.GetHead(ctx, branch.Volume)
-	if err != nil {
+	return branch.ViewFS(ctx, func(mach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
+		fr, err := mach.NewReader(ctx, [2]stores.Reading{s, s}, root, p)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(w, fr)
 		return err
-	}
-	defer tx.Abort(ctx)
-	if snap == nil {
-		return fmt.Errorf("branch is empty")
-	}
-	ctx, cf := context.WithCancel(ctx)
-	defer cf()
-	fr, err := branches.NewGotFS(&branch.Info).NewReader(ctx, [2]stores.Reading{tx, tx}, snap.Root, p)
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(w, fr)
-	return err
+	})
 }
 
 func (r *Repo) Stat(ctx context.Context, p string) (*gotfs.Info, error) {
@@ -55,16 +39,15 @@ func (r *Repo) Stat(ctx context.Context, p string) (*gotfs.Info, error) {
 	if err != nil {
 		return nil, err
 	}
-	snap, tx, err := branches.GetHead(ctx, branch.Volume)
-	if err != nil {
+	var info *gotfs.Info
+	if err := branch.ViewFS(ctx, func(mach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
+		var err error
+		info, err = mach.GetInfo(ctx, s, root, p)
+		return err
+	}); err != nil {
 		return nil, err
 	}
-	defer tx.Abort(ctx)
-	if snap == nil {
-		return nil, fmt.Errorf("branch is empty")
-	}
-	fsag := branches.NewGotFS(&branch.Info)
-	return fsag.GetInfo(ctx, tx, snap.Root, p)
+	return info, nil
 }
 
 func (r *Repo) Check(ctx context.Context) error {
@@ -72,7 +55,7 @@ func (r *Repo) Check(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	snap, tx, err := branches.GetHead(ctx, branch.Volume)
+	snap, tx, err := branch.GetHead(ctx)
 	if err != nil {
 		return err
 	}
@@ -80,9 +63,9 @@ func (r *Repo) Check(ctx context.Context) error {
 	if snap == nil {
 		return nil
 	}
-	vcag := branches.NewGotVC(&branch.Info)
+	vcag := branch.GotVC()
 	return vcag.Check(ctx, tx, *snap, func(root gotfs.Root) error {
-		return branches.NewGotFS(&branch.Info).Check(ctx, tx, root, func(ref gdat.Ref) error {
+		return branch.GotFS().Check(ctx, tx, root, func(ref gdat.Ref) error {
 			return nil
 		})
 	})

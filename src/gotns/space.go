@@ -36,7 +36,7 @@ func (bs *Space) Create(ctx context.Context, name string, config branches.Params
 	return &info, nil
 }
 
-func (bs *Space) Get(ctx context.Context, name string) (*branches.Info, error) {
+func (bs *Space) Inspect(ctx context.Context, name string) (*branches.Info, error) {
 	ent, err := bs.client.GetEntry(ctx, bs.volh, name)
 	if err != nil {
 		return nil, err
@@ -47,8 +47,19 @@ func (bs *Space) Get(ctx context.Context, name string) (*branches.Info, error) {
 	return &branches.Info{}, nil
 }
 
-func (bs *Space) Open(ctx context.Context, name string) (branches.Volume, error) {
-	return bs.client.OpenAt(ctx, bs.volh, name)
+func (bs *Space) Open(ctx context.Context, name string) (*branches.Branch, error) {
+	vol, err := bs.client.OpenAt(ctx, bs.volh, name)
+	if err != nil {
+		return nil, err
+	}
+	info, err := bs.Inspect(ctx, name)
+	if err != nil {
+		return nil, err
+	}
+	return &branches.Branch{
+		Volume: vol,
+		Info:   *info,
+	}, nil
 }
 
 func (bs *Space) Delete(ctx context.Context, name string) error {

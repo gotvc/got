@@ -34,9 +34,8 @@ import (
 
 // fs paths
 const (
-	gotPrefix      = ".got"
-	configPath     = ".got/config"
-	privateKeyPath = ".got/private.pem"
+	gotPrefix  = ".got"
+	configPath = ".got/config"
 
 	localDBPath      = ".got/got.db"
 	blobcacheDirPath = ".got/blobcache"
@@ -61,8 +60,6 @@ type Repo struct {
 	bc     blobcache.Service
 	db     *dbutil.Pool
 	config Config
-	// ctx is used as the background context for serving the repo
-	ctx context.Context
 
 	leafPrivate gotns.LeafPrivate
 	workingDir  FS // workingDir is repoFS with reserved paths filtered.
@@ -115,6 +112,8 @@ func Init(p string) error {
 
 func Open(p string) (*Repo, error) {
 	ctx := context.Background()
+	ctx, cf := context.WithCancel(ctx)
+	defer cf()
 	log, _ := zap.NewProduction()
 	ctx = logctx.NewContext(ctx, log)
 
@@ -178,7 +177,6 @@ func Open(p string) (*Repo, error) {
 		bc:          bc,
 		config:      *config,
 		leafPrivate: *leafPrivate,
-		ctx:         ctx,
 		repoc:       reposchema.NewClient(bc),
 		gnsc: gotns.Client{
 			Machine:   gotns.New(),
@@ -201,7 +199,7 @@ func Open(p string) (*Repo, error) {
 		Prefix: "",
 		Target: SpaceSpec{Local: &nsh.OID},
 	})
-	space, err := r.MakeSpace(SpaceSpec{Multi: &spaceSpec})
+	space, err := r.MakeSpace(ctx, SpaceSpec{Multi: &spaceSpec})
 	if err != nil {
 		return nil, err
 	}
@@ -287,11 +285,11 @@ func (r *Repo) Endpoint() blobcache.Endpoint {
 // GotNSVolume returns the FQOID of the namespace volume.
 // This can be used to access the namespace from another Blobcache node.
 func (r *Repo) GotNSVolume(ctx context.Context) (blobcache.FQOID, error) {
-	ep, err := r.bc.Endpoint(r.ctx)
+	ep, err := r.bc.Endpoint(ctx)
 	if err != nil {
 		return blobcache.FQOID{}, err
 	}
-	nsh, err := r.repoc.Namespace(r.ctx)
+	nsh, err := r.repoc.Namespace(ctx)
 	if err != nil {
 		return blobcache.FQOID{}, err
 	}

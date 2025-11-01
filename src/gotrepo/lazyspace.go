@@ -28,12 +28,12 @@ func (ls *lazySpace) Create(ctx context.Context, name string, params branches.Pa
 	return space.Create(ctx, name, params)
 }
 
-func (ls *lazySpace) Get(ctx context.Context, name string) (*branches.Info, error) {
+func (ls *lazySpace) Inspect(ctx context.Context, name string) (*branches.Info, error) {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return nil, err
 	}
-	return space.Get(ctx, name)
+	return space.Inspect(ctx, name)
 }
 
 func (ls *lazySpace) Set(ctx context.Context, name string, md branches.Params) error {
@@ -60,7 +60,7 @@ func (ls *lazySpace) List(ctx context.Context, span branches.Span, limit int) ([
 	return space.List(ctx, span, limit)
 }
 
-func (ls *lazySpace) Open(ctx context.Context, name string) (branches.Volume, error) {
+func (ls *lazySpace) Open(ctx context.Context, name string) (*branches.Branch, error) {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return nil, err

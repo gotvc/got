@@ -26,7 +26,7 @@ func NewMem(newVolume func() volumes.Volume) Space {
 	}
 }
 
-func (r *MemSpace) Get(ctx context.Context, name string) (*Info, error) {
+func (r *MemSpace) Inspect(ctx context.Context, name string) (*Info, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	info, exists := r.infos[name]
@@ -62,7 +62,6 @@ func (r *MemSpace) Set(ctx context.Context, name string, cfg Params) error {
 		return ErrNotExist
 	}
 	info := r.infos[name]
-	info.Salt = slices.Clone(cfg.Salt)
 	info.Annotations = slices.Clone(cfg.Annotations)
 	r.infos[name] = info
 	return nil
@@ -92,12 +91,18 @@ func (r *MemSpace) List(ctx context.Context, span Span, limit int) (ret []string
 	return ret, nil
 }
 
-func (r *MemSpace) Open(ctx context.Context, name string) (Volume, error) {
+func (r *MemSpace) Open(ctx context.Context, name string) (*Branch, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.volumes[name]; !exists {
 		return nil, ErrNotExist
 	}
-	v := r.volumes[name]
-	return v, nil
+	info, exists := r.infos[name]
+	if !exists {
+		return nil, ErrNotExist
+	}
+	return &Branch{
+		Volume: r.volumes[name],
+		Info:   info,
+	}, nil
 }

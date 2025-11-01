@@ -80,10 +80,10 @@ type SpaceSpec struct {
 	Prefix *PrefixSpaceSpec `json:"prefix,omitempty"`
 }
 
-func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
+func (r *Repo) MakeSpace(ctx context.Context, spec SpaceSpec) (Space, error) {
 	switch {
 	case spec.Local != nil:
-		volh, err := r.bc.OpenFiat(r.ctx, *spec.Local, blobcache.Action_ALL)
+		volh, err := r.bc.OpenFiat(ctx, *spec.Local, blobcache.Action_ALL)
 		if err != nil {
 			return nil, err
 		}
@@ -96,14 +96,14 @@ func (r *Repo) MakeSpace(spec SpaceSpec) (Space, error) {
 			layer := branches.Layer{
 				Prefix: spec.Prefix,
 				Target: newLazySpace(func(ctx context.Context) (branches.Space, error) {
-					return r.MakeSpace(spec.Target)
+					return r.MakeSpace(ctx, spec.Target)
 				}),
 			}
 			layers = append(layers, layer)
 		}
 		return branches.NewMultiSpace(layers)
 	case spec.Prefix != nil:
-		inner, err := r.MakeSpace(spec.Prefix.Inner)
+		inner, err := r.MakeSpace(ctx, spec.Prefix.Inner)
 		if err != nil {
 			return nil, err
 		}

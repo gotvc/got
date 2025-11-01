@@ -12,12 +12,12 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 	t.Run("CreateGet", func(t *testing.T) {
 		ctx := testutil.Context(t)
 		x := newSpace(t)
-		b, err := x.Get(ctx, "test")
+		b, err := x.Inspect(ctx, "test")
 		require.ErrorIs(t, err, ErrNotExist)
 		require.Nil(t, b)
 		_, err = x.Create(ctx, "test", Params{})
 		require.NoError(t, err)
-		b, err = x.Get(ctx, "test")
+		b, err = x.Inspect(ctx, "test")
 		require.NoError(t, err)
 		require.NotNil(t, b)
 	})
@@ -44,17 +44,17 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 		_, err = x.Create(ctx, "test2", Params{})
 		require.NoError(t, err)
 
-		_, err = x.Get(ctx, "test1")
+		_, err = x.Inspect(ctx, "test1")
 		require.NoError(t, err)
-		_, err = x.Get(ctx, "test2")
+		_, err = x.Inspect(ctx, "test2")
 		require.NoError(t, err)
 
 		err = x.Delete(ctx, "test1")
 		require.NoError(t, err)
 
-		_, err = x.Get(ctx, "test1")
+		_, err = x.Inspect(ctx, "test1")
 		require.ErrorIs(t, err, ErrNotExist)
-		_, err = x.Get(ctx, "test2")
+		_, err = x.Inspect(ctx, "test2")
 		require.NoError(t, err)
 	})
 }

@@ -18,16 +18,14 @@ import (
 var _ ftpserver.Driver = &Driver{}
 
 type Driver struct {
-	ctx   context.Context
-	vol   branches.Volume
-	gotfs gotfs.Machine
+	ctx    context.Context
+	branch branches.Branch
 }
 
-func NewDriver(ctx context.Context, info branches.Info, vol branches.Volume) *Driver {
+func NewDriver(ctx context.Context, b branches.Branch) *Driver {
 	return &Driver{
-		ctx:   ctx,
-		vol:   vol,
-		gotfs: *branches.NewGotFS(&info),
+		ctx:    ctx,
+		branch: b,
 	}
 }
 
@@ -36,7 +34,7 @@ func (d *Driver) Stat(ctx *ftpserver.Context, p string) (iofs.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return gotiofs.Stat(d.ctx, &d.gotfs, txn, *root, p)
+	return gotiofs.Stat(d.ctx, d.branch.GotFS(), txn, *root, p)
 }
 
 func (d *Driver) GetFile(ctx *ftpserver.Context, p string, off int64) (int64, io.ReadCloser, error) {
@@ -44,15 +42,15 @@ func (d *Driver) GetFile(ctx *ftpserver.Context, p string, off int64) (int64, io
 	if err != nil {
 		return 0, nil, err
 	}
-	tx, err := d.vol.BeginTx(d.ctx, blobcache.TxParams{})
+	tx, err := d.branch.Volume.BeginTx(d.ctx, blobcache.TxParams{})
 	if err != nil {
 		return 0, nil, err
 	}
-	size, err := d.gotfs.SizeOfFile(d.ctx, txn, *root, p)
+	size, err := d.branch.GotFS().SizeOfFile(d.ctx, txn, *root, p)
 	if err != nil {
 		return 0, nil, err
 	}
-	f := gotiofs.NewFile(d.ctx, &d.gotfs, tx, *root, p)
+	f := gotiofs.NewFile(d.ctx, d.branch.GotFS(), tx, *root, p)
 	off2, err := f.Seek(off, io.SeekStart)
 	if err != nil {
 		return 0, nil, err
@@ -73,9 +71,10 @@ func (d *Driver) ListDir(ctx *ftpserver.Context, p string, fn func(iofs.FileInfo
 	if err != nil {
 		return err
 	}
-	return d.gotfs.ReadDir(d.ctx, tx, *root, p, func(de gotfs.DirEnt) error {
+	fsmach := d.branch.GotFS()
+	return fsmach.ReadDir(d.ctx, tx, *root, p, func(de gotfs.DirEnt) error {
 		p2 := path.Join(p, de.Name)
-		finfo, err := gotiofs.Stat(d.ctx, &d.gotfs, tx, *root, p2)
+		finfo, err := gotiofs.Stat(d.ctx, fsmach, tx, *root, p2)
 		if err != nil {
 			return err
 		}
@@ -96,7 +95,7 @@ func (d *Driver) Rename(ctx *ftpserver.Context, oldpath, newpath string) error {
 }
 
 func (d *Driver) getRoot(ctx context.Context) (*gotfs.Root, volumes.Tx, error) {
-	snap, tx, err := branches.GetHead(ctx, d.vol)
+	snap, tx, err := d.branch.GetHead(ctx)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -22,8 +22,8 @@ func (s PrefixSpace) Create(ctx context.Context, k string, cfg Params) (*Info, e
 	return s.Target.Create(ctx, s.downward(k), cfg)
 }
 
-func (s PrefixSpace) Get(ctx context.Context, k string) (*Info, error) {
-	return s.Target.Get(ctx, s.downward(k))
+func (s PrefixSpace) Inspect(ctx context.Context, k string) (*Info, error) {
+	return s.Target.Inspect(ctx, s.downward(k))
 }
 
 func (s PrefixSpace) Set(ctx context.Context, k string, cfg Params) error {
@@ -57,7 +57,7 @@ func (s PrefixSpace) List(ctx context.Context, span Span, limit int) ([]string, 
 	return names, nil
 }
 
-func (s PrefixSpace) Open(ctx context.Context, name string) (Volume, error) {
+func (s PrefixSpace) Open(ctx context.Context, name string) (*Branch, error) {
 	return s.Target.Open(ctx, s.downward(name))
 }
 

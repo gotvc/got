@@ -66,17 +66,17 @@ func (s Span) Contains(x string) bool {
 // A Space holds named branches.
 type Space interface {
 	Create(ctx context.Context, name string, cfg Params) (*Info, error)
-	Get(ctx context.Context, name string) (*Info, error)
+	Inspect(ctx context.Context, name string) (*Info, error)
 	Set(ctx context.Context, name string, cfg Params) error
 	Delete(ctx context.Context, name string) error
 	List(ctx context.Context, span Span, limit int) ([]string, error)
 
 	// Open returns a volume for viewing and modifying the branch contents.
-	Open(ctx context.Context, name string) (Volume, error)
+	Open(ctx context.Context, name string) (*Branch, error)
 }
 
 func CreateIfNotExists(ctx context.Context, r Space, k string, cfg Params) (*Info, error) {
-	branch, err := r.Get(ctx, k)
+	branch, err := r.Inspect(ctx, k)
 	if err != nil {
 		if IsNotExist(err) {
 			return r.Create(ctx, k, cfg)

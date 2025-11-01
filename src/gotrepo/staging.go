@@ -32,11 +32,8 @@ import (
 
 type stagingCtx struct {
 	BranchName string
-	BranchInfo *branches.Info
-	Volume     branches.Volume
+	Branch     branches.Branch
 
-	FSMach   *gotfs.Machine
-	VCMach   *gotvc.Machine
 	Store    stores.RW
 	Stage    *staging.Stage
 	Importer *porting.Importer
@@ -79,16 +76,12 @@ func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error
 		defer stagingStore.Abort(ctx)
 		storePair := [2]stores.RW{stagingStore, stagingStore}
 		dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
-		imp := porting.NewImporter(branches.NewGotFS(&branch.Info), dirState, storePair)
-		exp := porting.NewExporter(branches.NewGotFS(&branch.Info), dirState, r.workingDir)
-		fsMach := branches.NewGotFS(&branch.Info)
+		imp := porting.NewImporter(branch.GotFS(), dirState, storePair)
+		exp := porting.NewExporter(branch.GotFS(), dirState, r.workingDir)
 
 		if err := fn(stagingCtx{
 			BranchName: branchName,
-			BranchInfo: &branch.Info,
-			Volume:     branch.Volume,
-			FSMach:     fsMach,
-			VCMach:     branches.NewGotVC(&branch.Info),
+			Branch:     *branch,
 
 			Stage:    staging.New(sa),
 			Store:    stagingStore,
@@ -117,7 +110,7 @@ func (r *Repo) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) 
 			return err
 		}
 		dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
-		exp := porting.NewExporter(branches.NewGotFS(&branch.Info), dirState, r.workingDir)
+		exp := porting.NewExporter(branch.GotFS(), dirState, r.workingDir)
 		stagingStore, err := r.beginStagingTx(ctx, sa.getSalt(), false)
 		if err != nil {
 			return err
@@ -125,11 +118,7 @@ func (r *Repo) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) 
 		defer stagingStore.Abort(ctx)
 		return fn(stagingCtx{
 			BranchName: branchName,
-			BranchInfo: &branch.Info,
-			Volume:     branch.Volume,
-
-			FSMach: branches.NewGotFS(&branch.Info),
-			VCMach: branches.NewGotVC(&branch.Info),
+			Branch:     *branch,
 
 			Stage:    staging.New(sa),
 			Store:    stagingStore,
@@ -200,13 +189,12 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 // Rm deletes a path known to version control.
 func (r *Repo) Rm(ctx context.Context, paths ...string) error {
 	return r.modifyStaging(ctx, func(sctx stagingCtx) error {
-		vol := sctx.Volume
-		snap, voltx, err := branches.GetHead(ctx, vol)
+		snap, voltx, err := sctx.Branch.GetHead(ctx)
 		if err != nil {
 			return err
 		}
 		defer voltx.Abort(ctx)
-		fsag := sctx.FSMach
+		fsag := sctx.Branch.GotFS()
 		stage := sctx.Stage
 		for _, target := range paths {
 			if snap == nil {
@@ -259,28 +247,26 @@ func (r *Repo) Commit(ctx context.Context, snapInfo branches.SnapInfo) error {
 		defer cf()
 		scratch := sctx.Store
 		stage := sctx.Stage
-		fsMach := sctx.FSMach
-		vcMach := sctx.VCMach
-		if err := branches.Apply(ctx, sctx.Volume, scratch, func(dst stores.RW, x *Snap) (*Snap, error) {
+		if err := sctx.Branch.Modify(ctx, scratch, func(mctx branches.ModifyCtx) (*Snap, error) {
 			var root *Root
-			if x != nil {
-				root = &x.Root
+			if mctx.Head != nil {
+				root = &mctx.Head.Root
 			}
-			s := stores.AddWriteLayer(dst, scratch)
+			s := stores.AddWriteLayer(mctx.Store, scratch)
 			ss := [2]stores.RW{s, s}
-			nextRoot, err := stage.Apply(ctx, fsMach, ss, root)
+			nextRoot, err := stage.Apply(ctx, sctx.Branch.GotFS(), ss, root)
 			if err != nil {
 				return nil, err
 			}
 			var parents []Snap
-			if x != nil {
-				parents = []Snap{*x}
+			if mctx.Head != nil {
+				parents = []Snap{*mctx.Head}
 			}
 			infoJSON, err := json.Marshal(snapInfo)
 			if err != nil {
 				return nil, err
 			}
-			return vcMach.NewSnapshot(ctx, s, parents, *nextRoot, gotvc.SnapParams{
+			return sctx.Branch.GotVC().NewSnapshot(ctx, s, parents, *nextRoot, gotvc.SnapParams{
 				Creator:   sctx.ActingAs.ID,
 				CreatedAt: tai64.Now().TAI64(),
 				Aux:       infoJSON,
@@ -305,9 +291,7 @@ type FileOperation struct {
 func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOperation) error) error {
 	return r.viewStaging(ctx, func(sctx stagingCtx) error {
 		stage := sctx.Stage
-		fsag := sctx.FSMach
-		vol := sctx.Volume
-		snap, voltx, err := branches.GetHead(ctx, vol)
+		snap, voltx, err := sctx.Branch.GetHead(ctx)
 		if err != nil {
 			return err
 		}
@@ -319,7 +303,7 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 		if snap != nil {
 			root = snap.Root
 		} else {
-			rootPtr, err := fsag.NewEmpty(ctx, s)
+			rootPtr, err := sctx.Branch.GotFS().NewEmpty(ctx, s)
 			if err != nil {
 				return err
 			}
@@ -331,7 +315,7 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 			case sop.Delete != nil:
 				op.Delete = sop.Delete
 			case sop.Put != nil:
-				md, err := fsag.GetInfo(ctx, s, root, p)
+				md, err := sctx.Branch.GotFS().GetInfo(ctx, s, root, p)
 				if err != nil && !posixfs.IsErrNotExist(err) {
 					return err
 				}
@@ -351,12 +335,12 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 //  2. the active branch head
 func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) error {
 	return r.viewStaging(ctx, func(sctx stagingCtx) error {
-		snap, voltx, err := branches.GetHead(ctx, sctx.Volume)
+		snap, voltx, err := sctx.Branch.GetHead(ctx)
 		if err != nil {
 			return err
 		}
 		stage := sctx.Stage
-		fsMach := sctx.FSMach
+		fsMach := sctx.Branch.GotFS()
 		defer voltx.Abort(ctx)
 		return posixfs.WalkLeaves(ctx, r.workingDir, "", func(p string, ent posixfs.DirEnt) error {
 			// filter staging
@@ -534,8 +518,5 @@ func scan32Bytes(stmt *sqlite.Stmt, dst *[32]byte) error {
 }
 
 func saltFromBranch(b *branches.Info) *[32]byte {
-	if b.Salt == nil {
-		return new([32]byte)
-	}
-	return (*[32]byte)(b.Salt)
+	return (*[32]byte)(&b.Salt)
 }
