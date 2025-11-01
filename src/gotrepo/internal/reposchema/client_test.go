@@ -7,6 +7,7 @@ import (
 	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gotns"
+	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -51,7 +52,7 @@ func TestClient(t *testing.T) {
 	require.NoError(t, err)
 	defer txn.Abort(ctx)
 	for _, cid := range cids {
-		yes, err := txn.Exists(ctx, cid)
+		yes, err := stores.ExistsUnit(ctx, txn, cid)
 		require.NoError(t, err)
 		require.True(t, yes)
 	}
@@ -59,9 +60,8 @@ func TestClient(t *testing.T) {
 
 func newBlobcache(t testing.TB) blobcache.Service {
 	env := bclocal.NewTestEnv(t)
-
-	env.Schemas[SchemaName_GotRepo] = NewSchema()
-	env.Schemas[SchemaName_GotNS] = gotns.Schema{}
+	env.Schemas[SchemaName_GotRepo] = Constructor
+	env.Schemas[SchemaName_GotNS] = gotns.SchemaConstructor
 	env.Root = GotRepoVolumeSpec()
 	return bclocal.NewTestServiceFromEnv(t, env)
 }

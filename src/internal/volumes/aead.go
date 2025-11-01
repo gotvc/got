@@ -84,8 +84,8 @@ func (tx *AEADTx) Post(ctx context.Context, data []byte) (cid blobcache.CID, err
 	return tx.inner.Post(ctx, data)
 }
 
-func (tx *AEADTx) Exists(ctx context.Context, cid blobcache.CID) (bool, error) {
-	return tx.inner.Exists(ctx, cid)
+func (tx *AEADTx) Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error {
+	return tx.inner.Exists(ctx, cids, dst)
 }
 
 func (tx *AEADTx) Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, error) {

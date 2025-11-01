@@ -11,7 +11,6 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/maybe"
 	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 // Builder is used to construct GotKV instances
@@ -176,7 +175,7 @@ func (a *Machine) MaxEntry(ctx context.Context, s stores.Reading, x Root, span S
 	return &dst, nil
 }
 
-func (a *Machine) HasPrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (bool, error) {
+func (a *Machine) HasPrefix(ctx context.Context, s stores.Reading, x Root, prefix []byte) (bool, error) {
 	if !bytes.HasPrefix(x.First, prefix) {
 		return false, nil
 	}
@@ -199,7 +198,7 @@ func (a *Machine) AddPrefix(x Root, prefix []byte) Root {
 // RemovePrefix removes a prefix from all the keys in instance x.
 // RemotePrefix errors if all the entries in x do not share a common prefix.
 // This is a O(1) operation.
-func (a *Machine) RemovePrefix(ctx context.Context, s cadata.Getter, x Root, prefix []byte) (*Root, error) {
+func (a *Machine) RemovePrefix(ctx context.Context, s stores.RW, x Root, prefix []byte) (*Root, error) {
 	if yes, err := a.HasPrefix(ctx, s, x, prefix); err != nil {
 		return nil, err
 	} else if yes {

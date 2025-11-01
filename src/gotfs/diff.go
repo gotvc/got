@@ -5,8 +5,8 @@ import (
 	"errors"
 
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.uber.org/zap"
 )
@@ -17,7 +17,7 @@ type Differ struct {
 	dent gotkv.DEntry
 }
 
-func (ag *Machine) NewDiffer(ms cadata.Store, left, right Root) *Differ {
+func (ag *Machine) NewDiffer(ms stores.Reading, left, right Root) *Differ {
 	return &Differ{
 		diff: ag.gotkv.NewDiffer(ms, left.ToGotKV(), right.ToGotKV(), gotkv.TotalSpan()),
 	}

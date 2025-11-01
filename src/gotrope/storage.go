@@ -6,7 +6,6 @@ import (
 
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/internal/stores"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 type Storage[R any] interface {
@@ -25,7 +24,7 @@ type storage struct {
 	s stores.Reading
 }
 
-func NewStorage(s cadata.Getter) Storage[blobcache.CID] {
+func NewStorage(s stores.Reading) Storage[blobcache.CID] {
 	return storage{s}
 }
 
@@ -50,10 +49,10 @@ func (s storage) MaxSize() int {
 
 type writeStore struct {
 	storage
-	s cadata.Store
+	s stores.Writing
 }
 
-func NewWriteStorage(s cadata.Store) WriteStorage[blobcache.CID] {
+func NewWriteStorage(s stores.RW) WriteStorage[blobcache.CID] {
 	return writeStore{
 		storage: storage{s},
 		s:       s,

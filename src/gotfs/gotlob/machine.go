@@ -11,7 +11,6 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/units"
 	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 type Option func(a *Machine)
@@ -118,7 +117,7 @@ func (ag *Machine) getExtentF(ctx context.Context, ds stores.Reading, ext *Exten
 	})
 }
 
-func (ag *Machine) readExtent(ctx context.Context, buf []byte, ds cadata.Store, ext *Extent) (int, error) {
+func (ag *Machine) readExtent(ctx context.Context, buf []byte, ds stores.Reading, ext *Extent) (int, error) {
 	n, err := ag.gdat.Read(ctx, ds, ext.Ref, buf)
 	if err != nil {
 		return 0, err
@@ -150,7 +149,7 @@ func (ag *Machine) MaxExtent(ctx context.Context, ms stores.Reading, root Root, 
 	}
 }
 
-func (ag *Machine) MinExtent(ctx context.Context, ms cadata.Store, root Root, span Span) ([]byte, *Extent, error) {
+func (ag *Machine) MinExtent(ctx context.Context, ms stores.Reading, root Root, span Span) ([]byte, *Extent, error) {
 	it := ag.gotkv.NewIterator(ms, root, span)
 	var ent gotkv.Entry
 	for {

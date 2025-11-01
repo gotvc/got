@@ -90,10 +90,10 @@ func TestCreateAt(t *testing.T) {
 
 func newTestService(t *testing.T) *bclocal.Service {
 	env := bclocal.NewTestEnv(t)
-	env.Schemas["gotns"] = Schema{}
+	env.Schemas["gotns"] = SchemaConstructor
 	env.Root = blobcache.DefaultLocalSpec()
 	env.Root.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
-	env.Root.Local.Schema = "gotns"
+	env.Root.Local.Schema = blobcache.SchemaSpec{Name: "gotns"}
 
 	return bclocal.NewTestServiceFromEnv(t, env)
 }

@@ -6,9 +6,8 @@ import (
 	"testing"
 
 	"blobcache.io/blobcache/src/blobcache"
-	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/internal/stores"
 	"github.com/stretchr/testify/require"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 const (
@@ -89,7 +88,7 @@ func newTestRope(t *testing.T, s WriteStorage[Ref], n int) *Root[blobcache.CID] 
 }
 
 func newStore(t testing.TB) WriteStorage[Ref] {
-	s := cadata.NewMem(gdat.Hash, 1<<20)
+	s := stores.NewMem()
 	return writeStore{
 		storage: storage{s},
 		s:       s,

@@ -73,8 +73,15 @@ func (tx *MemoryTx) Post(ctx context.Context, data []byte) (cid blobcache.CID, e
 	return tx.vol.s.Post(ctx, data)
 }
 
-func (tx *MemoryTx) Exists(ctx context.Context, cid blobcache.CID) (bool, error) {
-	return tx.vol.s.Exists(ctx, cid)
+func (tx *MemoryTx) Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error {
+	for i := range dst {
+		exists, err := tx.vol.s.Exists(ctx, cids[i])
+		if err != nil {
+			return err
+		}
+		dst[i] = exists
+	}
+	return nil
 }
 
 func (tx *MemoryTx) Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, error) {

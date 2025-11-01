@@ -337,9 +337,9 @@ func openRemoteBlobcache(privateKey ed25519.PrivateKey, pc net.PacketConn, ep bl
 	return bcremote.New(privateKey, pc, ep), nil
 }
 
-func blobcacheSchemas() map[blobcache.Schema]schema.Schema {
+func blobcacheSchemas() map[blobcache.SchemaName]schema.Constructor {
 	schemas := bclocal.DefaultSchemas()
-	schemas[reposchema.SchemaName_GotRepo] = reposchema.NewSchema()
-	schemas[reposchema.SchemaName_GotNS] = gotns.Schema{}
+	schemas[reposchema.SchemaName_GotRepo] = reposchema.Constructor
+	schemas[reposchema.SchemaName_GotNS] = gotns.SchemaConstructor
 	return schemas
 }

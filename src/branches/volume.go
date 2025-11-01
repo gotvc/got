@@ -103,7 +103,7 @@ func applySnapshot(ctx context.Context, dstVol Volume, fn func(stores.RW, *Snap)
 	var yData []byte
 	if ySnap != nil {
 		// this is a check for dangling references.
-		if err := syncStores(ctx, stores.NewVoid(), tx, *ySnap); err != nil {
+		if err := syncStores(ctx, stores.NewMem(), tx, *ySnap); err != nil {
 			return err
 		}
 		yData, err = json.Marshal(*ySnap)

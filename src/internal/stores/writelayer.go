@@ -3,6 +3,7 @@ package stores
 import (
 	"context"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"go.brendoncarroll.net/state/cadata"
 )
 
@@ -30,19 +31,21 @@ func (wl writeLayer) Get(ctx context.Context, id cadata.ID, buf []byte) (int, er
 	return wl.base.Get(ctx, id, buf)
 }
 
-func (wl writeLayer) Exists(ctx context.Context, id cadata.ID) (bool, error) {
-	exists, err := wl.writeTo.Exists(ctx, id)
-	if err != nil {
-		return false, err
+func (wl writeLayer) Exists(ctx context.Context, ids []blobcache.CID, dst []bool) error {
+	dst2 := make([]bool, len(ids))
+	if err := wl.writeTo.Exists(ctx, ids, dst2); err != nil {
+		return err
 	}
-	if exists {
-		return true, nil
+	for i := range dst {
+		dst[i] = dst2[i]
 	}
-	if e, ok := wl.base.(cadata.Exister); ok {
-		return e.Exists(ctx, id)
-	} else {
-		panic("base store does not support Exists")
+	if err := wl.base.Exists(ctx, ids, dst2); err != nil {
+		return err
 	}
+	for i := range dst {
+		dst[i] = dst2[i]
+	}
+	return nil
 }
 
 func (wl writeLayer) MaxSize() int {

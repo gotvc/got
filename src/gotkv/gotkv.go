@@ -120,7 +120,7 @@ func (a *Machine) Sync(ctx context.Context, src stores.Reading, dst stores.Writi
 	}
 	return do(ctx, rp, x.toPtree(), doer{
 		CanSkip: func(r Root) (bool, error) {
-			return dst.Exists(ctx, r.Ref.CID)
+			return stores.ExistsUnit(ctx, dst, r.Ref.CID)
 		},
 		EntryFn: entryFn,
 		NodeFn: func(r Root) error {

@@ -10,12 +10,11 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 func TestNewEmpty(t *testing.T) {
 	ctx := testutil.Context(t)
-	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
+	s := stores.NewMem()
 	ag := newTestMachine(t)
 	x, err := ag.NewEmpty(ctx, s)
 	require.NoError(t, err)
@@ -69,7 +68,7 @@ func TestPutGetMany(t *testing.T) {
 	}
 }
 
-func testSetup(t *testing.T) (context.Context, cadata.Store, *Root) {
+func testSetup(t *testing.T) (context.Context, stores.RW, *Root) {
 	ctx := testutil.Context(t)
 	ag := newTestMachine(t)
 	s := stores.NewMem()
@@ -84,7 +83,7 @@ func newTestMachine(t testing.TB) Machine {
 
 func BenchmarkPut(b *testing.B) {
 	ctx := testutil.Context(b)
-	s := cadata.NewVoid(cadata.DefaultHash, cadata.DefaultMaxSize)
+	s := stores.NewMem()
 	ag := newTestMachine(b)
 	const M = 100
 

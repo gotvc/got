@@ -7,7 +7,6 @@ import (
 	"os"
 	"strings"
 
-	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/stdctx/logctx"
 
 	"github.com/gotvc/got/src/chunking"
@@ -119,7 +118,7 @@ func (a *Machine) MeanBlobSizeMetadata() int {
 }
 
 // Select returns a new root containing everything under p, shifted to the root.
-func (a *Machine) Select(ctx context.Context, s cadata.Store, root Root, p string) (*Root, error) {
+func (a *Machine) Select(ctx context.Context, s stores.RW, root Root, p string) (*Root, error) {
 	p = cleanPath(p)
 	_, err := a.GetInfo(ctx, s, root, p)
 	if err != nil {
@@ -141,7 +140,7 @@ func (a *Machine) Select(ctx context.Context, s cadata.Store, root Root, p strin
 	return newRoot(y), err
 }
 
-func (a *Machine) deleteOutside(ctx context.Context, s cadata.Store, root gotkv.Root, span gotkv.Span) (*gotkv.Root, error) {
+func (a *Machine) deleteOutside(ctx context.Context, s stores.RW, root gotkv.Root, span gotkv.Span) (*gotkv.Root, error) {
 	x := &root
 	var err error
 	if x, err = a.gotkv.DeleteSpan(ctx, s, *x, gotkv.Span{Begin: nil, End: span.Begin}); err != nil {
@@ -153,7 +152,7 @@ func (a *Machine) deleteOutside(ctx context.Context, s cadata.Store, root gotkv.
 	return x, err
 }
 
-func (a *Machine) ForEach(ctx context.Context, s cadata.Getter, root Root, p string, fn func(p string, md *Info) error) error {
+func (a *Machine) ForEach(ctx context.Context, s stores.Reading, root Root, p string, fn func(p string, md *Info) error) error {
 	p = cleanPath(p)
 	fn2 := func(ent gotkv.Entry) error {
 		if !isExtentKey(ent.Key) {
@@ -174,7 +173,7 @@ func (a *Machine) ForEach(ctx context.Context, s cadata.Getter, root Root, p str
 }
 
 // ForEachLeaf calls fn with each regular file in root, beneath p.
-func (a *Machine) ForEachLeaf(ctx context.Context, s cadata.Getter, root Root, p string, fn func(p string, md *Info) error) error {
+func (a *Machine) ForEachLeaf(ctx context.Context, s stores.Reading, root Root, p string, fn func(p string, md *Info) error) error {
 	return a.ForEach(ctx, s, root, p, func(p string, md *Info) error {
 		if os.FileMode(md.Mode).IsDir() {
 			return nil

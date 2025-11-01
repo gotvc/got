@@ -5,6 +5,7 @@ import (
 	"context"
 
 	"blobcache.io/blobcache/src/blobcache"
+	"blobcache.io/blobcache/src/schema"
 	"go.brendoncarroll.net/state/cadata"
 	"golang.org/x/crypto/blake2b"
 )
@@ -62,24 +63,21 @@ func Hash(x []byte) blobcache.CID {
 	return blake2b.Sum256(x)
 }
 
-func NewMem() *cadata.MemStore {
-	return cadata.NewMem(Hash, 1<<22)
-}
-
-func NewVoid() cadata.Store {
-	return cadata.NewVoid(Hash, 1<<22)
+func NewMem() *schema.MemStore {
+	return schema.NewMem(blobcache.HashAlgo_BLAKE2b_256.HashFunc(), 1<<22)
 }
 
 // Reading is used for read-only operations.
 type Reading interface {
 	Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, error)
+	Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error
 	MaxSize() int
 }
 
 // Writing is used for additive copy-on-write operations.
 type Writing interface {
 	Post(ctx context.Context, data []byte) (blobcache.CID, error)
-	Exists(ctx context.Context, cid blobcache.CID) (bool, error)
+	Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error
 	MaxSize() int
 }
 
@@ -92,7 +90,7 @@ type RW interface {
 type RWD interface {
 	Reading
 	Writing
-	cadata.Deleter
+	Delete(ctx context.Context, cids []blobcache.CID) error
 }
 
 type Exister interface {

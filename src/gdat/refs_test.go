@@ -4,14 +4,14 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 func TestMarshalUnmarshal(t *testing.T) {
 	ctx := testutil.Context(t)
-	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
+	s := stores.NewMem()
 	ag := NewMachine()
 	x, err := ag.Post(ctx, s, []byte("test data"))
 	require.NoError(t, err)

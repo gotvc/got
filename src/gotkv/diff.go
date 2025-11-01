@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"context"
 
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/maybe"
 	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 // DEntry is the delta between 2 Entries
@@ -16,7 +16,7 @@ type DEntry struct {
 	Right maybe.Maybe[[]byte]
 }
 
-func (ag *Machine) NewDiffer(s cadata.Getter, left, right Root, span Span) *Differ {
+func (ag *Machine) NewDiffer(s stores.Reading, left, right Root, span Span) *Differ {
 	return &Differ{
 		left:  ag.NewIterator(s, left, span),
 		right: ag.NewIterator(s, right, span),

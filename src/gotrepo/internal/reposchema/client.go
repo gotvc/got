@@ -148,7 +148,7 @@ func (c *Client) createSubVolume(ctx context.Context, txn *blobcache.Tx, spec bl
 	if err != nil {
 		return nil, err
 	}
-	if err := txn.AllowLink(ctx, *subVol); err != nil {
+	if err := txn.Link(ctx, *subVol, blobcache.Action_ALL); err != nil {
 		return nil, err
 	}
 	return subVol, nil
@@ -229,7 +229,7 @@ func GotRepoVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
 			VolumeParams: blobcache.VolumeParams{
-				Schema:   SchemaName_GotRepo,
+				Schema:   blobcache.SchemaSpec{Name: SchemaName_GotRepo},
 				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
 				MaxSize:  1 << 22,
 				Salted:   false,
@@ -242,7 +242,7 @@ func GotNSVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
 			VolumeParams: blobcache.VolumeParams{
-				Schema:   SchemaName_GotNS,
+				Schema:   blobcache.SchemaSpec{Name: SchemaName_GotNS},
 				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
 				MaxSize:  1 << 22,
 				Salted:   false,
@@ -255,7 +255,7 @@ func StageVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
 			VolumeParams: blobcache.VolumeParams{
-				Schema:   blobcache.Schema_NONE,
+				Schema:   blobcache.SchemaSpec{Name: blobcache.Schema_NONE},
 				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
 				MaxSize:  1 << 22,
 				Salted:   false,
