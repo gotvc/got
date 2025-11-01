@@ -103,7 +103,7 @@ func applySnapshot(ctx context.Context, dstVol Volume, fn func(stores.RW, *Snap)
 	var yData []byte
 	if ySnap != nil {
 		// this is a check for dangling references.
-		if err := syncStores(ctx, stores.NewVoid(), tx, *ySnap); err != nil {
+		if err := syncStores(ctx, stores.NewMem(), tx, *ySnap); err != nil {
 			return err
 		}
 		yData, err = json.Marshal(*ySnap)
@@ -153,7 +153,7 @@ func CleanupVolume(ctx context.Context, vol Volume) error {
 
 func filterStore(ctx context.Context, s cadata.Store, set cadata.Set) (int, error) {
 	var count int
-	err := cadata.ForEach(ctx, s, cadata.Span{}, func(id cadata.ID) error {
+	err := cadata.ForEach(ctx, s, cadata.Span{}, func(id blobcache.CID) error {
 		exists, err := set.Exists(ctx, id)
 		if err != nil {
 			return err

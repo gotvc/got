@@ -4,12 +4,11 @@ package reposchema
 
 import (
 	"context"
+	"encoding/json"
 
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
 	"github.com/gotvc/got/src/gotkv"
-	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 const (
@@ -18,13 +17,19 @@ const (
 )
 
 var (
-	_ schema.Schema    = &Schema{}
-	_ schema.Container = &Schema{}
+	_ schema.Schema = &Schema{}
+	_ schema.Opener = &Schema{}
 )
 
 // Schema implements a Blobcache Schema for a Got Repo.
 type Schema struct {
 	GotKV gotkv.Machine
+}
+
+var _ schema.Constructor = Constructor
+
+func Constructor(params json.RawMessage, mkSchema schema.Factory) (schema.Schema, error) {
+	return NewSchema(), nil
 }
 
 func NewSchema() *Schema {
@@ -34,35 +39,19 @@ func NewSchema() *Schema {
 	return &Schema{GotKV: mach}
 }
 
-func (sch *Schema) Validate(ctx context.Context, s cadata.Getter, prev, next []byte) error {
+func (sch *Schema) ValidateChange(ctx context.Context, change schema.Change) error {
 	var prevRoot, nextRoot gotkv.Root
-	if len(prev) > 0 {
-		if err := prevRoot.Unmarshal(prev); err != nil {
+	if len(change.PrevCell) > 0 {
+		if err := prevRoot.Unmarshal(change.PrevCell); err != nil {
 			return err
 		}
 	}
-	if err := nextRoot.Unmarshal(next); err != nil {
+	if err := nextRoot.Unmarshal(change.NextCell); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (sch *Schema) ReadLinks(ctx context.Context, s cadata.Getter, rootData []byte, dst map[blobcache.OID]blobcache.ActionSet) error {
-	if len(rootData) == 0 {
-		return nil
-	}
-	var root gotkv.Root
-	if err := root.Unmarshal(rootData); err != nil {
-		return err
-	}
-	it := sch.GotKV.NewIterator(s, root, gotkv.Span{})
-	return streams.ForEach(ctx, it, func(ent gotkv.Entry) error {
-		oid := blobcache.OID(ent.Value)
-		dst[oid] = blobcache.Action_ALL
-		return nil
-	})
-}
-
-func (sch *Schema) Open(ctx context.Context, s cadata.Getter, root []byte, peer blobcache.PeerID) (blobcache.ActionSet, error) {
+func (sch *Schema) OpenAs(ctx context.Context, s schema.RO, root []byte, peer blobcache.PeerID) (blobcache.ActionSet, error) {
 	return blobcache.Action_ALL, nil
 }

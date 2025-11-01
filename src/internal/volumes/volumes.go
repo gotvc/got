@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"blobcache.io/blobcache/src/blobcache"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/state/cadata"
 )
 
@@ -22,13 +23,13 @@ type Tx interface {
 	Save(ctx context.Context, src []byte) error
 
 	Post(ctx context.Context, data []byte) (blobcache.CID, error)
-	Exists(ctx context.Context, cid blobcache.CID) (bool, error)
+	Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error
 	Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, error)
 	MaxSize() int
 	Hash(data []byte) blobcache.CID
 }
 
-func Modify(ctx context.Context, vol Volume, fn func(dst cadata.PostExister, x []byte) ([]byte, error)) error {
+func Modify(ctx context.Context, vol Volume, fn func(dst stores.RW, x []byte) ([]byte, error)) error {
 	tx, err := vol.BeginTx(ctx, TxParams{Mutate: true})
 	if err != nil {
 		return err

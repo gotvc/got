@@ -8,8 +8,8 @@ import (
 
 	"github.com/gotvc/got/src/gotfs/gotlob"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 // Delta is the different between two Roots
@@ -39,7 +39,7 @@ type DeltaIterator struct {
 	ent gotkv.Entry
 }
 
-func (ag *Machine) NewDeltaIterator(ms, ds cadata.Store, delta Delta) *DeltaIterator {
+func (ag *Machine) NewDeltaIterator(ms, ds stores.Reading, delta Delta) *DeltaIterator {
 	return &DeltaIterator{
 		iter: ag.gotkv.NewIterator(ms, gotkv.Root(delta), gotkv.TotalSpan()),
 	}
@@ -100,7 +100,7 @@ func (di *DeltaIterator) Next(ctx context.Context, dst *DeltaEntry) error {
 	}
 }
 
-func (ag *Machine) NewDeltaBuilder(ms, ds cadata.Store) *DeltaBuilder {
+func (ag *Machine) NewDeltaBuilder(ms, ds stores.RW) *DeltaBuilder {
 	return &DeltaBuilder{
 		b: ag.gotkv.NewBuilder(ms),
 	}

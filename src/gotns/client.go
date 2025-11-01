@@ -255,7 +255,7 @@ func (c *Client) AddMember(ctx context.Context, volh blobcache.Handle, name stri
 
 func (c *Client) adjustHandle(ctx context.Context, volh blobcache.Handle) (blobcache.Handle, error) {
 	if volh.Secret == ([16]byte{}) {
-		volh, err := c.Blobcache.OpenAs(ctx, nil, volh.OID, blobcache.Action_ALL)
+		volh, err := c.Blobcache.OpenFiat(ctx, volh.OID, blobcache.Action_ALL)
 		if err != nil {
 			return blobcache.Handle{}, err
 		}
@@ -322,7 +322,7 @@ func (c *Client) createSubVolume(ctx context.Context, tx *blobcache.Tx) (*blobca
 	if err != nil {
 		return nil, err
 	}
-	if err := tx.AllowLink(ctx, *volh); err != nil {
+	if err := tx.Link(ctx, *volh, blobcache.Action_ALL); err != nil {
 		return nil, err
 	}
 	return volh, nil
@@ -361,7 +361,7 @@ func BranchVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
 			VolumeParams: blobcache.VolumeParams{
-				Schema:   blobcache.Schema_NONE,
+				Schema:   blobcache.SchemaSpec{Name: blobcache.Schema_NONE},
 				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
 				MaxSize:  1 << 22,
 				Salted:   false,

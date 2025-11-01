@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sort"
 
-	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
 	"go.inet256.org/inet256/src/inet256"
@@ -19,10 +18,9 @@ import (
 )
 
 type (
-	Store = cadata.Store
-	Ref   = gdat.Ref
-	Root  = gotfs.Root
-	Snap  = Snapshot
+	Ref  = gdat.Ref
+	Root = gotfs.Root
+	Snap = Snapshot
 )
 
 type Snapshot struct {
@@ -181,7 +179,7 @@ func (a *Machine) NewSnapshot(ctx context.Context, s stores.Writing, parents []S
 }
 
 // NewZero creates a new snapshot with no parent
-func (mach *Machine) NewZero(ctx context.Context, s cadata.Store, root Root, sp SnapParams) (*Snapshot, error) {
+func (mach *Machine) NewZero(ctx context.Context, s stores.Writing, root Root, sp SnapParams) (*Snapshot, error) {
 	return mach.NewSnapshot(ctx, s, nil, root, sp)
 }
 
@@ -208,7 +206,7 @@ func (ag *Machine) GetSnapshot(ctx context.Context, s stores.Reading, ref Ref) (
 
 // Squash turns multiple snapshots into one.
 // It preserves the latest version of the data, but destroys versioning granularity
-func (ag *Machine) Squash(ctx context.Context, s Store, x Snapshot, n int) (*Snapshot, error) {
+func (ag *Machine) Squash(ctx context.Context, s stores.RW, x Snapshot, n int) (*Snapshot, error) {
 	if n < 1 {
 		return nil, fmt.Errorf("cannot squash single commit")
 	}
@@ -255,8 +253,8 @@ func parseSnapshot(data []byte) (*Snapshot, error) {
 
 // RefFromSnapshot computes a ref for snap if it was posted to s.
 // It only calls s.Hash and s.MaxSize; it does not mutate s.
-func (ag *Machine) RefFromSnapshot(snap Snapshot, s cadata.Getter) Ref {
-	s2 := cadata.NewVoid(s.Hash, s.MaxSize())
+func (ag *Machine) RefFromSnapshot(snap Snapshot) Ref {
+	s2 := stores.NewVoid()
 	ref, err := ag.PostSnapshot(context.TODO(), s2, snap)
 	if err != nil {
 		panic(err)

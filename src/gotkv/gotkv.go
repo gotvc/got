@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/gotkv/ptree"
@@ -18,9 +19,9 @@ import (
 )
 
 type (
-	Getter = cadata.Getter
-	Store  = cadata.Store
-	ID     = cadata.ID
+	Getter = stores.Reading
+	Store  = stores.RWD
+	ID     = blobcache.CID
 	Ref    = gdat.Ref
 
 	Entry = kvstreams.Entry
@@ -119,7 +120,7 @@ func (a *Machine) Sync(ctx context.Context, src stores.Reading, dst stores.Writi
 	}
 	return do(ctx, rp, x.toPtree(), doer{
 		CanSkip: func(r Root) (bool, error) {
-			return dst.Exists(ctx, r.Ref.CID)
+			return stores.ExistsUnit(ctx, dst, r.Ref.CID)
 		},
 		EntryFn: entryFn,
 		NodeFn: func(r Root) error {
@@ -197,7 +198,7 @@ func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x ptree.Root[Entry
 
 type ptreeGetter struct {
 	ag *gdat.Machine
-	s  cadata.Getter
+	s  stores.Reading
 }
 
 func (s *ptreeGetter) Get(ctx context.Context, ref Ref, buf []byte) (int, error) {

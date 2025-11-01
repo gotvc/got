@@ -5,14 +5,17 @@ import (
 	"io"
 	"math"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/chacha20"
+
+	"github.com/gotvc/got/src/internal/stores"
 )
 
-func Hash(x []byte) cadata.ID {
-	return blake2b.Sum256(x)
+func Hash(x []byte) blobcache.CID {
+	return stores.Hash(x)
 }
 
 // DeriveKey uses the blake2b XOF to fill out.
@@ -52,12 +55,12 @@ func DeriveStream(secret *[32]byte, additional []byte) io.Reader {
 }
 
 // KeyFunc produces a key for a given blob
-type KeyFunc func(ptextHash cadata.ID) DEK
+type KeyFunc func(ptextHash blobcache.CID) DEK
 
 // SaltedConvergent uses salt to generate convergent keys for each blob.
 func SaltedConvergent(salt *[32]byte) KeyFunc {
 	salt = cloneSalt(salt)
-	return func(ptextHash cadata.ID) DEK {
+	return func(ptextHash blobcache.CID) DEK {
 		dek := DEK{}
 		DeriveKey(dek[:], salt, ptextHash[:])
 		return dek
@@ -65,7 +68,7 @@ func SaltedConvergent(salt *[32]byte) KeyFunc {
 }
 
 // Convergent generates a DEK depending only on ptextHash
-func Convergent(ptextHash cadata.ID) DEK {
+func Convergent(ptextHash blobcache.CID) DEK {
 	return DEK(ptextHash)
 }
 
@@ -77,26 +80,26 @@ func (*DEK) String() string {
 	return "{ 32 byte DEK }"
 }
 
-func (a *Machine) postEncrypt(ctx context.Context, s cadata.Poster, keyFunc KeyFunc, data []byte) (cadata.ID, *DEK, error) {
+func (a *Machine) postEncrypt(ctx context.Context, s stores.Writing, keyFunc KeyFunc, data []byte) (blobcache.CID, *DEK, error) {
 	dek := keyFunc(Hash(data))
 	ctext := a.acquire(s.MaxSize())
 	defer a.release(ctext)
 	n := cryptoXOR(dek, ctext, data)
 	id, err := s.Post(ctx, ctext[:n])
 	if err != nil {
-		return cadata.ID{}, nil, err
+		return blobcache.CID{}, nil, err
 	}
 	return id, &dek, nil
 }
 
-func getDecrypt(ctx context.Context, s cadata.Getter, dek DEK, id cadata.ID, buf []byte) (int, error) {
+func getDecrypt(ctx context.Context, s stores.Reading, dek DEK, id blobcache.CID, buf []byte) (int, error) {
 	n, err := s.Get(ctx, id, buf)
 	if err != nil {
 		return 0, err
 	}
 	data := buf[:n]
-	if err := cadata.Check(s.Hash, id, data); err != nil {
-		logctx.Errorf(ctx, "len(data)=%d HAVE: %v WANT: %v", len(data), id, s.Hash(data))
+	if err := cadata.Check(Hash, id, data); err != nil {
+		logctx.Errorf(ctx, "len(data)=%d HAVE: %v WANT: %v", len(data), id, Hash(data))
 		return 0, err
 	}
 	cryptoXOR(dek, data, data)

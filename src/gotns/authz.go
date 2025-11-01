@@ -10,7 +10,6 @@ import (
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
-	"go.brendoncarroll.net/state/cadata"
 	"go.inet256.org/inet256/src/inet256"
 )
 
@@ -297,7 +296,7 @@ func (m *Machine) EnsureObligations(ctx context.Context, s stores.Reading, state
 
 type RuleID = CID
 
-type CID = cadata.ID
+type CID = blobcache.CID
 
 func (m *Machine) addInitialRules(ctx context.Context, s stores.RW, state State, adminGroupName string) (*State, error) {
 	for _, rule := range []Rule{

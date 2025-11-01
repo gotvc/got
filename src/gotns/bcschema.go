@@ -2,60 +2,47 @@ package gotns
 
 import (
 	"context"
+	"encoding/json"
 
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
-	"github.com/gotvc/got/src/branches"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 var (
-	_ schema.Schema    = Schema{}
-	_ schema.Container = Schema{}
+	_ schema.Schema = Schema{}
+	_ schema.Opener = Schema{}
 )
+
+var _ schema.Constructor = SchemaConstructor
+
+func SchemaConstructor(params json.RawMessage, mkSchema schema.Factory) (schema.Schema, error) {
+	return Schema{}, nil
+}
 
 // Schema implements a blobcache Schema for Got Namespaces.
 type Schema struct{}
 
-func (s Schema) Validate(ctx context.Context, src cadata.Getter, prev, next []byte) error {
+func (s Schema) ValidateChange(ctx context.Context, change schema.Change) error {
 	mach := New()
-	if len(prev) == 0 {
-		nextRoot, err := ParseRoot(next)
+	if len(change.PrevCell) == 0 {
+		nextRoot, err := ParseRoot(change.NextCell)
 		if err != nil {
 			return err
 		}
-		return mach.ValidateState(ctx, src, nextRoot.State)
+		return mach.ValidateState(ctx, change.NextStore, nextRoot.State)
 	}
-	prevRoot, err := ParseRoot(prev)
+	prevRoot, err := ParseRoot(change.PrevCell)
 	if err != nil {
 		return err
 	}
-	nextRoot, err := ParseRoot(next)
+	nextRoot, err := ParseRoot(change.NextCell)
 	if err != nil {
 		return err
 	}
-	return mach.led.Validate(ctx, src, prevRoot, nextRoot)
+	return mach.led.Validate(ctx, change.PrevStore, prevRoot, nextRoot)
 }
 
-func (s Schema) ReadLinks(ctx context.Context, src cadata.Getter, rootData []byte, dst map[blobcache.OID]blobcache.ActionSet) error {
-	if len(rootData) == 0 {
-		return nil
-	}
-	root, err := ParseRoot(rootData)
-	if err != nil {
-		return err
-	}
-	mach := New()
-	entries, err := mach.ListEntries(ctx, src, root.State, branches.TotalSpan(), 0)
-	if err != nil {
-		return err
-	}
-	for _, ent := range entries {
-		dst[ent.Volume] = ent.Rights
-	}
-	return nil
-}
-
-func (s Schema) Open(ctx context.Context, src cadata.Getter, rootData []byte, peer blobcache.PeerID) (blobcache.ActionSet, error) {
+func (s Schema) OpenAs(ctx context.Context, src schema.RO, rootData []byte, peer blobcache.PeerID) (blobcache.ActionSet, error) {
+	// TODO: restrict permission based on read/write access.
 	return blobcache.Action_ALL, nil
 }

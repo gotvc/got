@@ -10,7 +10,6 @@ import (
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/stores"
-	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/tai64"
 	"go.inet256.org/inet256/src/inet256"
 	"golang.org/x/exp/slices"
@@ -137,7 +136,7 @@ func (m Mode) String() string {
 }
 
 // SetHead forcibly sets the head of the branch.
-func SetHead(ctx context.Context, dst Volume, src cadata.Getter, snap Snap) error {
+func SetHead(ctx context.Context, dst Volume, src stores.Reading, snap Snap) error {
 	return applySnapshot(ctx, dst, func(dst stores.RW, x *Snap) (*Snap, error) {
 		if err := syncStores(ctx, src, dst, snap); err != nil {
 			return nil, err
@@ -176,7 +175,7 @@ func History(ctx context.Context, vcag *gotvc.Machine, v Volume, fn func(ref gda
 	if snap == nil {
 		return nil
 	}
-	ref := vcag.RefFromSnapshot(*snap, tx)
+	ref := vcag.RefFromSnapshot(*snap)
 	if err := fn(ref, *snap); err != nil {
 		return err
 	}

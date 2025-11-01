@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/gotvc/got/src/gdat"
+	"blobcache.io/blobcache/src/blobcache"
+	"github.com/gotvc/got/src/internal/stores"
 	"github.com/stretchr/testify/require"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 const (
@@ -16,7 +16,7 @@ const (
 )
 
 func TestEmpty(t *testing.T) {
-	type Ref = cadata.ID
+	type Ref = blobcache.CID
 	s := newStore(t)
 	b := NewBuilder(s, defaultMeanSize, defaultMaxSize, nil)
 	root, err := b.Finish(ctx)
@@ -52,7 +52,7 @@ func TestBuildIterate(t *testing.T) {
 }
 
 func TestCopyAppend(t *testing.T) {
-	type Ref = cadata.ID
+	type Ref = blobcache.CID
 	s := newStore(t)
 	const N = 10000
 	x := newTestRope(t, s, N)
@@ -69,13 +69,13 @@ func TestCopyAppend(t *testing.T) {
 	require.Equal(t, v, string(last.Value))
 }
 
-type Ref = cadata.ID
+type Ref = blobcache.CID
 
 func newTestBuilder(t *testing.T, s WriteStorage[Ref]) *Builder[Ref] {
 	return NewBuilder(s, 1024, defaultMaxSize, nil)
 }
 
-func newTestRope(t *testing.T, s WriteStorage[Ref], n int) *Root[cadata.ID] {
+func newTestRope(t *testing.T, s WriteStorage[Ref], n int) *Root[blobcache.CID] {
 	b := newTestBuilder(t, s)
 	var value []byte
 	for i := 0; i < n; i++ {
@@ -88,7 +88,7 @@ func newTestRope(t *testing.T, s WriteStorage[Ref], n int) *Root[cadata.ID] {
 }
 
 func newStore(t testing.TB) WriteStorage[Ref] {
-	s := cadata.NewMem(gdat.Hash, 1<<20)
+	s := stores.NewMem()
 	return writeStore{
 		storage: storage{s},
 		s:       s,

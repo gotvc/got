@@ -21,7 +21,7 @@ type DirEnt struct {
 
 // NewEmpty creates a new filesystem with an empty root directory
 func (a *Machine) NewEmpty(ctx context.Context, s stores.RW) (*Root, error) {
-	b := a.NewBuilder(ctx, s, stores.NewVoid())
+	b := a.NewBuilder(ctx, s, stores.NewMem())
 	if err := b.Mkdir("/", 0o755); err != nil {
 		return nil, err
 	}

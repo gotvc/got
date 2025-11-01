@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"testing"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 	"go.brendoncarroll.net/exp/streams"
@@ -269,9 +270,9 @@ func TestEmpty(t *testing.T) {
 	}
 }
 
-func newBuilder(t testing.TB, s cadata.Store) *Builder[Entry, cadata.ID] {
+func newBuilder(t testing.TB, s cadata.Store) *Builder[Entry, blobcache.CID] {
 	averageSize := 1 << 12
-	return NewBuilder(BuilderParams[Entry, cadata.ID]{
+	return NewBuilder(BuilderParams[Entry, blobcache.CID]{
 		Store:           s,
 		MeanSize:        averageSize,
 		MaxSize:         s.MaxSize(),
@@ -283,8 +284,8 @@ func newBuilder(t testing.TB, s cadata.Store) *Builder[Entry, cadata.ID] {
 	})
 }
 
-func newIterator(t testing.TB, s cadata.Store, root Root[Entry, cadata.ID], span state.Span[Entry]) *Iterator[Entry, cadata.ID] {
-	return NewIterator(IteratorParams[Entry, cadata.ID]{
+func newIterator(t testing.TB, s cadata.Store, root Root[Entry, blobcache.CID], span state.Span[Entry]) *Iterator[Entry, blobcache.CID] {
+	return NewIterator(IteratorParams[Entry, blobcache.CID]{
 		Store:           s,
 		Compare:         compareEntries,
 		Copy:            copyEntry,

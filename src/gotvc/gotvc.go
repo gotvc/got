@@ -102,7 +102,7 @@ func Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Snap
 	sync = func(snap Snapshot) error {
 		for _, parentRef := range snap.Parents {
 			// Skip if the parent is already copieda.
-			if exists, err := dst.Exists(ctx, parentRef.CID); err != nil {
+			if exists, err := stores.ExistsUnit(ctx, dst, parentRef.CID); err != nil {
 				return err
 			} else if !exists {
 				parent, err := ag.GetSnapshot(ctx, src, parentRef)
@@ -127,7 +127,7 @@ func Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Snap
 	return sync(snap)
 }
 
-// Populate adds all the cadata.IDs reachable from start to set.
+// Populate adds all the blobcache.CIDs reachable from start to set.
 // This will not include the CID for start itself, which has not yet been computed.
 func Populate(ctx context.Context, s stores.Reading, start Snapshot, set stores.Set, rootFn func(gotfs.Root) error) error {
 	for _, parentRef := range start.Parents {

@@ -6,9 +6,10 @@ import (
 	"strconv"
 	"testing"
 
+	"blobcache.io/blobcache/src/schema"
+	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 func TestBuilderMkdir(t *testing.T) {
@@ -48,8 +49,8 @@ func TestBuilderSmallFiles(t *testing.T) {
 	require.LessOrEqual(t, s.Len(), int(N))
 }
 
-func setup(t testing.TB) (context.Context, *Machine, *cadata.MemStore) {
+func setup(t testing.TB) (context.Context, *Machine, *schema.MemStore) {
 	op := NewMachine()
-	s := cadata.NewMem(cadata.DefaultHash, DefaultMaxBlobSize)
+	s := stores.NewMem()
 	return testutil.Context(t), op, s
 }

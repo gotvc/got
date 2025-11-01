@@ -6,15 +6,15 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 func TestAddPrefix(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	s := cadata.NewMem(cadata.DefaultHash, 1<<16)
+	s := stores.NewMem()
 	ag := NewMachine(1<<13, 1<<16)
 	b := ag.NewBuilder(s)
 

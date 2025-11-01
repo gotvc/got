@@ -26,8 +26,8 @@ const MaxLeavesPerGroup = 128
 
 // PutLeaf adds a leaf to the leaves table, overwriting whatever was there.
 // Any unreferenced leaves will be deleted.
-func (m *Machine) PutLeaf(ctx context.Context, s stores.RW, State State, leaf IdentityLeaf) (*State, error) {
-	leafState, err := m.gotkv.Mutate(ctx, s, State.Leaves, putLeaf(leaf))
+func (m *Machine) PutLeaf(ctx context.Context, s stores.Writing, State State, leaf IdentityLeaf) (*State, error) {
+	leafState, err := m.gotkv.Mutate(ctx, s.(stores.RW), State.Leaves, putLeaf(leaf))
 	if err != nil {
 		return nil, err
 	}

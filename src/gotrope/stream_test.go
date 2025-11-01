@@ -6,8 +6,9 @@ import (
 	"strconv"
 	"testing"
 
+	"blobcache.io/blobcache/src/blobcache"
+	"blobcache.io/blobcache/src/schema"
 	"github.com/stretchr/testify/require"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 var ctx = context.Background()
@@ -27,9 +28,9 @@ func TestWriteRead(t *testing.T) {
 		require.NoError(t, err)
 	}
 	require.NoError(t, sw.Flush(ctx))
-	require.Greater(t, s.(writeStore).s.(*cadata.MemStore).Len(), 2)
+	require.Greater(t, s.(writeStore).s.(*schema.MemStore).Len(), 2)
 
-	sr := NewStreamReader[Ref](s, func(context.Context) (*cadata.ID, error) {
+	sr := NewStreamReader[Ref](s, func(context.Context) (*blobcache.CID, error) {
 		if len(refs) == 0 {
 			return nil, nil
 		}

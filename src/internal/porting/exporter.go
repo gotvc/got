@@ -7,7 +7,6 @@ import (
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/stores"
 
-	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/state/kv"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/tai64"
@@ -34,7 +33,7 @@ func NewExporter(gotfs *gotfs.Machine, cache DirState, fsx posixfs.FS) *Exporter
 	}
 }
 
-func (pr *Exporter) ExportFile(ctx context.Context, ms, ds cadata.Store, root gotfs.Root, p string) error {
+func (pr *Exporter) ExportFile(ctx context.Context, ms, ds stores.Reading, root gotfs.Root, p string) error {
 	md, err := pr.gotfs.GetInfo(ctx, ms, root, p)
 	if err != nil {
 		return err

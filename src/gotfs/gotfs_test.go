@@ -7,13 +7,12 @@ import (
 	mrand "math/rand"
 	"testing"
 
-	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 func BenchmarkWrite(b *testing.B) {
-	s := cadata.NewVoid(gdat.Hash, DefaultMaxBlobSize)
+	s := stores.NewMem()
 	ag := NewMachine()
 
 	b.Run("1-1GB", func(b *testing.B) {
