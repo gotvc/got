@@ -13,7 +13,7 @@ func TestSpace(t *testing.T) {
 	ctx := testutil.Context(t)
 	branches.TestSpace(t, func(t testing.TB) branches.Space {
 		dir := t.TempDir()
-		err := Init(dir)
+		err := Init(dir, DefaultConfig())
 		require.NoError(t, err)
 		r, err := Open(dir)
 		require.NoError(t, err)

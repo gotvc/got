@@ -86,7 +86,8 @@ func TestMultiRepoSync(t *testing.T) {
 
 func initRepo(t testing.TB) string {
 	dirpath := t.TempDir()
-	require.NoError(t, gotrepo.Init(dirpath))
+	cfg := gotrepo.DefaultConfig()
+	require.NoError(t, gotrepo.Init(dirpath, cfg))
 	return dirpath
 }
 

@@ -70,7 +70,7 @@ type Repo struct {
 
 // Init initializes a new repo at the given path.
 // If bc is nil, a local blobcache will be created within the .got directory.
-func Init(p string) error {
+func Init(p string, config Config) error {
 	repoDirFS := posixfs.NewDirFS(p)
 	if _, err := repoDirFS.Stat(configPath); posixfs.IsErrNotExist(err) {
 	} else if err != nil {
@@ -82,7 +82,6 @@ func Init(p string) error {
 		return err
 	}
 	// config
-	config := DefaultConfig()
 	if err := SaveConfig(repoDirFS, configPath, config); err != nil {
 		return err
 	}

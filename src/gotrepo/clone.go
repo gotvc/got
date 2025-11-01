@@ -7,8 +7,8 @@ import (
 )
 
 // Clone creates a new Repo at dirPath with origin mapping to the space at URL.
-func Clone(ctx context.Context, u blobcache.FQOID, dirPath string) error {
-	if err := Init(dirPath); err != nil {
+func Clone(ctx context.Context, dirPath string, config Config, u blobcache.FQOID) error {
+	if err := Init(dirPath, config); err != nil {
 		return err
 	}
 	spaceSpec, err := spaceSpecFromURL(u)

@@ -21,7 +21,7 @@ func TestRepoInit(t *testing.T) {
 	ctx := testutil.Context(t)
 	dirpath := t.TempDir()
 	t.Log("testing in", dirpath)
-	require.NoError(t, Init(dirpath))
+	require.NoError(t, Init(dirpath, DefaultConfig()))
 	repo, err := Open(dirpath)
 	require.NoError(t, err)
 	require.NotNil(t, repo)
@@ -136,7 +136,7 @@ func TestFork(t *testing.T) {
 func newTestRepo(t testing.TB) *Repo {
 	dirpath := t.TempDir()
 	t.Log("testing in", dirpath)
-	require.NoError(t, Init(dirpath))
+	require.NoError(t, Init(dirpath, DefaultConfig()))
 	repo, err := Open(dirpath)
 	require.NoError(t, err)
 	require.NotNil(t, repo)

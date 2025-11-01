@@ -12,7 +12,8 @@ func newInitCmd() *cobra.Command {
 		Use:   "init",
 		Short: "initializes a repository in the current directory",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if err := gotrepo.Init("."); err != nil {
+			config := gotrepo.DefaultConfig()
+			if err := gotrepo.Init(".", config); err != nil {
 				return err
 			}
 			w := cmd.ErrOrStderr()
