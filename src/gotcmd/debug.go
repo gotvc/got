@@ -1,28 +1,35 @@
 package gotcmd
 
 import (
-	"github.com/gotvc/got/src/gotrepo"
-	"github.com/spf13/cobra"
+	"go.brendoncarroll.net/star"
 )
 
-func newDebugCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
-	var repo *gotrepo.Repo
-	return &cobra.Command{
-		Use:      "debug",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		Hidden:   true,
-		Args:     cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			p := args[0]
-			switch p {
-			case "fs":
-				return repo.DebugFS(ctx, cmd.OutOrStdout())
-			case "kv":
-				return repo.DebugKV(ctx, cmd.OutOrStdout())
-			default:
-				return nil
-			}
-		},
-	}
+var debugCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "debug commands",
+	},
+	Pos: []star.Positional{debugTypeParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		p := debugTypeParam.Load(c)
+		switch p {
+		case "fs":
+			return repo.DebugFS(ctx, c.StdOut)
+		case "kv":
+			return repo.DebugKV(ctx, c.StdOut)
+		default:
+			return nil
+		}
+	},
+}
+
+var debugTypeParam = star.Required[string]{
+	ID:       "type",
+	ShortDoc: "the type of debug to run",
+	Parse:    star.ParseString,
 }

@@ -3,95 +3,113 @@ package gotcmd
 import (
 	"fmt"
 
-	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/internal/metrics"
-	"github.com/spf13/cobra"
+	"go.brendoncarroll.net/star"
 )
 
-func newAddCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
-	var repo *gotrepo.Repo
-	return &cobra.Command{
-		Use:      "add",
-		Short:    "adds paths to the staging area",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		Args:     cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) < 1 {
-				return fmt.Errorf("path argument required")
-			}
-			r := metrics.NewTTYRenderer(collector, cmd.OutOrStdout())
-			defer r.Close()
-			return repo.Add(ctx, args...)
-		},
-	}
+var addCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "adds paths to the staging area",
+	},
+	Pos: []star.Positional{pathsParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		paths := pathsParam.Load(c)
+		if len(paths) < 1 {
+			return fmt.Errorf("path argument required")
+		}
+		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
+		defer r.Close()
+		return repo.Add(ctx, paths...)
+	},
 }
 
-func newRmCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
-	var repo *gotrepo.Repo
-	return &cobra.Command{
-		Use:      "rm",
-		Short:    "stages paths for deletion",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		Args:     cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) < 1 {
-				return fmt.Errorf("path argument required")
-			}
-			r := metrics.NewTTYRenderer(collector, cmd.OutOrStdout())
-			defer r.Close()
-			return repo.Rm(ctx, args...)
-		},
-	}
+var rmCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "stages paths for deletion",
+	},
+	Pos: []star.Positional{pathsParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		paths := pathsParam.Load(c)
+		if len(paths) < 1 {
+			return fmt.Errorf("path argument required")
+		}
+		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
+		defer r.Close()
+		return repo.Rm(ctx, paths...)
+	},
 }
 
-func newPutCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
-	var repo *gotrepo.Repo
-	return &cobra.Command{
-		Use:      "put",
-		Short:    "stages paths for replacement",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		Args:     cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) < 1 {
-				return fmt.Errorf("path argument required")
-			}
-			r := metrics.NewTTYRenderer(collector, cmd.OutOrStdout())
-			defer r.Close()
-			return repo.Put(ctx, args...)
-		},
-	}
+var putCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "stages paths for replacement",
+	},
+	Pos: []star.Positional{pathsParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		paths := pathsParam.Load(c)
+		if len(paths) < 1 {
+			return fmt.Errorf("path argument required")
+		}
+		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
+		defer r.Close()
+		return repo.Put(ctx, paths...)
+	},
 }
 
-func newDiscardCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
-	var repo *gotrepo.Repo
-	return &cobra.Command{
-		Use:      "discard",
-		Short:    "discards any changes staged for a path",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		Args:     cobra.MinimumNArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) < 1 {
-				return fmt.Errorf("path argument required")
-			}
-			return repo.Discard(ctx, args...)
-		},
-	}
+var discardCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "discards any changes staged for a path",
+	},
+	Pos: []star.Positional{pathsParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		paths := pathsParam.Load(c)
+		if len(paths) < 1 {
+			return fmt.Errorf("path argument required")
+		}
+		return repo.Discard(ctx, paths...)
+	},
 }
 
-func newClearCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
-	var repo *gotrepo.Repo
-	return &cobra.Command{
-		Use:      "clear",
-		Short:    "clears the staging area",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		Args:     cobra.ExactArgs(0),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			return repo.Clear(ctx)
-		},
-	}
+var clearCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "clears the staging area",
+	},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		return repo.Clear(ctx)
+	},
+}
+
+var pathsParam = star.Repeated[string]{
+	ID:       "paths",
+	ShortDoc: "one or more paths to add, remove, put, or discard",
+	Parse:    star.ParseString,
 }

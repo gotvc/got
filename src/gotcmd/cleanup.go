@@ -1,22 +1,23 @@
 package gotcmd
 
 import (
-	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/internal/metrics"
-	"github.com/spf13/cobra"
+	"go.brendoncarroll.net/star"
 )
 
-func newCleanupCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
-	var repo *gotrepo.Repo
-	return &cobra.Command{
-		Use:      "cleanup",
-		Short:    "cleanup cleans up unreferenced data associated with branches",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			ctx, cf := metrics.Child(ctx, "cleanup")
-			defer cf()
-			return repo.Cleanup(ctx)
-		},
-	}
+var cleanupCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "cleanup cleans up unreferenced data associated with branches",
+	},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		ctx, cf := metrics.Child(ctx, "cleanup")
+		defer cf()
+		return repo.Cleanup(ctx)
+	},
 }

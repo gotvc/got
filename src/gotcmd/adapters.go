@@ -4,67 +4,75 @@ import (
 	"net"
 	"net/http"
 
-	"github.com/spf13/cobra"
+	"go.brendoncarroll.net/star"
 	"go.brendoncarroll.net/stdctx/logctx"
 	ftpserver "goftp.io/server/v2"
 
 	"github.com/gotvc/got/src/adapters/gotftp"
 	"github.com/gotvc/got/src/adapters/gotiofs"
-	"github.com/gotvc/got/src/gotrepo"
 )
 
-func newHTTPCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
-	c := &cobra.Command{
-		Use:   "http [branch]",
+var httpCmd = star.Command{
+	Metadata: star.Metadata{
 		Short: "serve files over HTTP",
-	}
-	laddr := c.Flags().String("addr", "127.0.0.1:6006", "--addr 127.0.0.1:12345")
-	c.RunE = func(cmd *cobra.Command, args []string) error {
-		var branchName string
-		if len(args) > 0 {
-			branchName = args[0]
-		}
-		repo, err := open()
+	},
+	Pos: []star.Positional{branchNameOptParam},
+	Flags: map[string]star.Flag{
+		"addr": addrParam,
+	},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
 		if err != nil {
 			return err
 		}
+		defer repo.Close()
+		branchName, _ := branchNameOptParam.LoadOpt(c)
 		b, err := repo.GetBranch(ctx, branchName)
 		if err != nil {
 			return err
 		}
 		fs := gotiofs.New(ctx, *b)
 		h := http.FileServer(http.FS(fs))
-		l, err := net.Listen("tcp", *laddr)
+		addr, _ := addrParam.LoadOpt(c)
+		if addr == "" {
+			addr = "127.0.0.1:6006"
+		}
+		l, err := net.Listen("tcp", addr)
 		if err != nil {
 			return err
 		}
 		defer l.Close()
 		logctx.Infof(ctx, "serving on http://%v", l.Addr())
 		return http.Serve(l, h)
-	}
-	return c
+	},
 }
 
-func newFTPCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
-	c := &cobra.Command{
-		Use:   "ftp [branch]",
+var ftpCmd = star.Command{
+	Metadata: star.Metadata{
 		Short: "serve files over FTP",
-	}
-	laddr := c.Flags().String("addr", "127.0.0.1:6006", "--addr 127.0.0.1:12345")
-	c.RunE = func(cmd *cobra.Command, args []string) error {
-		var branchName string
-		if len(args) > 0 {
-			branchName = args[0]
-		}
-		repo, err := open()
+	},
+	Pos: []star.Positional{branchNameOptParam},
+	Flags: map[string]star.Flag{
+		"addr": addrParam,
+	},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
 		if err != nil {
 			return err
 		}
+		defer repo.Close()
+		branchName, _ := branchNameOptParam.LoadOpt(c)
 		b, err := repo.GetBranch(ctx, branchName)
 		if err != nil {
 			return err
 		}
-		l, err := net.Listen("tcp", *laddr)
+		addr, _ := addrParam.LoadOpt(c)
+		if addr == "" {
+			addr = "127.0.0.1:6006"
+		}
+		l, err := net.Listen("tcp", addr)
 		if err != nil {
 			return err
 		}
@@ -79,8 +87,13 @@ func newFTPCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
 		}
 		logctx.Infof(ctx, "serving on ftp://%v", l.Addr())
 		return s.Serve(l)
-	}
-	return c
+	},
+}
+
+var addrParam = star.Optional[string]{
+	ID:       "addr",
+	ShortDoc: "the address to serve on",
+	Parse:    star.ParseString,
 }
 
 type ftpAuth struct {

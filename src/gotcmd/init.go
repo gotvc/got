@@ -1,24 +1,20 @@
 package gotcmd
 
 import (
-	"fmt"
-
 	"github.com/gotvc/got/src/gotrepo"
-	"github.com/spf13/cobra"
+	"go.brendoncarroll.net/star"
 )
 
-func newInitCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "init",
+var initCmd = star.Command{
+	Metadata: star.Metadata{
 		Short: "initializes a repository in the current directory",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			config := gotrepo.DefaultConfig()
-			if err := gotrepo.Init(".", config); err != nil {
-				return err
-			}
-			w := cmd.ErrOrStderr()
-			fmt.Fprintln(w, "successfully initialized got repo in current directory")
-			return nil
-		},
-	}
+	},
+	F: func(c star.Context) error {
+		config := gotrepo.DefaultConfig()
+		if err := gotrepo.Init(".", config); err != nil {
+			return err
+		}
+		c.Printf("successfully initialized got repo in current directory\n")
+		return nil
+	},
 }
