@@ -168,6 +168,8 @@ func Open(p string) (*Repo, error) {
 			return nil, err
 		}
 		return nil, fmt.Errorf("remote blobcache is not yet supported")
+	default:
+		return nil, fmt.Errorf("empty blobcache spec: %v", config.Blobcache)
 	}
 	r := &Repo{
 		rootPath:    p,

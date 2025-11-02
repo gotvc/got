@@ -6,175 +6,247 @@ import (
 	"io"
 
 	"github.com/gotvc/got/src/branches"
-	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/internal/metrics"
-	"github.com/spf13/cobra"
+	"go.brendoncarroll.net/star"
 )
 
-func newBranchCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
-	var repo *gotrepo.Repo
-	bc := &cobra.Command{
-		Use: "branch",
-	}
-	var createBranchCmd = &cobra.Command{
-		Use:      "create",
-		Short:    "creates a new branch",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		Args:     cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			branchName := args[0]
-			_, err := repo.CreateBranch(ctx, branchName, branches.NewConfig(false))
+var branchCmd = star.NewDir(
+	star.Metadata{
+		Short: "manage branches",
+	}, map[string]star.Command{
+		"create":   branchCreateCmd,
+		"list":     branchListCmd,
+		"delete":   branchDeleteCmd,
+		"get-head": branchGetHeadCmd,
+		"inspect":  branchInspectCmd,
+		"cp-salt":  branchCpSaltCmd,
+	},
+)
+
+var branchCreateCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "creates a new branch",
+	},
+	Pos: []star.Positional{branchNameParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
 			return err
-		},
-	}
-	var listBranchCmd = &cobra.Command{
-		Use:      "list",
-		Short:    "lists the branches",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			w := cmd.OutOrStdout()
-			return repo.ForEachBranch(ctx, func(k string) error {
-				fmt.Fprintf(w, "%s\n", k)
-				return nil
-			})
-		},
-	}
-	var deleteBranchCmd = &cobra.Command{
-		Use:      "delete",
-		Short:    "deletes a branch",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		Args:     cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
-			return repo.DeleteBranch(ctx, name)
-		},
-	}
-	var getBranchHeadCmd = &cobra.Command{
-		Use:      "get-head",
-		Short:    "prints the snapshot at the head of the provided branch",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			var name string
-			if len(args) > 0 {
-				name = args[0]
-
-			}
-			branchHead, err := repo.GetBranchHead(ctx, name)
-			if err != nil {
-				return err
-			}
-			return prettyPrintJSON(cmd.OutOrStdout(), branchHead)
-		},
-	}
-	var inspectCmd = &cobra.Command{
-		Use:      "inspect <branch_name>",
-		Short:    "prints branch metadata",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		Args:     cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			name := args[0]
-			branch, err := repo.GetBranch(ctx, name)
-			if err != nil {
-				return err
-			}
-			return prettyPrintJSON(cmd.OutOrStdout(), branch.Info)
-		},
-	}
-	var cpSaltCmd = &cobra.Command{
-		Use:      "cp-salt",
-		Short:    "copies the salt from one branch to another",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		Args:     cobra.ExactArgs(2),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			src, dst := args[0], args[1]
-			srcInfo, err := repo.GetBranch(ctx, src)
-			if err != nil {
-				return err
-			}
-			dstInfo, err := repo.GetBranch(ctx, dst)
-			if err != nil {
-				return err
-			}
-			cfg := dstInfo.AsParams()
-			cfg.Salt = srcInfo.Info.Salt
-			return repo.SetBranch(ctx, dst, cfg)
-		},
-	}
-	for _, c := range []*cobra.Command{
-		createBranchCmd,
-		listBranchCmd,
-		deleteBranchCmd,
-		getBranchHeadCmd,
-		inspectCmd,
-		cpSaltCmd,
-	} {
-		bc.AddCommand(c)
-	}
-	return bc
+		}
+		defer repo.Close()
+		branchName := branchNameParam.Load(c)
+		_, err = repo.CreateBranch(ctx, branchName, branches.NewConfig(false))
+		return err
+	},
 }
 
-func newActiveCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
-	var repo *gotrepo.Repo
-	return &cobra.Command{
-		Use:      "active",
-		Short:    "print the active branch or sets it",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			if len(args) < 1 {
-				name, _, err := repo.GetActiveBranch(ctx)
-				if err != nil {
-					return err
-				}
-				fmt.Fprintln(cmd.OutOrStdout(), name)
-				return nil
+var branchListCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "lists the branches",
+	},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		return repo.ForEachBranch(ctx, func(k string) error {
+			fmt.Fprintf(c.StdOut, "%s\n", k)
+			return nil
+		})
+	},
+}
+
+var branchDeleteCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "deletes a branch",
+	},
+	Pos: []star.Positional{branchNameParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		name := branchNameParam.Load(c)
+		return repo.DeleteBranch(ctx, name)
+	},
+}
+
+var branchGetHeadCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "prints the snapshot at the head of the provided branch",
+	},
+	Pos: []star.Positional{branchNameOptParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		name, _ := branchNameOptParam.LoadOpt(c)
+		branchHead, err := repo.GetBranchHead(ctx, name)
+		if err != nil {
+			return err
+		}
+		return prettyPrintJSON(c.StdOut, branchHead)
+	},
+}
+
+var branchInspectCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "prints branch metadata",
+	},
+	Pos: []star.Positional{branchNameParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		name := branchNameParam.Load(c)
+		branch, err := repo.GetBranch(ctx, name)
+		if err != nil {
+			return err
+		}
+		return prettyPrintJSON(c.StdOut, branch.Info)
+	},
+}
+
+var branchCpSaltCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "copies the salt from one branch to another",
+	},
+	Pos: []star.Positional{srcBranchParam, dstBranchParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		src := srcBranchParam.Load(c)
+		dst := dstBranchParam.Load(c)
+		srcInfo, err := repo.GetBranch(ctx, src)
+		if err != nil {
+			return err
+		}
+		dstInfo, err := repo.GetBranch(ctx, dst)
+		if err != nil {
+			return err
+		}
+		cfg := dstInfo.AsParams()
+		cfg.Salt = srcInfo.Info.Salt
+		return repo.SetBranch(ctx, dst, cfg)
+	},
+}
+
+var branchNameParam = star.Required[string]{
+	ID:    "branch_name",
+	Parse: star.ParseString,
+}
+
+var branchNameOptParam = star.Optional[string]{
+	ID:    "branch_name",
+	Parse: star.ParseString,
+}
+
+var srcBranchParam = star.Required[string]{
+	ID:    "src",
+	Parse: star.ParseString,
+}
+
+var dstBranchParam = star.Required[string]{
+	ID:    "dst",
+	Parse: star.ParseString,
+}
+
+var activeCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "print the active branch or sets it",
+	},
+	Pos: []star.Positional{branchNameOptParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		name, hasName := branchNameOptParam.LoadOpt(c)
+		if !hasName {
+			name, _, err := repo.GetActiveBranch(ctx)
+			if err != nil {
+				return err
 			}
-			name := args[0]
-			return repo.SetActiveBranch(ctx, name)
-		},
-	}
+			fmt.Fprintln(c.StdOut, name)
+			return nil
+		}
+		return repo.SetActiveBranch(ctx, name)
+	},
 }
 
-func newForkCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
-	var repo *gotrepo.Repo
-	return &cobra.Command{
-		Use:      "fork",
-		Short:    "creates a new branch based off the provided branch",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		Args:     cobra.ExactArgs(1),
-		RunE: func(cmd *cobra.Command, args []string) error {
-			newName := args[0]
-			r := metrics.NewTTYRenderer(collector, cmd.OutOrStdout())
-			defer r.Close()
-			return repo.Fork(ctx, "", newName)
-		},
-	}
-}
-
-func newSyncCmd(open func() (*gotrepo.Repo, error)) *cobra.Command {
-	var repo *gotrepo.Repo
-	c := &cobra.Command{
-		Use:      "sync <src> <dst>",
-		Short:    "syncs the contents of one branch to another",
-		PreRunE:  loadRepo(&repo, open),
-		PostRunE: closeRepo(repo),
-		Args:     cobra.ExactArgs(2),
-	}
-	force := c.Flags().Bool("force", false, "--force")
-	c.RunE = func(cmd *cobra.Command, args []string) error {
-		r := metrics.NewTTYRenderer(collector, cmd.OutOrStdout())
+var forkCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "creates a new branch based off the provided branch",
+	},
+	Pos: []star.Positional{newBranchNameParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		newName := newBranchNameParam.Load(c)
+		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
 		defer r.Close()
-		src, dst := args[0], args[1]
-		return repo.Sync(ctx, src, dst, *force)
-	}
-	return c
+		return repo.Fork(ctx, "", newName)
+	},
+}
+
+var syncCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "syncs the contents of one branch to another",
+	},
+	Pos: []star.Positional{srcBranchParam, dstBranchParam},
+	Flags: map[string]star.Flag{
+		"force": forceParam,
+	},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
+		defer r.Close()
+		src := srcBranchParam.Load(c)
+		dst := dstBranchParam.Load(c)
+		force, _ := forceParam.LoadOpt(c)
+		return repo.Sync(ctx, src, dst, force)
+	},
+}
+
+var newBranchNameParam = star.Required[string]{
+	ID:    "new_name",
+	Parse: star.ParseString,
+}
+
+var forceParam = star.Optional[bool]{
+	ID: "force",
+	Parse: func(s string) (bool, error) {
+		if s == "" || s == "true" {
+			return true, nil
+		}
+		return false, nil
+	},
 }
 
 func prettyPrintJSON(w io.Writer, x interface{}) error {
@@ -185,4 +257,12 @@ func prettyPrintJSON(w io.Writer, x interface{}) error {
 	data = append(data, '\n')
 	_, err = w.Write(data)
 	return err
+}
+
+func prettyJSONString(x json.RawMessage) string {
+	data, err := json.MarshalIndent(x, "", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
