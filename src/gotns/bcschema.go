@@ -6,6 +6,7 @@ import (
 
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
+	"blobcache.io/blobcache/src/schema/statetrace"
 )
 
 var (
@@ -25,17 +26,17 @@ type Schema struct{}
 func (s Schema) ValidateChange(ctx context.Context, change schema.Change) error {
 	mach := New()
 	if len(change.PrevCell) == 0 {
-		nextRoot, err := ParseRoot(change.NextCell)
+		nextRoot, err := statetrace.Parse(change.NextCell, ParseRoot)
 		if err != nil {
 			return err
 		}
-		return mach.ValidateState(ctx, change.NextStore, nextRoot.State)
+		return mach.ValidateState(ctx, change.NextStore, nextRoot.State.Current)
 	}
-	prevRoot, err := ParseRoot(change.PrevCell)
+	prevRoot, err := statetrace.Parse(change.PrevCell, ParseRoot)
 	if err != nil {
 		return err
 	}
-	nextRoot, err := ParseRoot(change.NextCell)
+	nextRoot, err := statetrace.Parse(change.NextCell, ParseRoot)
 	if err != nil {
 		return err
 	}

@@ -67,8 +67,6 @@ var rootCmd = star.NewDir(
 	},
 )
 
-var ()
-
 func openRepo() (*gotrepo.Repo, error) {
 	return gotrepo.Open(".")
 }

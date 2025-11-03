@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"blobcache.io/blobcache/src/schema"
+	"blobcache.io/blobcache/src/schema/statetrace"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.inet256.org/inet256/src/inet256"
@@ -14,8 +16,8 @@ import (
 // And then turned into a single slot change to the ledger.
 type Txn struct {
 	m     *Machine
-	prev  Root
-	s     stores.RW
+	prev  statetrace.Root[Root]
+	s     schema.RW
 	actAs []LeafPrivate
 
 	curState State
@@ -25,14 +27,14 @@ type Txn struct {
 // NewBuilder creates a new delta builder.
 // privateKey is the private key of the actor performing the transaction.
 // It will be used to produce a signature at the end of the transaction.
-func (m *Machine) NewTxn(prev Root, s stores.RW, actAs []LeafPrivate) *Txn {
+func (m *Machine) NewTxn(prev statetrace.Root[Root], s schema.RW, actAs []LeafPrivate) *Txn {
 	return &Txn{
 		m:     m,
 		prev:  prev,
 		s:     s,
 		actAs: actAs,
 
-		curState: prev.State,
+		curState: prev.State.Current,
 		changes:  []Op{},
 	}
 }
@@ -42,7 +44,7 @@ func (tx *Txn) addOp(op Op) {
 }
 
 // Finish applies the changes to the previous root, and returns the new root.
-func (tx *Txn) Finish(ctx context.Context) (Root, error) {
+func (tx *Txn) Finish(ctx context.Context) (statetrace.Root[Root], error) {
 	cs := Op_ChangeSet{
 		Ops: tx.changes,
 	}
@@ -51,10 +53,14 @@ func (tx *Txn) Finish(ctx context.Context) (Root, error) {
 	}
 
 	s2 := stores.AddWriteLayer(tx.s, stores.NewMem())
-	if err := cs.validate(ctx, tx.m, s2, tx.prev.State, tx.curState, IDSet{}); err != nil {
-		return Root{}, err
+	if err := cs.validate(ctx, tx.m, s2, tx.prev.State.Current, tx.curState, IDSet{}); err != nil {
+		return statetrace.Root[Root]{}, err
 	}
-	return tx.m.led.AndThen(ctx, tx.s, tx.prev, Delta(cs), tx.curState)
+	nextRoot := Root{
+		Current: tx.curState,
+		Recent:  Delta(cs),
+	}
+	return tx.m.led.AndThen(ctx, tx.s, tx.prev, nextRoot)
 }
 
 // CreateLeaf creates a new leaf.
@@ -299,7 +305,7 @@ func (cs *Op_ChangeSet) Unmarshal(data []byte) error {
 	// read ops from the beginning.
 	opsLen, n := binary.Uvarint(data)
 	if n <= 0 {
-		return fmt.Errorf("invalid ops length")
+		return fmt.Errorf("invalid ops length len(data)=%d", len(data))
 	}
 	data = data[n:]
 	var ops []Op

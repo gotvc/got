@@ -383,7 +383,7 @@ func unmarshalIDMap(data []byte, dst map[inet256.ID][]byte) error {
 		if err != nil {
 			return err
 		}
-		if len(ent) < 32 {
+		if len(ent) < inet256.AddrSize {
 			return fmt.Errorf("map entry cannot be less than 32 bytes. %d", len(ent))
 		}
 		id := inet256.IDFromBytes(ent[:32])
@@ -391,7 +391,7 @@ func unmarshalIDMap(data []byte, dst map[inet256.ID][]byte) error {
 			return fmt.Errorf("leaves are not sorted")
 		}
 		// insert into the map
-		dst[id] = ent[32:]
+		dst[id] = ent[inet256.AddrSize:]
 
 		lastID = id
 		data = rest

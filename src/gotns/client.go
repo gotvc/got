@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"blobcache.io/blobcache/src/blobcache"
+	"blobcache.io/blobcache/src/schema/statetrace"
 	"github.com/cloudflare/circl/kem"
 	dilithium3 "github.com/cloudflare/circl/sign/dilithium/mode3"
 	"github.com/gotvc/got/src/branches"
@@ -172,7 +173,7 @@ func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string
 	if err := tx.Load(ctx, &rootData); err != nil {
 		return err
 	}
-	root, err := ParseRoot(rootData)
+	root, err := statetrace.Parse(rootData, ParseRoot)
 	if err != nil {
 		return err
 	}
@@ -228,31 +229,6 @@ func (c *Client) AddLeaf(ctx context.Context, volh blobcache.Handle, leaf Identi
 	panic("not implemented")
 }
 
-// AddMember adds a named identity to a group.
-func (c *Client) AddMember(ctx context.Context, volh blobcache.Handle, name string, member string) error {
-	volh, err := c.adjustHandle(ctx, volh)
-	if err != nil {
-		return err
-	}
-	tx, err := blobcache.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: true})
-	if err != nil {
-		return err
-	}
-	defer tx.Abort(ctx)
-	root, err := loadState(ctx, tx)
-	if err != nil {
-		return err
-	}
-	root, err = c.Machine.AddMember(ctx, tx, *root, name, member)
-	if err != nil {
-		return err
-	}
-	if err := tx.Save(ctx, root.Marshal(nil)); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
 func (c *Client) adjustHandle(ctx context.Context, volh blobcache.Handle) (blobcache.Handle, error) {
 	if volh.Secret == ([16]byte{}) {
 		volh, err := c.Blobcache.OpenFiat(ctx, volh.OID, blobcache.Action_ALL)
@@ -282,7 +258,7 @@ func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv LeafP
 	if err := tx.Load(ctx, &data); err != nil {
 		return err
 	}
-	root, err := ParseRoot(data)
+	root, err := statetrace.Parse(data, ParseRoot)
 	if err != nil {
 		return err
 	}
@@ -349,11 +325,11 @@ func loadState(ctx context.Context, tx *blobcache.Tx) (*State, error) {
 	if err := tx.Load(ctx, &data); err != nil {
 		return nil, err
 	}
-	root, err := ParseRoot(data)
+	root, err := statetrace.Parse(data, ParseRoot)
 	if err != nil {
 		return nil, err
 	}
-	return &root.State, nil
+	return &root.State.Current, nil
 }
 
 // BranchVolumeSpec is the volume spec used for new branches.

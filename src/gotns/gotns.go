@@ -5,19 +5,57 @@ import (
 	"crypto/rand"
 	"fmt"
 
+	"blobcache.io/blobcache/src/schema"
+	"blobcache.io/blobcache/src/schema/statetrace"
 	"github.com/gotvc/got/src/gotkv"
-	"github.com/gotvc/got/src/internal/gotled"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/slices2"
 	"go.inet256.org/inet256/src/inet256"
 )
 
-// Root contains references to the entire state of the namespace, including the history.
-type Root = gotled.Root[State, Delta]
+type Root struct {
+	Version uint8
+	// Current is the state of the world.
+	Current State
+	// Recent is the Delta that was applied most recently
+	// to get to the Current state, from the immediately previous state.
+	Recent Delta
+}
+
+func (r Root) Marshal(out []byte) []byte {
+	out = append(out, r.Version)
+	out = sbe.AppendLP(out, r.Current.Marshal(nil))
+	out = sbe.AppendLP(out, r.Recent.Marshal(nil))
+	return out
+}
 
 func ParseRoot(data []byte) (Root, error) {
-	return gotled.Parse(data, parseState, parseDelta)
+	if len(data) < 1 {
+		return Root{}, fmt.Errorf("gotns: data too short to contain version")
+	}
+	version, data := data[0], data[1:]
+	curData, data, err := sbe.ReadLP(data)
+	if err != nil {
+		return Root{}, err
+	}
+	recData, data, err := sbe.ReadLP(data)
+	if err != nil {
+		return Root{}, err
+	}
+	current, err := parseState(curData)
+	if err != nil {
+		return Root{}, err
+	}
+	recent, err := parseDelta(recData)
+	if err != nil {
+		return Root{}, err
+	}
+	return Root{
+		Version: version,
+		Current: current,
+		Recent:  recent,
+	}, nil
 }
 
 // State represents the current state of a namespace.
@@ -122,23 +160,24 @@ func (d Delta) Marshal(out []byte) []byte {
 
 type Machine struct {
 	gotkv gotkv.Machine
-	led   gotled.Machine[State, Delta]
+	led   statetrace.Machine[Root]
 }
 
 func New() Machine {
 	m := Machine{
 		gotkv: gotkv.NewMachine(1<<14, 1<<20),
-		led: gotled.Machine[State, Delta]{
-			ParseState: parseState,
-			ParseProof: parseDelta,
+		led: statetrace.Machine[Root]{
+			ParseState: ParseRoot,
 		},
 	}
-	m.led.Verify = m.ValidateChange
+	m.led.Verify = func(ctx context.Context, s schema.RO, prev, next Root) error {
+		return m.ValidateChange(ctx, s, prev.Current, next.Current, next.Recent)
+	}
 	return m
 }
 
 // New creates a new root.
-func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (*Root, error) {
+func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (*statetrace.Root[Root], error) {
 	state := new(State)
 	for _, dst := range []*gotkv.Root{&state.Groups, &state.Leaves, &state.Memberships, &state.Rules, &state.Obligations, &state.Branches} {
 		kvr, err := m.gotkv.NewEmpty(ctx, s)
@@ -184,14 +223,18 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 	if err := m.ValidateState(ctx, s, *state); err != nil {
 		panic(err)
 	}
-	root := m.led.Initial(*state)
-	return &root, nil
+	root := Root{
+		Current: *state,
+	}
+	root2 := m.led.Initial(root)
+	return &root2, nil
 }
 
 // ValidateState checks the state in isolation.
 func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State) error {
 	for _, kvr := range []gotkv.Root{x.Leaves, x.Groups, x.Memberships, x.Rules, x.Branches} {
 		if kvr.Ref.CID.IsZero() {
+			panic("uninitializec")
 			return fmt.Errorf("gotns: one of the States is uninitialized")
 		}
 	}
@@ -200,7 +243,7 @@ func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State
 
 // ValidateChange checks the change between two states.
 // Prev is assumed to be a known good, valid state.
-func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, next State, proof Delta) error {
+func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, next State, delta Delta) error {
 	if err := m.ValidateState(ctx, src, next); err != nil {
 		return err
 	}
