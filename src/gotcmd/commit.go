@@ -55,7 +55,7 @@ var historyCmd = star.Command{
 				fmt.Fprintf(pw, "#%04d\t%v\n", snap.N, ref.CID)
 				fmt.Fprintf(pw, "Created At: %v\n", snap.CreatedAt.GoTime().Local().String())
 				fmt.Fprintf(pw, "Created By: %v\n", snap.Creator)
-				pw.Write([]byte(prettyJSONString(snap.Aux)))
+				pw.Write([]byte(prettifyJSON(snap.Aux)))
 				fmt.Fprintln(pw)
 				return nil
 			})

@@ -249,7 +249,7 @@ var forceParam = star.Optional[bool]{
 	},
 }
 
-func prettyPrintJSON(w io.Writer, x interface{}) error {
+func prettyPrintJSON(w io.Writer, x any) error {
 	data, err := json.MarshalIndent(x, "", "  ")
 	if err != nil {
 		return err
@@ -259,7 +259,7 @@ func prettyPrintJSON(w io.Writer, x interface{}) error {
 	return err
 }
 
-func prettyJSONString(x json.RawMessage) string {
+func prettifyJSON(x json.RawMessage) string {
 	data, err := json.MarshalIndent(x, "", "  ")
 	if err != nil {
 		return ""

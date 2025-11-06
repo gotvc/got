@@ -89,7 +89,6 @@ func Init(p string, config Config) error {
 	if err != nil {
 		return err
 	}
-
 	return r.Close()
 }
 
@@ -336,4 +335,10 @@ func blobcacheSchemas() map[blobcache.SchemaName]schema.Constructor {
 	schemas[reposchema.SchemaName_GotRepo] = reposchema.Constructor
 	schemas[reposchema.SchemaName_GotNS] = gotns.SchemaConstructor
 	return schemas
+}
+
+// RepoVolumeSpec returns a Blobcache Volume spec which
+// can be used to create a Volume suitable for a Repo.
+func RepoVolumeSpec() blobcache.VolumeSpec {
+	return reposchema.GotRepoVolumeSpec()
 }

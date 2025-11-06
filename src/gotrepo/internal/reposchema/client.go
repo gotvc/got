@@ -232,7 +232,7 @@ func GotRepoVolumeSpec() blobcache.VolumeSpec {
 			VolumeParams: blobcache.VolumeParams{
 				Schema:   blobcache.SchemaSpec{Name: SchemaName_GotRepo},
 				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
-				MaxSize:  1 << 22,
+				MaxSize:  1 << 21,
 				Salted:   false,
 			},
 		},
@@ -245,7 +245,7 @@ func GotNSVolumeSpec() blobcache.VolumeSpec {
 			VolumeParams: blobcache.VolumeParams{
 				Schema:   blobcache.SchemaSpec{Name: SchemaName_GotNS},
 				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
-				MaxSize:  1 << 22,
+				MaxSize:  1 << 21,
 				Salted:   false,
 			},
 		},
@@ -258,7 +258,7 @@ func StageVolumeSpec() blobcache.VolumeSpec {
 			VolumeParams: blobcache.VolumeParams{
 				Schema:   blobcache.SchemaSpec{Name: blobcache.Schema_NONE},
 				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
-				MaxSize:  1 << 22,
+				MaxSize:  1 << 21,
 				Salted:   false,
 			},
 		},

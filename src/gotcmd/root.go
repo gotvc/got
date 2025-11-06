@@ -45,8 +45,10 @@ var rootCmd = star.NewDir(
 
 		"status": statusCmd,
 
-		"ls":  lsCmd,
-		"cat": catCmd,
+		"ls":   lsCmd,
+		"cat":  catCmd,
+		"http": httpCmd,
+		"ftp":  ftpCmd,
 
 		"history": historyCmd,
 		"log":     historyCmd,
@@ -61,9 +63,7 @@ var rootCmd = star.NewDir(
 		"cleanup":  cleanupCmd,
 		"debug":    debugCmd,
 		"scrub":    scrubCmd,
-
-		"http": httpCmd,
-		"ftp":  ftpCmd,
+		"bc":       blobcacheCmd,
 	},
 )
 
