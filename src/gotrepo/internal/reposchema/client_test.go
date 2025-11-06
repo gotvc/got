@@ -16,12 +16,13 @@ func TestClient(t *testing.T) {
 	ctx := testutil.Context(t)
 	bc := newBlobcache(t)
 	client := NewClient(bc)
-	nsh, err := client.Namespace(ctx)
+	repoVol := blobcache.OID{}
+	nsh, err := client.GetNamespace(ctx, repoVol)
 	require.NoError(t, err)
 
 	var vh blobcache.Handle
 	for i := 0; i < 3; i++ {
-		vh2, err := client.StagingArea(ctx, new([32]byte))
+		vh2, err := client.StagingArea(ctx, repoVol, new([32]byte))
 		require.NoError(t, err)
 		if vh != (blobcache.Handle{}) {
 			// Check that the same OID comes back each time.
@@ -29,11 +30,13 @@ func TestClient(t *testing.T) {
 		}
 		vh = *vh2
 	}
-	require.NotEqual(t, vh, (blobcache.Handle{}))
+	if vh == (blobcache.Handle{}) {
+		t.Fatal("vh is empty")
+	}
 
 	// Initialize GotNS
 	gnsc := gotns.Client{Blobcache: bc, Machine: gotns.New(), ActAs: gotns.LeafPrivate{}}
-	require.NoError(t, gnsc.Init(ctx, *nsh, []gotns.IdentityLeaf{}))
+	require.NoError(t, gnsc.EnsureInit(ctx, *nsh, []gotns.IdentityLeaf{}))
 
 	// Write some blobs to a staging area
 	txn, err := blobcache.BeginTx(ctx, bc, vh, blobcache.TxParams{Mutate: true})

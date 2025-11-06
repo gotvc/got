@@ -28,13 +28,29 @@ Got uses an improved data structure that better handles large files and director
 - [ ] Merge 2 branches.
 
 ## Getting Started
+
+### Installation
 Either download a prebuilt binary or build one from source.
 
+Installs to `$GOPATH/bin` with just.
+If that isn't on your path, just copy the executable from there to wherever you want.
+
+```shell
+$ just install
+```
+
+### Create a New Repo
 Then initialize a repository in the current working directory.
 Make sure you `cd` to where you want the repository.
 ```shell
 $ got init
 ```
+
+That will create a new repo using an in-process blobcache.
+All content will be stored in the `.got/blobcache` directory.
+
+A repo can also be created using the 
+
 
 ## Contributing
 We use `just` as a command runner.
@@ -43,13 +59,6 @@ All of the common development tasks have `just` commands.
 To run the tests:
 ```shell
 $ just test
-```
-
-Installs to `$GOPATH/bin` with just.
-If that isn't on your path, just copy the executable from there to wherever you want.
-
-```shell
-$ just install
 ```
 
 To build release binaries

@@ -480,7 +480,7 @@ func (sa *stagingArea) Delete(ctx context.Context, p string) error {
 // beginStagingTx begins a new transaction for the staging area with the given paramHash.
 // It is up to the caller to commit or abort the transaction.
 func (r *Repo) beginStagingTx(ctx context.Context, paramHash *[32]byte, mutate bool) (volumes.Tx, error) {
-	h, err := r.repoc.StagingArea(ctx, paramHash)
+	h, err := r.repoc.StagingArea(ctx, r.config.RepoVolume, paramHash)
 	if err != nil {
 		return nil, err
 	}

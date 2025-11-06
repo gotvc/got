@@ -24,9 +24,10 @@ func NewClient(svc blobcache.Service) Client {
 	}
 }
 
-// Namespace return the namespace.
-func (c *Client) Namespace(ctx context.Context) (*blobcache.Handle, error) {
-	rootH, err := c.rootHandle(ctx)
+// GetNamespace returns a handle to the namespace volume, creating it if it doesn't exist.
+// It does not modify the contents of the namespace volume.
+func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID) (*blobcache.Handle, error) {
+	rootH, err := c.rootHandle(ctx, repoVol)
 	if err != nil {
 		return nil, err
 	}
@@ -70,8 +71,8 @@ func (c *Client) Namespace(ctx context.Context) (*blobcache.Handle, error) {
 // StagingArea returns a handle to a staging area, creating it if it doesn't exist.
 // StagingAreas are volumes where data is initially imported when it is added to Got.
 // There are separate Volumes.
-func (c *Client) StagingArea(ctx context.Context, paramHash *[32]byte) (*blobcache.Handle, error) {
-	rootH, err := c.rootHandle(ctx)
+func (c *Client) StagingArea(ctx context.Context, repoVol blobcache.OID, paramHash *[32]byte) (*blobcache.Handle, error) {
+	rootH, err := c.rootHandle(ctx, repoVol)
 	if err != nil {
 		return nil, err
 	}
@@ -112,8 +113,8 @@ func (c *Client) StagingArea(ctx context.Context, paramHash *[32]byte) (*blobcac
 	return subVol, nil
 }
 
-func (c *Client) ForEachStage(ctx context.Context, fn func(paramHash *[32]byte, volid blobcache.OID) error) error {
-	rootH, err := c.rootHandle(ctx)
+func (c *Client) ForEachStage(ctx context.Context, repoVol blobcache.OID, fn func(paramHash *[32]byte, volid blobcache.OID) error) error {
+	rootH, err := c.rootHandle(ctx, repoVol)
 	if err != nil {
 		return err
 	}
@@ -154,8 +155,8 @@ func (c *Client) createSubVolume(ctx context.Context, txn *blobcache.Tx, spec bl
 	return subVol, nil
 }
 
-func (c *Client) rootHandle(ctx context.Context) (*blobcache.Handle, error) {
-	return c.Service.OpenFiat(ctx, blobcache.OID{}, blobcache.Action_ALL)
+func (c *Client) rootHandle(ctx context.Context, repoVol blobcache.OID) (*blobcache.Handle, error) {
+	return c.Service.OpenFiat(ctx, repoVol, blobcache.Action_ALL)
 }
 
 func (c *Client) getRoot(ctx context.Context, txn *blobcache.Tx) (*gotkv.Root, error) {

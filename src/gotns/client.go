@@ -23,8 +23,9 @@ type Client struct {
 	ActAs     LeafPrivate
 }
 
-// Init initializes a new GotNS instance in the given volume.
-func (c *Client) Init(ctx context.Context, volh blobcache.Handle, admins []IdentityLeaf) error {
+// EnsureInit initializes a new GotNS instance in the given volume.
+// If the volume already contains a GotNS instance, it is left unchanged.
+func (c *Client) EnsureInit(ctx context.Context, volh blobcache.Handle, admins []IdentityLeaf) error {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return err
@@ -39,7 +40,10 @@ func (c *Client) Init(ctx context.Context, volh blobcache.Handle, admins []Ident
 		return err
 	}
 	if len(data) > 0 {
-		return errors.New("gotns: root already exists")
+		if _, err := statetrace.Parse(data, ParseRoot); err != nil {
+			return err
+		}
+		return nil
 	}
 	root, err := c.Machine.New(ctx, tx, admins)
 	if err != nil {
