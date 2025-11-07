@@ -171,7 +171,7 @@ func Open(p string) (*Repo, error) {
 		}),
 	}
 	r.space = newLazySetup(func(ctx context.Context) (branches.Space, error) {
-		nsh, err := r.repoc.GetNamespace(ctx, config.RepoVolume)
+		nsh, err := r.repoc.GetNamespace(ctx, config.RepoVolume, r.useSchema())
 		if err != nil {
 			return nil, err
 		}
@@ -284,7 +284,7 @@ func (r *Repo) GotNSVolume(ctx context.Context) (blobcache.FQOID, error) {
 	if err != nil {
 		return blobcache.FQOID{}, err
 	}
-	nsh, err := r.repoc.GetNamespace(ctx, r.config.RepoVolume)
+	nsh, err := r.repoc.GetNamespace(ctx, r.config.RepoVolume, r.useSchema())
 	if err != nil {
 		return blobcache.FQOID{}, err
 	}
@@ -292,6 +292,18 @@ func (r *Repo) GotNSVolume(ctx context.Context) (blobcache.FQOID, error) {
 		Peer: ep.Peer,
 		OID:  nsh.OID,
 	}, nil
+}
+
+func (r *Repo) useSchema() bool {
+	bccfg := r.config.Blobcache
+	switch {
+	case bccfg.HTTP != nil:
+		return false
+	case bccfg.Remote != nil:
+		return false
+	default:
+		return true
+	}
 }
 
 func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) error {
@@ -339,6 +351,12 @@ func blobcacheSchemas() map[blobcache.SchemaName]schema.Constructor {
 
 // RepoVolumeSpec returns a Blobcache Volume spec which
 // can be used to create a Volume suitable for a Repo.
-func RepoVolumeSpec() blobcache.VolumeSpec {
-	return reposchema.GotRepoVolumeSpec()
+func RepoVolumeSpec(useSchema bool) blobcache.VolumeSpec {
+	spec := reposchema.GotRepoVolumeSpec()
+	if !useSchema {
+		spec.Local.Schema = blobcache.SchemaSpec{
+			Name: blobcache.Schema_NONE,
+		}
+	}
+	return spec
 }

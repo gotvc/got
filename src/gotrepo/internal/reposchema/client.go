@@ -26,7 +26,7 @@ func NewClient(svc blobcache.Service) Client {
 
 // GetNamespace returns a handle to the namespace volume, creating it if it doesn't exist.
 // It does not modify the contents of the namespace volume.
-func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID) (*blobcache.Handle, error) {
+func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSchema bool) (*blobcache.Handle, error) {
 	rootH, err := c.rootHandle(ctx, repoVol)
 	if err != nil {
 		return nil, err
@@ -51,7 +51,11 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID) (*blob
 	}
 
 	// ns doesn't exist, create it.
-	subVol, err := c.createSubVolume(ctx, txn, GotNSVolumeSpec())
+	nsSpec := GotNSVolumeSpec()
+	if useSchema {
+		nsSpec.Local.Schema = blobcache.SchemaSpec{Name: blobcache.Schema_NONE}
+	}
+	subVol, err := c.createSubVolume(ctx, txn, nsSpec)
 	if err != nil {
 		return nil, err
 	}

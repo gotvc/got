@@ -122,7 +122,7 @@ var mkrepoCmd = star.Command{
 		}
 		nsh := blobcache.Handle{}
 
-		spec := gotrepo.RepoVolumeSpec()
+		spec := gotrepo.RepoVolumeSpec(false)
 		volh, err := bnsc.CreateAt(ctx, nsh, volName, spec)
 		if err != nil {
 			return err
