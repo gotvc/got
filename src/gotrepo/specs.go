@@ -24,11 +24,21 @@ type BlobcacheSpec struct {
 	// HTTP uses an HTTP Blobcache service.
 	// This is plaintext, non-encrypted HTTP, and it does not require authentication.
 	// This should only be used for connecting on local host or via a unix socket.
-	HTTP *string `json:"http,omitempty"`
+	HTTP *HTTPBlobcache `json:"http,omitempty"`
 	// Remote uses the Blobcache Protocol (BCP), and Got will appear as a Blobcache Node to the service.
 	// This is a binary protocol and has less overhead than HTTP.
 	// Got will not serve any requests that it receieves while acting as a dummy Node.
-	Remote *blobcache.Endpoint `json:"remote,omitempty"`
+	Remote *RemoteBlobcache `json:"remote,omitempty"`
+}
+
+type HTTPBlobcache struct {
+	URL       string `json:"url"`
+	UseSchema bool   `json:"schema"`
+}
+
+type RemoteBlobcache struct {
+	Endpoint  blobcache.Endpoint `json:"endpoint"`
+	UseSchema bool               `json:"schema"`
 }
 
 // VolumeSpec explains how to create a Volume in blobcache.

@@ -3,6 +3,7 @@ package volumes
 import (
 	"context"
 
+	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/state/cadata"
@@ -14,7 +15,7 @@ type Volume interface {
 	BeginTx(ctx context.Context, tp TxParams) (Tx, error)
 }
 
-var _ Tx = &blobcache.Tx{}
+var _ Tx = &bcsdk.Tx{}
 
 type Tx interface {
 	Commit(ctx context.Context) error
@@ -69,5 +70,5 @@ type Blobcache struct {
 }
 
 func (bc *Blobcache) BeginTx(ctx context.Context, tp TxParams) (Tx, error) {
-	return blobcache.BeginTx(ctx, bc.Service, bc.Handle, tp)
+	return bcsdk.BeginTx(ctx, bc.Service, bc.Handle, tp)
 }

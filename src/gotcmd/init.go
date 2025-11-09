@@ -67,10 +67,14 @@ func specFromContext(c star.Context) (ret gotrepo.BlobcacheSpec, _ error) {
 	switch {
 	case remoteSet:
 		c.Printf("using remote blobcache\n")
-		ret.Remote = &blobcacheRemote
+		ret.Remote = &gotrepo.RemoteBlobcache{
+			Endpoint: blobcacheRemote,
+		}
 	case httpSet:
 		c.Printf("using HTTP blobcache\n")
-		ret.HTTP = &blobcacheHttp
+		ret.HTTP = &gotrepo.HTTPBlobcache{
+			URL: blobcacheHttp,
+		}
 	default:
 		c.Printf("using in-process blobcache\n")
 		ret.InProcess = &struct{}{}

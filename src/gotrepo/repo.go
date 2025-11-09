@@ -137,7 +137,7 @@ func Open(p string) (*Repo, error) {
 			return nil, err
 		}
 	case config.Blobcache.HTTP != nil:
-		bc, err = openHTTPBlobcache(*config.Blobcache.HTTP)
+		bc, err = openHTTPBlobcache(config.Blobcache.HTTP.URL)
 		if err != nil {
 			return nil, err
 		}
@@ -146,7 +146,7 @@ func Open(p string) (*Repo, error) {
 		if err != nil {
 			return nil, err
 		}
-		bc, err = openRemoteBlobcache(sigPrivKey, pc, *config.Blobcache.Remote)
+		bc, err = openRemoteBlobcache(sigPrivKey, pc, config.Blobcache.Remote.Endpoint)
 		if err != nil {
 			return nil, err
 		}
@@ -298,9 +298,9 @@ func (r *Repo) useSchema() bool {
 	bccfg := r.config.Blobcache
 	switch {
 	case bccfg.HTTP != nil:
-		return false
+		return bccfg.HTTP.UseSchema
 	case bccfg.Remote != nil:
-		return false
+		return bccfg.Remote.UseSchema
 	default:
 		return true
 	}
@@ -334,8 +334,8 @@ func openLocalBlobcache(bgCtx context.Context, privKey ed25519.PrivateKey, p str
 	}, bclocal.Config{})
 }
 
-func openHTTPBlobcache(ep string) (*bchttp.Client, error) {
-	return bchttp.NewClient(nil, ep), nil
+func openHTTPBlobcache(u string) (*bchttp.Client, error) {
+	return bchttp.NewClient(nil, u), nil
 }
 
 func openRemoteBlobcache(privateKey ed25519.PrivateKey, pc net.PacketConn, ep blobcache.Endpoint) (*bcremote.Service, error) {
