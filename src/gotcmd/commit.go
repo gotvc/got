@@ -53,6 +53,15 @@ var historyCmd = star.Command{
 		eg.Go(func() error {
 			err := repo.History(ctx, "", func(ref gdat.Ref, snap gotvc.Snap) error {
 				fmt.Fprintf(pw, "#%04d\t%v\n", snap.N, ref.CID)
+				fmt.Fprintf(pw, "FS: %v\n", snap.Root.Ref.CID)
+				if len(snap.Parents) == 0 {
+					fmt.Fprintf(pw, "Parents: (none)\n")
+				} else {
+					fmt.Fprintf(pw, "Parents:\n")
+					for _, parent := range snap.Parents {
+						fmt.Fprintf(pw, "  %v\n", parent.CID)
+					}
+				}
 				fmt.Fprintf(pw, "Created At: %v\n", snap.CreatedAt.GoTime().Local().String())
 				fmt.Fprintf(pw, "Created By: %v\n", snap.Creator)
 				pw.Write([]byte(prettifyJSON(snap.Aux)))
