@@ -32,6 +32,7 @@ func (ls *lazySetup[T]) Use(ctx context.Context) (T, error) {
 		return zero, err
 	}
 	defer ls.sem.Release(1)
+	isSetup = ls.isSetup.Load()
 	if isSetup {
 		return ls.x, nil
 	}
