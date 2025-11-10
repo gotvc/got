@@ -28,13 +28,36 @@ Got uses an improved data structure that better handles large files and director
 - [ ] Merge 2 branches.
 
 ## Getting Started
+
+### Installation
 Either download a prebuilt binary or build one from source.
 
+Installs to `$GOPATH/bin` with just.
+If that isn't on your path, just copy the executable from there to wherever you want.
+
+```shell
+$ just install
+```
+
+### Create a New Repo
 Then initialize a repository in the current working directory.
 Make sure you `cd` to where you want the repository.
 ```shell
 $ got init
 ```
+
+That will create a new repo using an in-process blobcache.
+All content will be stored in the `.got/blobcache` directory.
+> This is the recommended way to try out blobcache.
+
+A repo can also be initially configured to use the system (or any) blobcache instance.
+There are two ways to do this:
+1. Using BCP with `got init --blobcache-remote <bcp endpoint>`
+2. Using HTTP with `got init --blobcache-http <http endpoint>`
+
+> For large repositories, it is recommended to use an out of process blobcache
+
+The HTTP endpoint should *just work*, the BCP endpoint requires granting access to Got.
 
 ## Contributing
 We use `just` as a command runner.
@@ -43,13 +66,6 @@ All of the common development tasks have `just` commands.
 To run the tests:
 ```shell
 $ just test
-```
-
-Installs to `$GOPATH/bin` with just.
-If that isn't on your path, just copy the executable from there to wherever you want.
-
-```shell
-$ just install
 ```
 
 To build release binaries

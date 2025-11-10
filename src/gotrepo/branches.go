@@ -20,7 +20,11 @@ type Branch = branches.Branch
 
 // CreateBranch creates a branch using the default spec.
 func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Params) (*BranchInfo, error) {
-	return r.space.Create(ctx, name, params)
+	space, err := r.GetSpace(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return space.Create(ctx, name, params)
 }
 
 // // CreateBranchWithSpec creates a branch using spec
@@ -30,7 +34,11 @@ func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Pa
 
 // DeleteBranch deletes a branch
 func (r *Repo) DeleteBranch(ctx context.Context, name string) error {
-	return r.space.Delete(ctx, name)
+	space, err := r.GetSpace(ctx)
+	if err != nil {
+		return err
+	}
+	return space.Delete(ctx, name)
 }
 
 // GetBranch returns the branch with the specified name
@@ -47,7 +55,11 @@ func (r *Repo) getBranch(ctx context.Context, name string) (*Branch, error) {
 	if name == "" {
 		return nil, fmt.Errorf("branch name cannot be empty")
 	}
-	return r.space.Open(ctx, name)
+	space, err := r.GetSpace(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return space.Open(ctx, name)
 }
 
 // SetBranch sets branch metadata
@@ -59,12 +71,20 @@ func (r *Repo) SetBranch(ctx context.Context, name string, md branches.Params) e
 		}
 		name = name2
 	}
-	return r.space.Set(ctx, name, md)
+	space, err := r.GetSpace(ctx)
+	if err != nil {
+		return err
+	}
+	return space.Set(ctx, name, md)
 }
 
 // ForEachBranch calls fn once for each branch, or until an error is returned from fn
 func (r *Repo) ForEachBranch(ctx context.Context, fn func(string) error) error {
-	return branches.ForEach(ctx, r.space, branches.TotalSpan(), fn)
+	space, err := r.GetSpace(ctx)
+	if err != nil {
+		return err
+	}
+	return branches.ForEach(ctx, space, branches.TotalSpan(), fn)
 }
 
 // SetActiveBranch sets the active branch to name
@@ -111,7 +131,11 @@ func (r *Repo) GetActiveBranch(ctx context.Context) (string, *Branch, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	branch, err := r.GetSpace().Open(ctx, name)
+	space, err := r.GetSpace(ctx)
+	if err != nil {
+		return "", nil, err
+	}
+	branch, err := space.Open(ctx, name)
 	if err != nil {
 		return "", nil, err
 	}

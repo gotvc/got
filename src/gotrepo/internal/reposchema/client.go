@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/hex"
 
+	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 
 	"github.com/gotvc/got/src/gotkv"
@@ -24,13 +25,14 @@ func NewClient(svc blobcache.Service) Client {
 	}
 }
 
-// Namespace return the namespace.
-func (c *Client) Namespace(ctx context.Context) (*blobcache.Handle, error) {
-	rootH, err := c.rootHandle(ctx)
+// GetNamespace returns a handle to the namespace volume, creating it if it doesn't exist.
+// It does not modify the contents of the namespace volume.
+func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSchema bool) (*blobcache.Handle, error) {
+	rootH, err := c.rootHandle(ctx, repoVol)
 	if err != nil {
 		return nil, err
 	}
-	txn, err := blobcache.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Mutate: true})
+	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Mutate: true})
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +52,11 @@ func (c *Client) Namespace(ctx context.Context) (*blobcache.Handle, error) {
 	}
 
 	// ns doesn't exist, create it.
-	subVol, err := c.createSubVolume(ctx, txn, GotNSVolumeSpec())
+	nsSpec := GotNSVolumeSpec()
+	if !useSchema {
+		nsSpec.Local.Schema = blobcache.SchemaSpec{Name: blobcache.Schema_NONE}
+	}
+	subVol, err := c.createSubVolume(ctx, txn, nsSpec)
 	if err != nil {
 		return nil, err
 	}
@@ -70,12 +76,12 @@ func (c *Client) Namespace(ctx context.Context) (*blobcache.Handle, error) {
 // StagingArea returns a handle to a staging area, creating it if it doesn't exist.
 // StagingAreas are volumes where data is initially imported when it is added to Got.
 // There are separate Volumes.
-func (c *Client) StagingArea(ctx context.Context, paramHash *[32]byte) (*blobcache.Handle, error) {
-	rootH, err := c.rootHandle(ctx)
+func (c *Client) StagingArea(ctx context.Context, repoVol blobcache.OID, paramHash *[32]byte) (*blobcache.Handle, error) {
+	rootH, err := c.rootHandle(ctx, repoVol)
 	if err != nil {
 		return nil, err
 	}
-	txn, err := blobcache.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Mutate: true})
+	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Mutate: true})
 	if err != nil {
 		return nil, err
 	}
@@ -112,12 +118,12 @@ func (c *Client) StagingArea(ctx context.Context, paramHash *[32]byte) (*blobcac
 	return subVol, nil
 }
 
-func (c *Client) ForEachStage(ctx context.Context, fn func(paramHash *[32]byte, volid blobcache.OID) error) error {
-	rootH, err := c.rootHandle(ctx)
+func (c *Client) ForEachStage(ctx context.Context, repoVol blobcache.OID, fn func(paramHash *[32]byte, volid blobcache.OID) error) error {
+	rootH, err := c.rootHandle(ctx, repoVol)
 	if err != nil {
 		return err
 	}
-	txn, err := blobcache.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Mutate: false})
+	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Mutate: false})
 	if err != nil {
 		return err
 	}
@@ -143,7 +149,7 @@ func (c *Client) ForEachStage(ctx context.Context, fn func(paramHash *[32]byte, 
 
 // createSubVolume creates a new volume and calls txn.AllowLink so it can be persisted indefinitely
 // by the root Volume's Schema.
-func (c *Client) createSubVolume(ctx context.Context, txn *blobcache.Tx, spec blobcache.VolumeSpec) (*blobcache.Handle, error) {
+func (c *Client) createSubVolume(ctx context.Context, txn *bcsdk.Tx, spec blobcache.VolumeSpec) (*blobcache.Handle, error) {
 	subVol, err := c.Service.CreateVolume(ctx, nil, spec)
 	if err != nil {
 		return nil, err
@@ -154,11 +160,11 @@ func (c *Client) createSubVolume(ctx context.Context, txn *blobcache.Tx, spec bl
 	return subVol, nil
 }
 
-func (c *Client) rootHandle(ctx context.Context) (*blobcache.Handle, error) {
-	return c.Service.OpenFiat(ctx, blobcache.OID{}, blobcache.Action_ALL)
+func (c *Client) rootHandle(ctx context.Context, repoVol blobcache.OID) (*blobcache.Handle, error) {
+	return c.Service.OpenFiat(ctx, repoVol, blobcache.Action_ALL)
 }
 
-func (c *Client) getRoot(ctx context.Context, txn *blobcache.Tx) (*gotkv.Root, error) {
+func (c *Client) getRoot(ctx context.Context, txn *bcsdk.Tx) (*gotkv.Root, error) {
 	var rootData []byte
 	if err := txn.Load(ctx, &rootData); err != nil {
 		return nil, err
@@ -228,10 +234,10 @@ var nsKey = []byte("ns")
 func GotRepoVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
-			VolumeParams: blobcache.VolumeParams{
+			VolumeConfig: blobcache.VolumeConfig{
 				Schema:   blobcache.SchemaSpec{Name: SchemaName_GotRepo},
 				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
-				MaxSize:  1 << 22,
+				MaxSize:  1 << 21,
 				Salted:   false,
 			},
 		},
@@ -241,10 +247,10 @@ func GotRepoVolumeSpec() blobcache.VolumeSpec {
 func GotNSVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
-			VolumeParams: blobcache.VolumeParams{
+			VolumeConfig: blobcache.VolumeConfig{
 				Schema:   blobcache.SchemaSpec{Name: SchemaName_GotNS},
 				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
-				MaxSize:  1 << 22,
+				MaxSize:  1 << 21,
 				Salted:   false,
 			},
 		},
@@ -254,10 +260,10 @@ func GotNSVolumeSpec() blobcache.VolumeSpec {
 func StageVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
-			VolumeParams: blobcache.VolumeParams{
+			VolumeConfig: blobcache.VolumeConfig{
 				Schema:   blobcache.SchemaSpec{Name: blobcache.Schema_NONE},
 				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
-				MaxSize:  1 << 22,
+				MaxSize:  1 << 21,
 				Salted:   false,
 			},
 		},

@@ -22,7 +22,9 @@ func TestSpace(t *testing.T) {
 		})
 		// have to delete the automatically created master branch to get a clean slate,
 		// which is what the test expects.
-		require.NoError(t, r.space.Delete(ctx, nameMaster))
-		return r.space
+		space, err := r.GetSpace(ctx)
+		require.NoError(t, err)
+		require.NoError(t, space.Delete(ctx, nameMaster))
+		return space
 	})
 }

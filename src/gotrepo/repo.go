@@ -57,15 +57,15 @@ type Repo struct {
 	rootPath string
 	repoFS   FS // repoFS is the directory that the repo is in
 
+	config Config
 	bc     blobcache.Service
 	db     *dbutil.Pool
-	config Config
 
 	leafPrivate gotns.LeafPrivate
 	workingDir  FS // workingDir is repoFS with reserved paths filtered.
 	repoc       reposchema.Client
 	gnsc        gotns.Client
-	space       branches.Space
+	space       lazySetup[branches.Space]
 }
 
 // Init initializes a new repo at the given path.
@@ -89,23 +89,6 @@ func Init(p string, config Config) error {
 	if err != nil {
 		return err
 	}
-	ctx := context.TODO()
-	idenLeaf, err := r.ActiveIdentity(ctx)
-	if err != nil {
-		return err
-	}
-
-	nsh, err := r.repoc.Namespace(ctx)
-	if err != nil {
-		return err
-	}
-	if err := r.gnsc.Init(ctx, *nsh, []gotns.IdentityLeaf{idenLeaf}); err != nil {
-		return err
-	}
-	if _, err := branches.CreateIfNotExists(ctx, r.space, nameMaster, branches.NewConfig(false)); err != nil {
-		return err
-	}
-
 	return r.Close()
 }
 
@@ -154,7 +137,7 @@ func Open(p string) (*Repo, error) {
 			return nil, err
 		}
 	case config.Blobcache.HTTP != nil:
-		bc, err = openHTTPBlobcache(*config.Blobcache.HTTP)
+		bc, err = openHTTPBlobcache(config.Blobcache.HTTP.URL)
 		if err != nil {
 			return nil, err
 		}
@@ -163,11 +146,10 @@ func Open(p string) (*Repo, error) {
 		if err != nil {
 			return nil, err
 		}
-		bc, err = openRemoteBlobcache(sigPrivKey, pc, *config.Blobcache.Remote)
+		bc, err = openRemoteBlobcache(sigPrivKey, pc, config.Blobcache.Remote.Endpoint)
 		if err != nil {
 			return nil, err
 		}
-		return nil, fmt.Errorf("remote blobcache is not yet supported")
 	default:
 		return nil, fmt.Errorf("empty blobcache spec: %v", config.Blobcache)
 	}
@@ -188,23 +170,34 @@ func Open(p string) (*Repo, error) {
 			return !strings.HasPrefix(x, gotPrefix)
 		}),
 	}
-
-	nsh, err := r.repoc.Namespace(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// setup space
-	spaceSpec := config.Spaces
-	spaceSpec = append(spaceSpec, SpaceLayerSpec{
-		Prefix: "",
-		Target: SpaceSpec{Local: &nsh.OID},
+	r.space = newLazySetup(func(ctx context.Context) (branches.Space, error) {
+		nsh, err := r.repoc.GetNamespace(ctx, config.RepoVolume, r.useSchema())
+		if err != nil {
+			return nil, err
+		}
+		leaf, err := r.ActiveIdentity(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if err := r.gnsc.EnsureInit(ctx, *nsh, []gotns.IdentityLeaf{leaf}); err != nil {
+			return nil, err
+		}
+		spaceSpec := config.Spaces
+		spaceSpec = append(spaceSpec, SpaceLayerSpec{
+			Prefix: "",
+			Target: SpaceSpec{Local: &nsh.OID},
+		})
+		space, err := r.MakeSpace(ctx, SpaceSpec{Multi: &spaceSpec})
+		if err != nil {
+			return nil, err
+		}
+		// create the master branch if it doesn't exist
+		if _, err := branches.CreateIfNotExists(ctx, space, nameMaster, branches.NewConfig(false)); err != nil {
+			return nil, err
+		}
+		return space, nil
 	})
-	space, err := r.MakeSpace(ctx, SpaceSpec{Multi: &spaceSpec})
-	if err != nil {
-		return nil, err
-	}
-	r.space = space
+
 	return r, nil
 }
 
@@ -236,8 +229,8 @@ func (r *Repo) WorkingDir() FS {
 	return r.workingDir
 }
 
-func (r *Repo) GetSpace() Space {
-	return r.space
+func (r *Repo) GetSpace(ctx context.Context) (Space, error) {
+	return r.space.Use(ctx)
 }
 
 func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
@@ -285,12 +278,13 @@ func (r *Repo) Endpoint() blobcache.Endpoint {
 
 // GotNSVolume returns the FQOID of the namespace volume.
 // This can be used to access the namespace from another Blobcache node.
+// It does not modify the contents of the namespace volume.
 func (r *Repo) GotNSVolume(ctx context.Context) (blobcache.FQOID, error) {
 	ep, err := r.bc.Endpoint(ctx)
 	if err != nil {
 		return blobcache.FQOID{}, err
 	}
-	nsh, err := r.repoc.Namespace(ctx)
+	nsh, err := r.repoc.GetNamespace(ctx, r.config.RepoVolume, r.useSchema())
 	if err != nil {
 		return blobcache.FQOID{}, err
 	}
@@ -298,6 +292,18 @@ func (r *Repo) GotNSVolume(ctx context.Context) (blobcache.FQOID, error) {
 		Peer: ep.Peer,
 		OID:  nsh.OID,
 	}, nil
+}
+
+func (r *Repo) useSchema() bool {
+	bccfg := r.config.Blobcache
+	switch {
+	case bccfg.HTTP != nil:
+		return bccfg.HTTP.UseSchema
+	case bccfg.Remote != nil:
+		return bccfg.Remote.UseSchema
+	default:
+		return true
+	}
 }
 
 func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) error {
@@ -328,8 +334,8 @@ func openLocalBlobcache(bgCtx context.Context, privKey ed25519.PrivateKey, p str
 	}, bclocal.Config{})
 }
 
-func openHTTPBlobcache(ep string) (*bchttp.Client, error) {
-	return bchttp.NewClient(nil, ep), nil
+func openHTTPBlobcache(u string) (*bchttp.Client, error) {
+	return bchttp.NewClient(nil, u), nil
 }
 
 func openRemoteBlobcache(privateKey ed25519.PrivateKey, pc net.PacketConn, ep blobcache.Endpoint) (*bcremote.Service, error) {
@@ -341,4 +347,16 @@ func blobcacheSchemas() map[blobcache.SchemaName]schema.Constructor {
 	schemas[reposchema.SchemaName_GotRepo] = reposchema.Constructor
 	schemas[reposchema.SchemaName_GotNS] = gotns.SchemaConstructor
 	return schemas
+}
+
+// RepoVolumeSpec returns a Blobcache Volume spec which
+// can be used to create a Volume suitable for a Repo.
+func RepoVolumeSpec(useSchema bool) blobcache.VolumeSpec {
+	spec := reposchema.GotRepoVolumeSpec()
+	if !useSchema {
+		spec.Local.Schema = blobcache.SchemaSpec{
+			Name: blobcache.Schema_NONE,
+		}
+	}
+	return spec
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema/statetrace"
 	"github.com/cloudflare/circl/kem"
@@ -23,13 +24,14 @@ type Client struct {
 	ActAs     LeafPrivate
 }
 
-// Init initializes a new GotNS instance in the given volume.
-func (c *Client) Init(ctx context.Context, volh blobcache.Handle, admins []IdentityLeaf) error {
+// EnsureInit initializes a new GotNS instance in the given volume.
+// If the volume already contains a GotNS instance, it is left unchanged.
+func (c *Client) EnsureInit(ctx context.Context, volh blobcache.Handle, admins []IdentityLeaf) error {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return err
 	}
-	tx, err := blobcache.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: true})
+	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: true})
 	if err != nil {
 		return err
 	}
@@ -39,7 +41,10 @@ func (c *Client) Init(ctx context.Context, volh blobcache.Handle, admins []Ident
 		return err
 	}
 	if len(data) > 0 {
-		return errors.New("gotns: root already exists")
+		if _, err := statetrace.Parse(data, ParseRoot); err != nil {
+			return err
+		}
+		return nil
 	}
 	root, err := c.Machine.New(ctx, tx, admins)
 	if err != nil {
@@ -91,7 +96,7 @@ func (c *Client) GetEntry(ctx context.Context, volh blobcache.Handle, name strin
 	if err != nil {
 		return nil, err
 	}
-	tx, err := blobcache.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{})
+	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{})
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +125,7 @@ func (c *Client) ListEntries(ctx context.Context, volh blobcache.Handle, span br
 	if err != nil {
 		return nil, err
 	}
-	tx, err := blobcache.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: false})
+	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: false})
 	if err != nil {
 		return nil, err
 	}
@@ -144,7 +149,7 @@ func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string
 	if err != nil {
 		return nil, err
 	}
-	tx, err := blobcache.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: false})
+	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: false})
 	if err != nil {
 		return nil, err
 	}
@@ -160,7 +165,7 @@ func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string
 	if err != nil {
 		return err
 	}
-	tx, err := blobcache.BeginTx(ctx, c.Blobcache, nsh, blobcache.TxParams{Mutate: true})
+	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, nsh, blobcache.TxParams{Mutate: true})
 	if err != nil {
 		return err
 	}
@@ -249,7 +254,7 @@ func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv LeafP
 	if err != nil {
 		return err
 	}
-	tx, err := blobcache.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: true})
+	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: true})
 	if err != nil {
 		return err
 	}
@@ -281,7 +286,7 @@ func (c *Client) view(ctx context.Context, volh blobcache.Handle, fn func(s stor
 	if err != nil {
 		return err
 	}
-	tx, err := blobcache.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: false})
+	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: false})
 	if err != nil {
 		return err
 	}
@@ -293,7 +298,7 @@ func (c *Client) view(ctx context.Context, volh blobcache.Handle, fn func(s stor
 	return fn(tx, *state)
 }
 
-func (c *Client) createSubVolume(ctx context.Context, tx *blobcache.Tx) (*blobcache.Handle, error) {
+func (c *Client) createSubVolume(ctx context.Context, tx *bcsdk.Tx) (*blobcache.Handle, error) {
 	volh, err := c.Blobcache.CreateVolume(ctx, nil, BranchVolumeSpec())
 	if err != nil {
 		return nil, err
@@ -320,7 +325,7 @@ func (c *Client) IntroduceSelf(kemPub kem.PublicKey) Op_ChangeSet {
 	return cs
 }
 
-func loadState(ctx context.Context, tx *blobcache.Tx) (*State, error) {
+func loadState(ctx context.Context, tx *bcsdk.Tx) (*State, error) {
 	var data []byte
 	if err := tx.Load(ctx, &data); err != nil {
 		return nil, err
@@ -336,7 +341,7 @@ func loadState(ctx context.Context, tx *blobcache.Tx) (*State, error) {
 func BranchVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
-			VolumeParams: blobcache.VolumeParams{
+			VolumeConfig: blobcache.VolumeConfig{
 				Schema:   blobcache.SchemaSpec{Name: blobcache.Schema_NONE},
 				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
 				MaxSize:  1 << 22,
