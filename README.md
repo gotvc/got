@@ -48,9 +48,16 @@ $ got init
 
 That will create a new repo using an in-process blobcache.
 All content will be stored in the `.got/blobcache` directory.
+> This is the recommended way to try out blobcache.
 
-A repo can also be created using the 
+A repo can also be initially configured to use the system (or any) blobcache instance.
+There are two ways to do this:
+1. Using BCP with `got init --blobcache-remote <bcp endpoint>`
+2. Using HTTP with `got init --blobcache-http <http endpoint>`
 
+> For large repositories, it is recommended to use an out of process blobcache
+
+The HTTP endpoint should *just work*, the BCP endpoint requires granting access to Got.
 
 ## Contributing
 We use `just` as a command runner.
