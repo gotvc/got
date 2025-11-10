@@ -1,5 +1,5 @@
-blobcache.io/blobcache v0.0.0-20251109182348-e31a3c26b364 h1:G06gnFk4zWQOgfLg43lhLF7ehEGKjzsiFGzkZPEyQww=
-blobcache.io/blobcache v0.0.0-20251109182348-e31a3c26b364/go.mod h1:c0iD6Dnf477SHvzvtCfbPn0NP2F8DG9v5XvGR6n5JMM=
+blobcache.io/blobcache v0.0.0-20251110181309-a7e78e6cc183 h1:9CpXYZGpmKiJZWGGEasuCgcaWIGlwEWy1qxR9bAOysg=
+blobcache.io/blobcache v0.0.0-20251110181309-a7e78e6cc183/go.mod h1:c0iD6Dnf477SHvzvtCfbPn0NP2F8DG9v5XvGR6n5JMM=
 capnproto.org/go/capnp/v3 v3.1.0-alpha.2 h1:93ISpqHf2/3WQlfrBP0tT8Dg/RQc3uq6DV36vN0ePWk=
 capnproto.org/go/capnp/v3 v3.1.0-alpha.2/go.mod h1:2vT5D2dtG8sJGEoEKU17e+j7shdaYp1Myl8X03B3hmc=
 github.com/DataDog/zstd v1.4.5 h1:EndNeuB0l9syBZhut0wns3gV1hL8zX8LIu6ZiVHWLIQ=
