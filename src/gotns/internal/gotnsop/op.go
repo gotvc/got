@@ -124,9 +124,9 @@ func parseOp(code Code, payload []byte) (Op, error) {
 		op = &DropRule{}
 
 	case Code_PutEntry:
-		op = &PutEntry{}
+		op = &PutBranchEntry{}
 	case Code_DeleteEntry:
-		op = &DeleteEntry{}
+		op = &DeleteBranchEntry{}
 	default:
 		return nil, fmt.Errorf("unrecognized op code: %d", code)
 	}
@@ -558,19 +558,19 @@ func (op DropRule) Code() Code {
 }
 
 // PutEntry creates or overwrites a Branch entry.
-type PutEntry struct {
-	Entry Entry
+type PutBranchEntry struct {
+	Entry BranchEntry
 }
 
-func (op PutEntry) isOp() {}
+func (op PutBranchEntry) isOp() {}
 
-func (op PutEntry) Marshal(out []byte) []byte {
+func (op PutBranchEntry) Marshal(out []byte) []byte {
 	out = sbe.AppendLP(out, op.Entry.Key(nil))
 	out = sbe.AppendLP(out, op.Entry.Value(nil))
 	return out
 }
 
-func (op *PutEntry) Unmarshal(data []byte) error {
+func (op *PutBranchEntry) Unmarshal(data []byte) error {
 	k, data, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
@@ -579,34 +579,34 @@ func (op *PutEntry) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	op.Entry, err = ParseEntry(k, val)
+	op.Entry, err = ParseBranchEntry(k, val)
 	if err != nil {
 		return err
 	}
 	return nil
 }
 
-func (op PutEntry) Code() Code {
+func (op PutBranchEntry) Code() Code {
 	return Code_PutEntry
 }
 
 // DeleteEntry deletes a Branch entry.
-type DeleteEntry struct {
+type DeleteBranchEntry struct {
 	Name string
 }
 
-func (op DeleteEntry) isOp() {}
+func (op DeleteBranchEntry) isOp() {}
 
-func (op DeleteEntry) Marshal(out []byte) []byte {
+func (op DeleteBranchEntry) Marshal(out []byte) []byte {
 	return append(out, op.Name...)
 }
 
-func (op *DeleteEntry) Unmarshal(data []byte) error {
+func (op *DeleteBranchEntry) Unmarshal(data []byte) error {
 	op.Name = string(data)
 	return nil
 }
 
-func (op DeleteEntry) Code() Code {
+func (op DeleteBranchEntry) Code() Code {
 	return Code_DeleteEntry
 }
 

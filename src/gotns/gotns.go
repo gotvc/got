@@ -88,10 +88,11 @@ type State struct {
 
 	// Content tables
 
+	// Volumes holds the volume entries themselves.
+	Volumes gotkv.Root
+
 	// Branches holds the actual branch entries themselves.
-	// Branch entries contain a volume OID, and a set of rights (which is for Blobcache)
-	// They also contain a set of DEK hashes for the DEKs that should be used to encrypt the volume
-	// and a map from Hash(KEM public key) to the KEM ciphertext for the DEK encrypted with the KEM public key.
+	// Branch entries contain a volume OID
 	Branches gotkv.Root
 }
 
@@ -103,6 +104,7 @@ func (s State) Marshal(out []byte) []byte {
 	out = sbe.AppendLP(out, s.Memberships.Marshal(nil))
 	out = sbe.AppendLP(out, s.Rules.Marshal(nil))
 	out = sbe.AppendLP(out, s.Obligations.Marshal(nil))
+	out = sbe.AppendLP(out, s.Volumes.Marshal(nil))
 	out = sbe.AppendLP(out, s.Branches.Marshal(nil))
 	return out
 }
@@ -120,7 +122,7 @@ func (s *State) Unmarshal(data []byte) error {
 	data = data[1:]
 
 	// read all of the gotkv roots
-	for _, dst := range []*gotkv.Root{&s.Leaves, &s.Groups, &s.Memberships, &s.Rules, &s.Obligations, &s.Branches} {
+	for _, dst := range []*gotkv.Root{&s.Leaves, &s.Groups, &s.Memberships, &s.Rules, &s.Obligations, &s.Volumes, &s.Branches} {
 		kvrData, rest, err := sbe.ReadLP(data)
 		if err != nil {
 			return err

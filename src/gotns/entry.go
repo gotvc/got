@@ -11,14 +11,13 @@ import (
 	"go.brendoncarroll.net/exp/streams"
 )
 
-type Entry = gotnsop.Entry
+type Entry = gotnsop.BranchEntry
 
 // NewEntry creates a new entry with the provided information
 // and produces KEMs for each group with access to the entry.
 func (m *Machine) NewEntry(ctx context.Context, name string, rights blobcache.ActionSet, volume blobcache.OID, secret *[32]byte) (Entry, error) {
 	entry := Entry{
 		Name:   name,
-		Rights: rights,
 		Volume: volume,
 	}
 	return entry, nil
@@ -32,7 +31,7 @@ func (m *Machine) GetEntry(ctx context.Context, s stores.Reading, State State, n
 		}
 		return nil, err
 	}
-	entry, err := gotnsop.ParseEntry(name, val)
+	entry, err := gotnsop.ParseBranchEntry(name, val)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +89,7 @@ func (m *Machine) ListEntries(ctx context.Context, s stores.Reading, State State
 			return nil, err
 		}
 
-		entry, err := gotnsop.ParseEntry(ent.Key, ent.Value)
+		entry, err := gotnsop.ParseBranchEntry(ent.Key, ent.Value)
 		if err != nil {
 			return nil, err
 		}
@@ -100,4 +99,36 @@ func (m *Machine) ListEntries(ctx context.Context, s stores.Reading, State State
 		}
 	}
 	return ents, nil
+}
+
+type VolumeEntry = gotnsop.VolumeEntry
+
+func (m *Machine) PutVolumeEntry(ctx context.Context, s stores.RW, state State, entry VolumeEntry) (*State, error) {
+	next, err := m.gotkv.Put(ctx, s, state.Volumes, entry.Key(nil), entry.Value(nil))
+	if err != nil {
+		return nil, err
+	}
+	state.Volumes = *next
+	return &state, nil
+}
+
+func (m *Machine) GetVolumeEntry(ctx context.Context, s stores.Reading, state State, volOID blobcache.OID) (*VolumeEntry, error) {
+	val, err := m.gotkv.Get(ctx, s, state.Volumes, volOID[:])
+	if err != nil {
+		return nil, err
+	}
+	entry, err := gotnsop.ParseVolumeEntry(volOID[:], val)
+	if err != nil {
+		return nil, err
+	}
+	return entry, nil
+}
+
+func (m *Machine) DeleteVolumeEntry(ctx context.Context, s stores.RW, state State, volOID blobcache.OID) (*State, error) {
+	next, err := m.gotkv.Delete(ctx, s, state.Volumes, volOID[:])
+	if err != nil {
+		return nil, err
+	}
+	state.Volumes = *next
+	return &state, nil
 }

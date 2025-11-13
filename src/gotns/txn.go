@@ -104,7 +104,7 @@ func (tx *Txn) PutEntry(ctx context.Context, entry Entry) error {
 		return err
 	}
 	tx.curState = *state
-	tx.addOp(&gotnsop.PutEntry{
+	tx.addOp(&gotnsop.PutBranchEntry{
 		Entry: entry,
 	})
 	return nil
@@ -116,7 +116,7 @@ func (tx *Txn) DeleteEntry(ctx context.Context, name string) error {
 		return err
 	}
 	tx.curState = *state
-	tx.addOp(&gotnsop.DeleteEntry{
+	tx.addOp(&gotnsop.DeleteBranchEntry{
 		Name: name,
 	})
 	return nil

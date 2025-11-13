@@ -187,7 +187,6 @@ func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string
 	if err := tx2.PutEntry(ctx, Entry{
 		Name:   name,
 		Volume: subVolh.OID,
-		Rights: blobcache.Action_ALL,
 	}); err != nil {
 		return err
 	}

@@ -23,8 +23,8 @@ func TestMarshalOp(t *testing.T) {
 		&RemoveMember{Group: "a", Member: "b"},
 		&AddRule{Rule: Rule{Subject: "sub", Verb: "verb", ObjectType: ObjectType_GROUP, Names: regexp.MustCompile(".*")}},
 		&DropRule{RuleID: RuleID{}},
-		&PutEntry{Entry: Entry{Name: "test", Aux: []byte{}}},
-		&DeleteEntry{Name: "test"},
+		&PutBranchEntry{Entry: BranchEntry{Name: "test", Aux: []byte{}}},
+		&DeleteBranchEntry{Name: "test"},
 	}
 
 	for i, tc := range tc {
