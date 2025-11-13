@@ -8,6 +8,7 @@ import (
 	"blobcache.io/blobcache/src/schema"
 	"blobcache.io/blobcache/src/schema/statetrace"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotns/internal/gotnsop"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/slices2"
@@ -144,10 +145,10 @@ func parseState(x []byte) (State, error) {
 }
 
 // Delta can be applied to a State to produce a new State.
-type Delta Op_ChangeSet
+type Delta gotnsop.ChangeSet
 
 func parseDelta(data []byte) (Delta, error) {
-	var cs Op_ChangeSet
+	var cs gotnsop.ChangeSet
 	if err := cs.Unmarshal(data); err != nil {
 		return Delta{}, err
 	}
@@ -155,7 +156,7 @@ func parseDelta(data []byte) (Delta, error) {
 }
 
 func (d Delta) Marshal(out []byte) []byte {
-	return Op_ChangeSet(d).Marshal(out)
+	return gotnsop.ChangeSet(d).Marshal(out)
 }
 
 type Machine struct {
@@ -188,11 +189,11 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 	}
 
 	// create initial KEM seed
-	var kemSeed [64]byte
+	var kemSeed gotnsop.Secret
 	if _, err := rand.Read(kemSeed[:]); err != nil {
 		return nil, err
 	}
-	groupKEMPub, _ := DeriveKEM(kemSeed)
+	groupKEMPub, _ := kemSeed.DeriveKEM()
 
 	leaves := map[inet256.ID][]byte{}
 	for _, leaf := range admins {
@@ -204,7 +205,7 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 		leaves[leaf.ID] = encryptSeed(nil, leaf.KEMPublicKey, &kemSeed)
 	}
 	const adminGroupName = "admin"
-	g := Group{
+	g := gotnsop.Group{
 		Name:     adminGroupName,
 		KEM:      groupKEMPub,
 		LeafKEMs: leaves,
@@ -234,7 +235,6 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State) error {
 	for _, kvr := range []gotkv.Root{x.Leaves, x.Groups, x.Memberships, x.Rules, x.Branches} {
 		if kvr.Ref.CID.IsZero() {
-			panic("uninitializec")
 			return fmt.Errorf("gotns: one of the States is uninitialized")
 		}
 	}
@@ -244,15 +244,32 @@ func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State
 // ValidateChange checks the change between two states.
 // Prev is assumed to be a known good, valid state.
 func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, next State, delta Delta) error {
-	if err := m.ValidateState(ctx, src, next); err != nil {
-		return err
-	}
+
 	// TODO: first validate auth operations, ensure that all the differences are signed.
 	return nil
 }
 
+// validateOp validates an operation in isolation.
+func (m *Machine) validateOp(ctx context.Context, src stores.Reading, prev, next State, approvers func(inet256.ID) bool, op Op) error {
+	switch op := op.(type) {
+	case *gotnsop.ChangeSet:
+		return m.validateChangeSet(ctx, src, prev, next, approvers, op)
+	default:
+		return fmt.Errorf("unsupported op: %T", op)
+	}
+}
+
+func (m *Machine) validateChangeSet(ctx context.Context, src stores.Reading, prev, next State, approvers func(inet256.ID) bool, op *gotnsop.ChangeSet) error {
+	for _, op2 := range op.Ops {
+		if err := m.validateOp(ctx, src, prev, next, approvers, op2); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // putGroup returns a gotkv mutation that puts a group into the groups table.
-func putGroup(group Group) gotkv.Mutation {
+func putGroup(group gotnsop.Group) gotkv.Mutation {
 	return gotkv.Mutation{
 		Span: gotkv.SingleKeySpan(group.Key(nil)),
 		Entries: []gotkv.Entry{
@@ -263,3 +280,5 @@ func putGroup(group Group) gotkv.Mutation {
 		},
 	}
 }
+
+type ChangeSet = gotnsop.ChangeSet

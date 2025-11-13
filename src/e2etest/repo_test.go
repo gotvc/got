@@ -58,7 +58,7 @@ func TestMultiRepoSync(t *testing.T) {
 	require.NoError(t, gnsc.EnsureInit(ctx, blobcache.Handle{OID: originNS.OID}, []gotns.IdentityLeaf{originLeaf}))
 	// Handles with empty secrets cause OpenAs to be called instead of OpenFrom.
 	require.NoError(t, gnsc.Do(ctx, blobcache.Handle{OID: originNS.OID}, func(tx *gotns.Txn) error {
-		for _, intro := range []gotns.Op_ChangeSet{intro1, intro2} {
+		for _, intro := range []gotns.ChangeSet{intro1, intro2} {
 			if err := tx.ChangeSet(ctx, intro); err != nil {
 				return err
 			}

@@ -8,93 +8,23 @@ import (
 
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotns/internal/gotnsop"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.inet256.org/inet256/src/inet256"
 )
 
-type Verb string
-
-const (
-	// Verb_LOOK allows a subject to read an object.
-	Verb_LOOK Verb = "LOOK"
-	// Verb_TOUCH allows a subject to write to an object.
-	Verb_TOUCH Verb = "TOUCH"
-	// Verb_CREATE allows a subject to create an object with a certain set of names.
-	Verb_CREATE Verb = "CREATE"
-	// Verb_DROP allows a subject to delete an object with a certain set of names.
-	Verb_DROP Verb = "DROP"
-	// Verb_ADMIN allows a subject to create rules that reference a set of objects.
-	Verb_ADMIN Verb = "ADMIN"
+type (
+	RuleID     = gotnsop.RuleID
+	Rule       = gotnsop.Rule
+	Verb       = gotnsop.Verb
+	ObjectType = gotnsop.ObjectType
 )
-
-type ObjectType string
-
-const (
-	ObjectType_GROUP  ObjectType = "group"
-	ObjectType_BRANCH ObjectType = "branch"
-	ObjectType_RULE   ObjectType = "rule"
-)
-
-type Rule struct {
-	// Subject is the name of the group that this rule applies to.
-	Subject string
-	// Action is the action granted by this rule.
-	Verb Verb
-	// ObjectType is the type of the object that this rule applies to.
-	ObjectType ObjectType
-	// Names is a regular expression that matches the names of the objects that this rule applies to.
-	Names *regexp.Regexp
-}
-
-func (r *Rule) Unmarshal(data []byte) error {
-	subject, data, err := sbe.ReadLP(data)
-	if err != nil {
-		return err
-	}
-	verb, data, err := sbe.ReadLP(data)
-	if err != nil {
-		return err
-	}
-	objType, data, err := sbe.ReadLP(data)
-	if err != nil {
-		return err
-	}
-	namesData, _, err := sbe.ReadLP(data)
-	if err != nil {
-		return err
-	}
-	namesRe, err := regexp.Compile(string(namesData))
-	if err != nil {
-		return err
-	}
-	r.Subject = string(subject)
-	r.Verb = Verb(verb)
-	r.ObjectType = ObjectType(objType)
-	r.Names = namesRe
-	return nil
-}
-
-func (r Rule) Marshal(out []byte) []byte {
-	out = sbe.AppendLP(out, []byte(r.Subject))
-	out = sbe.AppendLP(out, []byte(r.Verb))
-	out = sbe.AppendLP(out, []byte(r.ObjectType))
-	out = sbe.AppendLP(out, []byte(r.Names.String()))
-	return out
-}
-
-func (r Rule) Matches(subject string, verb Verb, objType ObjectType, objName string) bool {
-	return r.Subject == subject && r.Verb == verb && r.ObjectType == objType && r.Names.MatchString(objName)
-}
-
-func PostRule(ctx context.Context, s stores.RW, r *Rule) (CID, error) {
-	return s.Post(ctx, r.Marshal(nil))
-}
 
 // AddRule adds a rule to the state if it doesn't already exist.
 // If it does exist, it does nothing.
-func (m *Machine) AddRule(ctx context.Context, s stores.RW, state State, r *Rule) (*State, error) {
-	cid, err := PostRule(ctx, s, r)
+func (m *Machine) AddRule(ctx context.Context, s stores.RW, state State, r *gotnsop.Rule) (*State, error) {
+	cid, err := gotnsop.PostRule(ctx, s, r)
 	if err != nil {
 		return nil, err
 	}
@@ -122,13 +52,13 @@ func (m *Machine) GetRule(ctx context.Context, s stores.Reading, state State, ci
 	buf := make([]byte, MaxRuleSize)
 	n, err := s.Get(ctx, cid, buf)
 	if err != nil {
-		return Rule{}, err
+		return gotnsop.Rule{}, err
 	}
 	data := buf[:n]
 
-	var rule Rule
+	var rule gotnsop.Rule
 	if err := rule.Unmarshal(data); err != nil {
-		return Rule{}, err
+		return gotnsop.Rule{}, err
 	}
 	return rule, nil
 }
@@ -156,7 +86,7 @@ func (m *Machine) ForEachRule(ctx context.Context, s stores.Reading, state State
 func (m *Machine) CanDo(ctx context.Context, s stores.Reading, state State, actor inet256.ID, verb Verb, objType ObjectType, objName string) (bool, error) {
 	var allowed bool
 	if err := m.gotkv.ForEach(ctx, s, state.Rules, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
-		var rule Rule
+		var rule gotnsop.Rule
 		if err := rule.Unmarshal(ent.Value); err != nil {
 			return err
 		}
@@ -283,8 +213,8 @@ func (m *Machine) PutObligation(ctx context.Context, s stores.RW, state State, o
 
 // EnsureObligations ensures that obligations for the entry are satisfied.
 func (m *Machine) EnsureObligations(ctx context.Context, s stores.Reading, state State, ent Entry, secret *[32]byte) (bool, error) {
-	if err := m.ForEachRule(ctx, s, state, func(rule Rule) error {
-		if rule.ObjectType != ObjectType_BRANCH || !rule.Names.MatchString(ent.Name) {
+	if err := m.ForEachRule(ctx, s, state, func(rule gotnsop.Rule) error {
+		if rule.ObjectType != gotnsop.ObjectType_BRANCH || !rule.Names.MatchString(ent.Name) {
 			return nil
 		}
 		return nil
@@ -294,22 +224,20 @@ func (m *Machine) EnsureObligations(ctx context.Context, s stores.Reading, state
 	return false, nil
 }
 
-type RuleID = CID
-
 type CID = blobcache.CID
 
 func (m *Machine) addInitialRules(ctx context.Context, s stores.RW, state State, adminGroupName string) (*State, error) {
-	for _, rule := range []Rule{
+	for _, rule := range []gotnsop.Rule{
 		{
 			Subject:    adminGroupName,
-			Verb:       Verb_ADMIN,
-			ObjectType: ObjectType_GROUP,
+			Verb:       gotnsop.Verb_ADMIN,
+			ObjectType: gotnsop.ObjectType_GROUP,
 			Names:      regexp.MustCompile(".*"),
 		},
 		{
 			Subject:    adminGroupName,
-			Verb:       Verb_ADMIN,
-			ObjectType: ObjectType_BRANCH,
+			Verb:       gotnsop.Verb_ADMIN,
+			ObjectType: gotnsop.ObjectType_BRANCH,
 			Names:      regexp.MustCompile(".*"),
 		},
 	} {

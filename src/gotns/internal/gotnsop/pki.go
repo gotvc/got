@@ -1,4 +1,4 @@
-package gotns
+package gotnsop
 
 import (
 	"fmt"
@@ -10,13 +10,27 @@ import (
 	"github.com/cloudflare/circl/sign"
 	"github.com/cloudflare/circl/sign/ed25519"
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/internal/sbe"
 	"go.inet256.org/inet256/src/inet256"
 )
 
-// DeriveKEM generates a new KEM key pair.
-func DeriveKEM(seed [64]byte) (kem.PublicKey, kem.PrivateKey) {
+type Secret [32]byte
+
+func (s Secret) DeriveKEM() (kem.PublicKey, kem.PrivateKey) {
+	var seed [64]byte
+	gdat.DeriveKey(seed[:], (*[32]byte)(&s), []byte(KEM_MLKEM1024))
 	return mlkem1024.Scheme().DeriveKeyPair(seed[:])
+}
+
+func (s Secret) DeriveSym() [32]byte {
+	var ret [32]byte
+	gdat.DeriveKey(ret[:], (*[32]byte)(&s), []byte("chacha20"))
+	return ret
+}
+
+func (s Secret) Ratchet() Secret {
+	return Secret(gdat.Hash(s[:]))
 }
 
 // MarshalKEMPublicKey marshals a KEM public key with a scheme tag.

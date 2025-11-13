@@ -11,6 +11,7 @@ import (
 	dilithium3 "github.com/cloudflare/circl/sign/dilithium/mode3"
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/gotns/internal/gotnsop"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/exp/slices2"
@@ -61,8 +62,8 @@ func (c *Client) Do(ctx context.Context, volh blobcache.Handle, fn func(txb *Txn
 	return c.doTx(ctx, volh, c.ActAs, fn)
 }
 
-func (c *Client) GetGroup(ctx context.Context, volh blobcache.Handle, name string) (*Group, error) {
-	var group *Group
+func (c *Client) GetGroup(ctx context.Context, volh blobcache.Handle, name string) (*gotnsop.Group, error) {
+	var group *gotnsop.Group
 	if err := c.view(ctx, volh, func(s stores.Reading, state State) error {
 		var err error
 		group, err = c.Machine.GetGroup(ctx, s, state, name)
@@ -312,11 +313,11 @@ func (c *Client) createSubVolume(ctx context.Context, tx *bcsdk.Tx) (*blobcache.
 // IntroduceSelf creates a signed change set that adds a leaf to the state.
 // Then it returns the signed change set data.
 // It does not contact Blobcache or perform any Volume operations.
-func (c *Client) IntroduceSelf(kemPub kem.PublicKey) Op_ChangeSet {
-	leaf := NewLeaf(c.ActAs.SigPrivateKey.Public().(inet256.PublicKey), kemPub)
-	cs := Op_ChangeSet{
+func (c *Client) IntroduceSelf(kemPub kem.PublicKey) gotnsop.ChangeSet {
+	leaf := gotnsop.NewLeaf(c.ActAs.SigPrivateKey.Public().(inet256.PublicKey), kemPub)
+	cs := gotnsop.ChangeSet{
 		Ops: []Op{
-			&Op_CreateLeaf{
+			&gotnsop.CreateLeaf{
 				Leaf: leaf,
 			},
 		},

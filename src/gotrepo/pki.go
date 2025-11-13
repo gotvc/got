@@ -24,10 +24,10 @@ func (r *Repo) ActiveIdentity(ctx context.Context) (gotns.IdentityLeaf, error) {
 	return dbutil.DoTx1(ctx, r.db, getActiveIdentity)
 }
 
-func (r *Repo) IntroduceSelf(ctx context.Context) (gotns.Op_ChangeSet, error) {
+func (r *Repo) IntroduceSelf(ctx context.Context) (gotns.ChangeSet, error) {
 	leaf, err := r.ActiveIdentity(ctx)
 	if err != nil {
-		return gotns.Op_ChangeSet{}, err
+		return gotns.ChangeSet{}, err
 	}
 	gnsc := r.GotNSClient()
 	return gnsc.IntroduceSelf(leaf.KEMPublicKey), nil
