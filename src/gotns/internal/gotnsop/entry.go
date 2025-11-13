@@ -40,7 +40,6 @@ type BranchEntry struct {
 	Name string
 
 	Volume blobcache.OID
-
 	// Aux is extra data associated with the volume.
 	// This will be filled with branches.Info JSON.
 	Aux []byte

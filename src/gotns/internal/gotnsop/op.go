@@ -1,6 +1,7 @@
 package gotnsop
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"maps"
@@ -69,10 +70,23 @@ type Op interface {
 	// Code returns the op code.
 	Code() Code
 
-	// validate checks if the op was correctly applied from prev to next.
-	//validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error
+	Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error
 
 	isOp()
+}
+
+type IDSet = map[inet256.ID]struct{}
+
+type State interface {
+	CanDo(ctx context.Context, actor inet256.ID, verb Verb, objType ObjectType, objName string) (bool, error)
+	GetLeaf(ctx context.Context, id inet256.ID) (*IdentityLeaf, error)
+}
+
+// Diff is things that have changed between two system states.
+type Diff interface {
+	ForEachRule(ctx context.Context, fn func(rule Rule) error) error
+	ForEachVolumeEntry(ctx context.Context, fn func(entry VolumeEntry) error) error
+	ForEachBranchEntry(ctx context.Context, fn func(entry BranchEntry) error) error
 }
 
 // AppendOp appends the op to the output.
@@ -188,45 +202,44 @@ func (cs *ChangeSet) Unmarshal(data []byte) error {
 	return nil
 }
 
-// func (cs ChangeSet) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
-// 	// collect all of the public keys that we need.
-// 	pubKeys := make(map[inet256.ID]inet256.PublicKey)
+func (cs ChangeSet) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
+	// collect all of the public keys that we need.
+	pubKeys := make(map[inet256.ID]inet256.PublicKey)
 
-// 	// Any create operations will provide public keys that are not yet in the state.
-// 	for _, op := range cs.Ops {
-// 		switch op := op.(type) {
-// 		case *CreateLeaf:
-// 			pubKeys[op.Leaf.ID] = op.Leaf.PublicKey
-// 		}
-// 	}
-// 	for id := range cs.Sigs {
-// 		if _, ok := pubKeys[id]; !ok {
-// 			leaf, err := m.GetLeaf(ctx, s, prev, id)
-// 			if err != nil {
-// 				return err
-// 			}
-// 			pubKeys[id] = leaf.PublicKey
-// 		}
-// 	}
-// 	// validate the sigs.
-// 	target := cs.OpData(nil)
-// 	for id, sig := range cs.Sigs {
-// 		pubKey := pubKeys[id]
-// 		if !pki.Verify(&sigCtxTxn, pubKey, target, sig) {
-// 			return fmt.Errorf("invalid signature for %v", id)
-// 		}
-// 		// add to approvers.
-// 		approvers[id] = struct{}{}
-// 	}
-// 	// validate the ops.
-// 	state := prev
-// 	for _, op := range cs.Ops {
-// 		if err := op.validate(ctx, m, s, state, next, approvers); err != nil {
-// 			return err
-// 		}
-// 	}
-// 	return nil
-// }
+	// Any create operations will provide public keys that are not yet in the state.
+	for _, op := range cs.Ops {
+		switch op := op.(type) {
+		case *CreateLeaf:
+			pubKeys[op.Leaf.ID] = op.Leaf.PublicKey
+		}
+	}
+	for id := range cs.Sigs {
+		if _, ok := pubKeys[id]; !ok {
+			leaf, err := prev.GetLeaf(ctx, id)
+			if err != nil {
+				return err
+			}
+			pubKeys[id] = leaf.PublicKey
+		}
+	}
+	// validate the sigs.
+	target := cs.OpData(nil)
+	for id, sig := range cs.Sigs {
+		pubKey := pubKeys[id]
+		if !pki.Verify(&sigCtxTxn, pubKey, target, sig) {
+			return fmt.Errorf("invalid signature for %v", id)
+		}
+		// add to approvers.
+		approvers[id] = struct{}{}
+	}
+	// validate the ops.
+	for _, op := range cs.Ops {
+		if err := op.Validate(ctx, prev, diff, approvers); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 var sigCtxTxn = inet256.SigCtxString("gotns/txn")
 
@@ -277,20 +290,9 @@ func (op CreateGroup) Code() Code {
 	return Code_CreateGroup
 }
 
-// func (op CreateGroup) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
-// 	_, err := m.GetGroup(ctx, s, prev, op.Group.Name)
-// 	if err == nil {
-// 		return fmt.Errorf("group already exists")
-// 	}
-// 	g, err := m.GetGroup(ctx, s, prev, op.Group.Name)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	if g.KEM.Equal(op.Group.KEM) {
-// 		return fmt.Errorf("group KEM mismatch")
-// 	}
-// 	return nil
-// }
+func (op CreateGroup) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
+	return nil
+}
 
 // CreateLeaf creates a new leaf, or fails if the leaf already exists.
 type CreateLeaf struct {
@@ -326,22 +328,10 @@ func (op *CreateLeaf) Unmarshal(data []byte) error {
 	return nil
 }
 
-// func (op CreateLeaf) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
-// 	if _, err := m.GetLeaf(ctx, s, prev, op.Leaf.ID); err == nil {
-// 		return fmt.Errorf("leaf already exists")
-// 	}
-// 	leaf, err := m.GetLeaf(ctx, s, next, op.Leaf.ID)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	if !leaf.PublicKey.Equal(op.Leaf.PublicKey) {
-// 		return fmt.Errorf("leaf public key mismatch")
-// 	}
-// 	if _, ok := approvers[op.Leaf.ID]; !ok {
-// 		return fmt.Errorf("cannot create leaf without approval from %v", op.Leaf.ID)
-// 	}
-// 	return nil
-// }
+func (op CreateLeaf) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
+
+	return nil
+}
 
 // AddLeaf adds a leaf to a group.
 // The leaf must exist.
@@ -374,13 +364,9 @@ func (op AddLeaf) Code() Code {
 	return Code_AddLeaf
 }
 
-// func (op AddLeaf) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
-// 	_, err := m.GetLeaf(ctx, s, prev, op.LeafID)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	panic("not implemented")
-// }
+func (op AddLeaf) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
+	return nil
+}
 
 // RemoveLeaf removes a leaf from a group.
 // If the leaf is not in any group, it is removed from the leaves table.
@@ -413,6 +399,10 @@ func (op *RemoveLeaf) Unmarshal(data []byte) error {
 
 func (op RemoveLeaf) Code() Code {
 	return Code_RemoveLeaf
+}
+
+func (op RemoveLeaf) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
+	return nil
 }
 
 type AddMember struct {
@@ -452,28 +442,10 @@ func (op AddMember) Code() Code {
 	return Code_AddMember
 }
 
-// func (op AddMember) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
-// 	g, err := m.GetGroup(ctx, s, prev, op.Group)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	foundOwner := false
-// 	for _, owner := range g.Owners {
-// 		if _, exists := approvers[owner]; exists {
-// 			foundOwner = true
-// 			break
-// 		}
-// 	}
-// 	if !foundOwner {
-// 		return fmt.Errorf("cannot add member without approval from an owner")
-// 	}
+func (op AddMember) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
 
-// 	g, err = m.GetGroup(ctx, s, next, op.Group)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	return nil
-// }
+	return nil
+}
 
 type RemoveMember struct {
 	Group, Member string
@@ -505,6 +477,10 @@ func (op RemoveMember) Code() Code {
 	return Code_RemoveMember
 }
 
+func (op RemoveMember) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
+	return nil
+}
+
 type AddRule struct {
 	Rule Rule
 }
@@ -524,16 +500,23 @@ func (op AddRule) Code() Code {
 	return Code_AddRule
 }
 
-// func (op AddRule) validate(ctx context.Context, m *Machine, s stores.RW, prev, next State, approvers IDSet) error {
-// 	yes, err := m.CanAnyDo(ctx, s, prev, approvers, "ADMIN", op.Rule.ObjectType, op.Rule.Names.String())
-// 	if err != nil {
-// 		return err
-// 	}
-// 	if !yes {
-// 		return fmt.Errorf("cannot add rule")
-// 	}
-// 	return nil
-// }
+func (op AddRule) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
+	yes := false
+	for approver := range approvers {
+		y, err := prev.CanDo(ctx, approver, Verb_ADMIN, op.Rule.ObjectType, "")
+		if err != nil {
+			return err
+		}
+		yes = yes || y
+		if yes {
+			break
+		}
+	}
+	if !yes {
+		return fmt.Errorf("cannot add rule")
+	}
+	return nil
+}
 
 type DropRule struct {
 	RuleID RuleID
@@ -555,6 +538,10 @@ func (op *DropRule) Unmarshal(data []byte) error {
 
 func (op DropRule) Code() Code {
 	return Code_DropRule
+}
+
+func (op DropRule) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
+	return nil
 }
 
 // PutEntry creates or overwrites a Branch entry.
@@ -590,6 +577,10 @@ func (op PutBranchEntry) Code() Code {
 	return Code_PutEntry
 }
 
+func (op PutBranchEntry) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
+	return nil
+}
+
 // DeleteEntry deletes a Branch entry.
 type DeleteBranchEntry struct {
 	Name string
@@ -608,6 +599,10 @@ func (op *DeleteBranchEntry) Unmarshal(data []byte) error {
 
 func (op DeleteBranchEntry) Code() Code {
 	return Code_DeleteEntry
+}
+
+func (op DeleteBranchEntry) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
+	return nil
 }
 
 func MarshalIDMap(out []byte, leaves map[inet256.ID][]byte) []byte {

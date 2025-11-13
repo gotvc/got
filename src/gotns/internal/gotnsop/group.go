@@ -19,7 +19,7 @@ type Group struct {
 
 	// Leaves are the leaves that are part of the group.
 	// The key in the leaves map is the leaf ID.
-	// The value in the leaves map is the group's KEM private key encrypted for the leaf to read.
+	// The value in the leaves map is the group's secret key encrypted for the leaf to read.
 	LeafKEMs map[inet256.ID][]byte
 
 	// Owners are the identities that can add and remove members from the group.

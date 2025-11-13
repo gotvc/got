@@ -13,16 +13,6 @@ import (
 
 type Entry = gotnsop.BranchEntry
 
-// NewEntry creates a new entry with the provided information
-// and produces KEMs for each group with access to the entry.
-func (m *Machine) NewEntry(ctx context.Context, name string, rights blobcache.ActionSet, volume blobcache.OID, secret *[32]byte) (Entry, error) {
-	entry := Entry{
-		Name:   name,
-		Volume: volume,
-	}
-	return entry, nil
-}
-
 func (m *Machine) GetEntry(ctx context.Context, s stores.Reading, State State, name []byte) (*Entry, error) {
 	val, err := m.gotkv.Get(ctx, s, State.Branches, name)
 	if err != nil {
@@ -131,4 +121,15 @@ func (m *Machine) DeleteVolumeEntry(ctx context.Context, s stores.RW, state Stat
 	}
 	state.Volumes = *next
 	return &state, nil
+}
+
+func (m *Machine) ForEachVolumeEntry(ctx context.Context, s stores.Reading, state State, fn func(entry VolumeEntry) error) error {
+	span := gotkv.TotalSpan()
+	return m.gotkv.ForEach(ctx, s, state.Volumes, span, func(ent gotkv.Entry) error {
+		entry, err := gotnsop.ParseVolumeEntry(ent.Key, ent.Value)
+		if err != nil {
+			return err
+		}
+		return fn(*entry)
+	})
 }
