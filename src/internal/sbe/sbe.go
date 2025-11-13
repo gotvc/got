@@ -94,3 +94,7 @@ func ReadN(data []byte, n int) ([]byte, []byte, error) {
 	}
 	return data[:n], data[n:], nil
 }
+
+type Marshaler interface {
+	Marshal(out []byte) []byte
+}

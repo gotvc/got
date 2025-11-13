@@ -5,7 +5,6 @@ import (
 	"context"
 
 	"github.com/gotvc/got/src/gdat"
-	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/stores"
 )
@@ -95,7 +94,7 @@ func (mach *Machine) isDescendentOf(ctx context.Context, m map[Ref]struct{}, s s
 }
 
 // Sync ensures dst has all of the data reachable from snap.
-func Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Snapshot) error {
+func Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Snapshot, syncp func(Payload) error) error {
 	ag := NewMachine()
 	ag.readOnly = true
 	var sync func(snap Snapshot) error
@@ -117,8 +116,11 @@ func Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Snap
 				}
 			}
 		}
-		fsmach := gotfs.NewMachine()
-		if err := fsmach.Sync(ctx, [2]stores.Reading{src, src}, [2]stores.Writing{dst, dst}, snap.Root); err != nil {
+		// fsmach := gotfs.NewMachine()
+		// if err := fsmach.Sync(ctx, [2]stores.Reading{src, src}, [2]stores.Writing{dst, dst}, snap.Payload.Root); err != nil {
+		// 	return err
+		// }
+		if err := syncp(snap.Payload); err != nil {
 			return err
 		}
 		metrics.AddInt(ctx, "snapshots", 1, "snapshots")
@@ -129,7 +131,7 @@ func Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Snap
 
 // Populate adds all the blobcache.CIDs reachable from start to set.
 // This will not include the CID for start itself, which has not yet been computed.
-func Populate(ctx context.Context, s stores.Reading, start Snapshot, set stores.Set, rootFn func(gotfs.Root) error) error {
+func Populate(ctx context.Context, s stores.Reading, start Snapshot, set stores.Set, rootFn func(Payload) error) error {
 	for _, parentRef := range start.Parents {
 		parentCID := parentRef.CID
 		exists, err := set.Exists(ctx, parentCID)
@@ -149,7 +151,7 @@ func Populate(ctx context.Context, s stores.Reading, start Snapshot, set stores.
 			}
 		}
 	}
-	if err := rootFn(start.Root); err != nil {
+	if err := rootFn(start.Payload); err != nil {
 		return err
 	}
 	return nil

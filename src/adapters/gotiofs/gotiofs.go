@@ -42,10 +42,10 @@ func (s *FS) Open(name string) (iofs.File, error) {
 		return nil, iofs.ErrNotExist
 	}
 	fsag := s.branch.GotFS()
-	if _, err := fsag.GetInfo(s.ctx, tx, snap.Root, name); err != nil {
+	if _, err := fsag.GetInfo(s.ctx, tx, snap.Payload.Root, name); err != nil {
 		return nil, convertError(err)
 	}
-	return NewFile(s.ctx, fsag, tx, snap.Root, name), nil
+	return NewFile(s.ctx, fsag, tx, snap.Payload.Root, name), nil
 }
 
 var _ iofs.File = &File{}

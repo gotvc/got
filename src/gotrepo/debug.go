@@ -22,7 +22,7 @@ func (r *Repo) DebugFS(ctx context.Context, w io.Writer) error {
 	if x == nil {
 		return fmt.Errorf("no snapshot, no root")
 	}
-	return gotfs.Dump(ctx, tx, x.Root, w)
+	return gotfs.Dump(ctx, tx, x.Payload.Root, w)
 }
 
 func (r *Repo) DebugKV(ctx context.Context, w io.Writer) error {
@@ -38,5 +38,5 @@ func (r *Repo) DebugKV(ctx context.Context, w io.Writer) error {
 	if x == nil {
 		return fmt.Errorf("no snapshot, no root")
 	}
-	return gotkv.DebugTree(ctx, tx, x.Root.ToGotKV(), w)
+	return gotkv.DebugTree(ctx, tx, x.Payload.Root.ToGotKV(), w)
 }

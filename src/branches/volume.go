@@ -24,9 +24,9 @@ type (
 )
 
 // SyncVolumes syncs the contents of src to dst.
-func SyncVolumes(ctx context.Context, srcVol, dstVol Volume, force bool) error {
-	return applySnapshot(ctx, dstVol, func(dst stores.RW, x *gotvc.Snapshot) (*gotvc.Snapshot, error) {
-		goal, tx, err := getSnapshot(ctx, srcVol)
+func Sync(ctx context.Context, src, dst *Branch, force bool) error {
+	return applySnapshot(ctx, dst.GotVC(), src.GotFS(), dst.Volume, func(dststore stores.RW, x *Snap) (*Snap, error) {
+		goal, tx, err := getSnapshot(ctx, src.Volume)
 		if err != nil {
 			return nil, err
 		}
@@ -47,7 +47,7 @@ func SyncVolumes(ctx context.Context, srcVol, dstVol Volume, force bool) error {
 				return nil, fmt.Errorf("cannot CAS, dst ref is not parent of src ref")
 			}
 		}
-		if err := syncStores(ctx, tx, dst, *goal); err != nil {
+		if err := syncStores(ctx, dst.GotVC(), dst.GotFS(), tx, dststore, *goal); err != nil {
 			return nil, err
 		}
 		return goal, nil
@@ -77,7 +77,7 @@ func getSnapshot(ctx context.Context, vol Volume) (*Snap, Tx, error) {
 	return ret, tx, nil
 }
 
-func applySnapshot(ctx context.Context, dstVol Volume, fn func(stores.RW, *Snap) (*Snap, error)) error {
+func applySnapshot(ctx context.Context, vcmach *gotvc.Machine, fsmach *gotfs.Machine, dstVol Volume, fn func(stores.RW, *Snap) (*Snap, error)) error {
 	tx, err := dstVol.BeginTx(ctx, blobcache.TxParams{Mutate: true})
 	if err != nil {
 		return err
@@ -101,7 +101,7 @@ func applySnapshot(ctx context.Context, dstVol Volume, fn func(stores.RW, *Snap)
 	var yData []byte
 	if ySnap != nil {
 		// this is a check for dangling references.
-		if err := syncStores(ctx, stores.NewMem(), tx, *ySnap); err != nil {
+		if err := syncStores(ctx, vcmach, fsmach, stores.NewMem(), tx, *ySnap); err != nil {
 			return err
 		}
 		yData, err = json.Marshal(*ySnap)
@@ -115,10 +115,12 @@ func applySnapshot(ctx context.Context, dstVol Volume, fn func(stores.RW, *Snap)
 	return tx.Commit(ctx)
 }
 
-func syncStores(ctx context.Context, src stores.Reading, dst stores.Writing, snap gotvc.Snapshot) (err error) {
+func syncStores(ctx context.Context, vcmach *gotvc.Machine, fsmach *gotfs.Machine, src stores.Reading, dst stores.Writing, snap gotvc.Snapshot) (err error) {
 	ctx, cf := metrics.Child(ctx, "syncing gotvc")
 	defer cf()
-	return gotvc.Sync(ctx, src, dst, snap)
+	return gotvc.Sync(ctx, src, dst, snap, func(payload gotvc.Payload) error {
+		return fsmach.Sync(ctx, [2]stores.Reading{src, src}, [2]stores.Writing{dst, dst}, payload.Root)
+	})
 }
 
 // Cleanup ensures that there are no unreachable blobs in volume.
@@ -130,9 +132,9 @@ func CleanupVolume(ctx context.Context, vol Volume) error {
 	defer tx.Abort(ctx)
 	keep := &stores.MemSet{}
 	if start != nil {
-		if err := gotvc.Populate(ctx, tx, *start, keep, func(root gotfs.Root) error {
+		if err := gotvc.Populate(ctx, tx, *start, keep, func(payload gotvc.Payload) error {
 			fsag := gotfs.NewMachine()
-			return fsag.Populate(ctx, tx, root, keep, keep)
+			return fsag.Populate(ctx, tx, payload.Root, keep, keep)
 		}); err != nil {
 			return err
 		}

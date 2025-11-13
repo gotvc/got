@@ -20,16 +20,18 @@ func TestMarshalSnapshot(t *testing.T) {
 	require.NoError(t, err)
 	tcs := []Snap{
 		{
-			N: 1,
+			N:         1,
+			CreatedAt: tai64.Now().TAI64(),
 			Parents: []Ref{
 				{},
 				{},
 				{},
 			},
-			Root:      *root,
-			CreatedAt: tai64.Now().TAI64(),
-			Creator:   inet256.ID{},
-			Aux:       []byte{},
+			Creator: inet256.ID{},
+			Payload: Payload{
+				Root: *root,
+				Aux:  []byte{},
+			},
 		},
 	}
 	for i, tc := range tcs {

@@ -102,7 +102,7 @@ func (d *Driver) getRoot(ctx context.Context) (*gotfs.Root, volumes.Tx, error) {
 	if snap == nil {
 		return nil, nil, iofs.ErrNotExist
 	}
-	return &snap.Root, tx, nil
+	return &snap.Payload.Root, tx, nil
 }
 
 func newErrReadOnly() error {

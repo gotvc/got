@@ -27,11 +27,6 @@ func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Pa
 	return space.Create(ctx, name, params)
 }
 
-// // CreateBranchWithSpec creates a branch using spec
-// func (r *Repo) CreateBranchWithSpec(ctx context.Context, name string, spec BranchSpec) (*BranchInfo, error) {
-// 	return r.space.CreateWithSpec(ctx, name, spec)
-// }
-
 // DeleteBranch deletes a branch
 func (r *Repo) DeleteBranch(ctx context.Context, name string) error {
 	space, err := r.GetSpace(ctx)
@@ -195,7 +190,7 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	}
 	ctx, cf := metrics.Child(ctx, "syncing")
 	defer cf()
-	if err := branches.SyncVolumes(ctx, baseBranch.Volume, nextBranch.Volume, false); err != nil {
+	if err := branches.Sync(ctx, baseBranch, nextBranch, false); err != nil {
 		return err
 	}
 	return r.SetActiveBranch(ctx, next)

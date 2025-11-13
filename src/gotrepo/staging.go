@@ -200,7 +200,7 @@ func (r *Repo) Rm(ctx context.Context, paths ...string) error {
 			if snap == nil {
 				return fmt.Errorf("path %q not found", target)
 			}
-			if err := fsag.ForEachLeaf(ctx, voltx, snap.Root, target, func(p string, _ *gotfs.Info) error {
+			if err := fsag.ForEachLeaf(ctx, voltx, snap.Payload.Root, target, func(p string, _ *gotfs.Info) error {
 				return stage.Delete(ctx, p)
 			}); err != nil {
 				return err
@@ -250,7 +250,7 @@ func (r *Repo) Commit(ctx context.Context, snapInfo branches.SnapInfo) error {
 		if err := sctx.Branch.Modify(ctx, scratch, func(mctx branches.ModifyCtx) (*Snap, error) {
 			var root *Root
 			if mctx.Head != nil {
-				root = &mctx.Head.Root
+				root = &mctx.Head.Payload.Root
 			}
 			s := stores.AddWriteLayer(mctx.Store, scratch)
 			ss := [2]stores.RW{s, s}
@@ -266,10 +266,13 @@ func (r *Repo) Commit(ctx context.Context, snapInfo branches.SnapInfo) error {
 			if err != nil {
 				return nil, err
 			}
-			return sctx.Branch.GotVC().NewSnapshot(ctx, s, parents, *nextRoot, gotvc.SnapParams{
+			return sctx.Branch.GotVC().NewSnapshot(ctx, s, gotvc.SnapParams{
+				Parents:   parents,
 				Creator:   sctx.ActingAs.ID,
 				CreatedAt: tai64.Now().TAI64(),
-				Aux:       infoJSON,
+			}, gotvc.Payload{
+				Root: *nextRoot,
+				Aux:  infoJSON,
 			})
 		}); err != nil {
 			return err
@@ -301,7 +304,7 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 		s := stores.AddWriteLayer(voltx, stores.NewMem())
 		var root gotfs.Root
 		if snap != nil {
-			root = snap.Root
+			root = snap.Payload.Root
 		} else {
 			rootPtr, err := sctx.Branch.GotFS().NewEmpty(ctx, s)
 			if err != nil {
@@ -351,7 +354,7 @@ func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) er
 			}
 			// filter branch head
 			if snap != nil {
-				if _, err := fsMach.GetInfo(ctx, voltx, snap.Root, p); err != nil && !os.IsNotExist(err) {
+				if _, err := fsMach.GetInfo(ctx, voltx, snap.Payload.Root, p); err != nil && !os.IsNotExist(err) {
 					return err
 				} else if err == nil {
 					return nil

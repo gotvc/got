@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/stores"
 )
 
@@ -64,8 +65,8 @@ func (r *Repo) Check(ctx context.Context) error {
 		return nil
 	}
 	vcag := branch.GotVC()
-	return vcag.Check(ctx, tx, *snap, func(root gotfs.Root) error {
-		return branch.GotFS().Check(ctx, tx, root, func(ref gdat.Ref) error {
+	return vcag.Check(ctx, tx, *snap, func(payload gotvc.Payload) error {
+		return branch.GotFS().Check(ctx, tx, payload.Root, func(ref gdat.Ref) error {
 			return nil
 		})
 	})

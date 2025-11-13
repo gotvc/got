@@ -3,7 +3,6 @@ package gotvc
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"sort"
 
@@ -23,21 +22,48 @@ type (
 	Snap = Snapshot
 )
 
+// Payload is the thing being snapshotted.
+type Payload struct {
+	Root gotfs.Root
+	Aux  []byte
+}
+
+func (p Payload) Marshal(out []byte) []byte {
+	out = p.Root.Marshal(out)
+	out = sbe.AppendLP(out, p.Aux)
+	return out
+}
+
+func (p *Payload) Unmarshal(data []byte) error {
+	rootData, data, err := sbe.ReadN(data, gotfs.RootSize)
+	if err != nil {
+		return err
+	}
+	root, err := gotfs.ParseRoot(rootData)
+	if err != nil {
+		return err
+	}
+	p.Root = *root
+	auxData, _, err := sbe.ReadLP(data)
+	if err != nil {
+		return err
+	}
+	p.Aux = auxData
+	return nil
+}
+
 type Snapshot struct {
 	// N is the critical distance to the root.
 	// N is 0 if there are no parents.
 	// N is the max of the parents' N + 1.
-	N       uint64
-	Parents []gdat.Ref
-
-	// Root is the root of the GotFS filesystem at the time of the snapshot.
-	Root gotfs.Root
+	N uint64
 	// CreatedAt is the time the snapshot was created.
 	CreatedAt tai64.TAI64
+	Parents   []gdat.Ref
 	// Creator is the ID of the user who created the snapshot.
 	Creator inet256.ID
-	// Aux holds auxiliary data associated with the snapshot.
-	Aux []byte
+
+	Payload Payload
 }
 
 func ParseSnapshot(data []byte) (*Snapshot, error) {
@@ -50,6 +76,8 @@ func ParseSnapshot(data []byte) (*Snapshot, error) {
 
 func (a Snapshot) Marshal(out []byte) []byte {
 	out = sbe.AppendUint64(out, a.N)
+	out = append(out, a.CreatedAt.Marshal()...)
+
 	// parents
 	if len(a.Parents) > 65535 {
 		panic(fmt.Errorf("too many parents: %d", len(a.Parents)))
@@ -58,10 +86,10 @@ func (a Snapshot) Marshal(out []byte) []byte {
 	for _, parent := range a.Parents {
 		out = gdat.AppendRef(out, parent)
 	}
-	out = a.Root.Marshal(out)
-	out = append(out, a.CreatedAt.Marshal()...)
+
 	out = append(out, a.Creator[:]...)
-	out = sbe.AppendLP(out, a.Aux)
+
+	out = a.Payload.Marshal(out)
 	return out
 }
 
@@ -72,6 +100,16 @@ func (a *Snapshot) Unmarshal(data []byte) error {
 		return err
 	}
 	a.N = n
+	// createdAt
+	createdAtData, data, err := sbe.ReadN(data, 8)
+	if err != nil {
+		return err
+	}
+	createdAt, err := tai64.Parse(createdAtData)
+	if err != nil {
+		return err
+	}
+	a.CreatedAt = createdAt
 	// parents
 	numParents, data, err := sbe.ReadUint16(data)
 	if err != nil {
@@ -90,38 +128,18 @@ func (a *Snapshot) Unmarshal(data []byte) error {
 		a.Parents[i] = ref
 		data = rest
 	}
-	// root
-	rootData, data, err := sbe.ReadN(data, gotfs.RootSize)
-	if err != nil {
-		return err
-	}
-	root, err := gotfs.ParseRoot(rootData)
-	if err != nil {
-		return err
-	}
-	a.Root = *root
-	// createdAt
-	createdAtData, data, err := sbe.ReadN(data, 8)
-	if err != nil {
-		return err
-	}
-	createdAt, err := tai64.Parse(createdAtData)
-	if err != nil {
-		return err
-	}
-	a.CreatedAt = createdAt
+
 	// creator
 	creatorData, data, err := sbe.ReadN(data, inet256.AddrSize)
 	if err != nil {
 		return err
 	}
 	a.Creator = inet256.ID(creatorData)
-	// aux
-	auxData, _, err := sbe.ReadLP(data)
-	if err != nil {
+
+	// payload
+	if err := a.Payload.Unmarshal(data); err != nil {
 		return err
 	}
-	a.Aux = auxData
 	return nil
 }
 
@@ -139,21 +157,21 @@ func (a Snapshot) Equals(b Snapshot) bool {
 		}
 	}
 	return a.N == b.N &&
-		gotfs.Equal(a.Root, b.Root) &&
+		gotfs.Equal(a.Payload.Root, b.Payload.Root) &&
 		parentsEqual
 }
 
 // SnapParams are the parameters required to create a new snapshot.
 type SnapParams struct {
+	Parents   []Snapshot
 	Creator   inet256.ID
 	CreatedAt tai64.TAI64
-	Aux       []byte
 }
 
-func (a *Machine) NewSnapshot(ctx context.Context, s stores.Writing, parents []Snapshot, root Root, sp SnapParams) (*Snapshot, error) {
+func (a *Machine) NewSnapshot(ctx context.Context, s stores.Writing, sp SnapParams, payload Payload) (*Snapshot, error) {
 	var n uint64
-	parentRefs := make([]Ref, len(parents))
-	for i, parent := range parents {
+	parentRefs := make([]Ref, len(sp.Parents))
+	for i, parent := range sp.Parents {
 		parentRef, err := a.PostSnapshot(ctx, s, parent)
 		if err != nil {
 			return nil, err
@@ -168,19 +186,19 @@ func (a *Machine) NewSnapshot(ctx context.Context, s stores.Writing, parents []S
 		return a.Compare(b) < 0
 	})
 	return &Snapshot{
-		N:       n,
-		Root:    root,
-		Parents: parentRefs,
-
+		N:         n,
 		CreatedAt: sp.CreatedAt,
+		Parents:   parentRefs,
 		Creator:   sp.Creator,
-		Aux:       sp.Aux,
+
+		Payload: payload,
 	}, nil
 }
 
 // NewZero creates a new snapshot with no parent
-func (mach *Machine) NewZero(ctx context.Context, s stores.Writing, root Root, sp SnapParams) (*Snapshot, error) {
-	return mach.NewSnapshot(ctx, s, nil, root, sp)
+func (mach *Machine) NewZero(ctx context.Context, s stores.Writing, sp SnapParams, payload Payload) (*Snapshot, error) {
+	sp.Parents = nil
+	return mach.NewSnapshot(ctx, s, sp, payload)
 }
 
 // PostSnapshot marshals the snapshot and posts it to the store
@@ -188,7 +206,7 @@ func (ag *Machine) PostSnapshot(ctx context.Context, s stores.Writing, x Snapsho
 	if ag.readOnly {
 		panic("gotvc: operator is read-only. This is a bug.")
 	}
-	return ag.da.Post(ctx, s, marshalSnapshot(x))
+	return ag.da.Post(ctx, s, x.Marshal(nil))
 }
 
 // GetSnapshot retrieves the snapshot referenced by ref from the store.
@@ -196,7 +214,7 @@ func (ag *Machine) GetSnapshot(ctx context.Context, s stores.Reading, ref Ref) (
 	var x *Snapshot
 	if err := ag.da.GetF(ctx, s, ref, func(data []byte) error {
 		var err error
-		x, err = parseSnapshot(data)
+		x, err = ParseSnapshot(data)
 		return err
 	}); err != nil {
 		return nil, err
@@ -223,7 +241,7 @@ func (ag *Machine) Squash(ctx context.Context, s stores.RW, x Snapshot, n int) (
 	if n == 1 {
 		return &Snapshot{
 			N:       parent.N,
-			Root:    x.Root,
+			Payload: x.Payload,
 			Parents: parent.Parents,
 		}, nil
 	}
@@ -231,24 +249,8 @@ func (ag *Machine) Squash(ctx context.Context, s stores.RW, x Snapshot, n int) (
 	if err != nil {
 		return nil, err
 	}
-	y.Root = x.Root
+	y.Payload = x.Payload
 	return y, nil
-}
-
-func marshalSnapshot(x Snapshot) []byte {
-	data, err := json.Marshal(x)
-	if err != nil {
-		panic(err)
-	}
-	return data
-}
-
-func parseSnapshot(data []byte) (*Snapshot, error) {
-	var snap Snapshot
-	if err := json.Unmarshal(data, &snap); err != nil {
-		return nil, err
-	}
-	return &snap, nil
 }
 
 // RefFromSnapshot computes a ref for snap if it was posted to s.
@@ -263,9 +265,9 @@ func (ag *Machine) RefFromSnapshot(snap Snapshot) Ref {
 }
 
 // Check ensures that snapshot is valid.
-func (a *Machine) Check(ctx context.Context, s stores.Reading, snap Snapshot, checkRoot func(gotfs.Root) error) error {
+func (a *Machine) Check(ctx context.Context, s stores.Reading, snap Snapshot, checkRoot func(Payload) error) error {
 	logctx.Infof(ctx, "checking snapshot #%d", snap.N)
-	if err := checkRoot(snap.Root); err != nil {
+	if err := checkRoot(snap.Payload); err != nil {
 		return err
 	}
 	if len(snap.Parents) == 0 {

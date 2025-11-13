@@ -145,8 +145,8 @@ func (b *Branch) GetHead(ctx context.Context) (*Snap, Tx, error) {
 
 // SetHead forcibly sets the head of the branch.
 func (b *Branch) SetHead(ctx context.Context, src stores.Reading, snap Snap) error {
-	return applySnapshot(ctx, b.Volume, func(dst stores.RW, x *Snap) (*Snap, error) {
-		if err := syncStores(ctx, src, dst, snap); err != nil {
+	return applySnapshot(ctx, b.gotvc, b.gotfs, b.Volume, func(dst stores.RW, x *Snap) (*Snap, error) {
+		if err := syncStores(ctx, b.gotvc, b.gotfs, src, dst, snap); err != nil {
 			return nil, err
 		}
 		return &snap, nil
@@ -163,7 +163,7 @@ type ModifyCtx struct {
 
 func (b *Branch) Modify(ctx context.Context, src stores.Reading, fn func(mctx ModifyCtx) (*Snap, error)) error {
 	b.init()
-	return applySnapshot(ctx, b.Volume, func(dst stores.RW, x *Snap) (*Snap, error) {
+	return applySnapshot(ctx, b.gotvc, b.gotfs, b.Volume, func(dst stores.RW, x *Snap) (*Snap, error) {
 		y, err := fn(ModifyCtx{
 			Store: dst,
 			Head:  x,
@@ -174,7 +174,7 @@ func (b *Branch) Modify(ctx context.Context, src stores.Reading, fn func(mctx Mo
 			return nil, err
 		}
 		if y != nil {
-			if err := syncStores(ctx, src, dst, *y); err != nil {
+			if err := syncStores(ctx, b.gotvc, b.gotfs, src, dst, *y); err != nil {
 				return nil, err
 			}
 		}
@@ -206,7 +206,7 @@ func (b *Branch) ViewFS(ctx context.Context, fn func(mach *gotfs.Machine, stores
 		return err
 	}
 	defer tx.Abort(ctx)
-	return fn(b.gotfs, tx, snap.Root)
+	return fn(b.gotfs, tx, snap.Payload.Root)
 }
 
 // NewGotFS creates a new gotfs.Machine suitable for writing to the branch
