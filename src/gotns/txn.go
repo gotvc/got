@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
 	"blobcache.io/blobcache/src/schema/statetrace"
 	"github.com/gotvc/got/src/gotns/internal/gotnsop"
@@ -98,8 +99,8 @@ func (tx *Txn) AddLeaf(ctx context.Context, group string, leafID inet256.ID) err
 	return nil
 }
 
-func (tx *Txn) PutEntry(ctx context.Context, entry Entry) error {
-	state, err := tx.m.PutEntry(ctx, tx.s, tx.curState, entry)
+func (tx *Txn) PutBranch(ctx context.Context, entry BranchEntry) error {
+	state, err := tx.m.PutBranch(ctx, tx.s, tx.curState, entry)
 	if err != nil {
 		return err
 	}
@@ -110,8 +111,8 @@ func (tx *Txn) PutEntry(ctx context.Context, entry Entry) error {
 	return nil
 }
 
-func (tx *Txn) DeleteEntry(ctx context.Context, name string) error {
-	state, err := tx.m.DeleteEntry(ctx, tx.s, tx.curState, name)
+func (tx *Txn) DeleteBranch(ctx context.Context, name string) error {
+	state, err := tx.m.DeleteBranch(ctx, tx.s, tx.curState, name)
 	if err != nil {
 		return err
 	}
@@ -119,6 +120,26 @@ func (tx *Txn) DeleteEntry(ctx context.Context, name string) error {
 	tx.addOp(&gotnsop.DeleteBranchEntry{
 		Name: name,
 	})
+	return nil
+}
+
+func (tx *Txn) AddVolume(ctx context.Context, vent gotnsop.VolumeEntry) error {
+	state, err := tx.m.AddVolume(ctx, tx.s, tx.curState, vent)
+	if err != nil {
+		return err
+	}
+	tx.curState = *state
+	tx.addOp(&gotnsop.AddVolume{Volume: vent.Volume})
+	return nil
+}
+
+func (tx *Txn) DropVolume(ctx context.Context, volid blobcache.OID) error {
+	state, err := tx.m.DropVolume(ctx, tx.s, tx.curState, volid)
+	if err != nil {
+		return err
+	}
+	tx.curState = *state
+	tx.addOp(&gotnsop.DropVolume{Volume: volid})
 	return nil
 }
 

@@ -2,35 +2,40 @@ package gotns
 
 import (
 	"context"
+	"fmt"
 
 	"blobcache.io/blobcache/src/blobcache"
+	"go.brendoncarroll.net/exp/streams"
+
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotns/internal/gotnsop"
 	"github.com/gotvc/got/src/internal/stores"
-	"go.brendoncarroll.net/exp/streams"
 )
 
-type Entry = gotnsop.BranchEntry
+type (
+	BranchEntry = gotnsop.BranchEntry
+	VolumeEntry = gotnsop.VolumeEntry
+)
 
-func (m *Machine) GetEntry(ctx context.Context, s stores.Reading, State State, name []byte) (*Entry, error) {
-	val, err := m.gotkv.Get(ctx, s, State.Branches, name)
+func (m *Machine) GetBranch(ctx context.Context, s stores.Reading, state State, name string) (*gotnsop.BranchEntry, error) {
+	val, err := m.gotkv.Get(ctx, s, state.Branches, []byte(name))
 	if err != nil {
 		if gotkv.IsErrKeyNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	entry, err := gotnsop.ParseBranchEntry(name, val)
+	entry, err := gotnsop.ParseBranchEntry([]byte(name), val)
 	if err != nil {
 		return nil, err
 	}
 	return &entry, nil
 }
 
-func (m *Machine) PutEntry(ctx context.Context, s stores.RW, State State, entry Entry) (*State, error) {
-	mut := PutEntry(entry)
-	entsState, err := m.gotkv.Mutate(ctx, s, State.Branches, mut)
+func (m *Machine) PutBranch(ctx context.Context, s stores.RW, State State, entry gotnsop.BranchEntry) (*State, error) {
+	mut1 := putBranch(entry)
+	entsState, err := m.gotkv.Mutate(ctx, s, State.Branches, mut1)
 	if err != nil {
 		return nil, err
 	}
@@ -38,7 +43,7 @@ func (m *Machine) PutEntry(ctx context.Context, s stores.RW, State State, entry 
 	return &State, nil
 }
 
-func (m *Machine) DeleteEntry(ctx context.Context, s stores.RW, State State, name string) (*State, error) {
+func (m *Machine) DeleteBranch(ctx context.Context, s stores.RW, State State, name string) (*State, error) {
 	entsState, err := m.gotkv.Delete(ctx, s, State.Branches, []byte(name))
 	if err != nil {
 		return nil, err
@@ -47,7 +52,7 @@ func (m *Machine) DeleteEntry(ctx context.Context, s stores.RW, State State, nam
 	return &State, nil
 }
 
-func PutEntry(entry Entry) gotkv.Mutation {
+func putBranch(entry gotnsop.BranchEntry) gotkv.Mutation {
 	k := entry.Key(nil)
 	return gotkv.Mutation{
 		Span: gotkv.SingleKeySpan(k),
@@ -60,7 +65,7 @@ func PutEntry(entry Entry) gotkv.Mutation {
 	}
 }
 
-func (m *Machine) ListEntries(ctx context.Context, s stores.Reading, State State, span branches.Span, limit int) ([]Entry, error) {
+func (m *Machine) ListBranches(ctx context.Context, s stores.Reading, state State, span branches.Span, limit int) ([]gotnsop.BranchEntry, error) {
 	span2 := gotkv.TotalSpan()
 	if span.Begin != "" {
 		span2.Begin = []byte(span.Begin)
@@ -68,8 +73,8 @@ func (m *Machine) ListEntries(ctx context.Context, s stores.Reading, State State
 	if span.End != "" {
 		span2.End = []byte(span.End)
 	}
-	it := m.gotkv.NewIterator(s, State.Branches, span2)
-	var ents []Entry
+	it := m.gotkv.NewIterator(s, state.Branches, span2)
+	var ents []gotnsop.BranchEntry
 	for {
 		ent, err := streams.Next(ctx, it)
 		if err != nil {
@@ -91,18 +96,31 @@ func (m *Machine) ListEntries(ctx context.Context, s stores.Reading, State State
 	return ents, nil
 }
 
-type VolumeEntry = gotnsop.VolumeEntry
-
-func (m *Machine) PutVolumeEntry(ctx context.Context, s stores.RW, state State, entry VolumeEntry) (*State, error) {
-	next, err := m.gotkv.Put(ctx, s, state.Volumes, entry.Key(nil), entry.Value(nil))
+// AddVolume adds a new Volume to the namespace.
+// It's OID must be unique within the namespace or an error will be returned.
+func (m *Machine) AddVolume(ctx context.Context, s stores.RW, state State, entry VolumeEntry) (*State, error) {
+	if entry.HashOfSecret == ([32]byte{}) {
+		return nil, fmt.Errorf("hash of secret must be non-zero for volumes")
+	}
+	tx := m.gotkv.NewTx(s, state.Volumes)
+	var val []byte
+	if found, err := tx.Get(ctx, entry.Key(nil), &val); err != nil {
+		return nil, err
+	} else if found {
+		return nil, fmt.Errorf("volume %v is already in this namespace", entry.Volume)
+	}
+	if err := tx.Put(ctx, entry.Key(nil), entry.Value(nil)); err != nil {
+		return nil, err
+	}
+	nextVol, err := tx.Finish(ctx)
 	if err != nil {
 		return nil, err
 	}
-	state.Volumes = *next
+	state.Volumes = *nextVol
 	return &state, nil
 }
 
-func (m *Machine) GetVolumeEntry(ctx context.Context, s stores.Reading, state State, volOID blobcache.OID) (*VolumeEntry, error) {
+func (m *Machine) GetVolume(ctx context.Context, s stores.Reading, state State, volOID blobcache.OID) (*VolumeEntry, error) {
 	val, err := m.gotkv.Get(ctx, s, state.Volumes, volOID[:])
 	if err != nil {
 		return nil, err
@@ -114,7 +132,7 @@ func (m *Machine) GetVolumeEntry(ctx context.Context, s stores.Reading, state St
 	return entry, nil
 }
 
-func (m *Machine) DeleteVolumeEntry(ctx context.Context, s stores.RW, state State, volOID blobcache.OID) (*State, error) {
+func (m *Machine) DropVolume(ctx context.Context, s stores.RW, state State, volOID blobcache.OID) (*State, error) {
 	next, err := m.gotkv.Delete(ctx, s, state.Volumes, volOID[:])
 	if err != nil {
 		return nil, err
@@ -123,7 +141,7 @@ func (m *Machine) DeleteVolumeEntry(ctx context.Context, s stores.RW, state Stat
 	return &state, nil
 }
 
-func (m *Machine) ForEachVolumeEntry(ctx context.Context, s stores.Reading, state State, fn func(entry VolumeEntry) error) error {
+func (m *Machine) ForEachVolume(ctx context.Context, s stores.Reading, state State, fn func(entry VolumeEntry) error) error {
 	span := gotkv.TotalSpan()
 	return m.gotkv.ForEach(ctx, s, state.Volumes, span, func(ent gotkv.Entry) error {
 		entry, err := gotnsop.ParseVolumeEntry(ent.Key, ent.Value)

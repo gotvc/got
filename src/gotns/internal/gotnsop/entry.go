@@ -31,8 +31,8 @@ func ParseVolumeEntry(key, value []byte) (*VolumeEntry, error) {
 		return nil, fmt.Errorf("volume entry value too short: %d", len(value))
 	}
 	var entry VolumeEntry
-	entry.Volume = blobcache.OID(key[:16])
-	entry.HashOfSecret = [32]byte(key[16:48])
+	entry.Volume = blobcache.OID(key)
+	entry.HashOfSecret = [32]byte(value)
 	return &entry, nil
 }
 

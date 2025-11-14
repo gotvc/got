@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/internal/sbe"
 	"go.inet256.org/inet256/src/inet256"
 )
@@ -28,6 +29,8 @@ const (
 	Code_AddRule
 	Code_DropRule
 
+	Code_AddVolume
+	Code_DropVolume
 	Code_PutEntry
 	Code_DeleteEntry
 )
@@ -137,6 +140,10 @@ func parseOp(code Code, payload []byte) (Op, error) {
 	case Code_DropRule:
 		op = &DropRule{}
 
+	case Code_AddVolume:
+		op = &AddVolume{}
+	case Code_DropVolume:
+		op = &DropVolume{}
 	case Code_PutEntry:
 		op = &PutBranchEntry{}
 	case Code_DeleteEntry:
@@ -541,6 +548,60 @@ func (op DropRule) Code() Code {
 }
 
 func (op DropRule) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
+	return nil
+}
+
+var _ Op = &AddVolume{}
+
+type AddVolume struct {
+	Volume blobcache.OID
+}
+
+func (op AddVolume) isOp() {}
+
+func (op AddVolume) Marshal(out []byte) []byte {
+	// AddVolume has no fields to marshal.
+	return out
+}
+
+func (op *AddVolume) Unmarshal(data []byte) error {
+	// AddVolume has no fields to unmarshal.
+	return nil
+}
+
+func (op AddVolume) Code() Code {
+	return Code_AddVolume
+}
+
+func (op AddVolume) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
+	// should check that volume did not exist previously
+	// and that all obligations are met for the new volume.
+	return nil
+}
+
+var _ Op = &DropVolume{}
+
+type DropVolume struct {
+	Volume blobcache.OID
+}
+
+func (op DropVolume) isOp() {}
+
+func (op DropVolume) Marshal(out []byte) []byte {
+	// DropVolume has no fields to marshal.
+	return out
+}
+
+func (op *DropVolume) Unmarshal(data []byte) error {
+	// DropVolume has no fields to unmarshal.
+	return nil
+}
+
+func (op DropVolume) Code() Code {
+	return Code_DropVolume
+}
+
+func (op DropVolume) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
 	return nil
 }
 

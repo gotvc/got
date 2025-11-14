@@ -10,7 +10,6 @@ import (
 	"github.com/cloudflare/circl/kem"
 	"go.inet256.org/inet256/src/inet256"
 	"golang.org/x/crypto/chacha20"
-	"golang.org/x/crypto/chacha20poly1305"
 
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotns/internal/gotnsop"
@@ -406,22 +405,6 @@ func decryptSeed(recvKEM kem.PrivateKey, ctext []byte) (*gotnsop.Secret, error) 
 	copy(seed[:], ctext[kemCtextSize:])
 	cryptoXOR((*[32]byte)(ss), seed[:], seed[:])
 	return &seed, nil
-}
-
-func symEncrypt(out []byte, secret *[32]byte, nonce *[12]byte, ptext []byte, ad []byte) []byte {
-	cipher, err := chacha20poly1305.New(secret[:])
-	if err != nil {
-		panic(err)
-	}
-	return cipher.Seal(out, nonce[:], ptext, ad)
-}
-
-func symDecrypt(out []byte, secret *[32]byte, nonce *[12]byte, ctext []byte, ad []byte) ([]byte, error) {
-	cipher, err := chacha20poly1305.New(secret[:])
-	if err != nil {
-		return nil, err
-	}
-	return cipher.Open(out, nonce[:], ctext, ad)
 }
 
 // cryptoXOR runs a chacha20 stream cipher over src, writing the result to dst.

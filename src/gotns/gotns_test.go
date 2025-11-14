@@ -35,7 +35,7 @@ func TestInit(t *testing.T) {
 	require.Equal(t, adminLeaf.ID, adminGrp.Owners[0])
 }
 
-func TestCreateAt(t *testing.T) {
+func TestCreateBranch(t *testing.T) {
 	ctx := testutil.Context(t)
 	bc := newTestService(t)
 	sigPub, sigPriv := newTestSigner(t)
@@ -43,7 +43,7 @@ func TestCreateAt(t *testing.T) {
 	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: LeafPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}}
 	require.NoError(t, gnsc.EnsureInit(ctx, blobcache.Handle{}, []IdentityLeaf{gotnsop.NewLeaf(sigPub, kemPub)}))
 
-	err := gnsc.CreateAt(ctx, blobcache.Handle{}, "test", nil)
+	err := gnsc.CreateBranch(ctx, blobcache.Handle{}, "test", nil)
 	require.NoError(t, err)
 }
 

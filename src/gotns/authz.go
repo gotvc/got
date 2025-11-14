@@ -212,7 +212,7 @@ func (m *Machine) PutObligation(ctx context.Context, s stores.RW, state State, o
 }
 
 // EnsureObligations ensures that obligations for the entry are satisfied.
-func (m *Machine) EnsureObligations(ctx context.Context, s stores.Reading, state State, ent Entry, secret *[32]byte) (bool, error) {
+func (m *Machine) EnsureObligations(ctx context.Context, s stores.Reading, state State, ent BranchEntry, secret *[32]byte) (bool, error) {
 	if err := m.ForEachRule(ctx, s, state, func(rule gotnsop.Rule) error {
 		if rule.ObjectType != gotnsop.ObjectType_BRANCH || !rule.Names.MatchString(ent.Name) {
 			return nil

@@ -182,7 +182,8 @@ func New() Machine {
 // New creates a new root.
 func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (*statetrace.Root[Root], error) {
 	state := new(State)
-	for _, dst := range []*gotkv.Root{&state.Groups, &state.Leaves, &state.Memberships, &state.Rules, &state.Obligations, &state.Branches} {
+	for _, dst := range []*gotkv.Root{
+		&state.Groups, &state.Leaves, &state.Memberships, &state.Rules, &state.Obligations, &state.Volumes, &state.Branches} {
 		kvr, err := m.gotkv.NewEmpty(ctx, s)
 		if err != nil {
 			return nil, err

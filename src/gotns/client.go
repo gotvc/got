@@ -2,6 +2,7 @@ package gotns
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 
 	"blobcache.io/blobcache/src/bcsdk"
@@ -59,7 +60,9 @@ func (c *Client) EnsureInit(ctx context.Context, volh blobcache.Handle, admins [
 
 // Do calls fn with a transaction for manipulating the NS.
 func (c *Client) Do(ctx context.Context, volh blobcache.Handle, fn func(txb *Txn) error) error {
-	return c.doTx(ctx, volh, c.ActAs, fn)
+	return c.doTx(ctx, volh, c.ActAs, func(tx *bcsdk.Tx, txn *Txn) error {
+		return fn(txn)
+	})
 }
 
 func (c *Client) GetGroup(ctx context.Context, volh blobcache.Handle, name string) (*gotnsop.Group, error) {
@@ -92,7 +95,7 @@ func (c *Client) GetLeaf(ctx context.Context, volh blobcache.Handle, id inet256.
 	return leaf, nil
 }
 
-func (c *Client) GetEntry(ctx context.Context, volh blobcache.Handle, name string) (*Entry, error) {
+func (c *Client) GetBranch(ctx context.Context, volh blobcache.Handle, name string) (*BranchEntry, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return nil, err
@@ -106,22 +109,54 @@ func (c *Client) GetEntry(ctx context.Context, volh blobcache.Handle, name strin
 	if err != nil {
 		return nil, err
 	}
-	return c.Machine.GetEntry(ctx, tx, *state, []byte(name))
+	return c.Machine.GetBranch(ctx, tx, *state, name)
 }
 
-func (c *Client) PutEntry(ctx context.Context, volh blobcache.Handle, ent Entry) error {
-	return c.doTx(ctx, volh, c.ActAs, func(txb *Txn) error {
-		return txb.PutEntry(ctx, ent)
+// CreateBranch creates a new branch with a new volume at the specified name.
+func (c *Client) CreateBranch(ctx context.Context, nsh blobcache.Handle, name string, aux []byte) error {
+	return c.doTx(ctx, nsh, c.ActAs, func(tx *bcsdk.Tx, txn *Txn) error {
+		svh, err := c.createSubVolume(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if err := tx.Link(ctx, *svh, blobcache.Action_ALL); err != nil {
+			return err
+		}
+		sec := [32]byte{}
+		if _, err := rand.Read(sec[:]); err != nil {
+			return err
+		}
+		hos := gdat.Hash(sec[:])
+		if err := txn.AddVolume(ctx, VolumeEntry{
+			Volume:       svh.OID,
+			HashOfSecret: hos,
+		}); err != nil {
+			return err
+		}
+		if err := txn.PutBranch(ctx, gotnsop.BranchEntry{
+			Name:   name,
+			Volume: svh.OID,
+			Aux:    aux,
+		}); err != nil {
+			return err
+		}
+		return nil
 	})
 }
 
-func (c *Client) DeleteEntry(ctx context.Context, volh blobcache.Handle, name string) error {
-	return c.doTx(ctx, volh, c.ActAs, func(txb *Txn) error {
-		return txb.DeleteEntry(ctx, name)
+func (c *Client) PutBranch(ctx context.Context, volh blobcache.Handle, bent BranchEntry) error {
+	return c.doTx(ctx, volh, c.ActAs, func(tx *bcsdk.Tx, txb *Txn) error {
+		return txb.PutBranch(ctx, bent)
 	})
 }
 
-func (c *Client) ListEntries(ctx context.Context, volh blobcache.Handle, span branches.Span, limit int) ([]string, error) {
+func (c *Client) DeleteBranch(ctx context.Context, volh blobcache.Handle, name string) error {
+	return c.doTx(ctx, volh, c.ActAs, func(tx *bcsdk.Tx, txb *Txn) error {
+		return txb.DeleteBranch(ctx, name)
+	})
+}
+
+func (c *Client) ListBranches(ctx context.Context, volh blobcache.Handle, span branches.Span, limit int) ([]string, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return nil, err
@@ -135,11 +170,11 @@ func (c *Client) ListEntries(ctx context.Context, volh blobcache.Handle, span br
 	if err != nil {
 		return nil, err
 	}
-	entries, err := c.Machine.ListEntries(ctx, tx, *state, span, limit)
+	entries, err := c.Machine.ListBranches(ctx, tx, *state, span, limit)
 	if err != nil {
 		return nil, err
 	}
-	names := slices2.Map(entries, func(e Entry) string {
+	names := slices2.Map(entries, func(e gotnsop.BranchEntry) string {
 		return e.Name
 	})
 	return names, nil
@@ -158,54 +193,12 @@ func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string
 	return nil, nil
 }
 
-func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string, aux []byte) error {
-	if c.ActAs == (LeafPrivate{}) {
-		return errors.New("gotns.Client: ActAs cannot be empty")
-	}
-	nsh, err := c.adjustHandle(ctx, nsh)
-	if err != nil {
-		return err
-	}
-	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, nsh, blobcache.TxParams{Mutate: true})
-	if err != nil {
-		return err
-	}
-	defer tx.Abort(ctx)
-	subVolh, err := c.createSubVolume(ctx, tx)
-	if err != nil {
-		return err
-	}
-	var rootData []byte
-	if err := tx.Load(ctx, &rootData); err != nil {
-		return err
-	}
-	root, err := statetrace.Parse(rootData, ParseRoot)
-	if err != nil {
-		return err
-	}
-	tx2 := c.Machine.NewTxn(root, tx, []LeafPrivate{c.ActAs})
-	if err := tx2.PutEntry(ctx, Entry{
-		Name:   name,
-		Volume: subVolh.OID,
-	}); err != nil {
-		return err
-	}
-	root2, err := tx2.Finish(ctx)
-	if err != nil {
-		return err
-	}
-	if err := tx.Save(ctx, root2.Marshal(nil)); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
 func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string) (branches.Volume, error) {
 	nsh, err := c.adjustHandle(ctx, nsh)
 	if err != nil {
 		return nil, err
 	}
-	ent, err := c.GetEntry(ctx, nsh, name)
+	ent, err := c.GetBranch(ctx, nsh, name)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +239,7 @@ func (c *Client) adjustHandle(ctx context.Context, volh blobcache.Handle) (blobc
 	}
 }
 
-func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv LeafPrivate, fn func(txb *Txn) error) error {
+func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv LeafPrivate, fn func(tx *bcsdk.Tx, txn *Txn) error) error {
 	if c.ActAs == (LeafPrivate{}) {
 		return errors.New("gotns.Client: ActAs cannot be nil")
 	}
@@ -267,11 +260,11 @@ func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv LeafP
 	if err != nil {
 		return err
 	}
-	builder := c.Machine.NewTxn(root, tx, []LeafPrivate{leafPriv})
-	if err := fn(builder); err != nil {
+	txn := c.Machine.NewTxn(root, tx, []LeafPrivate{leafPriv})
+	if err := fn(tx, txn); err != nil {
 		return err
 	}
-	root2, err := builder.Finish(ctx)
+	root2, err := txn.Finish(ctx)
 	if err != nil {
 		return err
 	}
