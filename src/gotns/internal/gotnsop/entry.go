@@ -4,13 +4,19 @@ import (
 	"fmt"
 
 	"blobcache.io/blobcache/src/blobcache"
+	"github.com/gotvc/got/src/internal/sbe"
 )
 
 type VolumeEntry struct {
 	Volume blobcache.OID
 	// The hash of the secret shared amongst readers of the volume.
 	// The double hash of the secret shared amongst writers of the volume.
-	HashOfSecret [32]byte
+	// There should never be more than two of these, or less than one.
+	HashOfSecrets [][32]byte
+
+	// Aux is extra data associated with the volume.
+	// This will be filled with branches.Info JSON.
+	Aux []byte
 }
 
 func (e VolumeEntry) Key(buf []byte) []byte {
@@ -19,51 +25,64 @@ func (e VolumeEntry) Key(buf []byte) []byte {
 }
 
 func (e VolumeEntry) Value(buf []byte) []byte {
-	buf = append(buf, e.HashOfSecret[:]...)
+	buf = sbe.AppendUint16(buf, uint16(len(e.HashOfSecrets)))
+	for _, hash := range e.HashOfSecrets {
+		buf = append(buf, hash[:]...)
+	}
+	buf = sbe.AppendLP(buf, e.Aux)
 	return buf
 }
 
 func ParseVolumeEntry(key, value []byte) (*VolumeEntry, error) {
+	var entry VolumeEntry
 	if len(key) != 16 {
 		return nil, fmt.Errorf("volume entry key too short: %d", len(key))
 	}
-	if len(value) != 32 {
-		return nil, fmt.Errorf("volume entry value too short: %d", len(value))
-	}
-	var entry VolumeEntry
 	entry.Volume = blobcache.OID(key)
-	entry.HashOfSecret = [32]byte(value)
+
+	numHashes, data, err := sbe.ReadUint16(value)
+	if err != nil {
+		return nil, err
+	}
+	entry.HashOfSecrets = make([][32]byte, numHashes)
+	for i := range entry.HashOfSecrets {
+		if len(data) < 32 {
+			return nil, fmt.Errorf("volume entry value too short")
+		}
+		copy(entry.HashOfSecrets[i][:], data[:32])
+		data = data[32:]
+	}
+	entry.Aux, data, err = sbe.ReadLP(data)
+	if err != nil {
+		return nil, err
+	}
 	return &entry, nil
 }
 
-type BranchEntry struct {
+// AliasEntry associates a name with a volume.
+type AliasEntry struct {
 	Name string
 
 	Volume blobcache.OID
-	// Aux is extra data associated with the volume.
-	// This will be filled with branches.Info JSON.
-	Aux []byte
 }
 
-func (e BranchEntry) Key(buf []byte) []byte {
+func (e AliasEntry) Key(buf []byte) []byte {
 	buf = append(buf, e.Name...)
 	return buf
 }
 
-func (e BranchEntry) Value(buf []byte) []byte {
+func (e AliasEntry) Value(buf []byte) []byte {
 	buf = append(buf, e.Volume[:]...)
-	buf = append(buf, e.Aux...)
 	return buf
 }
 
-func ParseBranchEntry(key, value []byte) (BranchEntry, error) {
-	var entry BranchEntry
+func ParseBranchEntry(key, value []byte) (AliasEntry, error) {
+	var entry AliasEntry
 	entry.Name = string(key)
 
 	if len(value) < 16 {
-		return BranchEntry{}, fmt.Errorf("entry value too short")
+		return AliasEntry{}, fmt.Errorf("entry value too short")
 	}
 	entry.Volume = blobcache.OID(value[:16])
-	entry.Aux = value[16:]
 	return entry, nil
 }

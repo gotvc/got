@@ -99,19 +99,20 @@ func (tx *Txn) AddLeaf(ctx context.Context, group string, leafID inet256.ID) err
 	return nil
 }
 
-func (tx *Txn) PutBranch(ctx context.Context, entry BranchEntry) error {
-	state, err := tx.m.PutBranch(ctx, tx.s, tx.curState, entry)
+func (tx *Txn) PutAlias(ctx context.Context, entry BranchEntry) error {
+	state, err := tx.m.PutAlias(ctx, tx.s, tx.curState, entry)
 	if err != nil {
 		return err
 	}
 	tx.curState = *state
 	tx.addOp(&gotnsop.PutBranchEntry{
-		Entry: entry,
+		Name:   entry.Name,
+		Volume: entry.Volume,
 	})
 	return nil
 }
 
-func (tx *Txn) DeleteBranch(ctx context.Context, name string) error {
+func (tx *Txn) DeleteAlias(ctx context.Context, name string) error {
 	state, err := tx.m.DeleteBranch(ctx, tx.s, tx.curState, name)
 	if err != nil {
 		return err

@@ -89,7 +89,7 @@ type State interface {
 type Diff interface {
 	ForEachRule(ctx context.Context, fn func(rule Rule) error) error
 	ForEachVolumeEntry(ctx context.Context, fn func(entry VolumeEntry) error) error
-	ForEachBranchEntry(ctx context.Context, fn func(entry BranchEntry) error) error
+	ForEachBranchEntry(ctx context.Context, fn func(entry AliasEntry) error) error
 }
 
 // AppendOp appends the op to the output.
@@ -605,16 +605,17 @@ func (op DropVolume) Validate(ctx context.Context, prev State, diff Diff, approv
 	return nil
 }
 
-// PutEntry creates or overwrites a Branch entry.
+// PutBranchEntry creates or overwrites a Branch entry.
 type PutBranchEntry struct {
-	Entry BranchEntry
+	Name   string
+	Volume blobcache.OID
 }
 
 func (op PutBranchEntry) isOp() {}
 
 func (op PutBranchEntry) Marshal(out []byte) []byte {
-	out = sbe.AppendLP(out, op.Entry.Key(nil))
-	out = sbe.AppendLP(out, op.Entry.Value(nil))
+	out = sbe.AppendLP(out, []byte(op.Name))
+	out = append(out, op.Volume[:]...)
 	return out
 }
 
@@ -623,14 +624,12 @@ func (op *PutBranchEntry) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	val, _, err := sbe.ReadLP(data)
+	val, _, err := sbe.ReadN(data, blobcache.OIDSize)
 	if err != nil {
 		return err
 	}
-	op.Entry, err = ParseBranchEntry(k, val)
-	if err != nil {
-		return err
-	}
+	op.Name = string(k)
+	copy(op.Volume[:], val)
 	return nil
 }
 

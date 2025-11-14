@@ -47,6 +47,7 @@ func (tx *Tx) Finish(ctx context.Context) (*Root, error) {
 		return nil, err
 	}
 	clear(tx.edits)
+	tx.prev = *nextRoot
 	return nextRoot, nil
 }
 

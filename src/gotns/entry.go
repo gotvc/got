@@ -14,12 +14,13 @@ import (
 )
 
 type (
-	BranchEntry = gotnsop.BranchEntry
+	BranchEntry = gotnsop.AliasEntry
 	VolumeEntry = gotnsop.VolumeEntry
 )
 
-func (m *Machine) GetBranch(ctx context.Context, s stores.Reading, state State, name string) (*gotnsop.BranchEntry, error) {
-	val, err := m.gotkv.Get(ctx, s, state.Branches, []byte(name))
+// GetBranch looks up an entry in the branches table.
+func (m *Machine) GetBranch(ctx context.Context, s stores.Reading, state State, name string) (*gotnsop.AliasEntry, error) {
+	val, err := m.gotkv.Get(ctx, s, state.Aliases, []byte(name))
 	if err != nil {
 		if gotkv.IsErrKeyNotFound(err) {
 			return nil, nil
@@ -33,26 +34,28 @@ func (m *Machine) GetBranch(ctx context.Context, s stores.Reading, state State, 
 	return &entry, nil
 }
 
-func (m *Machine) PutBranch(ctx context.Context, s stores.RW, State State, entry gotnsop.BranchEntry) (*State, error) {
-	mut1 := putBranch(entry)
-	entsState, err := m.gotkv.Mutate(ctx, s, State.Branches, mut1)
+// PutAlias inserts or overwrites an entry in the branches table.
+func (m *Machine) PutAlias(ctx context.Context, s stores.RW, State State, entry gotnsop.AliasEntry) (*State, error) {
+	mut1 := putAlias(entry)
+	aliasState, err := m.gotkv.Mutate(ctx, s, State.Aliases, mut1)
 	if err != nil {
 		return nil, err
 	}
-	State.Branches = *entsState
+	State.Aliases = *aliasState
 	return &State, nil
 }
 
+// DeleteBranch
 func (m *Machine) DeleteBranch(ctx context.Context, s stores.RW, State State, name string) (*State, error) {
-	entsState, err := m.gotkv.Delete(ctx, s, State.Branches, []byte(name))
+	entsState, err := m.gotkv.Delete(ctx, s, State.Aliases, []byte(name))
 	if err != nil {
 		return nil, err
 	}
-	State.Branches = *entsState
+	State.Aliases = *entsState
 	return &State, nil
 }
 
-func putBranch(entry gotnsop.BranchEntry) gotkv.Mutation {
+func putAlias(entry gotnsop.AliasEntry) gotkv.Mutation {
 	k := entry.Key(nil)
 	return gotkv.Mutation{
 		Span: gotkv.SingleKeySpan(k),
@@ -65,7 +68,7 @@ func putBranch(entry gotnsop.BranchEntry) gotkv.Mutation {
 	}
 }
 
-func (m *Machine) ListBranches(ctx context.Context, s stores.Reading, state State, span branches.Span, limit int) ([]gotnsop.BranchEntry, error) {
+func (m *Machine) ListBranches(ctx context.Context, s stores.Reading, state State, span branches.Span, limit int) ([]gotnsop.AliasEntry, error) {
 	span2 := gotkv.TotalSpan()
 	if span.Begin != "" {
 		span2.Begin = []byte(span.Begin)
@@ -73,8 +76,8 @@ func (m *Machine) ListBranches(ctx context.Context, s stores.Reading, state Stat
 	if span.End != "" {
 		span2.End = []byte(span.End)
 	}
-	it := m.gotkv.NewIterator(s, state.Branches, span2)
-	var ents []gotnsop.BranchEntry
+	it := m.gotkv.NewIterator(s, state.Aliases, span2)
+	var ents []gotnsop.AliasEntry
 	for {
 		ent, err := streams.Next(ctx, it)
 		if err != nil {
@@ -99,37 +102,34 @@ func (m *Machine) ListBranches(ctx context.Context, s stores.Reading, state Stat
 // AddVolume adds a new Volume to the namespace.
 // It's OID must be unique within the namespace or an error will be returned.
 func (m *Machine) AddVolume(ctx context.Context, s stores.RW, state State, entry VolumeEntry) (*State, error) {
-	if entry.HashOfSecret == ([32]byte{}) {
+	if len(entry.HashOfSecrets) == 0 {
 		return nil, fmt.Errorf("hash of secret must be non-zero for volumes")
 	}
-	tx := m.gotkv.NewTx(s, state.Volumes)
-	var val []byte
-	if found, err := tx.Get(ctx, entry.Key(nil), &val); err != nil {
+	if err := m.mapKV(ctx, s, &state.Volumes, func(tx *gotkv.Tx) error {
+		var val []byte
+		if found, err := tx.Get(ctx, entry.Key(nil), &val); err != nil {
+			return err
+		} else if found {
+			return fmt.Errorf("volume %v is already in this namespace", entry.Volume)
+		}
+		if err := tx.Put(ctx, entry.Key(nil), entry.Value(nil)); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		return nil, err
-	} else if found {
-		return nil, fmt.Errorf("volume %v is already in this namespace", entry.Volume)
 	}
-	if err := tx.Put(ctx, entry.Key(nil), entry.Value(nil)); err != nil {
-		return nil, err
-	}
-	nextVol, err := tx.Finish(ctx)
-	if err != nil {
-		return nil, err
-	}
-	state.Volumes = *nextVol
 	return &state, nil
 }
 
+// GetVolume looks up a volume in the volumes table.
+// If the volume is not found, nil is returned.
 func (m *Machine) GetVolume(ctx context.Context, s stores.Reading, state State, volOID blobcache.OID) (*VolumeEntry, error) {
 	val, err := m.gotkv.Get(ctx, s, state.Volumes, volOID[:])
-	if err != nil {
-		return nil, err
+	if gotkv.IsErrKeyNotFound(err) {
+		return nil, nil
 	}
-	entry, err := gotnsop.ParseVolumeEntry(volOID[:], val)
-	if err != nil {
-		return nil, err
-	}
-	return entry, nil
+	return gotnsop.ParseVolumeEntry(volOID[:], val)
 }
 
 func (m *Machine) DropVolume(ctx context.Context, s stores.RW, state State, volOID blobcache.OID) (*State, error) {

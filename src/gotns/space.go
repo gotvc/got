@@ -69,7 +69,7 @@ func (bs *Space) Delete(ctx context.Context, name string) error {
 }
 
 func (bs *Space) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {
-	return bs.client.ListBranches(ctx, bs.volh, span, limit)
+	return bs.client.ListAliases(ctx, bs.volh, span, limit)
 }
 
 func (bs *Space) Set(ctx context.Context, name string, config branches.Params) error {

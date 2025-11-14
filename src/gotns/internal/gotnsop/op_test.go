@@ -23,7 +23,7 @@ func TestMarshalOp(t *testing.T) {
 		&RemoveMember{Group: "a", Member: "b"},
 		&AddRule{Rule: Rule{Subject: "sub", Verb: "verb", ObjectType: ObjectType_GROUP, Names: regexp.MustCompile(".*")}},
 		&DropRule{RuleID: RuleID{}},
-		&PutBranchEntry{Entry: BranchEntry{Name: "test", Aux: []byte{}}},
+		&PutBranchEntry{Name: "test"},
 		&DeleteBranchEntry{Name: "test"},
 	}
 

@@ -16,12 +16,10 @@ type Group struct {
 	// KEM is used to send messages to the group.
 	// The private key is stored encrypted in each Membership entry.
 	KEM kem.PublicKey
-
 	// Leaves are the leaves that are part of the group.
 	// The key in the leaves map is the leaf ID.
 	// The value in the leaves map is the group's secret key encrypted for the leaf to read.
 	LeafKEMs map[inet256.ID][]byte
-
 	// Owners are the identities that can add and remove members from the group.
 	// Owners must also be members of the group.
 	Owners []inet256.ID

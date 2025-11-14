@@ -82,7 +82,6 @@ type State struct {
 
 	// Rules holds rules for the namespace, granting look or touch access to branches.
 	Rules gotkv.Root
-
 	// Obligations holds obligations for the namespace, granting access to volumes.
 	Obligations gotkv.Root
 
@@ -90,10 +89,7 @@ type State struct {
 
 	// Volumes holds the volume entries themselves.
 	Volumes gotkv.Root
-
-	// Branches holds the actual branch entries themselves.
-	// Branch entries contain a volume OID
-	Branches gotkv.Root
+	Aliases gotkv.Root
 }
 
 func (s State) Marshal(out []byte) []byte {
@@ -105,7 +101,7 @@ func (s State) Marshal(out []byte) []byte {
 	out = sbe.AppendLP(out, s.Rules.Marshal(nil))
 	out = sbe.AppendLP(out, s.Obligations.Marshal(nil))
 	out = sbe.AppendLP(out, s.Volumes.Marshal(nil))
-	out = sbe.AppendLP(out, s.Branches.Marshal(nil))
+	out = sbe.AppendLP(out, s.Aliases.Marshal(nil))
 	return out
 }
 
@@ -122,7 +118,7 @@ func (s *State) Unmarshal(data []byte) error {
 	data = data[1:]
 
 	// read all of the gotkv roots
-	for _, dst := range []*gotkv.Root{&s.Leaves, &s.Groups, &s.Memberships, &s.Rules, &s.Obligations, &s.Volumes, &s.Branches} {
+	for _, dst := range []*gotkv.Root{&s.Leaves, &s.Groups, &s.Memberships, &s.Rules, &s.Obligations, &s.Volumes, &s.Aliases} {
 		kvrData, rest, err := sbe.ReadLP(data)
 		if err != nil {
 			return err
@@ -183,7 +179,7 @@ func New() Machine {
 func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (*statetrace.Root[Root], error) {
 	state := new(State)
 	for _, dst := range []*gotkv.Root{
-		&state.Groups, &state.Leaves, &state.Memberships, &state.Rules, &state.Obligations, &state.Volumes, &state.Branches} {
+		&state.Groups, &state.Leaves, &state.Memberships, &state.Rules, &state.Obligations, &state.Volumes, &state.Aliases} {
 		kvr, err := m.gotkv.NewEmpty(ctx, s)
 		if err != nil {
 			return nil, err
@@ -236,7 +232,7 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 
 // ValidateState checks the state in isolation.
 func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State) error {
-	for _, kvr := range []gotkv.Root{x.Leaves, x.Groups, x.Memberships, x.Rules, x.Branches} {
+	for _, kvr := range []gotkv.Root{x.Leaves, x.Groups, x.Memberships, x.Rules, x.Aliases} {
 		if kvr.Ref.CID.IsZero() {
 			return fmt.Errorf("gotns: one of the States is uninitialized")
 		}
@@ -268,6 +264,19 @@ func (m *Machine) validateChangeSet(ctx context.Context, src stores.Reading, pre
 			return err
 		}
 	}
+	return nil
+}
+
+func (m *Machine) mapKV(ctx context.Context, s stores.RW, kvr *gotkv.Root, fn func(tx *gotkv.Tx) error) error {
+	tx := m.gotkv.NewTx(s, *kvr)
+	if err := fn(tx); err != nil {
+		return err
+	}
+	nextKvr, err := tx.Finish(ctx)
+	if err != nil {
+		return err
+	}
+	*kvr = *nextKvr
 	return nil
 }
 

@@ -128,15 +128,14 @@ func (c *Client) CreateBranch(ctx context.Context, nsh blobcache.Handle, name st
 		}
 		hos := gdat.Hash(sec[:])
 		if err := txn.AddVolume(ctx, VolumeEntry{
-			Volume:       svh.OID,
-			HashOfSecret: hos,
+			Volume:        svh.OID,
+			HashOfSecrets: [][32]byte{hos},
 		}); err != nil {
 			return err
 		}
-		if err := txn.PutBranch(ctx, gotnsop.BranchEntry{
+		if err := txn.PutAlias(ctx, gotnsop.AliasEntry{
 			Name:   name,
 			Volume: svh.OID,
-			Aux:    aux,
 		}); err != nil {
 			return err
 		}
@@ -144,19 +143,19 @@ func (c *Client) CreateBranch(ctx context.Context, nsh blobcache.Handle, name st
 	})
 }
 
-func (c *Client) PutBranch(ctx context.Context, volh blobcache.Handle, bent BranchEntry) error {
+func (c *Client) PutAlias(ctx context.Context, volh blobcache.Handle, bent BranchEntry) error {
 	return c.doTx(ctx, volh, c.ActAs, func(tx *bcsdk.Tx, txb *Txn) error {
-		return txb.PutBranch(ctx, bent)
+		return txb.PutAlias(ctx, bent)
 	})
 }
 
 func (c *Client) DeleteBranch(ctx context.Context, volh blobcache.Handle, name string) error {
 	return c.doTx(ctx, volh, c.ActAs, func(tx *bcsdk.Tx, txb *Txn) error {
-		return txb.DeleteBranch(ctx, name)
+		return txb.DeleteAlias(ctx, name)
 	})
 }
 
-func (c *Client) ListBranches(ctx context.Context, volh blobcache.Handle, span branches.Span, limit int) ([]string, error) {
+func (c *Client) ListAliases(ctx context.Context, volh blobcache.Handle, span branches.Span, limit int) ([]string, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return nil, err
@@ -174,7 +173,7 @@ func (c *Client) ListBranches(ctx context.Context, volh blobcache.Handle, span b
 	if err != nil {
 		return nil, err
 	}
-	names := slices2.Map(entries, func(e gotnsop.BranchEntry) string {
+	names := slices2.Map(entries, func(e gotnsop.AliasEntry) string {
 		return e.Name
 	})
 	return names, nil
