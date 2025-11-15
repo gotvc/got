@@ -14,13 +14,18 @@ func TestMarshalOp(t *testing.T) {
 	pubKey, _ := testutil.NewSigner(t, 0)
 	kemPub, _ := testutil.NewKEM(t, 0)
 	tc := []Op{
-		&CreateGroup{Group: Group{Name: "test", KEM: kemPub, Owners: nil, LeafKEMs: map[inet256.ID][]byte{}}},
-		&CreateLeaf{Leaf: NewLeaf(pubKey, kemPub)},
+		&CreateGroup{Group: Group{KEM: kemPub, Owners: IDSet{}}},
+		&CreateIDUnit{Unit: NewIDUnit(pubKey, kemPub)},
 
-		&AddLeaf{Group: "a", LeafID: inet256.ID{}},
-		&RemoveLeaf{Group: "a", ID: inet256.ID{}},
-		&AddMember{Group: "a", Member: "b", EncryptedKEM: []byte{}},
-		&RemoveMember{Group: "a", Member: "b"},
+		&AddMember{
+			Group:        ComputeGroupID([16]byte{}, IDSet{}),
+			Member:       MemberUnit(inet256.ID{}),
+			EncryptedKEM: []byte{},
+		},
+		&RemoveMember{
+			Group:  ComputeGroupID([16]byte{}, IDSet{}),
+			Member: MemberUnit(inet256.ID{}),
+		},
 		&AddRule{Rule: Rule{Subject: "sub", Verb: "verb", ObjectType: ObjectType_GROUP, Names: regexp.MustCompile(".*")}},
 		&DropRule{RuleID: RuleID{}},
 		&PutBranchEntry{Name: "test"},
@@ -41,7 +46,7 @@ func TestMarshalOp(t *testing.T) {
 
 func TestMarshalGroup(t *testing.T) {
 	kemPub, _ := testutil.NewKEM(t, 0)
-	group := Group{Name: "test", KEM: kemPub, Owners: nil, LeafKEMs: map[inet256.ID][]byte{}}
+	group := Group{KEM: kemPub, Owners: IDSet{}}
 	k := group.Key(nil)
 	val := group.Value(nil)
 	group2, err := ParseGroup(k, val)

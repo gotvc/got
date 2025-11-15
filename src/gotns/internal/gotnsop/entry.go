@@ -76,7 +76,7 @@ func (e AliasEntry) Value(buf []byte) []byte {
 	return buf
 }
 
-func ParseBranchEntry(key, value []byte) (AliasEntry, error) {
+func ParseAliasEntry(key, value []byte) (AliasEntry, error) {
 	var entry AliasEntry
 	entry.Name = string(key)
 

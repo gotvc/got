@@ -10,9 +10,9 @@ import (
 	"go.inet256.org/inet256/src/inet256"
 )
 
-// IdentityLeaf contains information about a specific signing key.
-// It is an entry in the Leaves table.
-type IdentityLeaf struct {
+// IdentityUnit contains information about a specific signing key.
+// It is an entry in the Units table.
+type IdentityUnit struct {
 	// ID is part of the key.
 	ID inet256.ID
 
@@ -23,17 +23,17 @@ type IdentityLeaf struct {
 	KEMPublicKey kem.PublicKey
 }
 
-// NewLeaf creates a new IdentityLeaf with a new KEM key pair.
-func NewLeaf(pubKey inet256.PublicKey, kemPub kem.PublicKey) IdentityLeaf {
-	return IdentityLeaf{
+// NewIDUnit creates a new IdentityUnit with a new KEM key pair.
+func NewIDUnit(pubKey inet256.PublicKey, kemPub kem.PublicKey) IdentityUnit {
+	return IdentityUnit{
 		ID:           pki.NewID(pubKey),
 		SigPublicKey: pubKey,
 		KEMPublicKey: kemPub,
 	}
 }
 
-func ParseIdentityLeaf(key, value []byte) (*IdentityLeaf, error) {
-	id, err := parseLeafKey(key)
+func ParseIDUnit(key, value []byte) (*IdentityUnit, error) {
+	id, err := parseIDUnitKey(key)
 	if err != nil {
 		return nil, err
 	}
@@ -53,16 +53,16 @@ func ParseIdentityLeaf(key, value []byte) (*IdentityLeaf, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &IdentityLeaf{
+	return &IdentityUnit{
 		ID:           id,
 		SigPublicKey: pubKey,
 		KEMPublicKey: kemPub,
 	}, nil
 }
 
-// parseLeafKey parses the key portion of the GotKV entry in the Leaves table.
+// parseIDUnitKey parses the key portion of the GotKV entry in the Leaves table.
 // The first part of the key is the group name, and the last 32 bytes are the ID.
-func parseLeafKey(key []byte) (id inet256.ID, _ error) {
+func parseIDUnitKey(key []byte) (id inet256.ID, _ error) {
 	if len(key) != 32 {
 		return inet256.ID{}, fmt.Errorf("leaf key too short")
 	}
@@ -70,12 +70,12 @@ func parseLeafKey(key []byte) (id inet256.ID, _ error) {
 }
 
 // Key returns the key portion of the GotKV entry in the Leaves table.
-func (il IdentityLeaf) Key(out []byte) []byte {
+func (il IdentityUnit) Key(out []byte) []byte {
 	return append(out, il.ID[:]...)
 }
 
 // Value returns the value portion of the GotKV entry in the Leaves table.
-func (il *IdentityLeaf) Value(out []byte) []byte {
+func (il *IdentityUnit) Value(out []byte) []byte {
 	pubKeyData, err := pki.MarshalPublicKey(nil, il.SigPublicKey)
 	if err != nil {
 		panic(err)
@@ -85,7 +85,7 @@ func (il *IdentityLeaf) Value(out []byte) []byte {
 	return out
 }
 
-func (il *IdentityLeaf) GenerateKEM(sigPriv inet256.PrivateKey) kem.PrivateKey {
+func (il *IdentityUnit) GenerateKEM(sigPriv inet256.PrivateKey) kem.PrivateKey {
 	pub, priv, err := mlkem1024.GenerateKeyPair(rand.Reader)
 	if err != nil {
 		panic(err)

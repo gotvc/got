@@ -20,9 +20,7 @@ const (
 	Code_ChangeSet
 
 	Code_CreateGroup
-	Code_CreateLeaf
-	Code_AddLeaf
-	Code_RemoveLeaf
+	Code_CreateIDUnit
 	Code_AddMember
 	Code_RemoveMember
 
@@ -78,11 +76,9 @@ type Op interface {
 	isOp()
 }
 
-type IDSet = map[inet256.ID]struct{}
-
 type State interface {
 	CanDo(ctx context.Context, actor inet256.ID, verb Verb, objType ObjectType, objName string) (bool, error)
-	GetLeaf(ctx context.Context, id inet256.ID) (*IdentityLeaf, error)
+	GetLeaf(ctx context.Context, id inet256.ID) (*IdentityUnit, error)
 }
 
 // Diff is things that have changed between two system states.
@@ -125,12 +121,8 @@ func parseOp(code Code, payload []byte) (Op, error) {
 		op = &ChangeSet{}
 	case Code_CreateGroup:
 		op = &CreateGroup{}
-	case Code_CreateLeaf:
-		op = &CreateLeaf{}
-	case Code_AddLeaf:
-		op = &AddLeaf{}
-	case Code_RemoveLeaf:
-		op = &RemoveLeaf{}
+	case Code_CreateIDUnit:
+		op = &CreateIDUnit{}
 	case Code_AddMember:
 		op = &AddMember{}
 	case Code_RemoveMember:
@@ -216,8 +208,8 @@ func (cs ChangeSet) Validate(ctx context.Context, prev State, diff Diff, approve
 	// Any create operations will provide public keys that are not yet in the state.
 	for _, op := range cs.Ops {
 		switch op := op.(type) {
-		case *CreateLeaf:
-			pubKeys[op.Leaf.ID] = op.Leaf.SigPublicKey
+		case *CreateIDUnit:
+			pubKeys[op.Unit.ID] = op.Unit.SigPublicKey
 		}
 	}
 	for id := range cs.Sigs {
@@ -237,7 +229,7 @@ func (cs ChangeSet) Validate(ctx context.Context, prev State, diff Diff, approve
 			return fmt.Errorf("invalid signature for %v", id)
 		}
 		// add to approvers.
-		approvers[id] = struct{}{}
+		approvers.Add(id)
 	}
 	// validate the ops.
 	for _, op := range cs.Ops {
@@ -301,24 +293,24 @@ func (op CreateGroup) Validate(ctx context.Context, prev State, diff Diff, appro
 	return nil
 }
 
-// CreateLeaf creates a new leaf, or fails if the leaf already exists.
-type CreateLeaf struct {
-	Leaf IdentityLeaf
+// CreateIDUnit creates a new leaf, or fails if the leaf already exists.
+type CreateIDUnit struct {
+	Unit IdentityUnit
 }
 
-func (op CreateLeaf) isOp() {}
+func (op CreateIDUnit) isOp() {}
 
-func (op CreateLeaf) Code() Code {
-	return Code_CreateLeaf
+func (op CreateIDUnit) Code() Code {
+	return Code_CreateIDUnit
 }
 
-func (op CreateLeaf) Marshal(out []byte) []byte {
-	out = sbe.AppendLP(out, op.Leaf.Key(nil))
-	out = sbe.AppendLP(out, op.Leaf.Value(nil))
+func (op CreateIDUnit) Marshal(out []byte) []byte {
+	out = sbe.AppendLP(out, op.Unit.Key(nil))
+	out = sbe.AppendLP(out, op.Unit.Value(nil))
 	return out
 }
 
-func (op *CreateLeaf) Unmarshal(data []byte) error {
+func (op *CreateIDUnit) Unmarshal(data []byte) error {
 	k, data, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
@@ -327,101 +319,30 @@ func (op *CreateLeaf) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	leaf, err := ParseIdentityLeaf(k, val)
+	unit, err := ParseIDUnit(k, val)
 	if err != nil {
 		return err
 	}
-	op.Leaf = *leaf
+	op.Unit = *unit
 	return nil
 }
 
-func (op CreateLeaf) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
+func (op CreateIDUnit) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
 
-	return nil
-}
-
-// AddLeaf adds a leaf to a group.
-// The leaf must exist.
-// It can be created by CreateLeaf included in the same transaction.
-type AddLeaf struct {
-	Group  string
-	LeafID inet256.ID
-}
-
-func (op AddLeaf) isOp() {}
-
-func (op AddLeaf) Marshal(out []byte) []byte {
-	out = append(out, op.Group...)
-	out = append(out, op.LeafID[:]...)
-	return out
-}
-
-func (op *AddLeaf) Unmarshal(data []byte) error {
-	if len(data) < 32 {
-		return fmt.Errorf("invalid leaf id length: %d", len(data))
-	}
-	group := string(data[:len(data)-32])
-	id := inet256.IDFromBytes(data[len(data)-32:])
-	op.Group = group
-	op.LeafID = id
-	return nil
-}
-
-func (op AddLeaf) Code() Code {
-	return Code_AddLeaf
-}
-
-func (op AddLeaf) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
-	return nil
-}
-
-// RemoveLeaf removes a leaf from a group.
-// If the leaf is not in any group, it is removed from the leaves table.
-type RemoveLeaf struct {
-	Group string
-	ID    inet256.ID
-}
-
-func (op RemoveLeaf) isOp() {}
-
-func (op RemoveLeaf) Marshal(out []byte) []byte {
-	out = append(out, op.Group...)
-	out = append(out, op.ID[:]...)
-	return out
-}
-
-func (op *RemoveLeaf) Unmarshal(data []byte) error {
-	if len(data) < 32 {
-		return fmt.Errorf("invalid leaf id length: %d", len(data))
-	}
-	group := string(data[:len(data)-32])
-	id, err := parseLeafKey(data[len(data)-32:])
-	if err != nil {
-		return err
-	}
-	op.Group = group
-	op.ID = id
-	return nil
-}
-
-func (op RemoveLeaf) Code() Code {
-	return Code_RemoveLeaf
-}
-
-func (op RemoveLeaf) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
 	return nil
 }
 
 type AddMember struct {
-	Group, Member string
-	EncryptedKEM  []byte
+	Group        GroupID
+	Member       Member
+	EncryptedKEM []byte
 }
 
 func (op AddMember) isOp() {}
 
 func (op AddMember) Marshal(out []byte) []byte {
-	out = sbe.AppendLP(out, []byte(op.Group))
-	out = sbe.AppendLP(out, []byte(op.Member))
+	out = sbe.AppendLP(out, op.Group[:])
+	out = sbe.AppendLP(out, op.Member.Marshal(nil))
 	out = sbe.AppendLP(out, op.EncryptedKEM)
 	return out
 }
@@ -431,7 +352,7 @@ func (op *AddMember) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	member, data, err := sbe.ReadLP(data)
+	memberData, data, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
@@ -439,8 +360,13 @@ func (op *AddMember) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	op.Group = string(group)
-	op.Member = string(member)
+	var member Member
+	if err := member.Unmarshal(memberData); err != nil {
+		return err
+	}
+
+	op.Member = member
+	op.Group = GroupID(group)
 	op.EncryptedKEM = encryptedKEM
 	return nil
 }
@@ -455,14 +381,15 @@ func (op AddMember) Validate(ctx context.Context, prev State, diff Diff, approve
 }
 
 type RemoveMember struct {
-	Group, Member string
+	Group  GroupID
+	Member Member
 }
 
 func (op RemoveMember) isOp() {}
 
 func (op RemoveMember) Marshal(out []byte) []byte {
-	out = sbe.AppendLP(out, []byte(op.Group))
-	out = sbe.AppendLP(out, []byte(op.Member))
+	out = sbe.AppendLP(out, op.Group[:])
+	out = sbe.AppendLP(out, op.Member.Marshal(nil))
 	return out
 }
 
@@ -471,12 +398,17 @@ func (op *RemoveMember) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	member, _, err := sbe.ReadLP(data)
+	memberData, _, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
-	op.Group = string(group)
-	op.Member = string(member)
+	var member Member
+	if err := member.Unmarshal(memberData); err != nil {
+		return err
+	}
+
+	op.Group = GroupID(group)
+	op.Member = member
 	return nil
 }
 
@@ -509,7 +441,7 @@ func (op AddRule) Code() Code {
 
 func (op AddRule) Validate(ctx context.Context, prev State, diff Diff, approvers IDSet) error {
 	yes := false
-	for approver := range approvers {
+	for _, approver := range approvers {
 		y, err := prev.CanDo(ctx, approver, Verb_ADMIN, op.Rule.ObjectType, "")
 		if err != nil {
 			return err

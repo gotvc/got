@@ -27,7 +27,7 @@ func (m *Machine) GetAlias(ctx context.Context, s stores.Reading, state State, n
 		}
 		return nil, err
 	}
-	entry, err := gotnsop.ParseBranchEntry([]byte(name), val)
+	entry, err := gotnsop.ParseAliasEntry([]byte(name), val)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +91,7 @@ func (m *Machine) ListBranches(ctx context.Context, s stores.Reading, state Stat
 			return nil, err
 		}
 
-		entry, err := gotnsop.ParseBranchEntry(ent.Key, ent.Value)
+		entry, err := gotnsop.ParseAliasEntry(ent.Key, ent.Value)
 		if err != nil {
 			return nil, err
 		}
