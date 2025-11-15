@@ -205,6 +205,10 @@ func (m *Machine) PutObligation(ctx context.Context, s stores.RW, state State, o
 	return &state, nil
 }
 
+func (m *Machine) Fulfill(ctx context.Context, s stores.RW, state State, name string) error {
+	return nil
+}
+
 // FulfillObligations ensures that obligations for the entry are satisfied.
 func (m *Machine) FulfillObligations(ctx context.Context, s stores.RW, state State, name string, secret *gotnsop.Secret) (*State, error) {
 	entry, err := m.GetAlias(ctx, s, state, name)
@@ -264,16 +268,16 @@ func (m *Machine) FulfillObligations(ctx context.Context, s stores.RW, state Sta
 
 type CID = blobcache.CID
 
-func (m *Machine) addInitialRules(ctx context.Context, s stores.RW, state State, adminGroupName string) (*State, error) {
+func (m *Machine) addInitialRules(ctx context.Context, s stores.RW, state State, adminGID GroupID) (*State, error) {
 	for _, rule := range []gotnsop.Rule{
 		{
-			Subject:    adminGroupName,
+			Subject:    adminGID,
 			Verb:       gotnsop.Verb_ADMIN,
 			ObjectType: gotnsop.ObjectType_GROUP,
 			Names:      regexp.MustCompile(".*"),
 		},
 		{
-			Subject:    adminGroupName,
+			Subject:    adminGID,
 			Verb:       gotnsop.Verb_ADMIN,
 			ObjectType: gotnsop.ObjectType_BRANCH,
 			Names:      regexp.MustCompile(".*"),

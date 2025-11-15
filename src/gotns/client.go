@@ -28,7 +28,7 @@ type Client struct {
 
 // EnsureInit initializes a new GotNS instance in the given volume.
 // If the volume already contains a GotNS instance, it is left unchanged.
-func (c *Client) EnsureInit(ctx context.Context, volh blobcache.Handle, admins []IdentityLeaf) error {
+func (c *Client) EnsureInit(ctx context.Context, volh blobcache.Handle, admins []IdentityUnit) error {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return err
@@ -65,11 +65,11 @@ func (c *Client) Do(ctx context.Context, volh blobcache.Handle, fn func(txb *Txn
 	})
 }
 
-func (c *Client) GetGroup(ctx context.Context, volh blobcache.Handle, name string) (*gotnsop.Group, error) {
+func (c *Client) LookupGroup(ctx context.Context, volh blobcache.Handle, name string) (*gotnsop.Group, error) {
 	var group *gotnsop.Group
 	if err := c.view(ctx, volh, func(s stores.Reading, state State) error {
 		var err error
-		group, err = c.Machine.GetGroup(ctx, s, state, name)
+		group, err = c.Machine.LookupGroup(ctx, s, state, name)
 		if err != nil {
 			return err
 		}
@@ -80,11 +80,11 @@ func (c *Client) GetGroup(ctx context.Context, volh blobcache.Handle, name strin
 	return group, nil
 }
 
-func (c *Client) GetLeaf(ctx context.Context, volh blobcache.Handle, id inet256.ID) (*IdentityLeaf, error) {
-	var leaf *IdentityLeaf
+func (c *Client) GetIDUnit(ctx context.Context, volh blobcache.Handle, id inet256.ID) (*IdentityUnit, error) {
+	var idu *IdentityUnit
 	if err := c.view(ctx, volh, func(s stores.Reading, state State) error {
 		var err error
-		leaf, err = c.Machine.GetLeaf(ctx, s, state, id)
+		idu, err = c.Machine.GetIDUnit(ctx, s, state, id)
 		if err != nil {
 			return err
 		}
@@ -92,7 +92,7 @@ func (c *Client) GetLeaf(ctx context.Context, volh blobcache.Handle, id inet256.
 	}); err != nil {
 		return nil, err
 	}
-	return leaf, nil
+	return idu, nil
 }
 
 func (c *Client) GetAlias(ctx context.Context, volh blobcache.Handle, name string) (*AliasEntry, error) {
@@ -238,7 +238,7 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, 
 }
 
 // AddLeaf adds a new primitive identity to a group.
-func (c *Client) AddLeaf(ctx context.Context, volh blobcache.Handle, leaf IdentityLeaf) error {
+func (c *Client) AddIDUnit(ctx context.Context, volh blobcache.Handle, idu IdentityUnit) error {
 	panic("not implemented")
 }
 
@@ -321,11 +321,11 @@ func (c *Client) createSubVolume(ctx context.Context, tx *bcsdk.Tx) (*blobcache.
 // Then it returns the signed change set data.
 // It does not contact Blobcache or perform any Volume operations.
 func (c *Client) IntroduceSelf(kemPub kem.PublicKey) gotnsop.ChangeSet {
-	leaf := gotnsop.NewLeaf(c.ActAs.SigPrivateKey.Public().(inet256.PublicKey), kemPub)
+	leaf := gotnsop.NewIDUnit(c.ActAs.SigPrivateKey.Public().(inet256.PublicKey), kemPub)
 	cs := gotnsop.ChangeSet{
 		Ops: []Op{
-			&gotnsop.CreateLeaf{
-				Leaf: leaf,
+			&gotnsop.CreateIDUnit{
+				Unit: leaf,
 			},
 		},
 	}

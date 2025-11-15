@@ -26,7 +26,7 @@ func TestMarshalOp(t *testing.T) {
 			Group:  ComputeGroupID([16]byte{}, IDSet{}),
 			Member: MemberUnit(inet256.ID{}),
 		},
-		&AddRule{Rule: Rule{Subject: "sub", Verb: "verb", ObjectType: ObjectType_GROUP, Names: regexp.MustCompile(".*")}},
+		&AddRule{Rule: Rule{Verb: "verb", ObjectType: ObjectType_GROUP, Names: regexp.MustCompile(".*")}},
 		&DropRule{RuleID: RuleID{}},
 		&PutBranchEntry{Name: "test"},
 		&DeleteBranchEntry{Name: "test"},

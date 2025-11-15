@@ -37,7 +37,7 @@ const (
 
 type Rule struct {
 	// Subject is the name of the group that this rule applies to.
-	Subject string
+	Subject GroupID
 	// Action is the action granted by this rule.
 	Verb Verb
 	// ObjectType is the type of the object that this rule applies to.
@@ -51,10 +51,11 @@ func (r Rule) ID() RuleID {
 }
 
 func (r *Rule) Unmarshal(data []byte) error {
-	subject, data, err := sbe.ReadLP(data)
+	subjectData, data, err := sbe.ReadN(data, 32)
 	if err != nil {
 		return err
 	}
+	subject := GroupID(subjectData)
 	verb, data, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
@@ -71,7 +72,7 @@ func (r *Rule) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	r.Subject = string(subject)
+	r.Subject = subject
 	r.Verb = Verb(verb)
 	r.ObjectType = ObjectType(objType)
 	r.Names = namesRe
@@ -79,14 +80,14 @@ func (r *Rule) Unmarshal(data []byte) error {
 }
 
 func (r Rule) Marshal(out []byte) []byte {
-	out = sbe.AppendLP(out, []byte(r.Subject))
+	out = append(out, r.Subject[:]...)
 	out = sbe.AppendLP(out, []byte(r.Verb))
 	out = sbe.AppendLP(out, []byte(r.ObjectType))
 	out = sbe.AppendLP(out, []byte(r.Names.String()))
 	return out
 }
 
-func (r Rule) Matches(subject string, verb Verb, objType ObjectType, objName string) bool {
+func (r Rule) Matches(subject GroupID, verb Verb, objType ObjectType, objName string) bool {
 	return r.Subject == subject && r.Verb == verb && r.ObjectType == objType && r.Names.MatchString(objName)
 }
 

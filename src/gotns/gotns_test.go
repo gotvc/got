@@ -24,14 +24,13 @@ func TestInit(t *testing.T) {
 	signPub, sigPriv := newTestSigner(t)
 	kemPub, kemPriv := newTestKEM(t)
 	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: LeafPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}}
-	adminLeaf := gotnsop.NewLeaf(signPub, kemPub)
-	admins := []IdentityLeaf{adminLeaf}
+	adminLeaf := NewIDUnit(signPub, kemPub)
+	admins := []IdentityUnit{adminLeaf}
 	err = gnsc.EnsureInit(ctx, *volh, admins)
 	require.NoError(t, err)
 
-	adminGrp, err := gnsc.GetGroup(ctx, *volh, "admin")
+	adminGrp, err := gnsc.LookupGroup(ctx, *volh, "admin")
 	require.NoError(t, err)
-	require.Equal(t, "admin", adminGrp.Name)
 	require.Equal(t, adminLeaf.ID, adminGrp.Owners[0])
 }
 
@@ -44,7 +43,7 @@ func TestCreateBranch(t *testing.T) {
 	priv := LeafPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}
 	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: priv}
 
-	require.NoError(t, gnsc.EnsureInit(ctx, nsh, []IdentityLeaf{gotnsop.NewLeaf(sigPub, kemPub)}))
+	require.NoError(t, gnsc.EnsureInit(ctx, nsh, []IdentityUnit{gotnsop.NewIDUnit(sigPub, kemPub)}))
 	err := gnsc.CreateAlias(ctx, nsh, "test", nil)
 	require.NoError(t, err)
 	vol, err := gnsc.OpenAt(ctx, nsh, "test", priv)

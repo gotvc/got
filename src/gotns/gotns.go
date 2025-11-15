@@ -63,18 +63,20 @@ func ParseRoot(data []byte) (Root, error) {
 type State struct {
 	// Authentication tables.
 
-	// Leaves hold primitive identity elements.
-	// The key is the leaf ID, derived by hashing the public signing key.
-	// The value is the public signing key for the leaf, and a signed KEM key for the leaf to recieve messages
-	// The leaf KEM private keys are not store anywhere in the state.
-	Leaves gotkv.Root
-	// Groups maps group names to group information.
+	// IDUnits hold primitive identity elements.
+	// The key is the INET256 ID, derived by hashing the public signing key.
+	// The value is the public signing key for the unit, and a signed KEM key for the leaf to recieve messages
+	// The unit KEM private keys are not store anywhere in the state.
+	IDUnits gotkv.Root
+	// Groups maps group IDs to group information.
 	// Group information holds group's Owner list, and shared KEM key for the group
 	// to receive messages.
 	Groups gotkv.Root
+	// GroupNames maps names to group IDs.
+	GroupNames gotkv.Root
+
 	// Memberships holds relationships between groups and other groups.
-	// The key is the containing group + the member group + len(member group name)
-	// The value is a KEM ciphertext sent by the containing group owner to the member.
+	// The value is a KEM ciphertext sent by the containing group owners to the member.
 	// The ciphertext contains the containing group's KEM private key encrypted with the member's KEM public key.
 	Memberships gotkv.Root
 
@@ -95,11 +97,15 @@ type State struct {
 func (s State) Marshal(out []byte) []byte {
 	const versionTag = 0
 	out = append(out, versionTag)
-	out = sbe.AppendLP(out, s.Leaves.Marshal(nil))
+
+	out = sbe.AppendLP(out, s.IDUnits.Marshal(nil))
 	out = sbe.AppendLP(out, s.Groups.Marshal(nil))
+	out = sbe.AppendLP(out, s.GroupNames.Marshal(nil))
 	out = sbe.AppendLP(out, s.Memberships.Marshal(nil))
+
 	out = sbe.AppendLP(out, s.Rules.Marshal(nil))
 	out = sbe.AppendLP(out, s.Obligations.Marshal(nil))
+
 	out = sbe.AppendLP(out, s.Volumes.Marshal(nil))
 	out = sbe.AppendLP(out, s.Aliases.Marshal(nil))
 	return out
@@ -118,7 +124,13 @@ func (s *State) Unmarshal(data []byte) error {
 	data = data[1:]
 
 	// read all of the gotkv roots
-	for _, dst := range []*gotkv.Root{&s.Leaves, &s.Groups, &s.Memberships, &s.Rules, &s.Obligations, &s.Volumes, &s.Aliases} {
+	for _, dst := range []*gotkv.Root{
+		&s.IDUnits, &s.Groups, &s.GroupNames, &s.Memberships,
+
+		&s.Rules, &s.Obligations,
+
+		&s.Volumes, &s.Aliases,
+	} {
 		kvrData, rest, err := sbe.ReadLP(data)
 		if err != nil {
 			return err
@@ -176,10 +188,19 @@ func New() Machine {
 }
 
 // New creates a new root.
-func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (*statetrace.Root[Root], error) {
+func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityUnit) (*statetrace.Root[Root], error) {
 	state := new(State)
 	for _, dst := range []*gotkv.Root{
-		&state.Groups, &state.Leaves, &state.Memberships, &state.Rules, &state.Obligations, &state.Volumes, &state.Aliases} {
+		&state.IDUnits,
+
+		&state.Groups,
+		&state.GroupNames,
+		&state.Memberships,
+
+		&state.Rules, &state.Obligations,
+
+		&state.Volumes, &state.Aliases,
+	} {
 		kvr, err := m.gotkv.NewEmpty(ctx, s)
 		if err != nil {
 			return nil, err
@@ -187,35 +208,51 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 		*dst = *kvr
 	}
 
-	// create initial KEM seed
-	var kemSeed gotnsop.Secret
-	if _, err := rand.Read(kemSeed[:]); err != nil {
+	// create initial group secret
+	var groupSecret gotnsop.Secret
+	if _, err := rand.Read(groupSecret[:]); err != nil {
 		return nil, err
 	}
-	groupKEMPub, _ := kemSeed.DeriveKEM()
+	groupKEMPub, _ := groupSecret.DeriveKEM()
 
-	leaves := map[inet256.ID][]byte{}
-	for _, leaf := range admins {
+	units := map[inet256.ID][]byte{}
+	for _, unit := range admins {
 		var err error
-		state, err = m.PutLeaf(ctx, s, *state, leaf)
+		state, err = m.PutIDUnit(ctx, s, *state, unit)
 		if err != nil {
 			return nil, err
 		}
-		leaves[leaf.ID] = encryptSeed(nil, leaf.KEMPublicKey, &kemSeed)
+		units[unit.ID] = encryptSeed(nil, unit.KEMPublicKey, &groupSecret)
 	}
+
 	const adminGroupName = "admin"
-	g := gotnsop.Group{
-		Name:     adminGroupName,
-		KEM:      groupKEMPub,
-		LeafKEMs: leaves,
-		Owners:   slices2.Map(admins, func(leaf IdentityLeaf) inet256.ID { return leaf.ID }),
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return nil, err
 	}
+	g := gotnsop.Group{
+		Nonce:  nonce,
+		KEM:    groupKEMPub,
+		Owners: slices2.Map(admins, func(leaf IdentityUnit) inet256.ID { return leaf.ID }),
+	}
+	g.ID = gotnsop.ComputeGroupID(g.Nonce, g.Owners)
 	var err error
 	state, err = m.PutGroup(ctx, s, *state, g)
 	if err != nil {
 		return nil, err
 	}
-	state, err = m.addInitialRules(ctx, s, *state, adminGroupName)
+	if state, err = m.PutGroupName(ctx, s, *state, adminGroupName, g.ID); err != nil {
+		return nil, err
+	}
+	for unit := range units {
+		mem := MemberUnit(unit)
+		state, err = m.AddMember(ctx, s, *state, g.ID, mem)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	state, err = m.addInitialRules(ctx, s, *state, g.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -232,9 +269,16 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 
 // ValidateState checks the state in isolation.
 func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State) error {
-	for _, kvr := range []gotkv.Root{x.Leaves, x.Groups, x.Memberships, x.Rules, x.Aliases} {
+	for i, kvr := range []gotkv.Root{
+		x.IDUnits,
+		x.Groups, x.GroupNames, x.Memberships,
+
+		x.Rules, x.Obligations,
+
+		x.Aliases, x.Volumes,
+	} {
 		if kvr.Ref.CID.IsZero() {
-			return fmt.Errorf("gotns: one of the States is uninitialized")
+			return fmt.Errorf("gotns: one of the States is uninitialized %d", i)
 		}
 	}
 	return nil

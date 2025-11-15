@@ -33,8 +33,13 @@ func ParseGroupID(x []byte) (GroupID, error) {
 }
 
 type Group struct {
+	// ID uniquely identifies the group.
+	// It is stored in the key,
 	ID GroupID
 
+	// All the fields below are stored in the value.
+
+	// Nonce is random additional data used to compute the GroupID
 	Nonce [16]byte
 	// KEM is used to send messages to the group.
 	// The private key is stored encrypted in each Membership entry.
@@ -49,6 +54,7 @@ func ParseGroup(key, value []byte) (*Group, error) {
 	if err != nil {
 		return nil, err
 	}
+
 	if len(value) < 16 {
 		return nil, nil
 	}

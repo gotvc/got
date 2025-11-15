@@ -65,38 +65,57 @@ func (tx *Txn) Finish(ctx context.Context) (statetrace.Root[Root], error) {
 	return tx.m.led.AndThen(ctx, tx.s, tx.prev, nextRoot)
 }
 
-// CreateLeaf creates a new leaf.
-func (tx *Txn) CreateLeaf(ctx context.Context, leaf IdentityLeaf) error {
-	if err := tx.createLeaf(ctx, leaf); err != nil {
+// CreateIDUnit creates a new unit.
+func (tx *Txn) CreateIDUnit(ctx context.Context, unit IdentityUnit) error {
+	state, err := tx.m.PutIDUnit(ctx, tx.s, tx.curState, unit)
+	if err != nil {
 		return err
 	}
-	tx.addOp(&gotnsop.CreateLeaf{
-		Leaf: leaf,
+	tx.curState = *state
+	tx.addOp(&gotnsop.CreateIDUnit{
+		Unit: unit,
 	})
 	return nil
 }
 
-// AddLeaf adds a leaf in a transaction.
-func (tx *Txn) AddLeaf(ctx context.Context, group string, leafID inet256.ID) error {
-	if len(tx.actAs) > 1 {
-		return fmt.Errorf("cannot add leaf in a transaction with multiple signers")
-	}
-	actAs := tx.actAs[0]
-	ownerID := pki.NewID(actAs.SigPrivateKey.Public().(inet256.PublicKey))
-	kemSeed, err := tx.m.GetKEMSeed(ctx, tx.s, tx.curState, []string{group}, ownerID, actAs.KEMPrivateKey)
-	if err != nil {
-		return err
-	}
-	nextState, err := tx.m.AddGroupLeaf(ctx, tx.s, tx.curState, kemSeed, group, leafID)
+func (tx *Txn) AddMember(ctx context.Context, group gotnsop.GroupID, member gotnsop.Member) error {
+	nextState, err := tx.m.AddMember(ctx, tx.s, tx.curState, group, member)
 	if err != nil {
 		return err
 	}
 	tx.curState = *nextState
 	tx.addOp(&gotnsop.AddMember{
 		Group:  group,
-		Member: leafID.String(),
+		Member: member,
 	})
 	return nil
+}
+
+// AddIDUnit adds a unit in a transaction.
+// func (tx *Txn) AddIDUnit(ctx context.Context, group string, id inet256.ID) error {
+// 	if len(tx.actAs) > 1 {
+// 		return fmt.Errorf("cannot add leaf in a transaction with multiple signers")
+// 	}
+// 	actAs := tx.actAs[0]
+// 	ownerID := pki.NewID(actAs.SigPrivateKey.Public().(inet256.PublicKey))
+// 	kemSeed, err := tx.m.GetKEMSeed(ctx, tx.s, tx.curState, []string{group}, ownerID, actAs.KEMPrivateKey)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	nextState, err := tx.m.AddGroupLeaf(ctx, tx.s, tx.curState, kemSeed, group, leafID)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	tx.curState = *nextState
+// 	tx.addOp(&gotnsop.AddMember{
+// 		Group:  group,
+// 		Member: leafID.String(),
+// 	})
+// 	return nil
+// }
+
+func (tx *Txn) LookupGroup(ctx context.Context, gname string) (*Group, error) {
+	return tx.m.LookupGroup(ctx, tx.s, tx.curState, gname)
 }
 
 func (tx *Txn) PutAlias(ctx context.Context, entry AliasEntry, secret *gotnsop.Secret) error {
@@ -148,8 +167,8 @@ func (tx *Txn) ChangeSet(ctx context.Context, cs gotnsop.ChangeSet) error {
 	for _, op := range cs.Ops {
 		// TODO: this is not great, we should only implement this once in CreateLeaf.
 		switch op := op.(type) {
-		case *gotnsop.CreateLeaf:
-			if err := tx.createLeaf(ctx, op.Leaf); err != nil {
+		case *gotnsop.CreateIDUnit:
+			if err := tx.createLeaf(ctx, op.Unit); err != nil {
 				return err
 			}
 
@@ -161,8 +180,8 @@ func (tx *Txn) ChangeSet(ctx context.Context, cs gotnsop.ChangeSet) error {
 	return nil
 }
 
-func (tx *Txn) createLeaf(ctx context.Context, leaf IdentityLeaf) error {
-	state, err := tx.m.PutLeaf(ctx, tx.s, tx.curState, leaf)
+func (tx *Txn) createLeaf(ctx context.Context, leaf IdentityUnit) error {
+	state, err := tx.m.PutIDUnit(ctx, tx.s, tx.curState, leaf)
 	if err != nil {
 		return err
 	}
