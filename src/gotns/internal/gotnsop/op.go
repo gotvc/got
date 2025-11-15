@@ -217,7 +217,7 @@ func (cs ChangeSet) Validate(ctx context.Context, prev State, diff Diff, approve
 	for _, op := range cs.Ops {
 		switch op := op.(type) {
 		case *CreateLeaf:
-			pubKeys[op.Leaf.ID] = op.Leaf.PublicKey
+			pubKeys[op.Leaf.ID] = op.Leaf.SigPublicKey
 		}
 	}
 	for id := range cs.Sigs {
@@ -226,7 +226,7 @@ func (cs ChangeSet) Validate(ctx context.Context, prev State, diff Diff, approve
 			if err != nil {
 				return err
 			}
-			pubKeys[id] = leaf.PublicKey
+			pubKeys[id] = leaf.SigPublicKey
 		}
 	}
 	// validate the sigs.

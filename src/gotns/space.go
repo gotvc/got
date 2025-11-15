@@ -32,14 +32,14 @@ func (bs *Space) Create(ctx context.Context, name string, config branches.Params
 	if err != nil {
 		return nil, err
 	}
-	if err := bs.client.CreateBranch(ctx, bs.volh, name, aux); err != nil {
+	if err := bs.client.CreateAlias(ctx, bs.volh, name, aux); err != nil {
 		return nil, err
 	}
 	return &info, nil
 }
 
 func (bs *Space) Inspect(ctx context.Context, name string) (*branches.Info, error) {
-	ent, err := bs.client.GetBranch(ctx, bs.volh, name)
+	ent, err := bs.client.GetAlias(ctx, bs.volh, name)
 	if err != nil {
 		return nil, err
 	}
@@ -50,7 +50,7 @@ func (bs *Space) Inspect(ctx context.Context, name string) (*branches.Info, erro
 }
 
 func (bs *Space) Open(ctx context.Context, name string) (*branches.Branch, error) {
-	vol, err := bs.client.OpenAt(ctx, bs.volh, name)
+	vol, err := bs.client.OpenAt(ctx, bs.volh, name, bs.client.ActAs)
 	if err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func (bs *Space) Open(ctx context.Context, name string) (*branches.Branch, error
 }
 
 func (bs *Space) Delete(ctx context.Context, name string) error {
-	return bs.client.DeleteBranch(ctx, bs.volh, name)
+	return bs.client.DeleteAlias(ctx, bs.volh, name)
 }
 
 func (bs *Space) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {

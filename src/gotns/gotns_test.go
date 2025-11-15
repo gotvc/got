@@ -40,11 +40,16 @@ func TestCreateBranch(t *testing.T) {
 	bc := newTestService(t)
 	sigPub, sigPriv := newTestSigner(t)
 	kemPub, kemPriv := newTestKEM(t)
-	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: LeafPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}}
-	require.NoError(t, gnsc.EnsureInit(ctx, blobcache.Handle{}, []IdentityLeaf{gotnsop.NewLeaf(sigPub, kemPub)}))
+	nsh := blobcache.Handle{}
+	priv := LeafPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}
+	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: priv}
 
-	err := gnsc.CreateBranch(ctx, blobcache.Handle{}, "test", nil)
+	require.NoError(t, gnsc.EnsureInit(ctx, nsh, []IdentityLeaf{gotnsop.NewLeaf(sigPub, kemPub)}))
+	err := gnsc.CreateAlias(ctx, nsh, "test", nil)
 	require.NoError(t, err)
+	vol, err := gnsc.OpenAt(ctx, nsh, "test", priv)
+	require.NoError(t, err)
+	t.Log(vol)
 }
 
 func newTestService(t *testing.T) *bclocal.Service {

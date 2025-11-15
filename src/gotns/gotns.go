@@ -40,7 +40,7 @@ func ParseRoot(data []byte) (Root, error) {
 	if err != nil {
 		return Root{}, err
 	}
-	recData, data, err := sbe.ReadLP(data)
+	recData, _, err := sbe.ReadLP(data)
 	if err != nil {
 		return Root{}, err
 	}

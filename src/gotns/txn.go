@@ -99,8 +99,8 @@ func (tx *Txn) AddLeaf(ctx context.Context, group string, leafID inet256.ID) err
 	return nil
 }
 
-func (tx *Txn) PutAlias(ctx context.Context, entry BranchEntry) error {
-	state, err := tx.m.PutAlias(ctx, tx.s, tx.curState, entry)
+func (tx *Txn) PutAlias(ctx context.Context, entry AliasEntry, secret *gotnsop.Secret) error {
+	state, err := tx.m.PutAlias(ctx, tx.s, tx.curState, entry, secret)
 	if err != nil {
 		return err
 	}
@@ -113,7 +113,7 @@ func (tx *Txn) PutAlias(ctx context.Context, entry BranchEntry) error {
 }
 
 func (tx *Txn) DeleteAlias(ctx context.Context, name string) error {
-	state, err := tx.m.DeleteBranch(ctx, tx.s, tx.curState, name)
+	state, err := tx.m.DeleteAlias(ctx, tx.s, tx.curState, name)
 	if err != nil {
 		return err
 	}

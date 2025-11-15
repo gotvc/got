@@ -5,6 +5,7 @@ import (
 	"regexp"
 
 	"blobcache.io/blobcache/src/blobcache"
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 )
@@ -43,6 +44,10 @@ type Rule struct {
 	ObjectType ObjectType
 	// Names is a regular expression that matches the names of the objects that this rule applies to.
 	Names *regexp.Regexp
+}
+
+func (r Rule) ID() RuleID {
+	return gdat.Hash(r.Marshal(nil))
 }
 
 func (r *Rule) Unmarshal(data []byte) error {

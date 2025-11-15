@@ -22,7 +22,7 @@ var localIDCmd = star.Command{
 			return err
 		}
 		fmt.Fprintf(c.StdOut, "%-40s\t%-10s\t%-10s\n", "ID", "SIG_ALGO", "KEM_ALGO")
-		fmt.Fprintf(c.StdOut, "%-40v\t%-10s\t%-10s\n", leaf.ID, leaf.PublicKey.Scheme().Name(), leaf.KEMPublicKey.Scheme().Name())
+		fmt.Fprintf(c.StdOut, "%-40v\t%-10s\t%-10s\n", leaf.ID, leaf.SigPublicKey.Scheme().Name(), leaf.KEMPublicKey.Scheme().Name())
 		return nil
 	},
 }

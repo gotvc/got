@@ -14,12 +14,12 @@ import (
 )
 
 type (
-	BranchEntry = gotnsop.AliasEntry
+	AliasEntry  = gotnsop.AliasEntry
 	VolumeEntry = gotnsop.VolumeEntry
 )
 
-// GetBranch looks up an entry in the branches table.
-func (m *Machine) GetBranch(ctx context.Context, s stores.Reading, state State, name string) (*gotnsop.AliasEntry, error) {
+// GetAlias looks up an entry in the branches table.
+func (m *Machine) GetAlias(ctx context.Context, s stores.Reading, state State, name string) (*gotnsop.AliasEntry, error) {
 	val, err := m.gotkv.Get(ctx, s, state.Aliases, []byte(name))
 	if err != nil {
 		if gotkv.IsErrKeyNotFound(err) {
@@ -35,18 +35,22 @@ func (m *Machine) GetBranch(ctx context.Context, s stores.Reading, state State, 
 }
 
 // PutAlias inserts or overwrites an entry in the branches table.
-func (m *Machine) PutAlias(ctx context.Context, s stores.RW, State State, entry gotnsop.AliasEntry) (*State, error) {
+func (m *Machine) PutAlias(ctx context.Context, s stores.RW, state State, entry gotnsop.AliasEntry, secret *gotnsop.Secret) (*State, error) {
 	mut1 := putAlias(entry)
-	aliasState, err := m.gotkv.Mutate(ctx, s, State.Aliases, mut1)
+	aliasState, err := m.gotkv.Mutate(ctx, s, state.Aliases, mut1)
 	if err != nil {
 		return nil, err
 	}
-	State.Aliases = *aliasState
-	return &State, nil
+	state.Aliases = *aliasState
+	nextState, err := m.FulfillObligations(ctx, s, state, entry.Name, secret)
+	if err != nil {
+		return nil, err
+	}
+	return nextState, nil
 }
 
-// DeleteBranch
-func (m *Machine) DeleteBranch(ctx context.Context, s stores.RW, State State, name string) (*State, error) {
+// DeleteAlias deletes an alias from the namespace.
+func (m *Machine) DeleteAlias(ctx context.Context, s stores.RW, State State, name string) (*State, error) {
 	entsState, err := m.gotkv.Delete(ctx, s, State.Aliases, []byte(name))
 	if err != nil {
 		return nil, err

@@ -29,8 +29,11 @@ func (s Secret) DeriveSym() [32]byte {
 	return ret
 }
 
-func (s Secret) Ratchet() Secret {
-	return Secret(gdat.Hash(s[:]))
+func (s Secret) Ratchet(n int) Secret {
+	for range n {
+		s = Secret(gdat.Hash(s[:]))
+	}
+	return s
 }
 
 // MarshalKEMPublicKey marshals a KEM public key with a scheme tag.

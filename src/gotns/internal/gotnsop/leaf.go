@@ -17,7 +17,7 @@ type IdentityLeaf struct {
 	ID inet256.ID
 
 	// PublicKey is the public signing key.
-	PublicKey inet256.PublicKey
+	SigPublicKey inet256.PublicKey
 	// KEMPublicKey is the public KEM key.
 	// This will have been authenticated by the leaf's.
 	KEMPublicKey kem.PublicKey
@@ -27,7 +27,7 @@ type IdentityLeaf struct {
 func NewLeaf(pubKey inet256.PublicKey, kemPub kem.PublicKey) IdentityLeaf {
 	return IdentityLeaf{
 		ID:           pki.NewID(pubKey),
-		PublicKey:    pubKey,
+		SigPublicKey: pubKey,
 		KEMPublicKey: kemPub,
 	}
 }
@@ -55,7 +55,7 @@ func ParseIdentityLeaf(key, value []byte) (*IdentityLeaf, error) {
 	}
 	return &IdentityLeaf{
 		ID:           id,
-		PublicKey:    pubKey,
+		SigPublicKey: pubKey,
 		KEMPublicKey: kemPub,
 	}, nil
 }
@@ -76,7 +76,7 @@ func (il IdentityLeaf) Key(out []byte) []byte {
 
 // Value returns the value portion of the GotKV entry in the Leaves table.
 func (il *IdentityLeaf) Value(out []byte) []byte {
-	pubKeyData, err := pki.MarshalPublicKey(nil, il.PublicKey)
+	pubKeyData, err := pki.MarshalPublicKey(nil, il.SigPublicKey)
 	if err != nil {
 		panic(err)
 	}

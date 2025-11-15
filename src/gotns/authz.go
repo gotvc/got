@@ -135,13 +135,10 @@ func (m *Machine) CanAnyDo(ctx context.Context, s stores.Reading, state State, a
 
 // Obligation associates encrypted secret keys with Volumes, according to rules.
 type Obligation struct {
-	// Volume is the volume that the obligation is for.
-	// Accessing the data in this volume requires the seed encrypted in the obligation value.
-	Volume blobcache.OID
+	// HashOfSecret is the hash of the secret that the obligation is for.
+	HashOfSecret [32]byte
 	// KEMHash is the hash of the KEM public key that the obligation is for.
 	KEMHash [32]byte
-	// Nonce is increased each time the volume keys change.
-	Nonce uint64
 
 	// The seed can be decrypted with the corresponding private key for the KEMHash.
 	// The seed will decrypt to a 64 byte seed, which is used for the volume's Signing Key.
@@ -152,9 +149,8 @@ type Obligation struct {
 }
 
 func (o *Obligation) Key(out []byte) []byte {
-	out = append(out, o.Volume[:]...)
+	out = append(out, o.HashOfSecret[:]...)
 	out = append(out, o.KEMHash[:]...)
-	out = binary.BigEndian.AppendUint64(out, o.Nonce)
 	return out
 }
 
@@ -169,19 +165,18 @@ func (o *Obligation) Value(out []byte) []byte {
 
 func ParseObligation(key []byte, value []byte) (*Obligation, error) {
 	// key
-	if len(key) < blobcache.OIDSize+32+8 {
+	if len(key) < 32+32 {
 		return nil, fmt.Errorf("key too short")
 	}
-	volID := blobcache.OID(key[:blobcache.OIDSize])
-	kemHash := [32]byte(key[blobcache.OIDSize : blobcache.OIDSize+32])
-	nonce := binary.BigEndian.Uint64(key[blobcache.OIDSize+32:])
+	hos := [32]byte(key[:32])
+	kemHash := [32]byte(key[32 : 32+32])
 
 	// value
 	encryptedSeed, value, err := sbe.ReadLP(value)
 	if err != nil {
 		return nil, err
 	}
-	ruleIDsLen, value, err := sbe.ReadUVarint(value[len(encryptedSeed):])
+	ruleIDsLen, value, err := sbe.ReadUVarint(value)
 	if err != nil {
 		return nil, err
 	}
@@ -193,9 +188,8 @@ func ParseObligation(key []byte, value []byte) (*Obligation, error) {
 		ruleIDs = append(ruleIDs, ruleID)
 	}
 	return &Obligation{
-		Volume:  volID,
-		KEMHash: kemHash,
-		Nonce:   nonce,
+		HashOfSecret: hos,
+		KEMHash:      kemHash,
 
 		EncryptedSeed: encryptedSeed,
 		RuleIDs:       ruleIDs,
@@ -211,17 +205,61 @@ func (m *Machine) PutObligation(ctx context.Context, s stores.RW, state State, o
 	return &state, nil
 }
 
-// EnsureObligations ensures that obligations for the entry are satisfied.
-func (m *Machine) EnsureObligations(ctx context.Context, s stores.Reading, state State, ent BranchEntry, secret *[32]byte) (bool, error) {
+// FulfillObligations ensures that obligations for the entry are satisfied.
+func (m *Machine) FulfillObligations(ctx context.Context, s stores.RW, state State, name string, secret *gotnsop.Secret) (*State, error) {
+	entry, err := m.GetAlias(ctx, s, state, name)
+	if err != nil {
+		return nil, err
+	}
+	if entry == nil {
+		return nil, fmt.Errorf("alias %s not found", name)
+	}
 	if err := m.ForEachRule(ctx, s, state, func(rule gotnsop.Rule) error {
-		if rule.ObjectType != gotnsop.ObjectType_BRANCH || !rule.Names.MatchString(ent.Name) {
+		if rule.ObjectType != gotnsop.ObjectType_BRANCH || !rule.Names.MatchString(name) {
+			return nil
+		}
+		g, err := m.GetGroup(ctx, s, state, rule.Subject)
+		if err != nil {
+			return err
+		}
+		kemPub := g.KEM
+		hashOfKEM := hashOfKEM(kemPub)
+		hos := secret.Ratchet(2)
+		switch rule.Verb {
+		case gotnsop.Verb_LOOK:
+			// Need to encrypt the secret for this rule.
+			lookSecret := secret.Ratchet(1)
+			nextState, err := m.PutObligation(ctx, s, state, &Obligation{
+				HashOfSecret:  hos,
+				KEMHash:       hashOfKEM,
+				EncryptedSeed: encryptSeed(nil, kemPub, &lookSecret),
+				RuleIDs:       []RuleID{rule.ID()},
+			})
+			if err != nil {
+				return err
+			}
+			state = *nextState
+		case gotnsop.Verb_TOUCH, gotnsop.Verb_ADMIN:
+			// Need to encrypt the secret for this rule.
+			nextState, err := m.PutObligation(ctx, s, state, &Obligation{
+				HashOfSecret:  hos,
+				KEMHash:       hashOfKEM,
+				EncryptedSeed: encryptSeed(nil, kemPub, secret),
+				RuleIDs:       []RuleID{rule.ID()},
+			})
+			if err != nil {
+				return err
+			}
+			state = *nextState
+		default:
+			// Nothing to do
 			return nil
 		}
 		return nil
 	}); err != nil {
-		return false, err
+		return nil, err
 	}
-	return false, nil
+	return &state, nil
 }
 
 type CID = blobcache.CID
@@ -248,4 +286,25 @@ func (m *Machine) addInitialRules(ctx context.Context, s stores.RW, state State,
 		state = *next
 	}
 	return &state, nil
+}
+
+// FindSecret finds reveres the provied hash.
+// It looks for obligations that match the hash, and decrypts the secret using the provided KEM private key.
+func (m *Machine) FindSecret(ctx context.Context, s stores.Reading, state State, actAs LeafPrivate, hos *[32]byte) (*gotnsop.Secret, error) {
+	var secret *gotnsop.Secret
+	if err := m.gotkv.ForEach(ctx, s, state.Obligations, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
+		obligation, err := ParseObligation(ent.Key, ent.Value)
+		if err != nil {
+			return err
+		}
+		if obligation.HashOfSecret == *hos {
+			var err error
+			secret, err = decryptSeed(actAs.KEMPrivateKey, obligation.EncryptedSeed)
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return secret, nil
 }

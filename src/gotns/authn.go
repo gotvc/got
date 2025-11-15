@@ -11,6 +11,7 @@ import (
 	"go.inet256.org/inet256/src/inet256"
 	"golang.org/x/crypto/chacha20"
 
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotns/internal/gotnsop"
 	"github.com/gotvc/got/src/internal/stores"
@@ -423,6 +424,10 @@ func appendXOR(out []byte, key *[32]byte, src []byte) []byte {
 	out = append(out, src...)
 	cryptoXOR(key, out[offset:], out[offset:])
 	return out
+}
+
+func hashOfKEM(kem kem.PublicKey) [32]byte {
+	return [32]byte(gdat.Hash(MarshalKEMPublicKey(nil, KEM_MLKEM1024, kem)))
 }
 
 const (

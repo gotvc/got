@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"fmt"
 
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
@@ -11,7 +12,6 @@ import (
 	"github.com/cloudflare/circl/kem"
 	dilithium3 "github.com/cloudflare/circl/sign/dilithium/mode3"
 	"github.com/gotvc/got/src/branches"
-	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotns/internal/gotnsop"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
@@ -95,7 +95,7 @@ func (c *Client) GetLeaf(ctx context.Context, volh blobcache.Handle, id inet256.
 	return leaf, nil
 }
 
-func (c *Client) GetBranch(ctx context.Context, volh blobcache.Handle, name string) (*BranchEntry, error) {
+func (c *Client) GetAlias(ctx context.Context, volh blobcache.Handle, name string) (*AliasEntry, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return nil, err
@@ -109,11 +109,11 @@ func (c *Client) GetBranch(ctx context.Context, volh blobcache.Handle, name stri
 	if err != nil {
 		return nil, err
 	}
-	return c.Machine.GetBranch(ctx, tx, *state, name)
+	return c.Machine.GetAlias(ctx, tx, *state, name)
 }
 
-// CreateBranch creates a new branch with a new volume at the specified name.
-func (c *Client) CreateBranch(ctx context.Context, nsh blobcache.Handle, name string, aux []byte) error {
+// CreateAlias creates a new alias with a new volume at the specified name.
+func (c *Client) CreateAlias(ctx context.Context, nsh blobcache.Handle, name string, aux []byte) error {
 	return c.doTx(ctx, nsh, c.ActAs, func(tx *bcsdk.Tx, txn *Txn) error {
 		svh, err := c.createSubVolume(ctx, tx)
 		if err != nil {
@@ -122,11 +122,11 @@ func (c *Client) CreateBranch(ctx context.Context, nsh blobcache.Handle, name st
 		if err := tx.Link(ctx, *svh, blobcache.Action_ALL); err != nil {
 			return err
 		}
-		sec := [32]byte{}
+		sec := gotnsop.Secret{}
 		if _, err := rand.Read(sec[:]); err != nil {
 			return err
 		}
-		hos := gdat.Hash(sec[:])
+		hos := [32]byte(sec.Ratchet(2))
 		if err := txn.AddVolume(ctx, VolumeEntry{
 			Volume:        svh.OID,
 			HashOfSecrets: [][32]byte{hos},
@@ -136,20 +136,20 @@ func (c *Client) CreateBranch(ctx context.Context, nsh blobcache.Handle, name st
 		if err := txn.PutAlias(ctx, gotnsop.AliasEntry{
 			Name:   name,
 			Volume: svh.OID,
-		}); err != nil {
+		}, &sec); err != nil {
 			return err
 		}
 		return nil
 	})
 }
 
-func (c *Client) PutAlias(ctx context.Context, volh blobcache.Handle, bent BranchEntry) error {
+func (c *Client) PutAlias(ctx context.Context, volh blobcache.Handle, bent AliasEntry, secret *gotnsop.Secret) error {
 	return c.doTx(ctx, volh, c.ActAs, func(tx *bcsdk.Tx, txb *Txn) error {
-		return txb.PutAlias(ctx, bent)
+		return txb.PutAlias(ctx, bent, secret)
 	})
 }
 
-func (c *Client) DeleteBranch(ctx context.Context, volh blobcache.Handle, name string) error {
+func (c *Client) DeleteAlias(ctx context.Context, volh blobcache.Handle, name string) error {
 	return c.doTx(ctx, volh, c.ActAs, func(tx *bcsdk.Tx, txb *Txn) error {
 		return txb.DeleteAlias(ctx, name)
 	})
@@ -192,19 +192,34 @@ func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string
 	return nil, nil
 }
 
-func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string) (branches.Volume, error) {
+func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, actAs LeafPrivate) (branches.Volume, error) {
+	var vent *VolumeEntry
+	var secret *gotnsop.Secret
 	nsh, err := c.adjustHandle(ctx, nsh)
 	if err != nil {
 		return nil, err
 	}
-	ent, err := c.GetBranch(ctx, nsh, name)
-	if err != nil {
+	if err := c.view(ctx, nsh, func(s stores.Reading, state State) error {
+		ent, err := c.Machine.GetAlias(ctx, s, state, name)
+		if err != nil {
+			return err
+		}
+		vent, err = c.Machine.GetVolume(ctx, s, state, ent.Volume)
+		if err != nil {
+			return err
+		}
+		secret, err = c.Machine.FindSecret(ctx, s, state, actAs, &vent.HashOfSecrets[0])
+		if err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
 		return nil, err
 	}
-	if ent == nil {
-		return nil, branches.ErrNotExist
+	if secret == nil {
+		return nil, fmt.Errorf("secret not found")
 	}
-	volh, err := c.Blobcache.OpenFrom(ctx, nsh, ent.Volume, blobcache.Action_ALL)
+	volh, err := c.Blobcache.OpenFrom(ctx, nsh, vent.Volume, blobcache.Action_ALL)
 	if err != nil {
 		return nil, err
 	}
@@ -212,12 +227,13 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string) 
 		Handle:  *volh,
 		Service: c.Blobcache,
 	}
-	// TODO: get the secret from the entry.
-	var secret [32]byte
+
+	// TODO: remove
 	pubKey, privKey := dilithium3.Scheme().DeriveKey(secret[:])
 	signedVol := volumes.NewSignedVolume(innerVol, pubKey, privKey)
-	secret2 := [32]byte(gdat.Hash(secret[:]))
-	vol := volumes.NewChaCha20Poly1305(signedVol, &secret2)
+
+	symSec := secret.Ratchet(1).DeriveSym()
+	vol := volumes.NewChaCha20Poly1305(signedVol, &symSec)
 	return vol, nil
 }
 
