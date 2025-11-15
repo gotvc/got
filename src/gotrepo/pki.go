@@ -20,7 +20,7 @@ func (r *Repo) GotNSClient() gotns.Client {
 	}
 }
 
-func (r *Repo) ActiveIdentity(ctx context.Context) (gotns.IdentityLeaf, error) {
+func (r *Repo) ActiveIdentity(ctx context.Context) (gotns.IdentityUnit, error) {
 	return dbutil.DoTx1(ctx, r.db, getActiveIdentity)
 }
 
@@ -105,12 +105,12 @@ func loadIdentity(conn *dbutil.Conn) (*gotns.LeafPrivate, error) {
 	}, nil
 }
 
-func getActiveIdentity(conn *dbutil.Conn) (gotns.IdentityLeaf, error) {
+func getActiveIdentity(conn *dbutil.Conn) (gotns.IdentityUnit, error) {
 	leafPrivate, err := loadIdentity(conn)
 	if err != nil {
-		return gotns.IdentityLeaf{}, err
+		return gotns.IdentityUnit{}, err
 	}
-	return gotns.NewLeaf(leafPrivate.SigPrivateKey.Public().(inet256.PublicKey), leafPrivate.KEMPrivateKey.Public().(kem.PublicKey)), nil
+	return gotns.NewIDUnit(leafPrivate.SigPrivateKey.Public().(inet256.PublicKey), leafPrivate.KEMPrivateKey.Public().(kem.PublicKey)), nil
 }
 
 var pki = gotns.PKI()

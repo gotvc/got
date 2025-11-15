@@ -179,7 +179,7 @@ func Open(p string) (*Repo, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := r.gnsc.EnsureInit(ctx, *nsh, []gotns.IdentityLeaf{leaf}); err != nil {
+		if err := r.gnsc.EnsureInit(ctx, *nsh, []gotns.IdentityUnit{leaf}); err != nil {
 			return nil, err
 		}
 		spaceSpec := config.Spaces
