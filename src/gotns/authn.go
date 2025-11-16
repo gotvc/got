@@ -2,17 +2,19 @@ package gotns
 
 import (
 	"context"
-	"encoding/binary"
 	"errors"
 	"fmt"
+	"iter"
 
 	"github.com/cloudflare/circl/kem"
+	"github.com/cloudflare/circl/sign"
 	"go.inet256.org/inet256/src/inet256"
 	"golang.org/x/crypto/chacha20"
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotns/internal/gotnsop"
+	"github.com/gotvc/got/src/internal/graphs"
 	"github.com/gotvc/got/src/internal/stores"
 )
 
@@ -105,40 +107,6 @@ func (m *Machine) GetGroup(ctx context.Context, s stores.Reading, State State, g
 	return gotnsop.ParseGroup(k, val)
 }
 
-// GetGroupSecret returns a KEM seed used to derive the key pair for a given group.
-// id is the ID of the leaf that is requesting the KEM private key.
-// kemPriv is the KEM private key for the leaf to decrypt messages sent to it by group operations.
-// groupPath should go from the largest group to the smallest group.
-func (m *Machine) GetGroupSecret(ctx context.Context, s stores.Reading, state State, id inet256.ID, kemPriv kem.PrivateKey, groupPath []GroupID) (*gotnsop.Secret, error) {
-	var groupSecret *gotnsop.Secret
-	memk := MemberUnit(id)
-	for len(groupPath) > 0 {
-		gid := groupPath[len(groupPath)-1]
-		groupPath = groupPath[:len(groupPath)-1]
-		group, err := m.GetGroup(ctx, s, state, gid)
-		if err != nil {
-			return nil, err
-		}
-		mshp, err := m.GetMembership(ctx, s, state, gid, memk)
-		if err != nil {
-			return nil, err
-		}
-		seed, err := decryptSeed(kemPriv, mshp.EncryptedKEM)
-		if err != nil {
-			return nil, fmt.Errorf("failed to decrypt KEM seed: %w", err)
-		}
-		kemPub, _ := seed.DeriveKEM()
-		if !kemPub.Equal(group.KEM) {
-			return nil, fmt.Errorf("secret from membership ctext did not produce group KEM")
-		}
-		groupSecret = seed
-	}
-	if groupSecret == nil {
-		return nil, fmt.Errorf("group secret not found")
-	}
-	return groupSecret, nil
-}
-
 // ForEachGroup calls fn for each group in the namespace.
 func (m *Machine) ForEachGroup(ctx context.Context, s stores.Reading, state State, fn func(group gotnsop.Group) error) error {
 	span := gotkv.TotalSpan()
@@ -187,6 +155,15 @@ func (m *Machine) LookupGroup(ctx context.Context, s stores.Reading, state State
 	return m.GetGroup(ctx, s, state, *groupID)
 }
 
+func (m *Machine) GetMembership(ctx context.Context, s stores.Reading, state State, group GroupID, mem Member) (*Membership, error) {
+	k := memberKey(nil, group, mem)
+	val, err := m.gotkv.Get(ctx, s, state.Memberships, k)
+	if err != nil {
+		return nil, err
+	}
+	return ParseMembership(k, val)
+}
+
 // ForEachMembership calls fn for each membership
 // If gid is non-nil, then it will be used to filter by the containing group.
 func (m *Machine) ForEachMembership(ctx context.Context, s stores.Reading, state State, gid *GroupID, fn func(mem Membership) error) error {
@@ -203,7 +180,7 @@ func (m *Machine) ForEachMembership(ctx context.Context, s stores.Reading, state
 	})
 }
 
-// AddMember adds a member group to a containing group.
+// AddMember adds a member (a unit or another Group) to a containing group.
 func (m *Machine) AddMember(ctx context.Context, s stores.RW, state State, gid GroupID, member Member) (*State, error) {
 	_, err := m.GetGroup(ctx, s, state, gid)
 	if err != nil {
@@ -255,13 +232,73 @@ func (m *Machine) RemoveMember(ctx context.Context, s stores.RW, state State, gi
 	return &state, nil
 }
 
-func (m *Machine) GetMembership(ctx context.Context, s stores.Reading, state State, group GroupID, mem Member) (*Membership, error) {
-	k := memberKey(nil, group, mem)
-	val, err := m.gotkv.Get(ctx, s, state.Memberships, k)
-	if err != nil {
-		return nil, err
+// ForEachInGroup calls fn recursively for each ID in the group.
+// This is a recursive method which explores the full transitive closure of the initial Group.
+func (m *Machine) ForEachUnitInGroup(ctx context.Context, s stores.Reading, state State, gid GroupID, fn func(inet256.ID) error) error {
+	return m.ForEachMembership(ctx, s, state, &gid, func(mem Membership) error {
+		switch {
+		case mem.Member.Unit != nil:
+			return fn(*mem.Member.Unit)
+		case mem.Member.Group != nil:
+			return m.ForEachUnitInGroup(ctx, s, state, *mem.Member.Group, fn)
+		}
+		return nil
+	})
+}
+
+// GroupContains returns true if the actor is a member of the group.
+// This method answers the `contains?` query for the full transitive closure for the group.
+// For immediate memberhsip call GetMembership directly and check for (nil, nil);
+// that means the memberhip does not exist.
+func (m *Machine) GroupContains(ctx context.Context, s stores.Reading, state State, group GroupID, actor inet256.ID) (bool, error) {
+	var contains bool
+	stopEarly := errors.New("stop early")
+	if err := m.ForEachUnitInGroup(ctx, s, state, group, func(id inet256.ID) error {
+		if actor == id {
+			contains = true
+			return stopEarly
+		}
+		return nil
+	}); err != nil && !errors.Is(err, stopEarly) {
+		return false, err
 	}
-	return ParseMembership(k, val)
+	return contains, nil
+}
+
+// GetGroupSecret returns a KEM seed used to derive the key pair for a given group.
+// id is the ID of the leaf that is requesting the KEM private key.
+// kemPriv is the KEM private key for the leaf to decrypt messages sent to it by group operations.
+// groupPath should go from the largest group to the smallest group.
+// If you need a groupPath, try `FindGroupPath` first.
+func (m *Machine) GetGroupSecret(ctx context.Context, s stores.Reading, state State, priv IdenPrivate, groupPath []GroupID) (*gotnsop.Secret, error) {
+	var groupSecret *gotnsop.Secret
+	memk := MemberUnit(priv.GetID())
+	for len(groupPath) > 0 {
+		gid := groupPath[len(groupPath)-1]
+		groupPath = groupPath[:len(groupPath)-1]
+		group, err := m.GetGroup(ctx, s, state, gid)
+		if err != nil {
+			return nil, err
+		}
+		mshp, err := m.GetMembership(ctx, s, state, gid, memk)
+		if err != nil {
+			return nil, err
+		}
+		_, kemPriv := groupSecret.DeriveKEM()
+		seed, err := decryptSeed(kemPriv, mshp.EncryptedKEM)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt KEM seed: %w", err)
+		}
+		kemPub, _ := seed.DeriveKEM()
+		if !kemPub.Equal(group.KEM) {
+			return nil, fmt.Errorf("secret from membership ctext did not produce group KEM")
+		}
+		groupSecret = seed
+	}
+	if groupSecret == nil {
+		return nil, fmt.Errorf("group secret not found")
+	}
+	return groupSecret, nil
 }
 
 // RekeyGroup creates a new KEM key pair for a group and
@@ -311,38 +348,57 @@ func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, state State, gid 
 	return &state, nil
 }
 
-// ForEachInGroup calls fn recursively for each ID in the group.
-func (m *Machine) ForEachUnitInGroup(ctx context.Context, s stores.Reading, state State, gid GroupID, fn func(inet256.ID) error) error {
-	return m.ForEachMembership(ctx, s, state, &gid, func(mem Membership) error {
-		switch {
-		case mem.Member.Unit != nil:
-			return fn(*mem.Member.Unit)
-		case mem.Member.Group != nil:
-			return m.ForEachUnitInGroup(ctx, s, state, *mem.Member.Group, fn)
+// FindGroupPath finds a path of groups from priv to the target Group.
+// FindGroupPath returns (nil, nil) when no path could be found.
+func (m *Machine) FindGroupPath(ctx context.Context, s stores.Reading, x State, id inet256.ID, target GroupID) ([]GroupID, error) {
+	initial := []GroupID{}
+	// List all the groups containing the unit
+	if err := m.ForEachGroup(ctx, s, x, func(g Group) error {
+		mem := MemberUnit(id)
+		mshp, err := m.GetMembership(ctx, s, x, g.ID, mem)
+		if err != nil {
+			return err
 		}
+		if mshp == nil {
+			return nil
+		}
+		initial = append(initial, g.ID)
 		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	return graphs.DijkstrasErr(initial, target, func(gid GroupID) iter.Seq2[GroupID, error] {
+		return func(yield func(GroupID, error) bool) {
+			stopIter := errors.New("stop iter")
+			err := m.ForEachMembership(ctx, s, x, &gid, func(mshp Membership) error {
+				switch {
+				case mshp.Member.Group != nil:
+					if !yield(*mshp.Member.Group, nil) {
+						return stopIter
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				if errors.Is(err, stopIter) {
+					return
+				} else {
+					yield(GroupID{}, err)
+				}
+			}
+		}
 	})
 }
 
-// GroupContains returns true if the actor is a member of the group.
-func (m *Machine) GroupContains(ctx context.Context, s stores.Reading, state State, group GroupID, actor inet256.ID) (bool, error) {
-	var contains bool
-	stopEarly := errors.New("stop early")
-	if err := m.ForEachUnitInGroup(ctx, s, state, group, func(id inet256.ID) error {
-		if actor == id {
-			contains = true
-			return stopEarly
-		}
-		return nil
-	}); err != nil && !errors.Is(err, stopEarly) {
-		return false, err
-	}
-	return contains, nil
-}
-
-type LeafPrivate struct {
+type IdenPrivate struct {
 	SigPrivateKey inet256.PrivateKey
 	KEMPrivateKey kem.PrivateKey
+}
+
+func (iden *IdenPrivate) GetID() inet256.ID {
+	pubKey := iden.SigPrivateKey.Public().(sign.PublicKey)
+	return pki.NewID(pubKey)
 }
 
 type Member = gotnsop.Member
@@ -379,10 +435,7 @@ func (m *Membership) Value(out []byte) []byte {
 
 func memberKey(key []byte, gid GroupID, member Member) []byte {
 	key = append(key, gid[:]...)
-	l1 := len(key)
 	key = member.Marshal(key)
-	l2 := len(key)
-	key = binary.LittleEndian.AppendUint32(key, uint32(l2-l1))
 	return key
 }
 
@@ -391,8 +444,9 @@ func parseMemberKey(key []byte) (GroupID, Member, error) {
 		return GroupID{}, Member{}, fmt.Errorf("wrong size for membership key. %d", len(key))
 	}
 	gid := GroupID(key[:32])
+	key = key[32:]
 	var mem Member
-	if err := mem.Unmarshal(key[32:]); err != nil {
+	if err := mem.Unmarshal(key); err != nil {
 		return GroupID{}, Member{}, err
 	}
 	return gid, mem, nil

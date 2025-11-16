@@ -23,7 +23,7 @@ import (
 type Client struct {
 	Blobcache blobcache.Service
 	Machine   Machine
-	ActAs     LeafPrivate
+	ActAs     IdenPrivate
 }
 
 // EnsureInit initializes a new GotNS instance in the given volume.
@@ -192,13 +192,14 @@ func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string
 	return nil, nil
 }
 
-func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, actAs LeafPrivate) (branches.Volume, error) {
+func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, actAs IdenPrivate, writeAccess bool) (branches.Volume, error) {
 	var vent *VolumeEntry
 	var secret *gotnsop.Secret
 	nsh, err := c.adjustHandle(ctx, nsh)
 	if err != nil {
 		return nil, err
 	}
+	var symSecret *[32]byte
 	if err := c.view(ctx, nsh, func(s stores.Reading, state State) error {
 		ent, err := c.Machine.GetAlias(ctx, s, state, name)
 		if err != nil {
@@ -208,10 +209,16 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, 
 		if err != nil {
 			return err
 		}
-		secret, err = c.Machine.FindSecret(ctx, s, state, actAs, &vent.HashOfSecrets[0])
+		minRatchet := uint8(1)
+		if writeAccess {
+			minRatchet = 2
+		}
+		secret, ratchet, err := c.Machine.FindSecret(ctx, s, state, actAs, &vent.HashOfSecrets[0], minRatchet)
 		if err != nil {
 			return err
 		}
+		rs := secret.Ratchet(int(ratchet) - 1).DeriveSym()
+		symSecret = &rs
 		return nil
 	}); err != nil {
 		return nil, err
@@ -228,8 +235,7 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, 
 		Service: c.Blobcache,
 	}
 
-	readSecret := secret.DeriveSym()
-	vol := newVolume(innerVol, &readSecret, actAs.SigPrivateKey, func(ctx context.Context, id inet256.ID) (sign.PublicKey, error) {
+	vol := newVolume(innerVol, symSecret, actAs.SigPrivateKey, func(ctx context.Context, id inet256.ID) (sign.PublicKey, error) {
 		var verifier sign.PublicKey
 		if err := c.view(ctx, nsh, func(s stores.Reading, x State) error {
 			idUnit, err := c.Machine.GetIDUnit(ctx, s, x, id)
@@ -256,9 +262,11 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, 
 	return vol, nil
 }
 
-// AddLeaf adds a new primitive identity to a group.
-func (c *Client) AddIDUnit(ctx context.Context, volh blobcache.Handle, idu IdentityUnit) error {
-	panic("not implemented")
+// AddMember adds a new primitive identity to a group.
+func (c *Client) AddMember(ctx context.Context, volh blobcache.Handle, gid GroupID, mem Member) error {
+	return c.doTx(ctx, volh, c.ActAs, func(tx1 *bcsdk.Tx, tx2 *Txn) error {
+		return tx2.AddMember(ctx, gid, mem)
+	})
 }
 
 func (c *Client) adjustHandle(ctx context.Context, volh blobcache.Handle) (blobcache.Handle, error) {
@@ -273,8 +281,8 @@ func (c *Client) adjustHandle(ctx context.Context, volh blobcache.Handle) (blobc
 	}
 }
 
-func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv LeafPrivate, fn func(tx *bcsdk.Tx, txn *Txn) error) error {
-	if c.ActAs == (LeafPrivate{}) {
+func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv IdenPrivate, fn func(tx1 *bcsdk.Tx, tx2 *Txn) error) error {
+	if c.ActAs == (IdenPrivate{}) {
 		return errors.New("gotns.Client: ActAs cannot be nil")
 	}
 	volh, err := c.adjustHandle(ctx, volh)
@@ -294,7 +302,7 @@ func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv LeafP
 	if err != nil {
 		return err
 	}
-	txn := c.Machine.NewTxn(root, tx, []LeafPrivate{leafPriv})
+	txn := c.Machine.NewTxn(root, tx, []IdenPrivate{leafPriv})
 	if err := fn(tx, txn); err != nil {
 		return err
 	}

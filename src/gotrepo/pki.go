@@ -67,7 +67,7 @@ func setupIdentity(conn *dbutil.Conn) error {
 	return err
 }
 
-func loadIdentity(conn *dbutil.Conn) (*gotns.LeafPrivate, error) {
+func loadIdentity(conn *dbutil.Conn) (*gotns.IdenPrivate, error) {
 	stmt := conn.Prep(`SELECT id, sign_private_key, kem_private_key FROM idens`)
 	defer stmt.Finalize()
 
@@ -99,7 +99,7 @@ func loadIdentity(conn *dbutil.Conn) (*gotns.LeafPrivate, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &gotns.LeafPrivate{
+	return &gotns.IdenPrivate{
 		SigPrivateKey: sigPriv,
 		KEMPrivateKey: kemPriv,
 	}, nil

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/gotvc/got/src/gotns/internal/gotnsop"
+	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 )
 
@@ -23,7 +24,7 @@ func TestInit(t *testing.T) {
 
 	signPub, sigPriv := newTestSigner(t)
 	kemPub, kemPriv := newTestKEM(t)
-	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: LeafPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}}
+	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: IdenPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}}
 	adminLeaf := NewIDUnit(signPub, kemPub)
 	admins := []IdentityUnit{adminLeaf}
 	err = gnsc.EnsureInit(ctx, *volh, admins)
@@ -40,15 +41,32 @@ func TestCreateBranch(t *testing.T) {
 	sigPub, sigPriv := newTestSigner(t)
 	kemPub, kemPriv := newTestKEM(t)
 	nsh := blobcache.Handle{}
-	priv := LeafPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}
+	priv := IdenPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}
 	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: priv}
 
 	require.NoError(t, gnsc.EnsureInit(ctx, nsh, []IdentityUnit{gotnsop.NewIDUnit(sigPub, kemPub)}))
 	err := gnsc.CreateAlias(ctx, nsh, "test", nil)
 	require.NoError(t, err)
-	vol, err := gnsc.OpenAt(ctx, nsh, "test", priv)
+	vol, err := gnsc.OpenAt(ctx, nsh, "test", priv, false)
 	require.NoError(t, err)
 	t.Log(vol)
+}
+
+func TestPutGetIDUnit(t *testing.T) {
+	ctx := testutil.Context(t)
+	sigPub, sigPriv := newTestSigner(t)
+	kemPub, kemPriv := newTestKEM(t)
+	priv := IdenPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}
+	m := New()
+	s := stores.NewMem()
+	root, err := m.New(ctx, s, []IdentityUnit{NewIDUnit(sigPub, kemPub)})
+	require.NoError(t, err)
+	idu := NewIDUnit(sigPub, kemPub)
+	state, err := m.PutIDUnit(ctx, s, root.State.Current, idu)
+	require.NoError(t, err)
+	idu2, err := m.GetIDUnit(ctx, s, *state, priv.GetID())
+	require.NoError(t, err)
+	require.Equal(t, idu2, &idu)
 }
 
 func newTestService(t *testing.T) *bclocal.Service {

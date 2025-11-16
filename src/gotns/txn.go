@@ -20,7 +20,7 @@ type Txn struct {
 	m     *Machine
 	prev  statetrace.Root[Root]
 	s     schema.RW
-	actAs []LeafPrivate
+	actAs []IdenPrivate
 
 	curState State
 	changes  []Op
@@ -29,7 +29,7 @@ type Txn struct {
 // NewBuilder creates a new delta builder.
 // privateKey is the private key of the actor performing the transaction.
 // It will be used to produce a signature at the end of the transaction.
-func (m *Machine) NewTxn(prev statetrace.Root[Root], s schema.RW, actAs []LeafPrivate) *Txn {
+func (m *Machine) NewTxn(prev statetrace.Root[Root], s schema.RW, actAs []IdenPrivate) *Txn {
 	return &Txn{
 		m:     m,
 		prev:  prev,

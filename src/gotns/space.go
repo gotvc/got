@@ -50,7 +50,7 @@ func (bs *Space) Inspect(ctx context.Context, name string) (*branches.Info, erro
 }
 
 func (bs *Space) Open(ctx context.Context, name string) (*branches.Branch, error) {
-	vol, err := bs.client.OpenAt(ctx, bs.volh, name, bs.client.ActAs)
+	vol, err := bs.client.OpenAt(ctx, bs.volh, name, bs.client.ActAs, false)
 	if err != nil {
 		return nil, err
 	}
