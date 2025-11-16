@@ -189,6 +189,7 @@ func New() Machine {
 
 // New creates a new root.
 func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityUnit) (*statetrace.Root[Root], error) {
+	const adminGroupName = "admin"
 	state := new(State)
 	for _, dst := range []*gotkv.Root{
 		&state.IDUnits,
@@ -214,7 +215,6 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityUnit) (
 		return nil, err
 	}
 	groupKEMPub, _ := groupSecret.DeriveKEM()
-
 	units := map[inet256.ID][]byte{}
 	for _, unit := range admins {
 		var err error
@@ -225,7 +225,6 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityUnit) (
 		units[unit.ID] = encryptSeed(nil, unit.KEMPublicKey, &groupSecret)
 	}
 
-	const adminGroupName = "admin"
 	var nonce [16]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return nil, err

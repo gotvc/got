@@ -10,22 +10,24 @@ import (
 	"go.inet256.org/inet256/src/inet256"
 )
 
+type GetVerifierFunc = func(context.Context, inet256.ID) (sign.PublicKey, error)
+
 type SignedVolume struct {
-	inner      Volume
-	publicKey  inet256.PublicKey
-	privateKey inet256.PrivateKey
+	inner       Volume
+	getVerifier GetVerifierFunc
+	privateKey  inet256.PrivateKey
 }
 
 // NewSignedVolume creates a SignedVolume.
 // publicKey must not be nil, if privateKey is nil, then the volume will be read only.
-func NewSignedVolume(inner Volume, publicKey inet256.PublicKey, privateKey inet256.PrivateKey) *SignedVolume {
-	if publicKey == nil {
-		panic("public key cannot be nil")
+func NewSignedVolume(inner Volume, privateKey inet256.PrivateKey, getVerifier GetVerifierFunc) *SignedVolume {
+	if getVerifier == nil {
+		panic("getVerifier cannot be nil")
 	}
 	return &SignedVolume{
-		inner:      inner,
-		privateKey: privateKey,
-		publicKey:  publicKey,
+		inner:       inner,
+		privateKey:  privateKey,
+		getVerifier: getVerifier,
 	}
 }
 
@@ -35,16 +37,16 @@ func (v *SignedVolume) BeginTx(ctx context.Context, tp TxParams) (Tx, error) {
 		return nil, err
 	}
 	return &SignedTx{
-		inner:      inner,
-		privateKey: v.privateKey,
-		publicKey:  v.publicKey,
+		inner:       inner,
+		privateKey:  v.privateKey,
+		getVerifier: v.getVerifier,
 	}, nil
 }
 
 type SignedTx struct {
-	inner      Tx
-	privateKey inet256.PrivateKey
-	publicKey  inet256.PublicKey
+	inner       Tx
+	privateKey  inet256.PrivateKey
+	getVerifier GetVerifierFunc
 }
 
 func (tx *SignedTx) Commit(ctx context.Context) error {
@@ -60,15 +62,26 @@ func (tx *SignedTx) Load(ctx context.Context, dst *[]byte) error {
 		return err
 	}
 	if len(*dst) == 0 {
+		*dst = (*dst)[:0]
 		return nil
 	}
-	sch := tx.publicKey.Scheme()
+	if len(*dst) < 32 {
+		return fmt.Errorf("too short to contain inet256.ID")
+	}
+	id := inet256.IDFromBytes((*dst)[:32])
+	*dst = (*dst)[32:]
+	pubKey, err := tx.getVerifier(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	sch := pubKey.Scheme()
 	sigSize := sch.SignatureSize()
 	if len(*dst) < sigSize {
 		return fmt.Errorf("too small to contain signature")
 	}
 	msg, sig := (*dst)[:len(*dst)-sigSize], (*dst)[len(*dst)-sigSize:]
-	if !pki.Verify(&sigCtxVolume, tx.publicKey, msg, sig) {
+	if !pki.Verify(&sigCtxVolume, pubKey, msg, sig) {
 		return fmt.Errorf("invalid signature")
 	}
 	*dst = msg
@@ -79,6 +92,9 @@ func (tx *SignedTx) Save(ctx context.Context, src []byte) error {
 	if tx.privateKey == nil {
 		return fmt.Errorf("private key not set, cannot create signature")
 	}
+	pubKey := tx.privateKey.Public().(sign.PublicKey)
+	id := inet256.NewID(pubKey)
+	src = append(src, id[:]...)
 	src = pki.Sign(&sigCtxVolume, tx.privateKey, src, src)
 	return tx.inner.Save(ctx, src)
 }

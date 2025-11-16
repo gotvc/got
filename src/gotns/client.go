@@ -10,7 +10,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema/statetrace"
 	"github.com/cloudflare/circl/kem"
-	dilithium3 "github.com/cloudflare/circl/sign/dilithium/mode3"
+	"github.com/cloudflare/circl/sign"
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotns/internal/gotnsop"
 	"github.com/gotvc/got/src/internal/stores"
@@ -228,12 +228,28 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, 
 		Service: c.Blobcache,
 	}
 
-	// TODO: remove
-	pubKey, privKey := dilithium3.Scheme().DeriveKey(secret[:])
-	signedVol := volumes.NewSignedVolume(innerVol, pubKey, privKey)
-
-	symSec := secret.Ratchet(1).DeriveSym()
-	vol := volumes.NewChaCha20Poly1305(signedVol, &symSec)
+	readSecret := secret.DeriveSym()
+	vol := newVolume(innerVol, &readSecret, actAs.SigPrivateKey, func(ctx context.Context, id inet256.ID) (sign.PublicKey, error) {
+		var verifier sign.PublicKey
+		if err := c.view(ctx, nsh, func(s stores.Reading, x State) error {
+			idUnit, err := c.Machine.GetIDUnit(ctx, s, x, id)
+			if err != nil {
+				return err
+			}
+			yes, err := c.Machine.CanDo(ctx, s, x, id, gotnsop.Verb_TOUCH, gotnsop.ObjectType_BRANCH, name)
+			if err != nil {
+				return err
+			}
+			if !yes {
+				return fmt.Errorf("id %v is not allowed to write to this branch", id)
+			}
+			verifier = idUnit.SigPublicKey
+			return nil
+		}); err != nil {
+			return nil, err
+		}
+		return verifier, nil
+	})
 	return vol, nil
 }
 
