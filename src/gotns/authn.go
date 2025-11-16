@@ -45,6 +45,9 @@ func (m *Machine) PutIDUnit(ctx context.Context, s stores.Writing, state State, 
 func (m *Machine) GetIDUnit(ctx context.Context, s stores.Reading, state State, id inet256.ID) (*IdentityUnit, error) {
 	val, err := m.gotkv.Get(ctx, s, state.IDUnits, id[:])
 	if err != nil {
+		if gotkv.IsErrKeyNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return gotnsop.ParseIDUnit(id[:], val)
@@ -94,6 +97,9 @@ func (m *Machine) GetGroup(ctx context.Context, s stores.Reading, State State, g
 	k := groupID[:]
 	val, err := m.gotkv.Get(ctx, s, State.Groups, k)
 	if err != nil {
+		if gotkv.IsErrKeyNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
 	return gotnsop.ParseGroup(k, val)
@@ -103,7 +109,7 @@ func (m *Machine) GetGroup(ctx context.Context, s stores.Reading, State State, g
 // id is the ID of the leaf that is requesting the KEM private key.
 // kemPriv is the KEM private key for the leaf to decrypt messages sent to it by group operations.
 // groupPath should go from the largest group to the smallest group.
-func (m *Machine) GetGroupSeed(ctx context.Context, s stores.Reading, state State, id inet256.ID, kemPriv kem.PrivateKey, groupPath []GroupID) (*gotnsop.Secret, error) {
+func (m *Machine) GetGroupSecret(ctx context.Context, s stores.Reading, state State, id inet256.ID, kemPriv kem.PrivateKey, groupPath []GroupID) (*gotnsop.Secret, error) {
 	var groupSecret *gotnsop.Secret
 	memk := MemberUnit(id)
 	for len(groupPath) > 0 {
@@ -202,6 +208,26 @@ func (m *Machine) AddMember(ctx context.Context, s stores.RW, state State, gid G
 	_, err := m.GetGroup(ctx, s, state, gid)
 	if err != nil {
 		return nil, err
+	}
+	switch {
+	case member.Unit != nil:
+		idUnit, err := m.GetIDUnit(ctx, s, state, *member.Unit)
+		if err != nil {
+			return nil, err
+		}
+		if idUnit == nil {
+			return nil, fmt.Errorf("cannot create membership identity does not exist: %v", *member.Unit)
+		}
+	case member.Group != nil:
+		g, err := m.GetGroup(ctx, s, state, *member.Group)
+		if err != nil {
+			return nil, err
+		}
+		if g == nil {
+			return nil, fmt.Errorf("cannot create membership group does not exist: %v", *member.Group)
+		}
+	default:
+		return nil, fmt.Errorf("member is empty")
 	}
 	memState, err := m.gotkv.Mutate(ctx, s, state.Memberships,
 		putMember(Membership{

@@ -62,7 +62,6 @@ func (tx *SignedTx) Load(ctx context.Context, dst *[]byte) error {
 		return err
 	}
 	if len(*dst) == 0 {
-		*dst = (*dst)[:0]
 		return nil
 	}
 	if len(*dst) < 32 {
@@ -72,7 +71,7 @@ func (tx *SignedTx) Load(ctx context.Context, dst *[]byte) error {
 	*dst = (*dst)[32:]
 	pubKey, err := tx.getVerifier(ctx, id)
 	if err != nil {
-		return err
+		return fmt.Errorf("looking up verifier %v: %w", id, err)
 	}
 
 	sch := pubKey.Scheme()

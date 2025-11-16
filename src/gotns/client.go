@@ -236,6 +236,9 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, 
 			if err != nil {
 				return err
 			}
+			if idUnit == nil {
+				return fmt.Errorf("info for id %v not found", id)
+			}
 			yes, err := c.Machine.CanDo(ctx, s, x, id, gotnsop.Verb_TOUCH, gotnsop.ObjectType_BRANCH, name)
 			if err != nil {
 				return err
