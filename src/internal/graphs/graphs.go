@@ -67,6 +67,11 @@ func DijkstrasErr[V comparable](starting []V, goal func(V) bool, dwn DownstreamF
 OUTER:
 	for queue.Len() > 0 {
 		v := queue.Pop()
+		if goal(v) {
+			found = true
+			target = v
+			break OUTER
+		}
 		for v2, err := range dwn(v) {
 			if err != nil {
 				return nil, err
@@ -75,11 +80,6 @@ OUTER:
 			if oldCost, exists := costs[v2]; !exists || newCost < oldCost {
 				costs[v2] = newCost
 				prevs[v2] = v
-			}
-			if goal(v2) {
-				found = true
-				target = v2
-				break OUTER
 			}
 			queue.Push(v2)
 		}

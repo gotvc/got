@@ -68,9 +68,9 @@ func (m *Machine) ForEachVolume(ctx context.Context, s stores.Reading, x State, 
 	})
 }
 
-type VolumeTransformer = func(branches.Volume) branches.Volume
+type VolumeConstructor = func(nsVol, innerVol branches.Volume) *Volume
 
-func (m *Machine) Open(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, volid blobcache.OID, writeAccess bool) (VolumeTransformer, error) {
+func (m *Machine) Open(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, volid blobcache.OID, writeAccess bool) (VolumeConstructor, error) {
 	vent, err := m.GetVolume(ctx, s, x, volid)
 	if err != nil {
 		return nil, err
@@ -86,24 +86,13 @@ func (m *Machine) Open(ctx context.Context, s stores.Reading, x State, actAs Ide
 	rs := secret.Ratchet(int(ratchet) - 1).DeriveSym()
 	symSecret := &rs
 
-	wrapVolume := func(innerVol branches.Volume) branches.Volume {
-		return newVolume(innerVol, symSecret, actAs.SigPrivateKey, func(ctx context.Context, id inet256.ID) (sign.PublicKey, error) {
-			var verifier sign.PublicKey
-			idUnit, err := m.GetIDUnit(ctx, s, x, id)
-			if err != nil {
-				return nil, err
-			}
-			if idUnit == nil {
-				return nil, fmt.Errorf("info for id %v not found", id)
-			}
-			verifier = idUnit.SigPublicKey
-			return verifier, nil
-		})
+	mkVol := func(nsVol, innerVol branches.Volume) *Volume {
+		return newVolume(m, actAs.SigPrivateKey, nsVol, innerVol, symSecret)
 	}
-	return wrapVolume, nil
+	return mkVol, nil
 }
 
-func (m *Machine) OpenAt(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, name string, writeAccess bool) (blobcache.OID, VolumeTransformer, error) {
+func (m *Machine) OpenAt(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, name string, writeAccess bool) (blobcache.OID, VolumeConstructor, error) {
 	ent, err := m.GetAlias(ctx, s, x, name)
 	if err != nil {
 		return blobcache.OID{}, nil, err
@@ -115,8 +104,63 @@ func (m *Machine) OpenAt(ctx context.Context, s stores.Reading, x State, actAs I
 	return ent.Volume, vw, nil
 }
 
-func newVolume(inner volumes.Volume, readSecret *[32]byte, privateKey sign.PrivateKey, getVerifier volumes.GetVerifierFunc) volumes.Volume {
-	symVol := volumes.NewChaCha20Poly1305(inner, readSecret)
-	sigVol := volumes.NewSignedVolume(symVol, privateKey, getVerifier)
-	return sigVol
+var _ volumes.Volume = &Volume{}
+
+type Volume struct {
+	m        *Machine
+	nsVol    volumes.Volume
+	innerVol volumes.Volume
+
+	privateKey sign.PrivateKey
+	symSecret  *[32]byte
+}
+
+func newVolume(m *Machine, privKey sign.PrivateKey, nsVol, innerVol volumes.Volume, symSecret *[32]byte) *Volume {
+	return &Volume{
+		m:        m,
+		nsVol:    nsVol,
+		innerVol: innerVol,
+
+		privateKey: privKey,
+		symSecret:  symSecret,
+	}
+}
+
+func (v *Volume) BeginTx(ctx context.Context, txp blobcache.TxParams) (volumes.Tx, error) {
+	symVol := volumes.NewChaCha20Poly1305(v.innerVol, v.symSecret)
+	sigVol := volumes.NewSignedVolume(symVol, v.privateKey, v.getVerifier)
+	return sigVol.BeginTx(ctx, txp)
+}
+
+func (v *Volume) getVerifier(ctx context.Context, id inet256.ID) (sign.PublicKey, error) {
+	tx, err := v.nsVol.BeginTx(ctx, blobcache.TxParams{})
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Abort(ctx)
+	x, err := LoadState(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	idu, err := v.m.GetIDUnit(ctx, tx, *x, id)
+	if err != nil {
+		return nil, err
+	}
+	return idu.SigPublicKey, nil
+}
+
+type loader interface {
+	Load(ctx context.Context, dst *[]byte) error
+}
+
+func LoadState(ctx context.Context, ldr loader) (*State, error) {
+	var buf []byte
+	if err := ldr.Load(ctx, &buf); err != nil {
+		return nil, err
+	}
+	r, err := Parse(buf)
+	if err != nil {
+		return nil, err
+	}
+	return &r.State.Current, nil
 }

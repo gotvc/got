@@ -15,6 +15,10 @@ import (
 	"go.inet256.org/inet256/src/inet256"
 )
 
+func Parse(x []byte) (statetrace.Root[Root], error) {
+	return statetrace.Parse(x, ParseRoot)
+}
+
 type Root struct {
 	Version uint8
 	// Current is the state of the world.
@@ -31,32 +35,41 @@ func (r Root) Marshal(out []byte) []byte {
 	return out
 }
 
-func ParseRoot(data []byte) (Root, error) {
+func (r *Root) Unmarshal(data []byte) error {
 	if len(data) < 1 {
-		return Root{}, fmt.Errorf("gotns: data too short to contain version")
+		return fmt.Errorf("gotns: data too short to contain version")
 	}
 	version, data := data[0], data[1:]
 	curData, data, err := sbe.ReadLP(data)
 	if err != nil {
-		return Root{}, err
+		return err
 	}
 	recData, _, err := sbe.ReadLP(data)
 	if err != nil {
-		return Root{}, err
+		return err
 	}
 	current, err := parseState(curData)
 	if err != nil {
-		return Root{}, err
+		return err
 	}
 	recent, err := parseDelta(recData)
 	if err != nil {
-		return Root{}, err
+		return err
 	}
-	return Root{
+	*r = Root{
 		Version: version,
 		Current: current,
 		Recent:  recent,
-	}, nil
+	}
+	return nil
+}
+
+func ParseRoot(data []byte) (Root, error) {
+	var root Root
+	if err := root.Unmarshal(data); err != nil {
+		return Root{}, err
+	}
+	return root, nil
 }
 
 // State represents the current state of a namespace.
@@ -91,7 +104,8 @@ type State struct {
 
 	// Volumes holds the volume entries themselves.
 	Volumes gotkv.Root
-	Aliases gotkv.Root
+	// VolumeNames maps names to Volume OIDs
+	VolumeNames gotkv.Root
 }
 
 func (s State) Marshal(out []byte) []byte {
@@ -107,7 +121,7 @@ func (s State) Marshal(out []byte) []byte {
 	out = sbe.AppendLP(out, s.Obligations.Marshal(nil))
 
 	out = sbe.AppendLP(out, s.Volumes.Marshal(nil))
-	out = sbe.AppendLP(out, s.Aliases.Marshal(nil))
+	out = sbe.AppendLP(out, s.VolumeNames.Marshal(nil))
 	return out
 }
 
@@ -129,7 +143,7 @@ func (s *State) Unmarshal(data []byte) error {
 
 		&s.Rules, &s.Obligations,
 
-		&s.Volumes, &s.Aliases,
+		&s.Volumes, &s.VolumeNames,
 	} {
 		kvrData, rest, err := sbe.ReadLP(data)
 		if err != nil {
@@ -200,7 +214,7 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityUnit) (
 
 		&state.Rules, &state.Obligations,
 
-		&state.Volumes, &state.Aliases,
+		&state.Volumes, &state.VolumeNames,
 	} {
 		kvr, err := m.gotkv.NewEmpty(ctx, s)
 		if err != nil {
@@ -274,7 +288,7 @@ func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State
 
 		x.Rules, x.Obligations,
 
-		x.Aliases, x.Volumes,
+		x.VolumeNames, x.Volumes,
 	} {
 		if kvr.Ref.CID.IsZero() {
 			return fmt.Errorf("gotns: one of the States is uninitialized %d", i)
@@ -286,7 +300,6 @@ func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State
 // ValidateChange checks the change between two states.
 // Prev is assumed to be a known good, valid state.
 func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, next State, delta Delta) error {
-
 	// TODO: first validate auth operations, ensure that all the differences are signed.
 	return nil
 }

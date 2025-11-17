@@ -195,11 +195,11 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, 
 	if err != nil {
 		return nil, err
 	}
-	var wrapVolume VolumeTransformer
 	var volid blobcache.OID
+	var mkVol VolumeConstructor
 	if err := c.view(ctx, nsh, func(s stores.Reading, x State) error {
 		var err error
-		volid, wrapVolume, err = c.Machine.OpenAt(ctx, s, x, c.ActAs, name, false)
+		volid, mkVol, err = c.Machine.OpenAt(ctx, s, x, c.ActAs, name, false)
 		return err
 	}); err != nil {
 		return nil, err
@@ -208,11 +208,9 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, 
 	if err != nil {
 		return nil, err
 	}
-	innerVol := &volumes.Blobcache{
-		Handle:  *volh,
-		Service: c.Blobcache,
-	}
-	return wrapVolume(innerVol), nil
+	nsVol := &volumes.Blobcache{Service: c.Blobcache, Handle: *volh}
+	innerVol := &volumes.Blobcache{Service: c.Blobcache, Handle: *volh}
+	return mkVol(nsVol, innerVol), nil
 }
 
 // AddMember adds a new primitive identity to a group.

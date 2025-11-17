@@ -18,7 +18,7 @@ type (
 
 // GetAlias looks up an entry in the branches table.
 func (m *Machine) GetAlias(ctx context.Context, s stores.Reading, state State, name string) (*gotnsop.AliasEntry, error) {
-	val, err := m.gotkv.Get(ctx, s, state.Aliases, []byte(name))
+	val, err := m.gotkv.Get(ctx, s, state.VolumeNames, []byte(name))
 	if err != nil {
 		if gotkv.IsErrKeyNotFound(err) {
 			return nil, nil
@@ -35,11 +35,11 @@ func (m *Machine) GetAlias(ctx context.Context, s stores.Reading, state State, n
 // PutAlias inserts or overwrites an entry in the branches table.
 func (m *Machine) PutAlias(ctx context.Context, s stores.RW, state State, entry gotnsop.AliasEntry, secret *gotnsop.Secret) (*State, error) {
 	mut1 := putAlias(entry)
-	aliasState, err := m.gotkv.Mutate(ctx, s, state.Aliases, mut1)
+	aliasState, err := m.gotkv.Mutate(ctx, s, state.VolumeNames, mut1)
 	if err != nil {
 		return nil, err
 	}
-	state.Aliases = *aliasState
+	state.VolumeNames = *aliasState
 	nextState, err := m.FulfillObligations(ctx, s, state, entry.Name, secret)
 	if err != nil {
 		return nil, err
@@ -49,11 +49,11 @@ func (m *Machine) PutAlias(ctx context.Context, s stores.RW, state State, entry 
 
 // DeleteAlias deletes an alias from the namespace.
 func (m *Machine) DeleteAlias(ctx context.Context, s stores.RW, State State, name string) (*State, error) {
-	entsState, err := m.gotkv.Delete(ctx, s, State.Aliases, []byte(name))
+	entsState, err := m.gotkv.Delete(ctx, s, State.VolumeNames, []byte(name))
 	if err != nil {
 		return nil, err
 	}
-	State.Aliases = *entsState
+	State.VolumeNames = *entsState
 	return &State, nil
 }
 
@@ -78,7 +78,7 @@ func (m *Machine) ListBranches(ctx context.Context, s stores.Reading, state Stat
 	if span.End != "" {
 		span2.End = []byte(span.End)
 	}
-	it := m.gotkv.NewIterator(s, state.Aliases, span2)
+	it := m.gotkv.NewIterator(s, state.VolumeNames, span2)
 	var ents []gotnsop.AliasEntry
 	for {
 		ent, err := streams.Next(ctx, it)
