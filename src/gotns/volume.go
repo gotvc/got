@@ -128,7 +128,7 @@ func newVolume(m *Machine, privKey sign.PrivateKey, nsVol, innerVol volumes.Volu
 
 func (v *Volume) BeginTx(ctx context.Context, txp blobcache.TxParams) (volumes.Tx, error) {
 	symVol := volumes.NewChaCha20Poly1305(v.innerVol, v.symSecret)
-	sigVol := volumes.NewSignedVolume(symVol, v.privateKey, v.getVerifier)
+	sigVol := volumes.NewSignedVolume(symVol, pki, v.privateKey, v.getVerifier)
 	return sigVol.BeginTx(ctx, txp)
 }
 
@@ -145,6 +145,9 @@ func (v *Volume) getVerifier(ctx context.Context, id inet256.ID) (sign.PublicKey
 	idu, err := v.m.GetIDUnit(ctx, tx, *x, id)
 	if err != nil {
 		return nil, err
+	}
+	if idu == nil {
+		return nil, fmt.Errorf("could not find verifier")
 	}
 	return idu.SigPublicKey, nil
 }

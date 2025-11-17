@@ -113,6 +113,17 @@ func (c *Client) GetAlias(ctx context.Context, volh blobcache.Handle, name strin
 // CreateAlias creates a new alias with a new volume at the specified name.
 func (c *Client) CreateAlias(ctx context.Context, nsh blobcache.Handle, name string, aux []byte) error {
 	return c.doTx(ctx, nsh, c.ActAs, func(tx *bcsdk.Tx, txn *Txn) error {
+		x, err := LoadState(ctx, tx)
+		if err != nil {
+			return err
+		}
+		idu, err := c.Machine.GetIDUnit(ctx, tx, *x, c.ActAs.GetID())
+		if err != nil {
+			return err
+		}
+		if idu == nil {
+			return errors.New("cannot create alias: actor identity is not in the namespace")
+		}
 		svh, err := c.createSubVolume(ctx, tx)
 		if err != nil {
 			return err
@@ -208,7 +219,7 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, 
 	if err != nil {
 		return nil, err
 	}
-	nsVol := &volumes.Blobcache{Service: c.Blobcache, Handle: *volh}
+	nsVol := &volumes.Blobcache{Service: c.Blobcache, Handle: nsh}
 	innerVol := &volumes.Blobcache{Service: c.Blobcache, Handle: *volh}
 	return mkVol(nsVol, innerVol), nil
 }
@@ -249,7 +260,7 @@ func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv IdenP
 	if err := tx.Load(ctx, &data); err != nil {
 		return err
 	}
-	root, err := statetrace.Parse(data, ParseRoot)
+	root, err := Parse(data)
 	if err != nil {
 		return err
 	}
@@ -316,7 +327,7 @@ func loadState(ctx context.Context, tx *bcsdk.Tx) (*State, error) {
 	if err := tx.Load(ctx, &data); err != nil {
 		return nil, err
 	}
-	root, err := statetrace.Parse(data, ParseRoot)
+	root, err := Parse(data)
 	if err != nil {
 		return nil, err
 	}

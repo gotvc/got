@@ -3,7 +3,6 @@ package gotns
 import (
 	"context"
 	"fmt"
-	"log"
 	"regexp"
 
 	"blobcache.io/blobcache/src/blobcache"
@@ -319,7 +318,6 @@ func (m *Machine) FindSecret(ctx context.Context, s stores.Reading, x State, act
 	}); err != nil {
 		return nil, 0, err
 	}
-	log.Println("groups with access", gids)
 
 	// Find the groups with access
 	for gid, ratchet := range gids {
