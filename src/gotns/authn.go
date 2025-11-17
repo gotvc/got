@@ -368,7 +368,8 @@ func (m *Machine) FindGroupPath(ctx context.Context, s stores.Reading, x State, 
 		return nil, err
 	}
 
-	return graphs.DijkstrasErr(initial, target, func(gid GroupID) iter.Seq2[GroupID, error] {
+	goal := func(gid GroupID) bool { return gid == target }
+	return graphs.DijkstrasErr(initial, goal, func(gid GroupID) iter.Seq2[GroupID, error] {
 		return func(yield func(GroupID, error) bool) {
 			stopIter := errors.New("stop iter")
 			err := m.ForEachMembership(ctx, s, x, &gid, func(mshp Membership) error {
