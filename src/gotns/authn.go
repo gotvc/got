@@ -181,42 +181,48 @@ func (m *Machine) ForEachMembership(ctx context.Context, s stores.Reading, state
 }
 
 // AddMember adds a member (a unit or another Group) to a containing group.
-func (m *Machine) AddMember(ctx context.Context, s stores.RW, state State, gid GroupID, member Member) (*State, error) {
-	_, err := m.GetGroup(ctx, s, state, gid)
+func (m *Machine) AddMember(ctx context.Context, s stores.RW, x State, gid GroupID, member Member, groupSecret *gotnsop.Secret) (*State, error) {
+	_, err := m.GetGroup(ctx, s, x, gid)
 	if err != nil {
 		return nil, err
 	}
+	var kemPub kem.PublicKey
 	switch {
 	case member.Unit != nil:
-		idUnit, err := m.GetIDUnit(ctx, s, state, *member.Unit)
+		idUnit, err := m.GetIDUnit(ctx, s, x, *member.Unit)
 		if err != nil {
 			return nil, err
 		}
 		if idUnit == nil {
 			return nil, fmt.Errorf("cannot create membership identity does not exist: %v", *member.Unit)
 		}
+		kemPub = idUnit.KEMPublicKey
 	case member.Group != nil:
-		g, err := m.GetGroup(ctx, s, state, *member.Group)
+		g, err := m.GetGroup(ctx, s, x, *member.Group)
 		if err != nil {
 			return nil, err
 		}
 		if g == nil {
 			return nil, fmt.Errorf("cannot create membership group does not exist: %v", *member.Group)
 		}
+		kemPub = g.KEM
 	default:
 		return nil, fmt.Errorf("member is empty")
 	}
-	memState, err := m.gotkv.Mutate(ctx, s, state.Memberships,
+
+	kemCtext := encryptSeed(nil, kemPub, groupSecret)
+	memState, err := m.gotkv.Mutate(ctx, s, x.Memberships,
 		putMember(Membership{
-			Group:  gid,
-			Member: member,
+			Group:        gid,
+			Member:       member,
+			EncryptedKEM: kemCtext,
 		}),
 	)
 	if err != nil {
 		return nil, err
 	}
-	state.Memberships = *memState
-	return &state, nil
+	x.Memberships = *memState
+	return &x, nil
 }
 
 // RemoveMember removes a member group from a containing group.
@@ -271,7 +277,9 @@ func (m *Machine) GroupContains(ctx context.Context, s stores.Reading, state Sta
 // groupPath should go from the largest group to the smallest group.
 // If you need a groupPath, try `FindGroupPath` first.
 func (m *Machine) GetGroupSecret(ctx context.Context, s stores.Reading, state State, priv IdenPrivate, groupPath []GroupID) (*gotnsop.Secret, error) {
+	kemPriv := priv.KEMPrivateKey
 	var groupSecret *gotnsop.Secret
+
 	memk := MemberUnit(priv.GetID())
 	for len(groupPath) > 0 {
 		gid := groupPath[len(groupPath)-1]
@@ -284,16 +292,17 @@ func (m *Machine) GetGroupSecret(ctx context.Context, s stores.Reading, state St
 		if err != nil {
 			return nil, err
 		}
-		_, kemPriv := groupSecret.DeriveKEM()
-		seed, err := decryptSeed(kemPriv, mshp.EncryptedKEM)
+
+		gs, err := decryptSeed(kemPriv, mshp.EncryptedKEM)
 		if err != nil {
 			return nil, fmt.Errorf("failed to decrypt KEM seed: %w", err)
 		}
-		kemPub, _ := seed.DeriveKEM()
+		kemPub, _ := gs.DeriveKEM()
 		if !kemPub.Equal(group.KEM) {
 			return nil, fmt.Errorf("secret from membership ctext did not produce group KEM")
 		}
-		groupSecret = seed
+		groupSecret = gs
+		_, kemPriv = groupSecret.DeriveKEM()
 	}
 	if groupSecret == nil {
 		return nil, fmt.Errorf("group secret not found")

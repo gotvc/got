@@ -4,13 +4,11 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
-	"fmt"
 
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema/statetrace"
 	"github.com/cloudflare/circl/kem"
-	"github.com/cloudflare/circl/sign"
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotns/internal/gotnsop"
 	"github.com/gotvc/got/src/internal/stores"
@@ -193,40 +191,20 @@ func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string
 }
 
 func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, actAs IdenPrivate, writeAccess bool) (branches.Volume, error) {
-	var vent *VolumeEntry
-	var secret *gotnsop.Secret
 	nsh, err := c.adjustHandle(ctx, nsh)
 	if err != nil {
 		return nil, err
 	}
-	var symSecret *[32]byte
-	if err := c.view(ctx, nsh, func(s stores.Reading, state State) error {
-		ent, err := c.Machine.GetAlias(ctx, s, state, name)
-		if err != nil {
-			return err
-		}
-		vent, err = c.Machine.GetVolume(ctx, s, state, ent.Volume)
-		if err != nil {
-			return err
-		}
-		minRatchet := uint8(1)
-		if writeAccess {
-			minRatchet = 2
-		}
-		secret, ratchet, err := c.Machine.FindSecret(ctx, s, state, actAs, &vent.HashOfSecrets[0], minRatchet)
-		if err != nil {
-			return err
-		}
-		rs := secret.Ratchet(int(ratchet) - 1).DeriveSym()
-		symSecret = &rs
-		return nil
+	var wrapVolume VolumeTransformer
+	var volid blobcache.OID
+	if err := c.view(ctx, nsh, func(s stores.Reading, x State) error {
+		var err error
+		volid, wrapVolume, err = c.Machine.OpenAt(ctx, s, x, c.ActAs, name, false)
+		return err
 	}); err != nil {
 		return nil, err
 	}
-	if secret == nil {
-		return nil, fmt.Errorf("secret not found")
-	}
-	volh, err := c.Blobcache.OpenFrom(ctx, nsh, vent.Volume, blobcache.Action_ALL)
+	volh, err := c.Blobcache.OpenFrom(ctx, nsh, volid, blobcache.Action_ALL)
 	if err != nil {
 		return nil, err
 	}
@@ -234,32 +212,7 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, 
 		Handle:  *volh,
 		Service: c.Blobcache,
 	}
-
-	vol := newVolume(innerVol, symSecret, actAs.SigPrivateKey, func(ctx context.Context, id inet256.ID) (sign.PublicKey, error) {
-		var verifier sign.PublicKey
-		if err := c.view(ctx, nsh, func(s stores.Reading, x State) error {
-			idUnit, err := c.Machine.GetIDUnit(ctx, s, x, id)
-			if err != nil {
-				return err
-			}
-			if idUnit == nil {
-				return fmt.Errorf("info for id %v not found", id)
-			}
-			yes, err := c.Machine.CanDo(ctx, s, x, id, gotnsop.Verb_TOUCH, gotnsop.ObjectType_BRANCH, name)
-			if err != nil {
-				return err
-			}
-			if !yes {
-				return fmt.Errorf("id %v is not allowed to write to this branch", id)
-			}
-			verifier = idUnit.SigPublicKey
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-		return verifier, nil
-	})
-	return vol, nil
+	return wrapVolume(innerVol), nil
 }
 
 // AddMember adds a new primitive identity to a group.

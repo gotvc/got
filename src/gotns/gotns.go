@@ -245,7 +245,7 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityUnit) (
 	}
 	for unit := range units {
 		mem := MemberUnit(unit)
-		state, err = m.AddMember(ctx, s, *state, g.ID, mem)
+		state, err = m.AddMember(ctx, s, *state, g.ID, mem, &groupSecret)
 		if err != nil {
 			return nil, err
 		}

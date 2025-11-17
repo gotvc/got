@@ -78,14 +78,23 @@ func (tx *Txn) CreateIDUnit(ctx context.Context, unit IdentityUnit) error {
 	return nil
 }
 
-func (tx *Txn) AddMember(ctx context.Context, group gotnsop.GroupID, member gotnsop.Member) error {
-	nextState, err := tx.m.AddMember(ctx, tx.s, tx.curState, group, member)
+func (tx *Txn) AddMember(ctx context.Context, gid gotnsop.GroupID, member gotnsop.Member) error {
+	priv := tx.actAs[0]
+	groupPath, err := tx.m.FindGroupPath(ctx, tx.s, tx.curState, priv.GetID(), gid)
+	if err != nil {
+		return err
+	}
+	groupSecret, err := tx.m.GetGroupSecret(ctx, tx.s, tx.curState, priv, groupPath)
+	if err != nil {
+		return err
+	}
+	nextState, err := tx.m.AddMember(ctx, tx.s, tx.curState, gid, member, groupSecret)
 	if err != nil {
 		return err
 	}
 	tx.curState = *nextState
 	tx.addOp(&gotnsop.AddMember{
-		Group:  group,
+		Group:  gid,
 		Member: member,
 	})
 	return nil

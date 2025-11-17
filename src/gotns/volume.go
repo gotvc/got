@@ -6,7 +6,9 @@ import (
 
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/cloudflare/circl/sign"
+	"go.inet256.org/inet256/src/inet256"
 
+	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotns/internal/gotnsop"
 	"github.com/gotvc/got/src/internal/stores"
@@ -55,15 +57,62 @@ func (m *Machine) DropVolume(ctx context.Context, s stores.RW, state State, volO
 	return &state, nil
 }
 
-func (m *Machine) ForEachVolume(ctx context.Context, s stores.Reading, state State, fn func(entry VolumeEntry) error) error {
+func (m *Machine) ForEachVolume(ctx context.Context, s stores.Reading, x State, fn func(entry VolumeEntry) error) error {
 	span := gotkv.TotalSpan()
-	return m.gotkv.ForEach(ctx, s, state.Volumes, span, func(ent gotkv.Entry) error {
+	return m.gotkv.ForEach(ctx, s, x.Volumes, span, func(ent gotkv.Entry) error {
 		entry, err := gotnsop.ParseVolumeEntry(ent.Key, ent.Value)
 		if err != nil {
 			return err
 		}
 		return fn(*entry)
 	})
+}
+
+type VolumeTransformer = func(branches.Volume) branches.Volume
+
+func (m *Machine) Open(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, volid blobcache.OID, writeAccess bool) (VolumeTransformer, error) {
+	vent, err := m.GetVolume(ctx, s, x, volid)
+	if err != nil {
+		return nil, err
+	}
+	minRatchet := uint8(1)
+	if writeAccess {
+		minRatchet = 2
+	}
+	secret, ratchet, err := m.FindSecret(ctx, s, x, actAs, &vent.HashOfSecrets[0], minRatchet)
+	if err != nil {
+		return nil, err
+	}
+	rs := secret.Ratchet(int(ratchet) - 1).DeriveSym()
+	symSecret := &rs
+
+	wrapVolume := func(innerVol branches.Volume) branches.Volume {
+		return newVolume(innerVol, symSecret, actAs.SigPrivateKey, func(ctx context.Context, id inet256.ID) (sign.PublicKey, error) {
+			var verifier sign.PublicKey
+			idUnit, err := m.GetIDUnit(ctx, s, x, id)
+			if err != nil {
+				return nil, err
+			}
+			if idUnit == nil {
+				return nil, fmt.Errorf("info for id %v not found", id)
+			}
+			verifier = idUnit.SigPublicKey
+			return verifier, nil
+		})
+	}
+	return wrapVolume, nil
+}
+
+func (m *Machine) OpenAt(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, name string, writeAccess bool) (blobcache.OID, VolumeTransformer, error) {
+	ent, err := m.GetAlias(ctx, s, x, name)
+	if err != nil {
+		return blobcache.OID{}, nil, err
+	}
+	vw, err := m.Open(ctx, s, x, actAs, ent.Volume, writeAccess)
+	if err != nil {
+		return blobcache.OID{}, nil, err
+	}
+	return ent.Volume, vw, nil
 }
 
 func newVolume(inner volumes.Volume, readSecret *[32]byte, privateKey sign.PrivateKey, getVerifier volumes.GetVerifierFunc) volumes.Volume {

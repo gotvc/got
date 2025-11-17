@@ -3,6 +3,7 @@ package gotns
 import (
 	"context"
 	"fmt"
+	"log"
 	"regexp"
 
 	"blobcache.io/blobcache/src/blobcache"
@@ -309,7 +310,7 @@ func (m *Machine) addInitialRules(ctx context.Context, s stores.RW, state State,
 //  4. Use that path to perform a chain of KEM decryptions eventually resulting
 //     a secret value which reverses hash of secret.
 func (m *Machine) FindSecret(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, hos *[32]byte, minRatchet uint8) (*gotnsop.Secret, uint8, error) {
-	gids := map[[32]byte]uint8{}
+	gids := map[GroupID]uint8{}
 	if err := m.ForEachObligation(ctx, s, x, hos, func(oblig Obligation) error {
 		if oblig.HashOfSecret == *hos && oblig.Ratchet >= minRatchet {
 			gids[oblig.GroupID] = oblig.Ratchet
@@ -318,6 +319,7 @@ func (m *Machine) FindSecret(ctx context.Context, s stores.Reading, x State, act
 	}); err != nil {
 		return nil, 0, err
 	}
+	log.Println("groups with access", gids)
 
 	// Find the groups with access
 	for gid, ratchet := range gids {
