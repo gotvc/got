@@ -113,7 +113,7 @@ func (c *Client) GetAlias(ctx context.Context, volh blobcache.Handle, name strin
 // CreateAlias creates a new alias with a new volume at the specified name.
 func (c *Client) CreateAlias(ctx context.Context, nsh blobcache.Handle, name string, aux []byte) error {
 	return c.doTx(ctx, nsh, c.ActAs, func(tx *bcsdk.Tx, txn *Txn) error {
-		x, err := LoadState(ctx, tx)
+		x, err := loadState(ctx, tx)
 		if err != nil {
 			return err
 		}
@@ -320,18 +320,6 @@ func (c *Client) IntroduceSelf(kemPub kem.PublicKey) gotnsop.ChangeSet {
 	}
 	cs.Sign(c.ActAs.SigPrivateKey)
 	return cs
-}
-
-func loadState(ctx context.Context, tx *bcsdk.Tx) (*State, error) {
-	var data []byte
-	if err := tx.Load(ctx, &data); err != nil {
-		return nil, err
-	}
-	root, err := Parse(data)
-	if err != nil {
-		return nil, err
-	}
-	return &root.State.Current, nil
 }
 
 // BranchVolumeSpec is the volume spec used for new branches.

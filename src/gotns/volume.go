@@ -138,7 +138,7 @@ func (v *Volume) getVerifier(ctx context.Context, id inet256.ID) (sign.PublicKey
 		return nil, err
 	}
 	defer tx.Abort(ctx)
-	x, err := LoadState(ctx, tx)
+	x, err := loadState(ctx, tx)
 	if err != nil {
 		return nil, err
 	}
@@ -156,7 +156,7 @@ type loader interface {
 	Load(ctx context.Context, dst *[]byte) error
 }
 
-func LoadState(ctx context.Context, ldr loader) (*State, error) {
+func loadState(ctx context.Context, ldr loader) (*State, error) {
 	var buf []byte
 	if err := ldr.Load(ctx, &buf); err != nil {
 		return nil, err

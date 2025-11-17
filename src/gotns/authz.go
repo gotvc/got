@@ -173,7 +173,7 @@ func ParseObligation(key []byte, value []byte) (*Obligation, error) {
 	}
 
 	// value
-	encryptedSeed, value, err := sbe.ReadLP(value)
+	encryptedSeed, _, err := sbe.ReadLP(value)
 	if err != nil {
 		return nil, err
 	}
