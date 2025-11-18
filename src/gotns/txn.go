@@ -100,29 +100,6 @@ func (tx *Txn) AddMember(ctx context.Context, gid gotnsop.GroupID, member gotnso
 	return nil
 }
 
-// AddIDUnit adds a unit in a transaction.
-// func (tx *Txn) AddIDUnit(ctx context.Context, group string, id inet256.ID) error {
-// 	if len(tx.actAs) > 1 {
-// 		return fmt.Errorf("cannot add leaf in a transaction with multiple signers")
-// 	}
-// 	actAs := tx.actAs[0]
-// 	ownerID := pki.NewID(actAs.SigPrivateKey.Public().(inet256.PublicKey))
-// 	kemSeed, err := tx.m.GetKEMSeed(ctx, tx.s, tx.curState, []string{group}, ownerID, actAs.KEMPrivateKey)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	nextState, err := tx.m.AddGroupLeaf(ctx, tx.s, tx.curState, kemSeed, group, leafID)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	tx.curState = *nextState
-// 	tx.addOp(&gotnsop.AddMember{
-// 		Group:  group,
-// 		Member: leafID.String(),
-// 	})
-// 	return nil
-// }
-
 func (tx *Txn) LookupGroup(ctx context.Context, gname string) (*Group, error) {
 	return tx.m.LookupGroup(ctx, tx.s, tx.curState, gname)
 }
