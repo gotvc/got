@@ -7,6 +7,7 @@ import (
 
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/branches"
+	"go.brendoncarroll.net/tai64"
 )
 
 var _ branches.Space = &Space{}
@@ -25,19 +26,20 @@ func (bs *Space) Create(ctx context.Context, name string, config branches.Params
 	info := branches.Info{
 		Salt:        config.Salt,
 		Annotations: config.Annotations,
+		CreatedAt:   tai64.Now().TAI64(),
 	}
 	aux, err := json.Marshal(info)
 	if err != nil {
 		return nil, err
 	}
-	if err := bs.client.CreateAt(ctx, bs.volh, name, aux); err != nil {
+	if err := bs.client.CreateAlias(ctx, bs.volh, name, aux); err != nil {
 		return nil, err
 	}
 	return &info, nil
 }
 
 func (bs *Space) Inspect(ctx context.Context, name string) (*branches.Info, error) {
-	ent, err := bs.client.GetEntry(ctx, bs.volh, name)
+	ent, err := bs.client.GetAlias(ctx, bs.volh, name)
 	if err != nil {
 		return nil, err
 	}
@@ -48,7 +50,7 @@ func (bs *Space) Inspect(ctx context.Context, name string) (*branches.Info, erro
 }
 
 func (bs *Space) Open(ctx context.Context, name string) (*branches.Branch, error) {
-	vol, err := bs.client.OpenAt(ctx, bs.volh, name)
+	vol, err := bs.client.OpenAt(ctx, bs.volh, name, bs.client.ActAs, false)
 	if err != nil {
 		return nil, err
 	}
@@ -63,11 +65,11 @@ func (bs *Space) Open(ctx context.Context, name string) (*branches.Branch, error
 }
 
 func (bs *Space) Delete(ctx context.Context, name string) error {
-	return bs.client.DeleteEntry(ctx, bs.volh, name)
+	return bs.client.DeleteAlias(ctx, bs.volh, name)
 }
 
 func (bs *Space) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {
-	return bs.client.ListEntries(ctx, bs.volh, span, limit)
+	return bs.client.ListAliases(ctx, bs.volh, span, limit)
 }
 
 func (bs *Space) Set(ctx context.Context, name string, config branches.Params) error {

@@ -59,12 +59,17 @@ func AppendLP(out []byte, x []byte) []byte {
 
 // ReadLP reads a length-prefixed byte slice from data.
 // ReadLP reads the format output by AppendLP.
-func ReadLP(x []byte) (ret []byte, rest []byte, _ error) {
+func ReadLP(x []byte) (data []byte, rest []byte, _ error) {
 	l, n := binary.Uvarint(x)
 	if n <= 0 {
 		return nil, nil, fmt.Errorf("too short to contain lp")
 	}
-	return x[n : n+int(l)], x[n+int(l):], nil
+	if len(x) < int(l)+n {
+		return nil, nil, fmt.Errorf("too short to contain %d more bytes", n)
+	}
+	data = x[n : n+int(l)]
+	rest = x[n+int(l):]
+	return data, rest, nil
 }
 
 // AppendLP16 appends a length-prefixed byte slice to out.

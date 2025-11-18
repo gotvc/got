@@ -20,14 +20,14 @@ func (r *Repo) GotNSClient() gotns.Client {
 	}
 }
 
-func (r *Repo) ActiveIdentity(ctx context.Context) (gotns.IdentityLeaf, error) {
+func (r *Repo) ActiveIdentity(ctx context.Context) (gotns.IdentityUnit, error) {
 	return dbutil.DoTx1(ctx, r.db, getActiveIdentity)
 }
 
-func (r *Repo) IntroduceSelf(ctx context.Context) (gotns.Op_ChangeSet, error) {
+func (r *Repo) IntroduceSelf(ctx context.Context) (gotns.ChangeSet, error) {
 	leaf, err := r.ActiveIdentity(ctx)
 	if err != nil {
-		return gotns.Op_ChangeSet{}, err
+		return gotns.ChangeSet{}, err
 	}
 	gnsc := r.GotNSClient()
 	return gnsc.IntroduceSelf(leaf.KEMPublicKey), nil
@@ -67,7 +67,7 @@ func setupIdentity(conn *dbutil.Conn) error {
 	return err
 }
 
-func loadIdentity(conn *dbutil.Conn) (*gotns.LeafPrivate, error) {
+func loadIdentity(conn *dbutil.Conn) (*gotns.IdenPrivate, error) {
 	stmt := conn.Prep(`SELECT id, sign_private_key, kem_private_key FROM idens`)
 	defer stmt.Finalize()
 
@@ -99,18 +99,18 @@ func loadIdentity(conn *dbutil.Conn) (*gotns.LeafPrivate, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &gotns.LeafPrivate{
+	return &gotns.IdenPrivate{
 		SigPrivateKey: sigPriv,
 		KEMPrivateKey: kemPriv,
 	}, nil
 }
 
-func getActiveIdentity(conn *dbutil.Conn) (gotns.IdentityLeaf, error) {
+func getActiveIdentity(conn *dbutil.Conn) (gotns.IdentityUnit, error) {
 	leafPrivate, err := loadIdentity(conn)
 	if err != nil {
-		return gotns.IdentityLeaf{}, err
+		return gotns.IdentityUnit{}, err
 	}
-	return gotns.NewLeaf(leafPrivate.SigPrivateKey.Public().(inet256.PublicKey), leafPrivate.KEMPrivateKey.Public().(kem.PublicKey)), nil
+	return gotns.NewIDUnit(leafPrivate.SigPrivateKey.Public().(inet256.PublicKey), leafPrivate.KEMPrivateKey.Public().(kem.PublicKey)), nil
 }
 
 var pki = gotns.PKI()

@@ -2,99 +2,28 @@ package gotns
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"regexp"
 
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotns/internal/gotnsop"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.inet256.org/inet256/src/inet256"
 )
 
-type Verb string
-
-const (
-	// Verb_LOOK allows a subject to read an object.
-	Verb_LOOK Verb = "LOOK"
-	// Verb_TOUCH allows a subject to write to an object.
-	Verb_TOUCH Verb = "TOUCH"
-	// Verb_CREATE allows a subject to create an object with a certain set of names.
-	Verb_CREATE Verb = "CREATE"
-	// Verb_DROP allows a subject to delete an object with a certain set of names.
-	Verb_DROP Verb = "DROP"
-	// Verb_ADMIN allows a subject to create rules that reference a set of objects.
-	Verb_ADMIN Verb = "ADMIN"
+type (
+	RuleID     = gotnsop.RuleID
+	Rule       = gotnsop.Rule
+	Verb       = gotnsop.Verb
+	ObjectType = gotnsop.ObjectType
 )
-
-type ObjectType string
-
-const (
-	ObjectType_GROUP  ObjectType = "group"
-	ObjectType_BRANCH ObjectType = "branch"
-	ObjectType_RULE   ObjectType = "rule"
-)
-
-type Rule struct {
-	// Subject is the name of the group that this rule applies to.
-	Subject string
-	// Action is the action granted by this rule.
-	Verb Verb
-	// ObjectType is the type of the object that this rule applies to.
-	ObjectType ObjectType
-	// Names is a regular expression that matches the names of the objects that this rule applies to.
-	Names *regexp.Regexp
-}
-
-func (r *Rule) Unmarshal(data []byte) error {
-	subject, data, err := sbe.ReadLP(data)
-	if err != nil {
-		return err
-	}
-	verb, data, err := sbe.ReadLP(data)
-	if err != nil {
-		return err
-	}
-	objType, data, err := sbe.ReadLP(data)
-	if err != nil {
-		return err
-	}
-	namesData, _, err := sbe.ReadLP(data)
-	if err != nil {
-		return err
-	}
-	namesRe, err := regexp.Compile(string(namesData))
-	if err != nil {
-		return err
-	}
-	r.Subject = string(subject)
-	r.Verb = Verb(verb)
-	r.ObjectType = ObjectType(objType)
-	r.Names = namesRe
-	return nil
-}
-
-func (r Rule) Marshal(out []byte) []byte {
-	out = sbe.AppendLP(out, []byte(r.Subject))
-	out = sbe.AppendLP(out, []byte(r.Verb))
-	out = sbe.AppendLP(out, []byte(r.ObjectType))
-	out = sbe.AppendLP(out, []byte(r.Names.String()))
-	return out
-}
-
-func (r Rule) Matches(subject string, verb Verb, objType ObjectType, objName string) bool {
-	return r.Subject == subject && r.Verb == verb && r.ObjectType == objType && r.Names.MatchString(objName)
-}
-
-func PostRule(ctx context.Context, s stores.RW, r *Rule) (CID, error) {
-	return s.Post(ctx, r.Marshal(nil))
-}
 
 // AddRule adds a rule to the state if it doesn't already exist.
 // If it does exist, it does nothing.
-func (m *Machine) AddRule(ctx context.Context, s stores.RW, state State, r *Rule) (*State, error) {
-	cid, err := PostRule(ctx, s, r)
+func (m *Machine) AddRule(ctx context.Context, s stores.RW, state State, r *gotnsop.Rule) (*State, error) {
+	cid, err := gotnsop.PostRule(ctx, s, r)
 	if err != nil {
 		return nil, err
 	}
@@ -122,13 +51,13 @@ func (m *Machine) GetRule(ctx context.Context, s stores.Reading, state State, ci
 	buf := make([]byte, MaxRuleSize)
 	n, err := s.Get(ctx, cid, buf)
 	if err != nil {
-		return Rule{}, err
+		return gotnsop.Rule{}, err
 	}
 	data := buf[:n]
 
-	var rule Rule
+	var rule gotnsop.Rule
 	if err := rule.Unmarshal(data); err != nil {
-		return Rule{}, err
+		return gotnsop.Rule{}, err
 	}
 	return rule, nil
 }
@@ -156,7 +85,7 @@ func (m *Machine) ForEachRule(ctx context.Context, s stores.Reading, state State
 func (m *Machine) CanDo(ctx context.Context, s stores.Reading, state State, actor inet256.ID, verb Verb, objType ObjectType, objName string) (bool, error) {
 	var allowed bool
 	if err := m.gotkv.ForEach(ctx, s, state.Rules, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
-		var rule Rule
+		var rule gotnsop.Rule
 		if err := rule.Unmarshal(ent.Value); err != nil {
 			return err
 		}
@@ -205,70 +134,56 @@ func (m *Machine) CanAnyDo(ctx context.Context, s stores.Reading, state State, a
 
 // Obligation associates encrypted secret keys with Volumes, according to rules.
 type Obligation struct {
-	// Volume is the volume that the obligation is for.
-	// Accessing the data in this volume requires the seed encrypted in the obligation value.
-	Volume blobcache.OID
-	// KEMHash is the hash of the KEM public key that the obligation is for.
-	KEMHash [32]byte
-	// Nonce is increased each time the volume keys change.
-	Nonce uint64
+	// HashOfSecret is the hash of the secret that the obligation is for.
+	HashOfSecret [32]byte
+	// Ratchet is the number of times that the secret is hashed to produce HashOfSecret
+	// This value must always be >= 0, usually 1 for readers and 2 for writers.
+	Ratchet uint8
+	// GroupID is the id of the Group that is entitled to the secret.
+	GroupID GroupID
 
 	// The seed can be decrypted with the corresponding private key for the KEMHash.
 	// The seed will decrypt to a 64 byte seed, which is used for the volume's Signing Key.
 	// The hash of the seed will be used for the symmetric cipher.
-	EncryptedSeed []byte
-	// RuleIDs is the rule that required the obligation.
-	RuleIDs []RuleID
+	EncryptedSecret []byte
 }
 
 func (o *Obligation) Key(out []byte) []byte {
-	out = append(out, o.Volume[:]...)
-	out = append(out, o.KEMHash[:]...)
-	out = binary.BigEndian.AppendUint64(out, o.Nonce)
+	out = append(out, o.HashOfSecret[:]...)
+	out = append(out, o.Ratchet)
+	out = append(out, o.GroupID[:]...)
 	return out
 }
 
 func (o *Obligation) Value(out []byte) []byte {
-	out = sbe.AppendLP(out, o.EncryptedSeed)
-	out = binary.AppendUvarint(out, uint64(len(o.RuleIDs)))
-	for _, ruleID := range o.RuleIDs {
-		out = append(out, ruleID[:]...)
-	}
+	out = sbe.AppendLP(out, o.EncryptedSecret)
 	return out
 }
 
 func ParseObligation(key []byte, value []byte) (*Obligation, error) {
 	// key
-	if len(key) < blobcache.OIDSize+32+8 {
+	if len(key) < 32+32+1 {
 		return nil, fmt.Errorf("key too short")
 	}
-	volID := blobcache.OID(key[:blobcache.OIDSize])
-	kemHash := [32]byte(key[blobcache.OIDSize : blobcache.OIDSize+32])
-	nonce := binary.BigEndian.Uint64(key[blobcache.OIDSize+32:])
+	hos := [32]byte(key[:32])
+	ratchet := key[32]
+	kemHash := [32]byte(key[33 : 33+32])
+	if ratchet == 0 {
+		return nil, fmt.Errorf("parsing Obligation: ratchet must be >= 0")
+	}
 
 	// value
-	encryptedSeed, value, err := sbe.ReadLP(value)
+	encryptedSeed, _, err := sbe.ReadLP(value)
 	if err != nil {
 		return nil, err
 	}
-	ruleIDsLen, value, err := sbe.ReadUVarint(value[len(encryptedSeed):])
-	if err != nil {
-		return nil, err
-	}
-	var ruleIDs []RuleID
-	for range ruleIDsLen {
-		var ruleID RuleID
-		copy(ruleID[:], value)
-		value = value[32:]
-		ruleIDs = append(ruleIDs, ruleID)
-	}
-	return &Obligation{
-		Volume:  volID,
-		KEMHash: kemHash,
-		Nonce:   nonce,
 
-		EncryptedSeed: encryptedSeed,
-		RuleIDs:       ruleIDs,
+	return &Obligation{
+		HashOfSecret: hos,
+		Ratchet:      ratchet,
+		GroupID:      kemHash,
+
+		EncryptedSecret: encryptedSeed,
 	}, nil
 }
 
@@ -281,35 +196,99 @@ func (m *Machine) PutObligation(ctx context.Context, s stores.RW, state State, o
 	return &state, nil
 }
 
-// EnsureObligations ensures that obligations for the entry are satisfied.
-func (m *Machine) EnsureObligations(ctx context.Context, s stores.Reading, state State, ent Entry, secret *[32]byte) (bool, error) {
-	if err := m.ForEachRule(ctx, s, state, func(rule Rule) error {
-		if rule.ObjectType != ObjectType_BRANCH || !rule.Names.MatchString(ent.Name) {
-			return nil
-		}
-		return nil
-	}); err != nil {
-		return false, err
+// ForEachObligation iterates over all Obligations
+// If hos is non-nil, then only obligations for the corresponding secret will be emmitted.
+func (m *Machine) ForEachObligation(ctx context.Context, s stores.Reading, x State, hos *[32]byte, fn func(ob Obligation) error) error {
+	span := gotkv.TotalSpan()
+	if hos != nil {
+		span = gotkv.PrefixSpan(hos[:])
 	}
-	return false, nil
+	return m.gotkv.ForEach(ctx, s, x.Obligations, span, func(ent gotkv.Entry) error {
+		oblig, err := ParseObligation(ent.Key, ent.Value)
+		if err != nil {
+			return err
+		}
+		return fn(*oblig)
+	})
 }
 
-type RuleID = CID
+// fulfill handles obligations for a single rule.
+func (m *Machine) fulfill(ctx context.Context, s stores.RW, x State, rule Rule, secret *gotnsop.Secret) (*State, error) {
+	g, err := m.GetGroup(ctx, s, x, rule.Subject)
+	if err != nil {
+		return nil, err
+	}
+	kemPub := g.KEM
+	hos := secret.Ratchet(2)
+	switch rule.Verb {
+	case gotnsop.Verb_LOOK:
+		// Need to encrypt the secret for this rule.
+		lookSecret := secret.Ratchet(1)
+		nextState, err := m.PutObligation(ctx, s, x, &Obligation{
+			HashOfSecret:    hos,
+			GroupID:         g.ID,
+			Ratchet:         1,
+			EncryptedSecret: encryptSeed(nil, kemPub, &lookSecret),
+		})
+		if err != nil {
+			return nil, err
+		}
+		x = *nextState
+	case gotnsop.Verb_TOUCH, gotnsop.Verb_ADMIN:
+		// Need to encrypt the secret for this rule.
+		nextState, err := m.PutObligation(ctx, s, x, &Obligation{
+			HashOfSecret:    hos,
+			GroupID:         g.ID,
+			Ratchet:         2,
+			EncryptedSecret: encryptSeed(nil, kemPub, secret),
+		})
+		if err != nil {
+			return nil, err
+		}
+		x = *nextState
+	}
+	return &x, nil
+}
+
+// FulfillObligations ensures that obligations for the entry are satisfied.
+func (m *Machine) FulfillObligations(ctx context.Context, s stores.RW, x State, name string, secret *gotnsop.Secret) (*State, error) {
+	entry, err := m.GetAlias(ctx, s, x, name)
+	if err != nil {
+		return nil, err
+	}
+	if entry == nil {
+		return nil, fmt.Errorf("alias %s not found", name)
+	}
+	if err := m.ForEachRule(ctx, s, x, func(rule gotnsop.Rule) error {
+		if rule.ObjectType != gotnsop.ObjectType_BRANCH || !rule.Names.MatchString(name) {
+			return nil
+		}
+		y, err := m.fulfill(ctx, s, x, rule, secret)
+		if err != nil {
+			return err
+		}
+		x = *y
+		return err
+	}); err != nil {
+		return nil, err
+	}
+	return &x, nil
+}
 
 type CID = blobcache.CID
 
-func (m *Machine) addInitialRules(ctx context.Context, s stores.RW, state State, adminGroupName string) (*State, error) {
-	for _, rule := range []Rule{
+func (m *Machine) addInitialRules(ctx context.Context, s stores.RW, state State, adminGID GroupID) (*State, error) {
+	for _, rule := range []gotnsop.Rule{
 		{
-			Subject:    adminGroupName,
-			Verb:       Verb_ADMIN,
-			ObjectType: ObjectType_GROUP,
+			Subject:    adminGID,
+			Verb:       gotnsop.Verb_ADMIN,
+			ObjectType: gotnsop.ObjectType_GROUP,
 			Names:      regexp.MustCompile(".*"),
 		},
 		{
-			Subject:    adminGroupName,
-			Verb:       Verb_ADMIN,
-			ObjectType: ObjectType_BRANCH,
+			Subject:    adminGID,
+			Verb:       gotnsop.Verb_ADMIN,
+			ObjectType: gotnsop.ObjectType_BRANCH,
 			Names:      regexp.MustCompile(".*"),
 		},
 	} {
@@ -320,4 +299,40 @@ func (m *Machine) addInitialRules(ctx context.Context, s stores.RW, state State,
 		state = *next
 	}
 	return &state, nil
+}
+
+// FindSecret reveres the provied hash.
+// The goal motivating all the complexity in this package is just to implement this function.
+//  1. Fnd all the obligations that hold the secret we are interested in.
+//  2. Find all the groups which can decrypt those secrets.
+//  3. Find a path from the the actor's ID to one of those groups.
+//  4. Use that path to perform a chain of KEM decryptions eventually resulting
+//     a secret value which reverses hash of secret.
+func (m *Machine) FindSecret(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, hos *[32]byte, minRatchet uint8) (*gotnsop.Secret, uint8, error) {
+	gids := map[GroupID]uint8{}
+	if err := m.ForEachObligation(ctx, s, x, hos, func(oblig Obligation) error {
+		if oblig.HashOfSecret == *hos && oblig.Ratchet >= minRatchet {
+			gids[oblig.GroupID] = oblig.Ratchet
+		}
+		return nil
+	}); err != nil {
+		return nil, 0, err
+	}
+
+	// Find the groups with access
+	for gid, ratchet := range gids {
+		p, err := m.FindGroupPath(ctx, s, x, actAs.GetID(), gid)
+		if err != nil {
+			return nil, 0, err
+		}
+		if len(p) == 0 {
+			continue
+		}
+		secret, err := m.GetGroupSecret(ctx, s, x, actAs, p)
+		if err != nil {
+			return nil, 0, err
+		}
+		return secret, ratchet, nil
+	}
+	return nil, 0, fmt.Errorf("no groups give iden=%v access to secret=%v", actAs.GetID(), *hos)
 }

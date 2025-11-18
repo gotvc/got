@@ -61,7 +61,7 @@ type Repo struct {
 	bc     blobcache.Service
 	db     *dbutil.Pool
 
-	leafPrivate gotns.LeafPrivate
+	leafPrivate gotns.IdenPrivate
 	workingDir  FS // workingDir is repoFS with reserved paths filtered.
 	repoc       reposchema.Client
 	gnsc        gotns.Client
@@ -108,7 +108,7 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	var leafPrivate *gotns.LeafPrivate
+	var leafPrivate *gotns.IdenPrivate
 	if err := dbutil.Borrow(ctx, db, func(conn *dbutil.Conn) error {
 		if err := migrations.EnsureAll(conn, dbmig.ListMigrations()); err != nil {
 			return err
@@ -179,7 +179,7 @@ func Open(p string) (*Repo, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := r.gnsc.EnsureInit(ctx, *nsh, []gotns.IdentityLeaf{leaf}); err != nil {
+		if err := r.gnsc.EnsureInit(ctx, *nsh, []gotns.IdentityUnit{leaf}); err != nil {
 			return nil, err
 		}
 		spaceSpec := config.Spaces

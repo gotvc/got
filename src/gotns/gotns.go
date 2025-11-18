@@ -8,11 +8,16 @@ import (
 	"blobcache.io/blobcache/src/schema"
 	"blobcache.io/blobcache/src/schema/statetrace"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotns/internal/gotnsop"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/slices2"
 	"go.inet256.org/inet256/src/inet256"
 )
+
+func Parse(x []byte) (statetrace.Root[Root], error) {
+	return statetrace.Parse(x, ParseRoot)
+}
 
 type Root struct {
 	Version uint8
@@ -30,50 +35,61 @@ func (r Root) Marshal(out []byte) []byte {
 	return out
 }
 
-func ParseRoot(data []byte) (Root, error) {
+func (r *Root) Unmarshal(data []byte) error {
 	if len(data) < 1 {
-		return Root{}, fmt.Errorf("gotns: data too short to contain version")
+		return fmt.Errorf("gotns: data too short to contain version")
 	}
 	version, data := data[0], data[1:]
 	curData, data, err := sbe.ReadLP(data)
 	if err != nil {
-		return Root{}, err
+		return err
 	}
-	recData, data, err := sbe.ReadLP(data)
+	recData, _, err := sbe.ReadLP(data)
 	if err != nil {
-		return Root{}, err
+		return err
 	}
 	current, err := parseState(curData)
 	if err != nil {
-		return Root{}, err
+		return err
 	}
 	recent, err := parseDelta(recData)
 	if err != nil {
-		return Root{}, err
+		return err
 	}
-	return Root{
+	*r = Root{
 		Version: version,
 		Current: current,
 		Recent:  recent,
-	}, nil
+	}
+	return nil
+}
+
+func ParseRoot(data []byte) (Root, error) {
+	var root Root
+	if err := root.Unmarshal(data); err != nil {
+		return Root{}, err
+	}
+	return root, nil
 }
 
 // State represents the current state of a namespace.
 type State struct {
 	// Authentication tables.
 
-	// Leaves hold primitive identity elements.
-	// The key is the leaf ID, derived by hashing the public signing key.
-	// The value is the public signing key for the leaf, and a signed KEM key for the leaf to recieve messages
-	// The leaf KEM private keys are not store anywhere in the state.
-	Leaves gotkv.Root
-	// Groups maps group names to group information.
+	// IDUnits hold primitive identity elements.
+	// The key is the INET256 ID, derived by hashing the public signing key.
+	// The value is the public signing key for the unit, and a signed KEM key for the leaf to recieve messages
+	// The unit KEM private keys are not store anywhere in the state.
+	IDUnits gotkv.Root
+	// Groups maps group IDs to group information.
 	// Group information holds group's Owner list, and shared KEM key for the group
 	// to receive messages.
 	Groups gotkv.Root
+	// GroupNames maps names to group IDs.
+	GroupNames gotkv.Root
+
 	// Memberships holds relationships between groups and other groups.
-	// The key is the containing group + the member group + len(member group name)
-	// The value is a KEM ciphertext sent by the containing group owner to the member.
+	// The value is a KEM ciphertext sent by the containing group owners to the member.
 	// The ciphertext contains the containing group's KEM private key encrypted with the member's KEM public key.
 	Memberships gotkv.Root
 
@@ -81,28 +97,31 @@ type State struct {
 
 	// Rules holds rules for the namespace, granting look or touch access to branches.
 	Rules gotkv.Root
-
 	// Obligations holds obligations for the namespace, granting access to volumes.
 	Obligations gotkv.Root
 
 	// Content tables
 
-	// Branches holds the actual branch entries themselves.
-	// Branch entries contain a volume OID, and a set of rights (which is for Blobcache)
-	// They also contain a set of DEK hashes for the DEKs that should be used to encrypt the volume
-	// and a map from Hash(KEM public key) to the KEM ciphertext for the DEK encrypted with the KEM public key.
-	Branches gotkv.Root
+	// Volumes holds the volume entries themselves.
+	Volumes gotkv.Root
+	// VolumeNames maps names to Volume OIDs
+	VolumeNames gotkv.Root
 }
 
 func (s State) Marshal(out []byte) []byte {
 	const versionTag = 0
 	out = append(out, versionTag)
-	out = sbe.AppendLP(out, s.Leaves.Marshal(nil))
+
+	out = sbe.AppendLP(out, s.IDUnits.Marshal(nil))
 	out = sbe.AppendLP(out, s.Groups.Marshal(nil))
+	out = sbe.AppendLP(out, s.GroupNames.Marshal(nil))
 	out = sbe.AppendLP(out, s.Memberships.Marshal(nil))
+
 	out = sbe.AppendLP(out, s.Rules.Marshal(nil))
 	out = sbe.AppendLP(out, s.Obligations.Marshal(nil))
-	out = sbe.AppendLP(out, s.Branches.Marshal(nil))
+
+	out = sbe.AppendLP(out, s.Volumes.Marshal(nil))
+	out = sbe.AppendLP(out, s.VolumeNames.Marshal(nil))
 	return out
 }
 
@@ -119,7 +138,13 @@ func (s *State) Unmarshal(data []byte) error {
 	data = data[1:]
 
 	// read all of the gotkv roots
-	for _, dst := range []*gotkv.Root{&s.Leaves, &s.Groups, &s.Memberships, &s.Rules, &s.Obligations, &s.Branches} {
+	for _, dst := range []*gotkv.Root{
+		&s.IDUnits, &s.Groups, &s.GroupNames, &s.Memberships,
+
+		&s.Rules, &s.Obligations,
+
+		&s.Volumes, &s.VolumeNames,
+	} {
 		kvrData, rest, err := sbe.ReadLP(data)
 		if err != nil {
 			return err
@@ -144,10 +169,10 @@ func parseState(x []byte) (State, error) {
 }
 
 // Delta can be applied to a State to produce a new State.
-type Delta Op_ChangeSet
+type Delta gotnsop.ChangeSet
 
 func parseDelta(data []byte) (Delta, error) {
-	var cs Op_ChangeSet
+	var cs gotnsop.ChangeSet
 	if err := cs.Unmarshal(data); err != nil {
 		return Delta{}, err
 	}
@@ -155,7 +180,7 @@ func parseDelta(data []byte) (Delta, error) {
 }
 
 func (d Delta) Marshal(out []byte) []byte {
-	return Op_ChangeSet(d).Marshal(out)
+	return gotnsop.ChangeSet(d).Marshal(out)
 }
 
 type Machine struct {
@@ -177,9 +202,20 @@ func New() Machine {
 }
 
 // New creates a new root.
-func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (*statetrace.Root[Root], error) {
+func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityUnit) (*statetrace.Root[Root], error) {
+	const adminGroupName = "admin"
 	state := new(State)
-	for _, dst := range []*gotkv.Root{&state.Groups, &state.Leaves, &state.Memberships, &state.Rules, &state.Obligations, &state.Branches} {
+	for _, dst := range []*gotkv.Root{
+		&state.IDUnits,
+
+		&state.Groups,
+		&state.GroupNames,
+		&state.Memberships,
+
+		&state.Rules, &state.Obligations,
+
+		&state.Volumes, &state.VolumeNames,
+	} {
 		kvr, err := m.gotkv.NewEmpty(ctx, s)
 		if err != nil {
 			return nil, err
@@ -187,35 +223,49 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 		*dst = *kvr
 	}
 
-	// create initial KEM seed
-	var kemSeed [64]byte
-	if _, err := rand.Read(kemSeed[:]); err != nil {
+	// create initial group secret
+	var groupSecret gotnsop.Secret
+	if _, err := rand.Read(groupSecret[:]); err != nil {
 		return nil, err
 	}
-	groupKEMPub, _ := DeriveKEM(kemSeed)
-
-	leaves := map[inet256.ID][]byte{}
-	for _, leaf := range admins {
+	groupKEMPub, _ := groupSecret.DeriveKEM()
+	units := map[inet256.ID][]byte{}
+	for _, unit := range admins {
 		var err error
-		state, err = m.PutLeaf(ctx, s, *state, leaf)
+		state, err = m.PutIDUnit(ctx, s, *state, unit)
 		if err != nil {
 			return nil, err
 		}
-		leaves[leaf.ID] = encryptSeed(nil, leaf.KEMPublicKey, &kemSeed)
+		units[unit.ID] = encryptSeed(nil, unit.KEMPublicKey, &groupSecret)
 	}
-	const adminGroupName = "admin"
-	g := Group{
-		Name:     adminGroupName,
-		KEM:      groupKEMPub,
-		LeafKEMs: leaves,
-		Owners:   slices2.Map(admins, func(leaf IdentityLeaf) inet256.ID { return leaf.ID }),
+
+	var nonce [16]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return nil, err
 	}
+	g := gotnsop.Group{
+		Nonce:  nonce,
+		KEM:    groupKEMPub,
+		Owners: slices2.Map(admins, func(leaf IdentityUnit) inet256.ID { return leaf.ID }),
+	}
+	g.ID = gotnsop.ComputeGroupID(g.Nonce, g.Owners)
 	var err error
 	state, err = m.PutGroup(ctx, s, *state, g)
 	if err != nil {
 		return nil, err
 	}
-	state, err = m.addInitialRules(ctx, s, *state, adminGroupName)
+	if state, err = m.PutGroupName(ctx, s, *state, adminGroupName, g.ID); err != nil {
+		return nil, err
+	}
+	for unit := range units {
+		mem := MemberUnit(unit)
+		state, err = m.AddMember(ctx, s, *state, g.ID, mem, &groupSecret)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	state, err = m.addInitialRules(ctx, s, *state, g.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -232,10 +282,16 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityLeaf) (
 
 // ValidateState checks the state in isolation.
 func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State) error {
-	for _, kvr := range []gotkv.Root{x.Leaves, x.Groups, x.Memberships, x.Rules, x.Branches} {
+	for i, kvr := range []gotkv.Root{
+		x.IDUnits,
+		x.Groups, x.GroupNames, x.Memberships,
+
+		x.Rules, x.Obligations,
+
+		x.VolumeNames, x.Volumes,
+	} {
 		if kvr.Ref.CID.IsZero() {
-			panic("uninitializec")
-			return fmt.Errorf("gotns: one of the States is uninitialized")
+			return fmt.Errorf("gotns: one of the States is uninitialized %d", i)
 		}
 	}
 	return nil
@@ -244,15 +300,44 @@ func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State
 // ValidateChange checks the change between two states.
 // Prev is assumed to be a known good, valid state.
 func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, next State, delta Delta) error {
-	if err := m.ValidateState(ctx, src, next); err != nil {
-		return err
-	}
 	// TODO: first validate auth operations, ensure that all the differences are signed.
 	return nil
 }
 
+// validateOp validates an operation in isolation.
+func (m *Machine) validateOp(ctx context.Context, src stores.Reading, prev, next State, approvers func(inet256.ID) bool, op Op) error {
+	switch op := op.(type) {
+	case *gotnsop.ChangeSet:
+		return m.validateChangeSet(ctx, src, prev, next, approvers, op)
+	default:
+		return fmt.Errorf("unsupported op: %T", op)
+	}
+}
+
+func (m *Machine) validateChangeSet(ctx context.Context, src stores.Reading, prev, next State, approvers func(inet256.ID) bool, op *gotnsop.ChangeSet) error {
+	for _, op2 := range op.Ops {
+		if err := m.validateOp(ctx, src, prev, next, approvers, op2); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (m *Machine) mapKV(ctx context.Context, s stores.RW, kvr *gotkv.Root, fn func(tx *gotkv.Tx) error) error {
+	tx := m.gotkv.NewTx(s, *kvr)
+	if err := fn(tx); err != nil {
+		return err
+	}
+	nextKvr, err := tx.Finish(ctx)
+	if err != nil {
+		return err
+	}
+	*kvr = *nextKvr
+	return nil
+}
+
 // putGroup returns a gotkv mutation that puts a group into the groups table.
-func putGroup(group Group) gotkv.Mutation {
+func putGroup(group gotnsop.Group) gotkv.Mutation {
 	return gotkv.Mutation{
 		Span: gotkv.SingleKeySpan(group.Key(nil)),
 		Entries: []gotkv.Entry{
@@ -263,3 +348,5 @@ func putGroup(group Group) gotkv.Mutation {
 		},
 	}
 }
+
+type ChangeSet = gotnsop.ChangeSet

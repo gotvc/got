@@ -2,15 +2,15 @@ package gotns
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema/statetrace"
 	"github.com/cloudflare/circl/kem"
-	dilithium3 "github.com/cloudflare/circl/sign/dilithium/mode3"
 	"github.com/gotvc/got/src/branches"
-	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/gotns/internal/gotnsop"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/exp/slices2"
@@ -21,12 +21,12 @@ import (
 type Client struct {
 	Blobcache blobcache.Service
 	Machine   Machine
-	ActAs     LeafPrivate
+	ActAs     IdenPrivate
 }
 
 // EnsureInit initializes a new GotNS instance in the given volume.
 // If the volume already contains a GotNS instance, it is left unchanged.
-func (c *Client) EnsureInit(ctx context.Context, volh blobcache.Handle, admins []IdentityLeaf) error {
+func (c *Client) EnsureInit(ctx context.Context, volh blobcache.Handle, admins []IdentityUnit) error {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return err
@@ -58,14 +58,16 @@ func (c *Client) EnsureInit(ctx context.Context, volh blobcache.Handle, admins [
 
 // Do calls fn with a transaction for manipulating the NS.
 func (c *Client) Do(ctx context.Context, volh blobcache.Handle, fn func(txb *Txn) error) error {
-	return c.doTx(ctx, volh, c.ActAs, fn)
+	return c.doTx(ctx, volh, c.ActAs, func(tx *bcsdk.Tx, txn *Txn) error {
+		return fn(txn)
+	})
 }
 
-func (c *Client) GetGroup(ctx context.Context, volh blobcache.Handle, name string) (*Group, error) {
-	var group *Group
+func (c *Client) LookupGroup(ctx context.Context, volh blobcache.Handle, name string) (*gotnsop.Group, error) {
+	var group *gotnsop.Group
 	if err := c.view(ctx, volh, func(s stores.Reading, state State) error {
 		var err error
-		group, err = c.Machine.GetGroup(ctx, s, state, name)
+		group, err = c.Machine.LookupGroup(ctx, s, state, name)
 		if err != nil {
 			return err
 		}
@@ -76,11 +78,11 @@ func (c *Client) GetGroup(ctx context.Context, volh blobcache.Handle, name strin
 	return group, nil
 }
 
-func (c *Client) GetLeaf(ctx context.Context, volh blobcache.Handle, id inet256.ID) (*IdentityLeaf, error) {
-	var leaf *IdentityLeaf
+func (c *Client) GetIDUnit(ctx context.Context, volh blobcache.Handle, id inet256.ID) (*IdentityUnit, error) {
+	var idu *IdentityUnit
 	if err := c.view(ctx, volh, func(s stores.Reading, state State) error {
 		var err error
-		leaf, err = c.Machine.GetLeaf(ctx, s, state, id)
+		idu, err = c.Machine.GetIDUnit(ctx, s, state, id)
 		if err != nil {
 			return err
 		}
@@ -88,10 +90,10 @@ func (c *Client) GetLeaf(ctx context.Context, volh blobcache.Handle, id inet256.
 	}); err != nil {
 		return nil, err
 	}
-	return leaf, nil
+	return idu, nil
 }
 
-func (c *Client) GetEntry(ctx context.Context, volh blobcache.Handle, name string) (*Entry, error) {
+func (c *Client) GetAlias(ctx context.Context, volh blobcache.Handle, name string) (*VolumeAlias, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return nil, err
@@ -105,22 +107,64 @@ func (c *Client) GetEntry(ctx context.Context, volh blobcache.Handle, name strin
 	if err != nil {
 		return nil, err
 	}
-	return c.Machine.GetEntry(ctx, tx, *state, []byte(name))
+	return c.Machine.GetAlias(ctx, tx, *state, name)
 }
 
-func (c *Client) PutEntry(ctx context.Context, volh blobcache.Handle, ent Entry) error {
-	return c.doTx(ctx, volh, c.ActAs, func(txb *Txn) error {
-		return txb.PutEntry(ctx, ent)
+// CreateAlias creates a new alias with a new volume at the specified name.
+func (c *Client) CreateAlias(ctx context.Context, nsh blobcache.Handle, name string, aux []byte) error {
+	return c.doTx(ctx, nsh, c.ActAs, func(tx *bcsdk.Tx, txn *Txn) error {
+		x, err := loadState(ctx, tx)
+		if err != nil {
+			return err
+		}
+		idu, err := c.Machine.GetIDUnit(ctx, tx, *x, c.ActAs.GetID())
+		if err != nil {
+			return err
+		}
+		if idu == nil {
+			return errors.New("cannot create alias: actor identity is not in the namespace")
+		}
+		svh, err := c.createSubVolume(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if err := tx.Link(ctx, *svh, blobcache.Action_ALL); err != nil {
+			return err
+		}
+		sec := gotnsop.Secret{}
+		if _, err := rand.Read(sec[:]); err != nil {
+			return err
+		}
+		hos := [32]byte(sec.Ratchet(2))
+		if err := txn.AddVolume(ctx, VolumeEntry{
+			Volume:        svh.OID,
+			HashOfSecrets: [][32]byte{hos},
+		}); err != nil {
+			return err
+		}
+		if err := txn.PutAlias(ctx, gotnsop.VolumeAlias{
+			Name:   name,
+			Volume: svh.OID,
+		}, &sec); err != nil {
+			return err
+		}
+		return nil
 	})
 }
 
-func (c *Client) DeleteEntry(ctx context.Context, volh blobcache.Handle, name string) error {
-	return c.doTx(ctx, volh, c.ActAs, func(txb *Txn) error {
-		return txb.DeleteEntry(ctx, name)
+func (c *Client) PutAlias(ctx context.Context, volh blobcache.Handle, bent VolumeAlias, secret *gotnsop.Secret) error {
+	return c.doTx(ctx, volh, c.ActAs, func(tx *bcsdk.Tx, txb *Txn) error {
+		return txb.PutAlias(ctx, bent, secret)
 	})
 }
 
-func (c *Client) ListEntries(ctx context.Context, volh blobcache.Handle, span branches.Span, limit int) ([]string, error) {
+func (c *Client) DeleteAlias(ctx context.Context, volh blobcache.Handle, name string) error {
+	return c.doTx(ctx, volh, c.ActAs, func(tx *bcsdk.Tx, txb *Txn) error {
+		return txb.DeleteAlias(ctx, name)
+	})
+}
+
+func (c *Client) ListAliases(ctx context.Context, volh blobcache.Handle, span branches.Span, limit int) ([]string, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return nil, err
@@ -134,11 +178,11 @@ func (c *Client) ListEntries(ctx context.Context, volh blobcache.Handle, span br
 	if err != nil {
 		return nil, err
 	}
-	entries, err := c.Machine.ListEntries(ctx, tx, *state, span, limit)
+	entries, err := c.Machine.ListBranches(ctx, tx, *state, span, limit)
 	if err != nil {
 		return nil, err
 	}
-	names := slices2.Map(entries, func(e Entry) string {
+	names := slices2.Map(entries, func(e gotnsop.VolumeAlias) string {
 		return e.Name
 	})
 	return names, nil
@@ -157,81 +201,34 @@ func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string
 	return nil, nil
 }
 
-func (c *Client) CreateAt(ctx context.Context, nsh blobcache.Handle, name string, aux []byte) error {
-	if c.ActAs == (LeafPrivate{}) {
-		return errors.New("gotns.Client: ActAs cannot be empty")
-	}
+func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, actAs IdenPrivate, writeAccess bool) (branches.Volume, error) {
 	nsh, err := c.adjustHandle(ctx, nsh)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, nsh, blobcache.TxParams{Mutate: true})
-	if err != nil {
+	var volid blobcache.OID
+	var mkVol VolumeConstructor
+	if err := c.view(ctx, nsh, func(s stores.Reading, x State) error {
+		var err error
+		volid, mkVol, err = c.Machine.OpenAt(ctx, s, x, c.ActAs, name, false)
 		return err
-	}
-	defer tx.Abort(ctx)
-	subVolh, err := c.createSubVolume(ctx, tx)
-	if err != nil {
-		return err
-	}
-	var rootData []byte
-	if err := tx.Load(ctx, &rootData); err != nil {
-		return err
-	}
-	root, err := statetrace.Parse(rootData, ParseRoot)
-	if err != nil {
-		return err
-	}
-	tx2 := c.Machine.NewTxn(root, tx, []LeafPrivate{c.ActAs})
-	if err := tx2.PutEntry(ctx, Entry{
-		Name:   name,
-		Volume: subVolh.OID,
-		Rights: blobcache.Action_ALL,
 	}); err != nil {
-		return err
+		return nil, err
 	}
-	root2, err := tx2.Finish(ctx)
+	volh, err := c.Blobcache.OpenFrom(ctx, nsh, volid, blobcache.Action_ALL)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if err := tx.Save(ctx, root2.Marshal(nil)); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
+	nsVol := &volumes.Blobcache{Service: c.Blobcache, Handle: nsh}
+	innerVol := &volumes.Blobcache{Service: c.Blobcache, Handle: *volh}
+	return mkVol(nsVol, innerVol), nil
 }
 
-func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string) (branches.Volume, error) {
-	nsh, err := c.adjustHandle(ctx, nsh)
-	if err != nil {
-		return nil, err
-	}
-	ent, err := c.GetEntry(ctx, nsh, name)
-	if err != nil {
-		return nil, err
-	}
-	if ent == nil {
-		return nil, branches.ErrNotExist
-	}
-	volh, err := c.Blobcache.OpenFrom(ctx, nsh, ent.Volume, blobcache.Action_ALL)
-	if err != nil {
-		return nil, err
-	}
-	innerVol := &volumes.Blobcache{
-		Handle:  *volh,
-		Service: c.Blobcache,
-	}
-	// TODO: get the secret from the entry.
-	var secret [32]byte
-	pubKey, privKey := dilithium3.Scheme().DeriveKey(secret[:])
-	signedVol := volumes.NewSignedVolume(innerVol, pubKey, privKey)
-	secret2 := [32]byte(gdat.Hash(secret[:]))
-	vol := volumes.NewChaCha20Poly1305(signedVol, &secret2)
-	return vol, nil
-}
-
-// AddLeaf adds a new primitive identity to a group.
-func (c *Client) AddLeaf(ctx context.Context, volh blobcache.Handle, leaf IdentityLeaf) error {
-	panic("not implemented")
+// AddMember adds a new primitive identity to a group.
+func (c *Client) AddMember(ctx context.Context, volh blobcache.Handle, gid GroupID, mem Member) error {
+	return c.doTx(ctx, volh, c.ActAs, func(tx1 *bcsdk.Tx, tx2 *Txn) error {
+		return tx2.AddMember(ctx, gid, mem)
+	})
 }
 
 func (c *Client) adjustHandle(ctx context.Context, volh blobcache.Handle) (blobcache.Handle, error) {
@@ -246,8 +243,8 @@ func (c *Client) adjustHandle(ctx context.Context, volh blobcache.Handle) (blobc
 	}
 }
 
-func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv LeafPrivate, fn func(txb *Txn) error) error {
-	if c.ActAs == (LeafPrivate{}) {
+func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv IdenPrivate, fn func(tx1 *bcsdk.Tx, tx2 *Txn) error) error {
+	if c.ActAs == (IdenPrivate{}) {
 		return errors.New("gotns.Client: ActAs cannot be nil")
 	}
 	volh, err := c.adjustHandle(ctx, volh)
@@ -263,15 +260,15 @@ func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv LeafP
 	if err := tx.Load(ctx, &data); err != nil {
 		return err
 	}
-	root, err := statetrace.Parse(data, ParseRoot)
+	root, err := Parse(data)
 	if err != nil {
 		return err
 	}
-	builder := c.Machine.NewTxn(root, tx, []LeafPrivate{leafPriv})
-	if err := fn(builder); err != nil {
+	txn := c.Machine.NewTxn(root, tx, []IdenPrivate{leafPriv})
+	if err := fn(tx, txn); err != nil {
 		return err
 	}
-	root2, err := builder.Finish(ctx)
+	root2, err := txn.Finish(ctx)
 	if err != nil {
 		return err
 	}
@@ -312,29 +309,17 @@ func (c *Client) createSubVolume(ctx context.Context, tx *bcsdk.Tx) (*blobcache.
 // IntroduceSelf creates a signed change set that adds a leaf to the state.
 // Then it returns the signed change set data.
 // It does not contact Blobcache or perform any Volume operations.
-func (c *Client) IntroduceSelf(kemPub kem.PublicKey) Op_ChangeSet {
-	leaf := NewLeaf(c.ActAs.SigPrivateKey.Public().(inet256.PublicKey), kemPub)
-	cs := Op_ChangeSet{
+func (c *Client) IntroduceSelf(kemPub kem.PublicKey) gotnsop.ChangeSet {
+	leaf := gotnsop.NewIDUnit(c.ActAs.SigPrivateKey.Public().(inet256.PublicKey), kemPub)
+	cs := gotnsop.ChangeSet{
 		Ops: []Op{
-			&Op_CreateLeaf{
-				Leaf: leaf,
+			&gotnsop.CreateIDUnit{
+				Unit: leaf,
 			},
 		},
 	}
 	cs.Sign(c.ActAs.SigPrivateKey)
 	return cs
-}
-
-func loadState(ctx context.Context, tx *bcsdk.Tx) (*State, error) {
-	var data []byte
-	if err := tx.Load(ctx, &data); err != nil {
-		return nil, err
-	}
-	root, err := statetrace.Parse(data, ParseRoot)
-	if err != nil {
-		return nil, err
-	}
-	return &root.State.Current, nil
 }
 
 // BranchVolumeSpec is the volume spec used for new branches.

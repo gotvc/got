@@ -2,97 +2,62 @@ package gotns
 
 import (
 	"context"
-	"encoding/binary"
-	"fmt"
 
-	"blobcache.io/blobcache/src/blobcache"
+	"go.brendoncarroll.net/exp/streams"
+
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotns/internal/gotnsop"
 	"github.com/gotvc/got/src/internal/stores"
-	"go.brendoncarroll.net/exp/streams"
 )
 
-// NewEntry creates a new entry with the provided information
-// and produces KEMs for each group with access to the entry.
-func (m *Machine) NewEntry(ctx context.Context, name string, rights blobcache.ActionSet, volume blobcache.OID, secret *[32]byte) (Entry, error) {
-	entry := Entry{
-		Name:   name,
-		Rights: rights,
-		Volume: volume,
-	}
-	return entry, nil
-}
+type (
+	VolumeAlias = gotnsop.VolumeAlias
+	VolumeEntry = gotnsop.VolumeEntry
+)
 
-type Entry struct {
-	Name   string
-	Volume blobcache.OID
-	Rights blobcache.ActionSet
-
-	// Aux is extra data associated with the volume.
-	// This will be filled with branches.Info JSON.
-	Aux []byte
-}
-
-func (e Entry) Key(buf []byte) []byte {
-	buf = append(buf, e.Name...)
-	return buf
-}
-
-func (e Entry) Value(buf []byte) []byte {
-	buf = append(buf, e.Volume[:]...)
-	buf = binary.LittleEndian.AppendUint64(buf, uint64(e.Rights))
-	buf = append(buf, e.Aux...)
-	return buf
-}
-
-func ParseEntry(key, value []byte) (Entry, error) {
-	var entry Entry
-	entry.Name = string(key)
-
-	if len(value) < 16+8 {
-		return Entry{}, fmt.Errorf("entry value too short")
-	}
-	entry.Volume = blobcache.OID(value[:16])
-	entry.Rights = blobcache.ActionSet(binary.LittleEndian.Uint64(value[16:24]))
-	entry.Aux = value[24:]
-	return entry, nil
-}
-
-func (m *Machine) GetEntry(ctx context.Context, s stores.Reading, State State, name []byte) (*Entry, error) {
-	val, err := m.gotkv.Get(ctx, s, State.Branches, name)
+// GetAlias looks up an entry in the branches table.
+func (m *Machine) GetAlias(ctx context.Context, s stores.Reading, state State, name string) (*gotnsop.VolumeAlias, error) {
+	val, err := m.gotkv.Get(ctx, s, state.VolumeNames, []byte(name))
 	if err != nil {
 		if gotkv.IsErrKeyNotFound(err) {
 			return nil, nil
 		}
 		return nil, err
 	}
-	entry, err := ParseEntry(name, val)
+	entry, err := gotnsop.ParseVolumeAlias([]byte(name), val)
 	if err != nil {
 		return nil, err
 	}
 	return &entry, nil
 }
 
-func (m *Machine) PutEntry(ctx context.Context, s stores.RW, State State, entry Entry) (*State, error) {
-	mut := PutEntry(entry)
-	entsState, err := m.gotkv.Mutate(ctx, s, State.Branches, mut)
+// PutAlias inserts or overwrites an entry in the branches table.
+func (m *Machine) PutAlias(ctx context.Context, s stores.RW, state State, entry gotnsop.VolumeAlias, secret *gotnsop.Secret) (*State, error) {
+	mut1 := putAlias(entry)
+	aliasState, err := m.gotkv.Mutate(ctx, s, state.VolumeNames, mut1)
 	if err != nil {
 		return nil, err
 	}
-	State.Branches = *entsState
-	return &State, nil
-}
-
-func (m *Machine) DeleteEntry(ctx context.Context, s stores.RW, State State, name string) (*State, error) {
-	entsState, err := m.gotkv.Delete(ctx, s, State.Branches, []byte(name))
+	state.VolumeNames = *aliasState
+	nextState, err := m.FulfillObligations(ctx, s, state, entry.Name, secret)
 	if err != nil {
 		return nil, err
 	}
-	State.Branches = *entsState
+	return nextState, nil
+}
+
+// DeleteAlias deletes an alias from the namespace.
+func (m *Machine) DeleteAlias(ctx context.Context, s stores.RW, State State, name string) (*State, error) {
+	entsState, err := m.gotkv.Delete(ctx, s, State.VolumeNames, []byte(name))
+	if err != nil {
+		return nil, err
+	}
+	State.VolumeNames = *entsState
 	return &State, nil
 }
 
-func PutEntry(entry Entry) gotkv.Mutation {
+func putAlias(entry gotnsop.VolumeAlias) gotkv.Mutation {
 	k := entry.Key(nil)
 	return gotkv.Mutation{
 		Span: gotkv.SingleKeySpan(k),
@@ -105,7 +70,7 @@ func PutEntry(entry Entry) gotkv.Mutation {
 	}
 }
 
-func (m *Machine) ListEntries(ctx context.Context, s stores.Reading, State State, span branches.Span, limit int) ([]Entry, error) {
+func (m *Machine) ListBranches(ctx context.Context, s stores.Reading, state State, span branches.Span, limit int) ([]gotnsop.VolumeAlias, error) {
 	span2 := gotkv.TotalSpan()
 	if span.Begin != "" {
 		span2.Begin = []byte(span.Begin)
@@ -113,8 +78,8 @@ func (m *Machine) ListEntries(ctx context.Context, s stores.Reading, State State
 	if span.End != "" {
 		span2.End = []byte(span.End)
 	}
-	it := m.gotkv.NewIterator(s, State.Branches, span2)
-	var ents []Entry
+	it := m.gotkv.NewIterator(s, state.VolumeNames, span2)
+	var ents []gotnsop.VolumeAlias
 	for {
 		ent, err := streams.Next(ctx, it)
 		if err != nil {
@@ -124,7 +89,7 @@ func (m *Machine) ListEntries(ctx context.Context, s stores.Reading, State State
 			return nil, err
 		}
 
-		entry, err := ParseEntry(ent.Key, ent.Value)
+		entry, err := gotnsop.ParseVolumeAlias(ent.Key, ent.Value)
 		if err != nil {
 			return nil, err
 		}

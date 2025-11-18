@@ -36,8 +36,8 @@ func TestClient(t *testing.T) {
 	}
 
 	// Initialize GotNS
-	gnsc := gotns.Client{Blobcache: bc, Machine: gotns.New(), ActAs: gotns.LeafPrivate{}}
-	require.NoError(t, gnsc.EnsureInit(ctx, *nsh, []gotns.IdentityLeaf{}))
+	gnsc := gotns.Client{Blobcache: bc, Machine: gotns.New(), ActAs: gotns.IdenPrivate{}}
+	require.NoError(t, gnsc.EnsureInit(ctx, *nsh, []gotns.IdentityUnit{}))
 
 	// Write some blobs to a staging area
 	txn, err := bcsdk.BeginTx(ctx, bc, vh, blobcache.TxParams{Mutate: true})

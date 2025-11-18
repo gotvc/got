@@ -85,7 +85,7 @@ var (
 )
 
 func IsErrKeyNotFound(err error) bool {
-	return errors.Is(err, ErrKeyNotFound)
+	return errors.Is(err, ErrKeyNotFound) || state.IsErrNotFound[[]byte](err)
 }
 
 var defaultReadOnlyMachine = &Machine{da: gdat.NewMachine()}

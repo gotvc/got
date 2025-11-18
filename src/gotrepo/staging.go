@@ -39,7 +39,7 @@ type stagingCtx struct {
 	Importer *porting.Importer
 	Exporter *porting.Exporter
 
-	ActingAs gotns.IdentityLeaf
+	ActingAs gotns.IdentityUnit
 }
 
 func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {

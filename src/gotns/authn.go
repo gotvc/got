@@ -1,113 +1,91 @@
 package gotns
 
 import (
-	"bytes"
 	"context"
-	"crypto/rand"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"maps"
-	"slices"
-	"strings"
+	"iter"
 
 	"github.com/cloudflare/circl/kem"
-	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
+	"github.com/cloudflare/circl/sign"
 	"go.inet256.org/inet256/src/inet256"
 	"golang.org/x/crypto/chacha20"
-	"golang.org/x/crypto/chacha20poly1305"
 
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
-	"github.com/gotvc/got/src/internal/sbe"
+	"github.com/gotvc/got/src/gotns/internal/gotnsop"
+	"github.com/gotvc/got/src/internal/graphs"
 	"github.com/gotvc/got/src/internal/stores"
 )
 
-const MaxLeavesPerGroup = 128
+type (
+	IdentityUnit = gotnsop.IdentityUnit
+	Group        = gotnsop.Group
+	GroupID      = gotnsop.GroupID
+)
+
+func MemberUnit(id inet256.ID) gotnsop.Member {
+	return gotnsop.MemberUnit(id)
+}
+
+func MemberGroup(gid GroupID) gotnsop.Member {
+	return gotnsop.MemberGroup(gid)
+}
 
 // PutLeaf adds a leaf to the leaves table, overwriting whatever was there.
 // Any unreferenced leaves will be deleted.
-func (m *Machine) PutLeaf(ctx context.Context, s stores.Writing, State State, leaf IdentityLeaf) (*State, error) {
-	leafState, err := m.gotkv.Mutate(ctx, s.(stores.RW), State.Leaves, putLeaf(leaf))
+func (m *Machine) PutIDUnit(ctx context.Context, s stores.Writing, state State, leaf IdentityUnit) (*State, error) {
+	leafState, err := m.gotkv.Mutate(ctx, s.(stores.RW), state.IDUnits, putLeaf(leaf))
 	if err != nil {
 		return nil, err
 	}
-	State.Leaves = *leafState
-	return &State, nil
+	state.IDUnits = *leafState
+	return &state, nil
 }
 
-// GetLeaf retuns an identity leaf by ID.
-func (m *Machine) GetLeaf(ctx context.Context, s stores.Reading, State State, id inet256.ID) (*IdentityLeaf, error) {
-	val, err := m.gotkv.Get(ctx, s, State.Leaves, id[:])
+// GetIDUnit retuns an identity unit by ID.
+func (m *Machine) GetIDUnit(ctx context.Context, s stores.Reading, state State, id inet256.ID) (*IdentityUnit, error) {
+	val, err := m.gotkv.Get(ctx, s, state.IDUnits, id[:])
 	if err != nil {
+		if gotkv.IsErrKeyNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
-	return ParseIdentityLeaf(id[:], val)
+	return gotnsop.ParseIDUnit(id[:], val)
 }
 
-// DropLeaf drops a leaf from the leaves table.
-func (m *Machine) DropLeaf(ctx context.Context, s stores.RW, state State, leafID inet256.ID) (*State, error) {
-	if err := m.ForEachGroup(ctx, s, state, func(group Group) error {
-		if group.LeafKEMs[leafID] != nil {
+// DropIDUnit drops a unit from the units table.
+func (m *Machine) DropIDUnit(ctx context.Context, s stores.RW, state State, id inet256.ID) (*State, error) {
+	if err := m.ForEachMembership(ctx, s, state, nil, func(mem Membership) error {
+		if mem.Member.Unit != nil && *mem.Member.Unit == id {
 			return fmt.Errorf("leaf is still in group")
 		}
 		return nil
 	}); err != nil {
 		return nil, err
 	}
-	leafState, err := m.gotkv.Delete(ctx, s, state.Leaves, leafID[:])
+	leafState, err := m.gotkv.Delete(ctx, s, state.IDUnits, id[:])
 	if err != nil {
 		return nil, err
 	}
-	state.Leaves = *leafState
+	state.IDUnits = *leafState
 	return &state, nil
 }
 
-// AddGroupLeaf adds a leaf to a group.
-func (m *Machine) AddGroupLeaf(ctx context.Context, s stores.RW, State State, kemSeed *[64]byte, groupName string, leafID inet256.ID) (*State, error) {
-	group, err := m.GetGroup(ctx, s, State, groupName)
-	if err != nil {
-		return nil, err
-	}
-	if len(group.LeafKEMs) >= MaxLeavesPerGroup {
-		return nil, fmt.Errorf("group %s has too many leaves (%d) to add another", groupName, len(group.LeafKEMs))
-	}
-	kemPub, _ := DeriveKEM(*kemSeed)
-	if !kemPub.Equal(group.KEM) {
-		return nil, fmt.Errorf("group %s has a different KEM public key than the one provided. %v != %v", groupName, kemPub, group.KEM)
-	}
-	// ensure the leaf exists
-	leaf, err := m.GetLeaf(ctx, s, State, leafID)
-	if err != nil {
-		return nil, err
-	}
-	group.LeafKEMs[leafID] = encryptSeed(nil, leaf.KEMPublicKey, kemSeed)
-	groupState, err := m.gotkv.Mutate(ctx, s, State.Groups, putGroup(*group))
-	if err != nil {
-		return nil, err
-	}
-	State.Groups = *groupState
-	return &State, nil
-}
-
-func (m *Machine) ForEachLeaf(ctx context.Context, s stores.Reading, State State, group string, fn func(leaf IdentityLeaf) error) error {
-	span := gotkv.SingleKeySpan([]byte(group))
-	return m.gotkv.ForEach(ctx, s, State.Leaves, span, func(ent gotkv.Entry) error {
-		if len(ent.Key) != len(group)+32 {
-			return nil // potentially for another group.
-		}
-		leaf, err := ParseIdentityLeaf(ent.Key, ent.Value)
+func (m *Machine) ForEachIDUnit(ctx context.Context, s stores.Reading, state State, fn func(unit IdentityUnit) error) error {
+	span := gotkv.TotalSpan()
+	return m.gotkv.ForEach(ctx, s, state.IDUnits, span, func(ent gotkv.Entry) error {
+		unit, err := gotnsop.ParseIDUnit(ent.Key, ent.Value)
 		if err != nil {
 			return err
 		}
-		return fn(*leaf)
+		return fn(*unit)
 	})
 }
 
 // PutGroup adds or replaces a group by name.
 func (m *Machine) PutGroup(ctx context.Context, s stores.RW, state State, group Group) (*State, error) {
-	if strings.ContainsAny(group.Name, "\x00") {
-		return nil, fmt.Errorf("group name contains null bytes")
-	}
 	groupState, err := m.gotkv.Mutate(ctx, s, state.Groups, putGroup(group))
 	if err != nil {
 		return nil, err
@@ -117,48 +95,23 @@ func (m *Machine) PutGroup(ctx context.Context, s stores.RW, state State, group 
 }
 
 // GetGroup returns a group by name.
-func (m *Machine) GetGroup(ctx context.Context, s stores.Reading, State State, name string) (*Group, error) {
-	k := []byte(name)
+func (m *Machine) GetGroup(ctx context.Context, s stores.Reading, State State, groupID GroupID) (*Group, error) {
+	k := groupID[:]
 	val, err := m.gotkv.Get(ctx, s, State.Groups, k)
 	if err != nil {
+		if gotkv.IsErrKeyNotFound(err) {
+			return nil, nil
+		}
 		return nil, err
 	}
-	return ParseGroup(k, val)
-}
-
-// GetKEMSeed returns a KEM seed used to derive the key pair for a given group.
-// id is the ID of the leaf that is requesting the KEM private key.
-// kemPriv is the KEM private key for the leaf to decrypt messages sent to it by group operations.
-// groupPath should go from the largest group to the smallest group.
-func (m *Machine) GetKEMSeed(ctx context.Context, s stores.Reading, state State, groupPath []string, id inet256.ID, kemPriv kem.PrivateKey) (*[64]byte, error) {
-	var kemSeed *[64]byte
-	for len(groupPath) > 0 {
-		groupName := groupPath[len(groupPath)-1]
-		groupPath = groupPath[:len(groupPath)-1]
-		g, err := m.GetGroup(ctx, s, state, groupName)
-		if err != nil {
-			return nil, err
-		}
-		if ctext, ok := g.LeafKEMs[id]; ok {
-			seed, err := decryptSeed(kemPriv, ctext)
-			if err != nil {
-				return nil, err
-			}
-			kemSeed = seed
-			_, kemPriv = DeriveKEM(*seed)
-		}
-	}
-	if kemSeed == nil {
-		return nil, fmt.Errorf("KEM seed not found")
-	}
-	return kemSeed, nil
+	return gotnsop.ParseGroup(k, val)
 }
 
 // ForEachGroup calls fn for each group in the namespace.
-func (m *Machine) ForEachGroup(ctx context.Context, s stores.Reading, State State, fn func(group Group) error) error {
+func (m *Machine) ForEachGroup(ctx context.Context, s stores.Reading, state State, fn func(group gotnsop.Group) error) error {
 	span := gotkv.TotalSpan()
-	return m.gotkv.ForEach(ctx, s, State.Groups, span, func(ent gotkv.Entry) error {
-		group, err := ParseGroup(ent.Key, ent.Value)
+	return m.gotkv.ForEach(ctx, s, state.Groups, span, func(ent gotkv.Entry) error {
+		group, err := gotnsop.ParseGroup(ent.Key, ent.Value)
 		if err != nil {
 			return err
 		}
@@ -166,126 +119,147 @@ func (m *Machine) ForEachGroup(ctx context.Context, s stores.Reading, State Stat
 	})
 }
 
-// ForEachMembership calls fn for each membership in the group.
-func (m *Machine) ForEachMembership(ctx context.Context, s stores.Reading, State State, group string, fn func(mem Membership) error) error {
-	span := gotkv.SingleKeySpan(memberKey(nil, group, ""))
-	return m.gotkv.ForEach(ctx, s, State.Memberships, span, func(ent gotkv.Entry) error {
-		mem, err := ParseMembership(ent.Key, ent.Value)
+func (m *Machine) PutGroupName(ctx context.Context, s stores.RW, state State, name string, groupID gotnsop.GroupID) (*State, error) {
+	_, err := m.GetGroup(ctx, s, state, groupID)
+	if err != nil {
+		return nil, err
+	}
+	if err := m.mapKV(ctx, s, &state.GroupNames, func(tx *gotkv.Tx) error {
+		return tx.Put(ctx, []byte(name), groupID[:])
+	}); err != nil {
+		return nil, err
+	}
+	return &state, nil
+}
+
+func (m *Machine) GetGroupName(ctx context.Context, s stores.Reading, x State, name string) (*gotnsop.GroupID, error) {
+	var groupID *gotnsop.GroupID
+	if err := m.gotkv.GetF(ctx, s, x.GroupNames, []byte(name), func(val []byte) error {
+		id, err := gotnsop.ParseGroupID(val)
 		if err != nil {
 			return err
 		}
-		if mem.Group != group {
-			return nil
-		}
-		return fn(*mem)
-	})
+		groupID = &id
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return groupID, nil
 }
 
-// AddMember adds a member group to a containing group.
-func (m *Machine) AddMember(ctx context.Context, s stores.RW, State State, name string, member string) (*State, error) {
-	if strings.ContainsAny(name, "\x00") {
-		return nil, fmt.Errorf("member name contains null bytes")
-	}
-	_, err := m.GetGroup(ctx, s, State, name)
+func (m *Machine) LookupGroup(ctx context.Context, s stores.Reading, state State, name string) (*Group, error) {
+	groupID, err := m.GetGroupName(ctx, s, state, name)
 	if err != nil {
 		return nil, err
 	}
-	memState, err := m.gotkv.Mutate(ctx, s, State.Memberships,
-		putMember(Membership{
-			Group:  name,
-			Member: member,
-		}),
-	)
-	if err != nil {
-		return nil, err
-	}
-	State.Memberships = *memState
-	return &State, nil
+	return m.GetGroup(ctx, s, state, *groupID)
 }
 
-// RemoveMember removes a member group from a containing group.
-func (m *Machine) RemoveMember(ctx context.Context, s stores.RW, State State, group string, member string) (*State, error) {
-	// TODO: Need to make sure group exists first.
-	memState, err := m.gotkv.Mutate(ctx, s, State.Memberships,
-		rmMember(group, member),
-	)
-	if err != nil {
-		return nil, err
-	}
-	State.Memberships = *memState
-	return &State, nil
-}
-
-func (m *Machine) GetMembership(ctx context.Context, s stores.Reading, State State, group, mem string) (*Membership, error) {
+func (m *Machine) GetMembership(ctx context.Context, s stores.Reading, state State, group GroupID, mem Member) (*Membership, error) {
 	k := memberKey(nil, group, mem)
-	val, err := m.gotkv.Get(ctx, s, State.Memberships, k)
+	val, err := m.gotkv.Get(ctx, s, state.Memberships, k)
 	if err != nil {
 		return nil, err
 	}
 	return ParseMembership(k, val)
 }
 
-// RekeyGroup creates a new KEM key pair for a group and
-// - changes the group's KEM public key
-// - re-encrypts the KEM private key for all leaves, using the leaves' KEM public key
-// - re-encrypts the KEM private key for all member groups, using those groups' KEM public keys
-func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, State State, name string, kemSeed *[64]byte) (*State, error) {
-	group, err := m.GetGroup(ctx, s, State, name)
-	if err != nil {
-		return nil, err
-	}
-
-	kemPub, _ := DeriveKEM([64]byte(*kemSeed))
-	// update group record
-	group.KEM = kemPub
-	for leafID := range group.LeafKEMs {
-		leaf, err := m.GetLeaf(ctx, s, State, leafID)
-		if err != nil {
-			return nil, err
-		}
-		kemCtext := encryptSeed(nil, leaf.KEMPublicKey, kemSeed)
-		group.LeafKEMs[leafID] = kemCtext
-	}
-	groupsRoot, err := m.gotkv.Mutate(ctx, s, State.Groups, putGroup(*group))
-	if err != nil {
-		return nil, err
-	}
-	State.Groups = *groupsRoot
-
-	var memMuts []gotkv.Mutation
-	if err := m.ForEachMembership(ctx, s, State, name, func(mem Membership) error {
-		subgroup, err := m.GetGroup(ctx, s, State, mem.Member)
+// ForEachMembership calls fn for each membership
+// If gid is non-nil, then it will be used to filter by the containing group.
+func (m *Machine) ForEachMembership(ctx context.Context, s stores.Reading, state State, gid *GroupID, fn func(mem Membership) error) error {
+	span := gotkv.TotalSpan()
+	return m.gotkv.ForEach(ctx, s, state.Memberships, span, func(ent gotkv.Entry) error {
+		mem, err := ParseMembership(ent.Key, ent.Value)
 		if err != nil {
 			return err
 		}
-		mem.EncryptedKEM = encryptSeed(nil, subgroup.KEM, kemSeed)
-		memMuts = append(memMuts, putMember(mem))
-		return nil
-	}); err != nil {
-		return nil, err
-	}
+		if gid != nil && *gid != mem.Group {
+			return nil
+		}
+		return fn(*mem)
+	})
+}
 
-	memRoot, err := m.gotkv.Mutate(ctx, s, State.Memberships, memMuts...)
+// AddMember adds a member (a unit or another Group) to a containing group.
+func (m *Machine) AddMember(ctx context.Context, s stores.RW, x State, gid GroupID, member Member, groupSecret *gotnsop.Secret) (*State, error) {
+	_, err := m.GetGroup(ctx, s, x, gid)
 	if err != nil {
 		return nil, err
 	}
-	State.Memberships = *memRoot
+	var kemPub kem.PublicKey
+	switch {
+	case member.Unit != nil:
+		idUnit, err := m.GetIDUnit(ctx, s, x, *member.Unit)
+		if err != nil {
+			return nil, err
+		}
+		if idUnit == nil {
+			return nil, fmt.Errorf("cannot create membership identity does not exist: %v", *member.Unit)
+		}
+		kemPub = idUnit.KEMPublicKey
+	case member.Group != nil:
+		g, err := m.GetGroup(ctx, s, x, *member.Group)
+		if err != nil {
+			return nil, err
+		}
+		if g == nil {
+			return nil, fmt.Errorf("cannot create membership group does not exist: %v", *member.Group)
+		}
+		kemPub = g.KEM
+	default:
+		return nil, fmt.Errorf("member is empty")
+	}
 
-	return &State, nil
+	kemCtext := encryptSeed(nil, kemPub, groupSecret)
+	memState, err := m.gotkv.Mutate(ctx, s, x.Memberships,
+		putMember(Membership{
+			Group:        gid,
+			Member:       member,
+			EncryptedKEM: kemCtext,
+		}),
+	)
+	if err != nil {
+		return nil, err
+	}
+	x.Memberships = *memState
+	return &x, nil
+}
+
+// RemoveMember removes a member group from a containing group.
+func (m *Machine) RemoveMember(ctx context.Context, s stores.RW, state State, gid GroupID, mem Member) (*State, error) {
+	// TODO: Need to make sure group exists first.
+	memState, err := m.gotkv.Mutate(ctx, s, state.Memberships,
+		rmMember(gid, mem),
+	)
+	if err != nil {
+		return nil, err
+	}
+	state.Memberships = *memState
+	return &state, nil
 }
 
 // ForEachInGroup calls fn recursively for each ID in the group.
-func (m *Machine) ForEachInGroup(ctx context.Context, s stores.Reading, State State, group string, fn func(inet256.ID) error) error {
-	return m.ForEachLeaf(ctx, s, State, group, func(leaf IdentityLeaf) error {
-		return fn(leaf.ID)
+// This is a recursive method which explores the full transitive closure of the initial Group.
+func (m *Machine) ForEachUnitInGroup(ctx context.Context, s stores.Reading, state State, gid GroupID, fn func(inet256.ID) error) error {
+	return m.ForEachMembership(ctx, s, state, &gid, func(mem Membership) error {
+		switch {
+		case mem.Member.Unit != nil:
+			return fn(*mem.Member.Unit)
+		case mem.Member.Group != nil:
+			return m.ForEachUnitInGroup(ctx, s, state, *mem.Member.Group, fn)
+		}
+		return nil
 	})
 }
 
 // GroupContains returns true if the actor is a member of the group.
-func (m *Machine) GroupContains(ctx context.Context, s stores.Reading, State State, group string, actor inet256.ID) (bool, error) {
+// This method answers the `contains?` query for the full transitive closure for the group.
+// For immediate memberhsip call GetMembership directly and check for (nil, nil);
+// that means the memberhip does not exist.
+func (m *Machine) GroupContains(ctx context.Context, s stores.Reading, state State, group GroupID, actor inet256.ID) (bool, error) {
 	var contains bool
 	stopEarly := errors.New("stop early")
-	if err := m.ForEachInGroup(ctx, s, State, group, func(id inet256.ID) error {
+	if err := m.ForEachUnitInGroup(ctx, s, state, group, func(id inet256.ID) error {
 		if actor == id {
 			contains = true
 			return stopEarly
@@ -297,222 +271,152 @@ func (m *Machine) GroupContains(ctx context.Context, s stores.Reading, State Sta
 	return contains, nil
 }
 
-type Group struct {
-	// Name uniquely identifies the group, it is the primary key of the Groups table.
-	Name string
+// GetGroupSecret returns a KEM seed used to derive the key pair for a given group.
+// id is the ID of the leaf that is requesting the KEM private key.
+// kemPriv is the KEM private key for the leaf to decrypt messages sent to it by group operations.
+// groupPath should go from the largest group to the smallest group.
+// If you need a groupPath, try `FindGroupPath` first.
+func (m *Machine) GetGroupSecret(ctx context.Context, s stores.Reading, state State, priv IdenPrivate, groupPath []GroupID) (*gotnsop.Secret, error) {
+	kemPriv := priv.KEMPrivateKey
+	var groupSecret *gotnsop.Secret
 
-	// KEM is used to send messages to the group.
-	// The private key is stored encrypted in each Membership entry.
-	KEM kem.PublicKey
+	memk := MemberUnit(priv.GetID())
+	for len(groupPath) > 0 {
+		gid := groupPath[len(groupPath)-1]
+		groupPath = groupPath[:len(groupPath)-1]
+		group, err := m.GetGroup(ctx, s, state, gid)
+		if err != nil {
+			return nil, err
+		}
+		mshp, err := m.GetMembership(ctx, s, state, gid, memk)
+		if err != nil {
+			return nil, err
+		}
 
-	// Leaves are the leaves that are part of the group.
-	// The key in the leaves map is the leaf ID.
-	// The value in the leaves map is the group's KEM private key encrypted for the leaf to read.
-	LeafKEMs map[inet256.ID][]byte
-
-	// Owners are the identities that can add and remove members from the group.
-	// Owners must also be members of the group.
-	Owners []inet256.ID
+		gs, err := decryptSeed(kemPriv, mshp.EncryptedKEM)
+		if err != nil {
+			return nil, fmt.Errorf("failed to decrypt KEM seed: %w", err)
+		}
+		kemPub, _ := gs.DeriveKEM()
+		if !kemPub.Equal(group.KEM) {
+			return nil, fmt.Errorf("secret from membership ctext did not produce group KEM")
+		}
+		groupSecret = gs
+		_, kemPriv = groupSecret.DeriveKEM()
+	}
+	if groupSecret == nil {
+		return nil, fmt.Errorf("group secret not found")
+	}
+	return groupSecret, nil
 }
 
-func ParseGroup(key, value []byte) (*Group, error) {
-	kemPubData, data, err := sbe.ReadLP(value)
+// RekeyGroup creates a new KEM key pair for a group and
+// - changes the group's KEM public key
+// - re-encrypts the KEM private key for all leaves, using the leaves' KEM public key
+// - re-encrypts the KEM private key for all member groups, using those groups' KEM public keys
+func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, state State, gid GroupID, secret *gotnsop.Secret) (*State, error) {
+	group, err := m.GetGroup(ctx, s, state, gid)
 	if err != nil {
 		return nil, err
 	}
-	kemPub, err := ParseKEMPublicKey(kemPubData)
+
+	kemPub, _ := secret.DeriveKEM()
+	// update group record
+	group.KEM = kemPub
+
+	// update memberships
+	var memMuts []gotkv.Mutation
+	if err := m.ForEachMembership(ctx, s, state, &gid, func(mshp Membership) error {
+		mem := mshp.Member
+		switch {
+		case mem.Unit != nil:
+			// TODO
+			panic("not implemented")
+
+		case mem.Group != nil:
+			subgroup, err := m.GetGroup(ctx, s, state, *mem.Group)
+			if err != nil {
+				return err
+			}
+			mshp.EncryptedKEM = encryptSeed(nil, subgroup.KEM, secret)
+			memMuts = append(memMuts, putMember(mshp))
+		default:
+			return fmt.Errorf("member is empty")
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	memRoot, err := m.gotkv.Mutate(ctx, s, state.Memberships, memMuts...)
 	if err != nil {
 		return nil, err
 	}
-	// leaves
-	leavesData, data, err := sbe.ReadLP(data)
-	if err != nil {
-		return nil, err
-	}
-	leaves := make(map[inet256.ID][]byte)
-	if err := unmarshalIDMap(leavesData, leaves); err != nil {
-		return nil, err
-	}
-	// owners
-	ownersData, _, err := sbe.ReadLP(data)
-	if err != nil {
-		return nil, err
-	}
-	var owners []inet256.ID
-	if err := unmarshalGroupOwners(ownersData, &owners); err != nil {
-		return nil, err
-	}
-	return &Group{
-		Name:     string(key),
-		KEM:      kemPub,
-		LeafKEMs: leaves,
-		Owners:   owners,
-	}, nil
+	state.Memberships = *memRoot
+
+	return &state, nil
 }
 
-func (g *Group) Key(out []byte) []byte {
-	return append(out, g.Name...)
-}
-
-func (g *Group) Value(out []byte) []byte {
-	out = sbe.AppendLP(out, MarshalKEMPublicKey(nil, KEM_MLKEM1024, g.KEM))
-	out = sbe.AppendLP(out, marshalIDMap(nil, g.LeafKEMs))
-	out = sbe.AppendLP(out, marshalGroupOwners(nil, g.Owners))
-	return out
-}
-
-func marshalIDMap(out []byte, leaves map[inet256.ID][]byte) []byte {
-	keys := slices.Collect(maps.Keys(leaves))
-	slices.SortFunc(keys, compareLeafIDs)
-	for _, leafID := range keys {
-		leafKEM := leaves[leafID]
-		var ent []byte
-		ent = append(ent, leafID[:]...)
-		ent = append(ent, leafKEM...)
-
-		out = sbe.AppendLP(out, ent)
-	}
-	return out
-}
-
-func unmarshalIDMap(data []byte, dst map[inet256.ID][]byte) error {
-	clear(dst)
-	var lastID inet256.ID
-	for len(data) > 0 {
-		ent, rest, err := sbe.ReadLP(data)
+// FindGroupPath finds a path of groups from priv to the target Group.
+// FindGroupPath returns (nil, nil) when no path could be found.
+func (m *Machine) FindGroupPath(ctx context.Context, s stores.Reading, x State, id inet256.ID, target GroupID) ([]GroupID, error) {
+	initial := []GroupID{}
+	// List all the groups containing the unit
+	if err := m.ForEachGroup(ctx, s, x, func(g Group) error {
+		mem := MemberUnit(id)
+		mshp, err := m.GetMembership(ctx, s, x, g.ID, mem)
 		if err != nil {
 			return err
 		}
-		if len(ent) < inet256.AddrSize {
-			return fmt.Errorf("map entry cannot be less than 32 bytes. %d", len(ent))
+		if mshp == nil {
+			return nil
 		}
-		id := inet256.IDFromBytes(ent[:32])
-		if compareLeafIDs(id, lastID) <= 0 {
-			return fmt.Errorf("leaves are not sorted")
+		initial = append(initial, g.ID)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+
+	goal := func(gid GroupID) bool { return gid == target }
+	return graphs.DijkstrasErr(initial, goal, func(gid GroupID) iter.Seq2[GroupID, error] {
+		return func(yield func(GroupID, error) bool) {
+			stopIter := errors.New("stop iter")
+			err := m.ForEachMembership(ctx, s, x, &gid, func(mshp Membership) error {
+				switch {
+				case mshp.Member.Group != nil:
+					if !yield(*mshp.Member.Group, nil) {
+						return stopIter
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				if errors.Is(err, stopIter) {
+					return
+				} else {
+					yield(GroupID{}, err)
+				}
+			}
 		}
-		// insert into the map
-		dst[id] = ent[inet256.AddrSize:]
-
-		lastID = id
-		data = rest
-	}
-	return nil
+	})
 }
 
-func compareLeafIDs(a, b inet256.ID) int {
-	return bytes.Compare(a[:], b[:])
-}
-
-func marshalGroupOwners(out []byte, owners []inet256.ID) []byte {
-	for _, owner := range owners {
-		out = append(out, owner[:]...)
-	}
-	return out
-}
-
-func unmarshalGroupOwners(data []byte, dst *[]inet256.ID) error {
-	if len(data)%32 != 0 {
-		return fmt.Errorf("invalid group owners data")
-	}
-	for i := 0; i < len(data); i += 32 {
-		*dst = append(*dst, inet256.IDFromBytes(data[i:i+32]))
-	}
-	return nil
-}
-
-// IdentityLeaf contains information about a specific signing key.
-// It is an entry in the Leaves table.
-type IdentityLeaf struct {
-	// ID is part of the key.
-	ID inet256.ID
-
-	// PublicKey is the public signing key.
-	PublicKey inet256.PublicKey
-	// KEMPublicKey is the public KEM key.
-	// This will have been authenticated by the leaf's.
-	KEMPublicKey kem.PublicKey
-}
-
-// NewLeaf creates a new IdentityLeaf with a new KEM key pair.
-func NewLeaf(pubKey inet256.PublicKey, kemPub kem.PublicKey) IdentityLeaf {
-	return IdentityLeaf{
-		ID:           pki.NewID(pubKey),
-		PublicKey:    pubKey,
-		KEMPublicKey: kemPub,
-	}
-}
-
-func ParseIdentityLeaf(key, value []byte) (*IdentityLeaf, error) {
-	id, err := parseLeafKey(key)
-	if err != nil {
-		return nil, err
-	}
-	pkData, data, err := sbe.ReadLP(value)
-	if err != nil {
-		return nil, err
-	}
-	pubKey, err := pki.ParsePublicKey(pkData)
-	if err != nil {
-		return nil, err
-	}
-	kemPubData, _, err := sbe.ReadLP(data)
-	if err != nil {
-		return nil, err
-	}
-	kemPub, err := ParseKEMPublicKey(kemPubData)
-	if err != nil {
-		return nil, err
-	}
-	return &IdentityLeaf{
-		ID:           id,
-		PublicKey:    pubKey,
-		KEMPublicKey: kemPub,
-	}, nil
-}
-
-// parseLeafKey parses the key portion of the GotKV entry in the Leaves table.
-// The first part of the key is the group name, and the last 32 bytes are the ID.
-func parseLeafKey(key []byte) (id inet256.ID, _ error) {
-	if len(key) != 32 {
-		return inet256.ID{}, fmt.Errorf("leaf key too short")
-	}
-	return inet256.IDFromBytes(key[:]), nil
-}
-
-// Key returns the key portion of the GotKV entry in the Leaves table.
-func (il IdentityLeaf) Key(out []byte) []byte {
-	return append(out, il.ID[:]...)
-}
-
-// Value returns the value portion of the GotKV entry in the Leaves table.
-func (il *IdentityLeaf) Value(out []byte) []byte {
-	pubKeyData, err := pki.MarshalPublicKey(nil, il.PublicKey)
-	if err != nil {
-		panic(err)
-	}
-	out = sbe.AppendLP(out, pubKeyData)
-	out = sbe.AppendLP(out, MarshalKEMPublicKey(nil, KEM_MLKEM1024, il.KEMPublicKey))
-	return out
-}
-
-func (il *IdentityLeaf) GenerateKEM(sigPriv inet256.PrivateKey) kem.PrivateKey {
-	pub, priv, err := mlkem1024.GenerateKeyPair(rand.Reader)
-	if err != nil {
-		panic(err)
-	}
-	il.KEMPublicKey = pub
-	return priv
-}
-
-type LeafPrivate struct {
+type IdenPrivate struct {
 	SigPrivateKey inet256.PrivateKey
 	KEMPrivateKey kem.PrivateKey
 }
 
+func (iden *IdenPrivate) GetID() inet256.ID {
+	pubKey := iden.SigPrivateKey.Public().(sign.PublicKey)
+	return pki.NewID(pubKey)
+}
+
+type Member = gotnsop.Member
+
 // Membership contains the Group's KEM seed encrypted for the target member.
 type Membership struct {
-	Group  string
-	Member string
+	Group  GroupID
+	Member Member
 
 	// EncryptedKEM contains a KEM ciphertext, and a symmetric ciphertext.
 	// The symmetric ciphertext contains the KEM seed for the Group's KEM private key.
@@ -539,21 +443,23 @@ func (m *Membership) Value(out []byte) []byte {
 	return append(out, m.EncryptedKEM...)
 }
 
-func memberKey(key []byte, group string, member string) []byte {
-	key = append(key, []byte(group)...)
-	key = append(key, []byte(member)...)
-	key = binary.LittleEndian.AppendUint32(key, uint32(len(member)))
+func memberKey(key []byte, gid GroupID, member Member) []byte {
+	key = append(key, gid[:]...)
+	key = member.Marshal(key)
 	return key
 }
 
-func parseMemberKey(key []byte) (group string, member string, _ error) {
-	if len(key) < 4 {
-		return "", "", errors.New("key too short")
+func parseMemberKey(key []byte) (GroupID, Member, error) {
+	if len(key) < 32+32+1 {
+		return GroupID{}, Member{}, fmt.Errorf("wrong size for membership key. %d", len(key))
 	}
-	memberLen := binary.LittleEndian.Uint32(key[:4])
-	group = string(key[0 : len(key)-4])
-	member = string(key[4+memberLen:])
-	return group, member, nil
+	gid := GroupID(key[:32])
+	key = key[32:]
+	var mem Member
+	if err := mem.Unmarshal(key); err != nil {
+		return GroupID{}, Member{}, err
+	}
+	return gid, mem, nil
 }
 
 // putMember returns a mutation that adds a member to a group.
@@ -571,8 +477,8 @@ func putMember(mem Membership) gotkv.Mutation {
 }
 
 // rmMember removes a member from a group.
-func rmMember(group string, member string) gotkv.Mutation {
-	key := memberKey(nil, group, member)
+func rmMember(gid GroupID, member Member) gotkv.Mutation {
+	key := memberKey(nil, gid, member)
 	return gotkv.Mutation{
 		Span:    gotkv.SingleKeySpan(key),
 		Entries: []gotkv.Entry{},
@@ -580,7 +486,7 @@ func rmMember(group string, member string) gotkv.Mutation {
 }
 
 // putLeaf returns a gotkv mutation that adds a leaf to the leaves table.
-func putLeaf(leaf IdentityLeaf) gotkv.Mutation {
+func putLeaf(leaf IdentityUnit) gotkv.Mutation {
 	key := leaf.Key(nil)
 	return gotkv.Mutation{
 		Span: gotkv.SingleKeySpan(key),
@@ -591,7 +497,7 @@ func putLeaf(leaf IdentityLeaf) gotkv.Mutation {
 }
 
 // encryptSeed encryptes a secret seed
-func encryptSeed(out []byte, recvKEM kem.PublicKey, secretSeed *[64]byte) []byte {
+func encryptSeed(out []byte, recvKEM kem.PublicKey, secretSeed *gotnsop.Secret) []byte {
 	kemCtext, ss, err := recvKEM.Scheme().Encapsulate(recvKEM)
 	if err != nil {
 		panic(err)
@@ -602,7 +508,7 @@ func encryptSeed(out []byte, recvKEM kem.PublicKey, secretSeed *[64]byte) []byte
 }
 
 // decryptSeed decrypts a secret seed
-func decryptSeed(recvKEM kem.PrivateKey, ctext []byte) (*[64]byte, error) {
+func decryptSeed(recvKEM kem.PrivateKey, ctext []byte) (*gotnsop.Secret, error) {
 	kemCtextSize := recvKEM.Scheme().CiphertextSize()
 	if len(ctext) < kemCtextSize {
 		return nil, fmt.Errorf("ctext too short to contain KEM ciphertext")
@@ -612,26 +518,10 @@ func decryptSeed(recvKEM kem.PrivateKey, ctext []byte) (*[64]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	var seed [64]byte
+	var seed gotnsop.Secret
 	copy(seed[:], ctext[kemCtextSize:])
 	cryptoXOR((*[32]byte)(ss), seed[:], seed[:])
 	return &seed, nil
-}
-
-func symEncrypt(out []byte, secret *[32]byte, nonce *[12]byte, ptext []byte, ad []byte) []byte {
-	cipher, err := chacha20poly1305.New(secret[:])
-	if err != nil {
-		panic(err)
-	}
-	return cipher.Seal(out, nonce[:], ptext, ad)
-}
-
-func symDecrypt(out []byte, secret *[32]byte, nonce *[12]byte, ctext []byte, ad []byte) ([]byte, error) {
-	cipher, err := chacha20poly1305.New(secret[:])
-	if err != nil {
-		return nil, err
-	}
-	return cipher.Open(out, nonce[:], ctext, ad)
 }
 
 // cryptoXOR runs a chacha20 stream cipher over src, writing the result to dst.
@@ -650,4 +540,38 @@ func appendXOR(out []byte, key *[32]byte, src []byte) []byte {
 	out = append(out, src...)
 	cryptoXOR(key, out[offset:], out[offset:])
 	return out
+}
+
+func hashOfKEM(kem kem.PublicKey) [32]byte {
+	return [32]byte(gdat.Hash(MarshalKEMPublicKey(nil, KEM_MLKEM1024, kem)))
+}
+
+const (
+	KEM_MLKEM1024 = "mlkem1024"
+)
+
+var pki = gotnsop.PKI()
+
+func PKI() inet256.PKI {
+	return gotnsop.PKI()
+}
+
+func NewIDUnit(pubKey inet256.PublicKey, kemPub kem.PublicKey) IdentityUnit {
+	return gotnsop.NewIDUnit(pubKey, kemPub)
+}
+
+func MarshalKEMPublicKey(out []byte, tag string, kem kem.PublicKey) []byte {
+	return gotnsop.MarshalKEMPublicKey(out, tag, kem)
+}
+
+func MarshalKEMPrivateKey(out []byte, tag string, kem kem.PrivateKey) []byte {
+	return gotnsop.MarshalKEMPrivateKey(out, tag, kem)
+}
+
+func ParseKEMPrivateKey(data []byte) (kem.PrivateKey, error) {
+	return gotnsop.ParseKEMPrivateKey(data)
+}
+
+func ParseKEMPublicKey(data []byte) (kem.PublicKey, error) {
+	return gotnsop.ParseKEMPublicKey(data)
 }

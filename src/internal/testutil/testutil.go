@@ -3,6 +3,7 @@ package testutil
 import (
 	"bufio"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io"
 	"math"
@@ -11,6 +12,10 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/cloudflare/circl/kem"
+	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
+	"github.com/cloudflare/circl/sign"
+	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 	"github.com/stretchr/testify/require"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.uber.org/zap"
@@ -76,4 +81,19 @@ func PacketConn(t testing.TB) net.PacketConn {
 		pc.Close()
 	})
 	return pc
+}
+
+func NewSigner(t *testing.T, i uint64) (sign.PublicKey, sign.PrivateKey) {
+	var seed [32]byte
+	binary.LittleEndian.PutUint64(seed[:], i)
+	pub, priv := mldsa87.Scheme().DeriveKey(seed[:])
+
+	return pub, priv
+}
+
+func NewKEM(t *testing.T, i uint64) (kem.PublicKey, kem.PrivateKey) {
+	var seed [64]byte
+	binary.LittleEndian.PutUint64(seed[:], i)
+	pub, priv := mlkem1024.Scheme().DeriveKeyPair(seed[:])
+	return pub, priv
 }
