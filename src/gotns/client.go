@@ -93,7 +93,7 @@ func (c *Client) GetIDUnit(ctx context.Context, volh blobcache.Handle, id inet25
 	return idu, nil
 }
 
-func (c *Client) GetAlias(ctx context.Context, volh blobcache.Handle, name string) (*AliasEntry, error) {
+func (c *Client) GetAlias(ctx context.Context, volh blobcache.Handle, name string) (*VolumeAlias, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return nil, err
@@ -142,7 +142,7 @@ func (c *Client) CreateAlias(ctx context.Context, nsh blobcache.Handle, name str
 		}); err != nil {
 			return err
 		}
-		if err := txn.PutAlias(ctx, gotnsop.AliasEntry{
+		if err := txn.PutAlias(ctx, gotnsop.VolumeAlias{
 			Name:   name,
 			Volume: svh.OID,
 		}, &sec); err != nil {
@@ -152,7 +152,7 @@ func (c *Client) CreateAlias(ctx context.Context, nsh blobcache.Handle, name str
 	})
 }
 
-func (c *Client) PutAlias(ctx context.Context, volh blobcache.Handle, bent AliasEntry, secret *gotnsop.Secret) error {
+func (c *Client) PutAlias(ctx context.Context, volh blobcache.Handle, bent VolumeAlias, secret *gotnsop.Secret) error {
 	return c.doTx(ctx, volh, c.ActAs, func(tx *bcsdk.Tx, txb *Txn) error {
 		return txb.PutAlias(ctx, bent, secret)
 	})
@@ -182,7 +182,7 @@ func (c *Client) ListAliases(ctx context.Context, volh blobcache.Handle, span br
 	if err != nil {
 		return nil, err
 	}
-	names := slices2.Map(entries, func(e gotnsop.AliasEntry) string {
+	names := slices2.Map(entries, func(e gotnsop.VolumeAlias) string {
 		return e.Name
 	})
 	return names, nil

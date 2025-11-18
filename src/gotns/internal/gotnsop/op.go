@@ -85,7 +85,7 @@ type State interface {
 type Diff interface {
 	ForEachRule(ctx context.Context, fn func(rule Rule) error) error
 	ForEachVolumeEntry(ctx context.Context, fn func(entry VolumeEntry) error) error
-	ForEachBranchEntry(ctx context.Context, fn func(entry AliasEntry) error) error
+	ForEachBranchEntry(ctx context.Context, fn func(entry VolumeAlias) error) error
 }
 
 // AppendOp appends the op to the output.

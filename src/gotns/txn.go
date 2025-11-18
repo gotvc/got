@@ -127,7 +127,7 @@ func (tx *Txn) LookupGroup(ctx context.Context, gname string) (*Group, error) {
 	return tx.m.LookupGroup(ctx, tx.s, tx.curState, gname)
 }
 
-func (tx *Txn) PutAlias(ctx context.Context, entry AliasEntry, secret *gotnsop.Secret) error {
+func (tx *Txn) PutAlias(ctx context.Context, entry VolumeAlias, secret *gotnsop.Secret) error {
 	state, err := tx.m.PutAlias(ctx, tx.s, tx.curState, entry, secret)
 	if err != nil {
 		return err

@@ -59,29 +59,29 @@ func ParseVolumeEntry(key, value []byte) (*VolumeEntry, error) {
 	return &entry, nil
 }
 
-// AliasEntry associates a name with a volume.
-type AliasEntry struct {
+// VolumeAlias associates a name with a volume.
+type VolumeAlias struct {
 	Name string
 
 	Volume blobcache.OID
 }
 
-func (e AliasEntry) Key(buf []byte) []byte {
+func (e VolumeAlias) Key(buf []byte) []byte {
 	buf = append(buf, e.Name...)
 	return buf
 }
 
-func (e AliasEntry) Value(buf []byte) []byte {
+func (e VolumeAlias) Value(buf []byte) []byte {
 	buf = append(buf, e.Volume[:]...)
 	return buf
 }
 
-func ParseAliasEntry(key, value []byte) (AliasEntry, error) {
-	var entry AliasEntry
+func ParseVolumeAlias(key, value []byte) (VolumeAlias, error) {
+	var entry VolumeAlias
 	entry.Name = string(key)
 
 	if len(value) < 16 {
-		return AliasEntry{}, fmt.Errorf("entry value too short")
+		return VolumeAlias{}, fmt.Errorf("entry value too short")
 	}
 	entry.Volume = blobcache.OID(value[:16])
 	return entry, nil
