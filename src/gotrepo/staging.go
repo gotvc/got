@@ -488,7 +488,7 @@ func (r *Repo) beginStagingTx(ctx context.Context, paramHash *[32]byte, mutate b
 		return nil, err
 	}
 	vol := volumes.Blobcache{Service: r.bc, Handle: *h}
-	return vol.BeginTx(ctx, blobcache.TxParams{Mutate: mutate})
+	return vol.BeginTx(ctx, blobcache.TxParams{Modify: mutate})
 }
 
 // cleanupStagingBlobs removes blobs from staging areas which do not have ops that reference them.

@@ -31,7 +31,7 @@ type Tx interface {
 }
 
 func Modify(ctx context.Context, vol Volume, fn func(dst stores.RW, x []byte) ([]byte, error)) error {
-	tx, err := vol.BeginTx(ctx, TxParams{Mutate: true})
+	tx, err := vol.BeginTx(ctx, TxParams{Modify: true})
 	if err != nil {
 		return err
 	}
@@ -51,7 +51,7 @@ func Modify(ctx context.Context, vol Volume, fn func(dst stores.RW, x []byte) ([
 }
 
 func View(ctx context.Context, vol Volume, fn func(src cadata.Getter, root []byte) error) error {
-	tx, err := vol.BeginTx(ctx, TxParams{Mutate: false})
+	tx, err := vol.BeginTx(ctx, TxParams{Modify: false})
 	if err != nil {
 		return err
 	}

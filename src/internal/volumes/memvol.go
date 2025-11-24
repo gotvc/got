@@ -25,12 +25,12 @@ func NewMemory(hf cadata.HashFunc, maxSize int) *Memory {
 }
 
 func (v *Memory) BeginTx(ctx context.Context, tp blobcache.TxParams) (Tx, error) {
-	if tp.Mutate {
+	if tp.Modify {
 		v.mu.Lock()
 	} else {
 		v.mu.RLock()
 	}
-	return &MemoryTx{vol: v, mutate: tp.Mutate}, nil
+	return &MemoryTx{vol: v, mutate: tp.Modify}, nil
 }
 
 type MemoryTx struct {

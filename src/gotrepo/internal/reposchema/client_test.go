@@ -40,7 +40,7 @@ func TestClient(t *testing.T) {
 	require.NoError(t, gnsc.EnsureInit(ctx, *nsh, []gotns.IdentityUnit{}))
 
 	// Write some blobs to a staging area
-	txn, err := bcsdk.BeginTx(ctx, bc, vh, blobcache.TxParams{Mutate: true})
+	txn, err := bcsdk.BeginTx(ctx, bc, vh, blobcache.TxParams{Modify: true})
 	require.NoError(t, err)
 	defer txn.Abort(ctx)
 	var cids []blobcache.CID

@@ -5,7 +5,7 @@ go 1.24
 toolchain go1.24.1
 
 require (
-	blobcache.io/blobcache v0.0.0-20251110181309-a7e78e6cc183
+	blobcache.io/blobcache v0.0.0-20251123223043-1aa0b07e6697
 	github.com/cloudflare/circl v1.6.1
 	github.com/dchest/siphash v1.2.3
 	github.com/fatih/color v1.13.0

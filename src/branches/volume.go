@@ -78,7 +78,7 @@ func getSnapshot(ctx context.Context, vol Volume) (*Snap, Tx, error) {
 }
 
 func applySnapshot(ctx context.Context, vcmach *gotvc.Machine, fsmach *gotfs.Machine, dstVol Volume, fn func(stores.RW, *Snap) (*Snap, error)) error {
-	tx, err := dstVol.BeginTx(ctx, blobcache.TxParams{Mutate: true})
+	tx, err := dstVol.BeginTx(ctx, blobcache.TxParams{Modify: true})
 	if err != nil {
 		return err
 	}

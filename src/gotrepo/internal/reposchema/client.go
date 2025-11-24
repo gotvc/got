@@ -32,7 +32,7 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 	if err != nil {
 		return nil, err
 	}
-	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Mutate: true})
+	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Modify: true})
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (c *Client) StagingArea(ctx context.Context, repoVol blobcache.OID, paramHa
 	if err != nil {
 		return nil, err
 	}
-	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Mutate: true})
+	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Modify: true})
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +123,7 @@ func (c *Client) ForEachStage(ctx context.Context, repoVol blobcache.OID, fn fun
 	if err != nil {
 		return err
 	}
-	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Mutate: false})
+	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Modify: false})
 	if err != nil {
 		return err
 	}
@@ -234,12 +234,10 @@ var nsKey = []byte("ns")
 func GotRepoVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
-			VolumeConfig: blobcache.VolumeConfig{
-				Schema:   blobcache.SchemaSpec{Name: SchemaName_GotRepo},
-				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
-				MaxSize:  1 << 21,
-				Salted:   false,
-			},
+			Schema:   blobcache.SchemaSpec{Name: SchemaName_GotRepo},
+			HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
+			MaxSize:  1 << 21,
+			Salted:   false,
 		},
 	}
 }
@@ -247,12 +245,10 @@ func GotRepoVolumeSpec() blobcache.VolumeSpec {
 func GotNSVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
-			VolumeConfig: blobcache.VolumeConfig{
-				Schema:   blobcache.SchemaSpec{Name: SchemaName_GotNS},
-				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
-				MaxSize:  1 << 21,
-				Salted:   false,
-			},
+			Schema:   blobcache.SchemaSpec{Name: SchemaName_GotNS},
+			HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
+			MaxSize:  1 << 21,
+			Salted:   false,
 		},
 	}
 }
@@ -260,12 +256,10 @@ func GotNSVolumeSpec() blobcache.VolumeSpec {
 func StageVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
-			VolumeConfig: blobcache.VolumeConfig{
-				Schema:   blobcache.SchemaSpec{Name: blobcache.Schema_NONE},
-				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
-				MaxSize:  1 << 21,
-				Salted:   false,
-			},
+			Schema:   blobcache.SchemaSpec{Name: blobcache.Schema_NONE},
+			HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
+			MaxSize:  1 << 21,
+			Salted:   false,
 		},
 	}
 }

@@ -14,7 +14,7 @@ func TestChaCha20Poly1305(t *testing.T) {
 	secret := [32]byte{}
 	vol := NewChaCha20Poly1305(inner, &secret)
 
-	tx, err := vol.BeginTx(ctx, TxParams{Mutate: true})
+	tx, err := vol.BeginTx(ctx, TxParams{Modify: true})
 	require.NoError(t, err)
 
 	var empty []byte

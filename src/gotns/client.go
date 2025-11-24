@@ -31,7 +31,7 @@ func (c *Client) EnsureInit(ctx context.Context, volh blobcache.Handle, admins [
 	if err != nil {
 		return err
 	}
-	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: true})
+	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Modify: true})
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ func (c *Client) ListAliases(ctx context.Context, volh blobcache.Handle, span br
 	if err != nil {
 		return nil, err
 	}
-	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: false})
+	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Modify: false})
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +193,7 @@ func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string
 	if err != nil {
 		return nil, err
 	}
-	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: false})
+	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Modify: false})
 	if err != nil {
 		return nil, err
 	}
@@ -251,7 +251,7 @@ func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv IdenP
 	if err != nil {
 		return err
 	}
-	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: true})
+	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Modify: true})
 	if err != nil {
 		return err
 	}
@@ -283,7 +283,7 @@ func (c *Client) view(ctx context.Context, volh blobcache.Handle, fn func(s stor
 	if err != nil {
 		return err
 	}
-	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Mutate: false})
+	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Modify: false})
 	if err != nil {
 		return err
 	}
@@ -326,12 +326,10 @@ func (c *Client) IntroduceSelf(kemPub kem.PublicKey) gotnsop.ChangeSet {
 func BranchVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
-			VolumeConfig: blobcache.VolumeConfig{
-				Schema:   blobcache.SchemaSpec{Name: blobcache.Schema_NONE},
-				HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
-				MaxSize:  1 << 22,
-				Salted:   false,
-			},
+			Schema:   blobcache.SchemaSpec{Name: blobcache.Schema_NONE},
+			HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
+			MaxSize:  1 << 21,
+			Salted:   false,
 		},
 	}
 }
