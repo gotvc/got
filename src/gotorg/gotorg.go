@@ -37,7 +37,7 @@ func (r Root) Marshal(out []byte) []byte {
 
 func (r *Root) Unmarshal(data []byte) error {
 	if len(data) < 1 {
-		return fmt.Errorf("gotns: data too short to contain version")
+		return fmt.Errorf("gotorg: data too short to contain version")
 	}
 	version, data := data[0], data[1:]
 	curData, data, err := sbe.ReadLP(data)
@@ -291,7 +291,7 @@ func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State
 		x.VolumeNames, x.Volumes,
 	} {
 		if kvr.Ref.CID.IsZero() {
-			return fmt.Errorf("gotns: one of the States is uninitialized %d", i)
+			return fmt.Errorf("gotorg: one of the States is uninitialized %d", i)
 		}
 	}
 	return nil

@@ -245,7 +245,7 @@ func (c *Client) adjustHandle(ctx context.Context, volh blobcache.Handle) (blobc
 
 func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv IdenPrivate, fn func(tx1 *bcsdk.Tx, tx2 *Txn) error) error {
 	if c.ActAs == (IdenPrivate{}) {
-		return errors.New("gotns.Client: ActAs cannot be nil")
+		return errors.New("gotorg.Client: ActAs cannot be nil")
 	}
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {

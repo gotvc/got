@@ -65,7 +65,7 @@ func TestClient(t *testing.T) {
 func newBlobcache(t testing.TB) blobcache.Service {
 	env := bclocal.NewTestEnv(t)
 	env.Schemas[SchemaName_GotRepo] = Constructor
-	env.Schemas[SchemaName_GotNS] = gotorg.SchemaConstructor
+	env.Schemas[SchemeName_GotOrg] = gotorg.SchemaConstructor
 	env.Root = GotRepoVolumeSpec()
 	return bclocal.NewTestServiceFromEnv(t, env)
 }
