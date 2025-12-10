@@ -1,4 +1,4 @@
-package gotns
+package gotorg
 
 import (
 	"context"
@@ -7,12 +7,12 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
 	"blobcache.io/blobcache/src/schema/statetrace"
-	"github.com/gotvc/got/src/gotns/internal/gotnsop"
+	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.inet256.org/inet256/src/inet256"
 )
 
-type Op = gotnsop.Op
+type Op = gotorgop.Op
 
 // Txn allows a transction to be built up incrementally
 // And then turned into a single slot change to the ledger.
@@ -47,7 +47,7 @@ func (tx *Txn) addOp(op Op) {
 
 // Finish applies the changes to the previous root, and returns the new root.
 func (tx *Txn) Finish(ctx context.Context) (statetrace.Root[Root], error) {
-	cs := gotnsop.ChangeSet{
+	cs := gotorgop.ChangeSet{
 		Ops: tx.changes,
 	}
 	for _, signer := range tx.actAs {
@@ -72,13 +72,13 @@ func (tx *Txn) CreateIDUnit(ctx context.Context, unit IdentityUnit) error {
 		return err
 	}
 	tx.curState = *state
-	tx.addOp(&gotnsop.CreateIDUnit{
+	tx.addOp(&gotorgop.CreateIDUnit{
 		Unit: unit,
 	})
 	return nil
 }
 
-func (tx *Txn) AddMember(ctx context.Context, gid gotnsop.GroupID, member gotnsop.Member) error {
+func (tx *Txn) AddMember(ctx context.Context, gid gotorgop.GroupID, member gotorgop.Member) error {
 	priv := tx.actAs[0]
 	groupPath, err := tx.m.FindGroupPath(ctx, tx.s, tx.curState, priv.GetID(), gid)
 	if err != nil {
@@ -93,7 +93,7 @@ func (tx *Txn) AddMember(ctx context.Context, gid gotnsop.GroupID, member gotnso
 		return err
 	}
 	tx.curState = *nextState
-	tx.addOp(&gotnsop.AddMember{
+	tx.addOp(&gotorgop.AddMember{
 		Group:  gid,
 		Member: member,
 	})
@@ -104,13 +104,13 @@ func (tx *Txn) LookupGroup(ctx context.Context, gname string) (*Group, error) {
 	return tx.m.LookupGroup(ctx, tx.s, tx.curState, gname)
 }
 
-func (tx *Txn) PutAlias(ctx context.Context, entry VolumeAlias, secret *gotnsop.Secret) error {
+func (tx *Txn) PutAlias(ctx context.Context, entry VolumeAlias, secret *gotorgop.Secret) error {
 	state, err := tx.m.PutAlias(ctx, tx.s, tx.curState, entry, secret)
 	if err != nil {
 		return err
 	}
 	tx.curState = *state
-	tx.addOp(&gotnsop.PutBranchEntry{
+	tx.addOp(&gotorgop.PutBranchEntry{
 		Name:   entry.Name,
 		Volume: entry.Volume,
 	})
@@ -123,19 +123,19 @@ func (tx *Txn) DeleteAlias(ctx context.Context, name string) error {
 		return err
 	}
 	tx.curState = *state
-	tx.addOp(&gotnsop.DeleteBranchEntry{
+	tx.addOp(&gotorgop.DeleteBranchEntry{
 		Name: name,
 	})
 	return nil
 }
 
-func (tx *Txn) AddVolume(ctx context.Context, vent gotnsop.VolumeEntry) error {
+func (tx *Txn) AddVolume(ctx context.Context, vent gotorgop.VolumeEntry) error {
 	state, err := tx.m.AddVolume(ctx, tx.s, tx.curState, vent)
 	if err != nil {
 		return err
 	}
 	tx.curState = *state
-	tx.addOp(&gotnsop.AddVolume{Volume: vent.Volume})
+	tx.addOp(&gotorgop.AddVolume{Volume: vent.Volume})
 	return nil
 }
 
@@ -145,15 +145,15 @@ func (tx *Txn) DropVolume(ctx context.Context, volid blobcache.OID) error {
 		return err
 	}
 	tx.curState = *state
-	tx.addOp(&gotnsop.DropVolume{Volume: volid})
+	tx.addOp(&gotorgop.DropVolume{Volume: volid})
 	return nil
 }
 
-func (tx *Txn) ChangeSet(ctx context.Context, cs gotnsop.ChangeSet) error {
+func (tx *Txn) ChangeSet(ctx context.Context, cs gotorgop.ChangeSet) error {
 	for _, op := range cs.Ops {
 		// TODO: this is not great, we should only implement this once in CreateLeaf.
 		switch op := op.(type) {
-		case *gotnsop.CreateIDUnit:
+		case *gotorgop.CreateIDUnit:
 			if err := tx.createLeaf(ctx, op.Unit); err != nil {
 				return err
 			}

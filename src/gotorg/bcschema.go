@@ -1,4 +1,4 @@
-package gotns
+package gotorg
 
 import (
 	"context"

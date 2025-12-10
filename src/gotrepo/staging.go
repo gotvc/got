@@ -21,7 +21,7 @@ import (
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotns"
+	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/porting"
@@ -39,7 +39,7 @@ type stagingCtx struct {
 	Importer *porting.Importer
 	Exporter *porting.Exporter
 
-	ActingAs gotns.IdentityUnit
+	ActingAs gotorg.IdentityUnit
 }
 
 func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {

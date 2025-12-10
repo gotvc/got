@@ -245,7 +245,7 @@ func GotRepoVolumeSpec() blobcache.VolumeSpec {
 func GotNSVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
-			Schema:   blobcache.SchemaSpec{Name: SchemaName_GotNS},
+			Schema:   blobcache.SchemaSpec{Name: SchemeName_GotOrg},
 			HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
 			MaxSize:  1 << 21,
 			Salted:   false,

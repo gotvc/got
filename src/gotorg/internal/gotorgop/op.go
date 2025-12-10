@@ -1,4 +1,4 @@
-package gotnsop
+package gotorgop
 
 import (
 	"context"
@@ -240,7 +240,7 @@ func (cs ChangeSet) Validate(ctx context.Context, prev State, diff Diff, approve
 	return nil
 }
 
-var sigCtxTxn = inet256.SigCtxString("gotns/txn")
+var sigCtxTxn = inet256.SigCtxString("gotorg/txn")
 
 // Sign signs the change set with the private key and adds the signature to the sigs map.
 func (op *ChangeSet) Sign(pk inet256.PrivateKey) {

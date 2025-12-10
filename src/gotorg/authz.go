@@ -1,4 +1,4 @@
-package gotns
+package gotorg
 
 import (
 	"context"
@@ -7,23 +7,23 @@ import (
 
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gotkv"
-	"github.com/gotvc/got/src/gotns/internal/gotnsop"
+	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.inet256.org/inet256/src/inet256"
 )
 
 type (
-	RuleID     = gotnsop.RuleID
-	Rule       = gotnsop.Rule
-	Verb       = gotnsop.Verb
-	ObjectType = gotnsop.ObjectType
+	RuleID     = gotorgop.RuleID
+	Rule       = gotorgop.Rule
+	Verb       = gotorgop.Verb
+	ObjectType = gotorgop.ObjectType
 )
 
 // AddRule adds a rule to the state if it doesn't already exist.
 // If it does exist, it does nothing.
-func (m *Machine) AddRule(ctx context.Context, s stores.RW, state State, r *gotnsop.Rule) (*State, error) {
-	cid, err := gotnsop.PostRule(ctx, s, r)
+func (m *Machine) AddRule(ctx context.Context, s stores.RW, state State, r *gotorgop.Rule) (*State, error) {
+	cid, err := gotorgop.PostRule(ctx, s, r)
 	if err != nil {
 		return nil, err
 	}
@@ -51,13 +51,13 @@ func (m *Machine) GetRule(ctx context.Context, s stores.Reading, state State, ci
 	buf := make([]byte, MaxRuleSize)
 	n, err := s.Get(ctx, cid, buf)
 	if err != nil {
-		return gotnsop.Rule{}, err
+		return gotorgop.Rule{}, err
 	}
 	data := buf[:n]
 
-	var rule gotnsop.Rule
+	var rule gotorgop.Rule
 	if err := rule.Unmarshal(data); err != nil {
-		return gotnsop.Rule{}, err
+		return gotorgop.Rule{}, err
 	}
 	return rule, nil
 }
@@ -85,7 +85,7 @@ func (m *Machine) ForEachRule(ctx context.Context, s stores.Reading, state State
 func (m *Machine) CanDo(ctx context.Context, s stores.Reading, state State, actor inet256.ID, verb Verb, objType ObjectType, objName string) (bool, error) {
 	var allowed bool
 	if err := m.gotkv.ForEach(ctx, s, state.Rules, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
-		var rule gotnsop.Rule
+		var rule gotorgop.Rule
 		if err := rule.Unmarshal(ent.Value); err != nil {
 			return err
 		}
@@ -213,7 +213,7 @@ func (m *Machine) ForEachObligation(ctx context.Context, s stores.Reading, x Sta
 }
 
 // fulfill handles obligations for a single rule.
-func (m *Machine) fulfill(ctx context.Context, s stores.RW, x State, rule Rule, secret *gotnsop.Secret) (*State, error) {
+func (m *Machine) fulfill(ctx context.Context, s stores.RW, x State, rule Rule, secret *gotorgop.Secret) (*State, error) {
 	g, err := m.GetGroup(ctx, s, x, rule.Subject)
 	if err != nil {
 		return nil, err
@@ -221,7 +221,7 @@ func (m *Machine) fulfill(ctx context.Context, s stores.RW, x State, rule Rule, 
 	kemPub := g.KEM
 	hos := secret.Ratchet(2)
 	switch rule.Verb {
-	case gotnsop.Verb_LOOK:
+	case gotorgop.Verb_LOOK:
 		// Need to encrypt the secret for this rule.
 		lookSecret := secret.Ratchet(1)
 		nextState, err := m.PutObligation(ctx, s, x, &Obligation{
@@ -234,7 +234,7 @@ func (m *Machine) fulfill(ctx context.Context, s stores.RW, x State, rule Rule, 
 			return nil, err
 		}
 		x = *nextState
-	case gotnsop.Verb_TOUCH, gotnsop.Verb_ADMIN:
+	case gotorgop.Verb_TOUCH, gotorgop.Verb_ADMIN:
 		// Need to encrypt the secret for this rule.
 		nextState, err := m.PutObligation(ctx, s, x, &Obligation{
 			HashOfSecret:    hos,
@@ -251,7 +251,7 @@ func (m *Machine) fulfill(ctx context.Context, s stores.RW, x State, rule Rule, 
 }
 
 // FulfillObligations ensures that obligations for the entry are satisfied.
-func (m *Machine) FulfillObligations(ctx context.Context, s stores.RW, x State, name string, secret *gotnsop.Secret) (*State, error) {
+func (m *Machine) FulfillObligations(ctx context.Context, s stores.RW, x State, name string, secret *gotorgop.Secret) (*State, error) {
 	entry, err := m.GetAlias(ctx, s, x, name)
 	if err != nil {
 		return nil, err
@@ -259,8 +259,8 @@ func (m *Machine) FulfillObligations(ctx context.Context, s stores.RW, x State, 
 	if entry == nil {
 		return nil, fmt.Errorf("alias %s not found", name)
 	}
-	if err := m.ForEachRule(ctx, s, x, func(rule gotnsop.Rule) error {
-		if rule.ObjectType != gotnsop.ObjectType_BRANCH || !rule.Names.MatchString(name) {
+	if err := m.ForEachRule(ctx, s, x, func(rule gotorgop.Rule) error {
+		if rule.ObjectType != gotorgop.ObjectType_BRANCH || !rule.Names.MatchString(name) {
 			return nil
 		}
 		y, err := m.fulfill(ctx, s, x, rule, secret)
@@ -278,17 +278,17 @@ func (m *Machine) FulfillObligations(ctx context.Context, s stores.RW, x State, 
 type CID = blobcache.CID
 
 func (m *Machine) addInitialRules(ctx context.Context, s stores.RW, state State, adminGID GroupID) (*State, error) {
-	for _, rule := range []gotnsop.Rule{
+	for _, rule := range []gotorgop.Rule{
 		{
 			Subject:    adminGID,
-			Verb:       gotnsop.Verb_ADMIN,
-			ObjectType: gotnsop.ObjectType_GROUP,
+			Verb:       gotorgop.Verb_ADMIN,
+			ObjectType: gotorgop.ObjectType_GROUP,
 			Names:      regexp.MustCompile(".*"),
 		},
 		{
 			Subject:    adminGID,
-			Verb:       gotnsop.Verb_ADMIN,
-			ObjectType: gotnsop.ObjectType_BRANCH,
+			Verb:       gotorgop.Verb_ADMIN,
+			ObjectType: gotorgop.ObjectType_BRANCH,
 			Names:      regexp.MustCompile(".*"),
 		},
 	} {
@@ -308,7 +308,7 @@ func (m *Machine) addInitialRules(ctx context.Context, s stores.RW, state State,
 //  3. Find a path from the the actor's ID to one of those groups.
 //  4. Use that path to perform a chain of KEM decryptions eventually resulting
 //     a secret value which reverses hash of secret.
-func (m *Machine) FindSecret(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, hos *[32]byte, minRatchet uint8) (*gotnsop.Secret, uint8, error) {
+func (m *Machine) FindSecret(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, hos *[32]byte, minRatchet uint8) (*gotorgop.Secret, uint8, error) {
 	gids := map[GroupID]uint8{}
 	if err := m.ForEachObligation(ctx, s, x, hos, func(oblig Obligation) error {
 		if oblig.HashOfSecret == *hos && oblig.Ratchet >= minRatchet {

@@ -24,7 +24,7 @@ import (
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv"
-	"github.com/gotvc/got/src/gotns"
+	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo/internal/dbmig"
 	"github.com/gotvc/got/src/gotrepo/internal/reposchema"
 	"github.com/gotvc/got/src/gotvc"
@@ -61,10 +61,10 @@ type Repo struct {
 	bc     blobcache.Service
 	db     *dbutil.Pool
 
-	leafPrivate gotns.IdenPrivate
+	leafPrivate gotorg.IdenPrivate
 	workingDir  FS // workingDir is repoFS with reserved paths filtered.
 	repoc       reposchema.Client
-	gnsc        gotns.Client
+	gnsc        gotorg.Client
 	space       lazySetup[branches.Space]
 }
 
@@ -108,7 +108,7 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	var leafPrivate *gotns.IdenPrivate
+	var leafPrivate *gotorg.IdenPrivate
 	if err := dbutil.Borrow(ctx, db, func(conn *dbutil.Conn) error {
 		if err := migrations.EnsureAll(conn, dbmig.ListMigrations()); err != nil {
 			return err
@@ -161,8 +161,8 @@ func Open(p string) (*Repo, error) {
 		config:      *config,
 		leafPrivate: *leafPrivate,
 		repoc:       reposchema.NewClient(bc),
-		gnsc: gotns.Client{
-			Machine:   gotns.New(),
+		gnsc: gotorg.Client{
+			Machine:   gotorg.New(),
 			Blobcache: bc,
 			ActAs:     *leafPrivate,
 		},
@@ -179,7 +179,7 @@ func Open(p string) (*Repo, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := r.gnsc.EnsureInit(ctx, *nsh, []gotns.IdentityUnit{leaf}); err != nil {
+		if err := r.gnsc.EnsureInit(ctx, *nsh, []gotorg.IdentityUnit{leaf}); err != nil {
 			return nil, err
 		}
 		spaceSpec := config.Spaces
@@ -345,7 +345,7 @@ func openRemoteBlobcache(privateKey ed25519.PrivateKey, pc net.PacketConn, ep bl
 func blobcacheSchemas() map[blobcache.SchemaName]schema.Constructor {
 	schemas := bclocal.DefaultSchemas()
 	schemas[reposchema.SchemaName_GotRepo] = reposchema.Constructor
-	schemas[reposchema.SchemaName_GotNS] = gotns.SchemaConstructor
+	schemas[reposchema.SchemeName_GotOrg] = gotorg.SchemaConstructor
 	return schemas
 }
 

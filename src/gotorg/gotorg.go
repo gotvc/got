@@ -1,4 +1,4 @@
-package gotns
+package gotorg
 
 import (
 	"context"
@@ -8,7 +8,7 @@ import (
 	"blobcache.io/blobcache/src/schema"
 	"blobcache.io/blobcache/src/schema/statetrace"
 	"github.com/gotvc/got/src/gotkv"
-	"github.com/gotvc/got/src/gotns/internal/gotnsop"
+	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/slices2"
@@ -37,7 +37,7 @@ func (r Root) Marshal(out []byte) []byte {
 
 func (r *Root) Unmarshal(data []byte) error {
 	if len(data) < 1 {
-		return fmt.Errorf("gotns: data too short to contain version")
+		return fmt.Errorf("gotorg: data too short to contain version")
 	}
 	version, data := data[0], data[1:]
 	curData, data, err := sbe.ReadLP(data)
@@ -169,10 +169,10 @@ func parseState(x []byte) (State, error) {
 }
 
 // Delta can be applied to a State to produce a new State.
-type Delta gotnsop.ChangeSet
+type Delta gotorgop.ChangeSet
 
 func parseDelta(data []byte) (Delta, error) {
-	var cs gotnsop.ChangeSet
+	var cs gotorgop.ChangeSet
 	if err := cs.Unmarshal(data); err != nil {
 		return Delta{}, err
 	}
@@ -180,7 +180,7 @@ func parseDelta(data []byte) (Delta, error) {
 }
 
 func (d Delta) Marshal(out []byte) []byte {
-	return gotnsop.ChangeSet(d).Marshal(out)
+	return gotorgop.ChangeSet(d).Marshal(out)
 }
 
 type Machine struct {
@@ -224,7 +224,7 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityUnit) (
 	}
 
 	// create initial group secret
-	var groupSecret gotnsop.Secret
+	var groupSecret gotorgop.Secret
 	if _, err := rand.Read(groupSecret[:]); err != nil {
 		return nil, err
 	}
@@ -243,12 +243,12 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityUnit) (
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return nil, err
 	}
-	g := gotnsop.Group{
+	g := gotorgop.Group{
 		Nonce:  nonce,
 		KEM:    groupKEMPub,
 		Owners: slices2.Map(admins, func(leaf IdentityUnit) inet256.ID { return leaf.ID }),
 	}
-	g.ID = gotnsop.ComputeGroupID(g.Nonce, g.Owners)
+	g.ID = gotorgop.ComputeGroupID(g.Nonce, g.Owners)
 	var err error
 	state, err = m.PutGroup(ctx, s, *state, g)
 	if err != nil {
@@ -291,7 +291,7 @@ func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State
 		x.VolumeNames, x.Volumes,
 	} {
 		if kvr.Ref.CID.IsZero() {
-			return fmt.Errorf("gotns: one of the States is uninitialized %d", i)
+			return fmt.Errorf("gotorg: one of the States is uninitialized %d", i)
 		}
 	}
 	return nil
@@ -307,14 +307,14 @@ func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, 
 // validateOp validates an operation in isolation.
 func (m *Machine) validateOp(ctx context.Context, src stores.Reading, prev, next State, approvers func(inet256.ID) bool, op Op) error {
 	switch op := op.(type) {
-	case *gotnsop.ChangeSet:
+	case *gotorgop.ChangeSet:
 		return m.validateChangeSet(ctx, src, prev, next, approvers, op)
 	default:
 		return fmt.Errorf("unsupported op: %T", op)
 	}
 }
 
-func (m *Machine) validateChangeSet(ctx context.Context, src stores.Reading, prev, next State, approvers func(inet256.ID) bool, op *gotnsop.ChangeSet) error {
+func (m *Machine) validateChangeSet(ctx context.Context, src stores.Reading, prev, next State, approvers func(inet256.ID) bool, op *gotorgop.ChangeSet) error {
 	for _, op2 := range op.Ops {
 		if err := m.validateOp(ctx, src, prev, next, approvers, op2); err != nil {
 			return err
@@ -337,7 +337,7 @@ func (m *Machine) mapKV(ctx context.Context, s stores.RW, kvr *gotkv.Root, fn fu
 }
 
 // putGroup returns a gotkv mutation that puts a group into the groups table.
-func putGroup(group gotnsop.Group) gotkv.Mutation {
+func putGroup(group gotorgop.Group) gotkv.Mutation {
 	return gotkv.Mutation{
 		Span: gotkv.SingleKeySpan(group.Key(nil)),
 		Entries: []gotkv.Entry{
@@ -349,4 +349,4 @@ func putGroup(group gotnsop.Group) gotkv.Mutation {
 	}
 }
 
-type ChangeSet = gotnsop.ChangeSet
+type ChangeSet = gotorgop.ChangeSet

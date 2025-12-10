@@ -1,4 +1,4 @@
-package gotns
+package gotorg
 
 import (
 	"testing"
@@ -10,7 +10,7 @@ import (
 	"github.com/cloudflare/circl/sign"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gotvc/got/src/gotns/internal/gotnsop"
+	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 )
@@ -44,7 +44,7 @@ func TestCreateBranch(t *testing.T) {
 	priv := IdenPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}
 	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: priv}
 
-	require.NoError(t, gnsc.EnsureInit(ctx, nsh, []IdentityUnit{gotnsop.NewIDUnit(sigPub, kemPub)}))
+	require.NoError(t, gnsc.EnsureInit(ctx, nsh, []IdentityUnit{gotorgop.NewIDUnit(sigPub, kemPub)}))
 	err := gnsc.CreateAlias(ctx, nsh, "test", nil)
 	require.NoError(t, err)
 	vol, err := gnsc.OpenAt(ctx, nsh, "test", priv, false)
@@ -71,10 +71,10 @@ func TestPutGetIDUnit(t *testing.T) {
 
 func newTestService(t *testing.T) *bclocal.Service {
 	env := bclocal.NewTestEnv(t)
-	env.Schemas["gotns"] = SchemaConstructor
+	env.Schemas["gotorg"] = SchemaConstructor
 	env.Root = blobcache.DefaultLocalSpec()
 	env.Root.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
-	env.Root.Local.Schema = blobcache.SchemaSpec{Name: "gotns"}
+	env.Root.Local.Schema = blobcache.SchemaSpec{Name: "gotorg"}
 
 	return bclocal.NewTestServiceFromEnv(t, env)
 }

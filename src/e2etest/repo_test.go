@@ -12,7 +12,7 @@ import (
 
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotns"
+	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/internal/testutil"
 )
@@ -55,17 +55,17 @@ func TestMultiRepoSync(t *testing.T) {
 	require.NoError(t, err)
 	originLeaf, err := origin.ActiveIdentity(ctx)
 	require.NoError(t, err)
-	require.NoError(t, gnsc.EnsureInit(ctx, blobcache.Handle{OID: originNS.OID}, []gotns.IdentityUnit{originLeaf}))
+	require.NoError(t, gnsc.EnsureInit(ctx, blobcache.Handle{OID: originNS.OID}, []gotorg.IdentityUnit{originLeaf}))
 	// Handles with empty secrets cause OpenAs to be called instead of OpenFrom.
-	require.NoError(t, gnsc.Do(ctx, blobcache.Handle{OID: originNS.OID}, func(tx *gotns.Txn) error {
-		for _, intro := range []gotns.ChangeSet{intro1, intro2} {
+	require.NoError(t, gnsc.Do(ctx, blobcache.Handle{OID: originNS.OID}, func(tx *gotorg.Txn) error {
+		for _, intro := range []gotorg.ChangeSet{intro1, intro2} {
 			if err := tx.ChangeSet(ctx, intro); err != nil {
 				return err
 			}
 			g, err := tx.LookupGroup(ctx, "admin")
 			require.NoError(t, err)
 			id := getOne(intro.Sigs)
-			if err := tx.AddMember(ctx, g.ID, gotns.MemberUnit(id)); err != nil {
+			if err := tx.AddMember(ctx, g.ID, gotorg.MemberUnit(id)); err != nil {
 				return err
 			}
 		}

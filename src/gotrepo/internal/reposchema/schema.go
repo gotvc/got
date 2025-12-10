@@ -13,7 +13,7 @@ import (
 
 const (
 	SchemaName_GotRepo = "gotrepo"
-	SchemaName_GotNS   = "gotns"
+	SchemeName_GotOrg  = "gotorg"
 )
 
 var (

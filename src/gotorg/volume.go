@@ -1,4 +1,4 @@
-package gotns
+package gotorg
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotkv"
-	"github.com/gotvc/got/src/gotns/internal/gotnsop"
+	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 )
@@ -45,7 +45,7 @@ func (m *Machine) GetVolume(ctx context.Context, s stores.Reading, state State, 
 	if gotkv.IsErrKeyNotFound(err) {
 		return nil, nil
 	}
-	return gotnsop.ParseVolumeEntry(volOID[:], val)
+	return gotorgop.ParseVolumeEntry(volOID[:], val)
 }
 
 func (m *Machine) DropVolume(ctx context.Context, s stores.RW, state State, volOID blobcache.OID) (*State, error) {
@@ -60,7 +60,7 @@ func (m *Machine) DropVolume(ctx context.Context, s stores.RW, state State, volO
 func (m *Machine) ForEachVolume(ctx context.Context, s stores.Reading, x State, fn func(entry VolumeEntry) error) error {
 	span := gotkv.TotalSpan()
 	return m.gotkv.ForEach(ctx, s, x.Volumes, span, func(ent gotkv.Entry) error {
-		entry, err := gotnsop.ParseVolumeEntry(ent.Key, ent.Value)
+		entry, err := gotorgop.ParseVolumeEntry(ent.Key, ent.Value)
 		if err != nil {
 			return err
 		}
