@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cloudflare/circl/kem"
 	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
 	"github.com/cloudflare/circl/sign/ed25519"
 	"github.com/gotvc/got/src/gotorg"
@@ -110,7 +109,7 @@ func getActiveIdentity(conn *dbutil.Conn) (gotorg.IdentityUnit, error) {
 	if err != nil {
 		return gotorg.IdentityUnit{}, err
 	}
-	return gotorg.NewIDUnit(leafPrivate.SigPrivateKey.Public().(inet256.PublicKey), leafPrivate.KEMPrivateKey.Public().(kem.PublicKey)), nil
+	return gotorg.NewIDUnit(leafPrivate.SigPrivateKey.Public().(inet256.PublicKey), leafPrivate.KEMPrivateKey.Public()), nil
 }
 
 var pki = gotorg.PKI()

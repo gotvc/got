@@ -1,11 +1,13 @@
 package gotorg
 
 import (
+	"fmt"
 	"testing"
 
 	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/blobcache"
-	"blobcache.io/blobcache/src/schema/basicns"
+	"blobcache.io/blobcache/src/blobcachecmd"
+	"blobcache.io/blobcache/src/schema"
 	"github.com/cloudflare/circl/kem"
 	"github.com/cloudflare/circl/sign"
 	"github.com/stretchr/testify/require"
@@ -18,8 +20,11 @@ import (
 func TestInit(t *testing.T) {
 	ctx := testutil.Context(t)
 	bc := bclocal.NewTestService(t)
-	nsc := basicns.Client{Service: bc}
-	volh, err := nsc.CreateAt(ctx, blobcache.Handle{}, "test", BranchVolumeSpec())
+	nsh, err := bc.OpenFiat(ctx, blobcache.OID{}, blobcache.Action_ALL)
+	require.NoError(t, err)
+	nsc, err := blobcachecmd.NSClientForVolume(ctx, bc, *nsh)
+	require.NoError(t, err)
+	volh, err := nsc.CreateAt(ctx, *nsh, "test", BranchVolumeSpec())
 	require.NoError(t, err)
 
 	signPub, sigPriv := newTestSigner(t)
@@ -71,7 +76,16 @@ func TestPutGetIDUnit(t *testing.T) {
 
 func newTestService(t *testing.T) *bclocal.Service {
 	env := bclocal.NewTestEnv(t)
-	env.Schemas["gotorg"] = SchemaConstructor
+	env.MkSchema = func(spec blobcache.SchemaSpec) (schema.Schema, error) {
+		switch spec.Name {
+		case "gotorg":
+			return SchemaConstructor(spec.Params, nil)
+		case "":
+			return schema.NoneConstructor(spec.Params, nil)
+		default:
+			return nil, fmt.Errorf("unknown schema %s", spec.Name)
+		}
+	}
 	env.Root = blobcache.DefaultLocalSpec()
 	env.Root.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
 	env.Root.Local.Schema = blobcache.SchemaSpec{Name: "gotorg"}

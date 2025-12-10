@@ -25,22 +25,22 @@ type Schema struct{}
 
 func (s Schema) ValidateChange(ctx context.Context, change schema.Change) error {
 	mach := New()
-	if len(change.PrevCell) == 0 {
-		nextRoot, err := statetrace.Parse(change.NextCell, ParseRoot)
+	if len(change.Prev.Cell) == 0 {
+		nextRoot, err := statetrace.Parse(change.Next.Cell, ParseRoot)
 		if err != nil {
 			return err
 		}
-		return mach.ValidateState(ctx, change.NextStore, nextRoot.State.Current)
+		return mach.ValidateState(ctx, change.Next.Store, nextRoot.State.Current)
 	}
-	prevRoot, err := statetrace.Parse(change.PrevCell, ParseRoot)
+	prevRoot, err := statetrace.Parse(change.Prev.Cell, ParseRoot)
 	if err != nil {
 		return err
 	}
-	nextRoot, err := statetrace.Parse(change.NextCell, ParseRoot)
+	nextRoot, err := statetrace.Parse(change.Next.Cell, ParseRoot)
 	if err != nil {
 		return err
 	}
-	return mach.led.Validate(ctx, change.PrevStore, prevRoot, nextRoot)
+	return mach.led.Validate(ctx, change.Prev.Store, prevRoot, nextRoot)
 }
 
 func (s Schema) OpenAs(ctx context.Context, src schema.RO, rootData []byte, peer blobcache.PeerID) (blobcache.ActionSet, error) {

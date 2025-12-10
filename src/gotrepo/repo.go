@@ -328,7 +328,7 @@ func openLocalBlobcache(bgCtx context.Context, privKey ed25519.PrivateKey, p str
 		Background: bgCtx,
 		StateDir:   p,
 		PrivateKey: privKey,
-		Schemas:    blobcacheSchemas(),
+		MkSchema:   mkSchema,
 		Root:       reposchema.GotRepoVolumeSpec(),
 		Policy:     &bclocal.AllOrNothingPolicy{},
 	}, bclocal.Config{})
@@ -342,11 +342,17 @@ func openRemoteBlobcache(privateKey ed25519.PrivateKey, pc net.PacketConn, ep bl
 	return bcremote.New(privateKey, pc, ep), nil
 }
 
-func blobcacheSchemas() map[blobcache.SchemaName]schema.Constructor {
-	schemas := bclocal.DefaultSchemas()
-	schemas[reposchema.SchemaName_GotRepo] = reposchema.Constructor
-	schemas[reposchema.SchemeName_GotOrg] = gotorg.SchemaConstructor
-	return schemas
+func mkSchema(spec blobcache.SchemaSpec) (schema.Schema, error) {
+	switch spec.Name {
+	case reposchema.SchemaName_GotRepo:
+		return reposchema.Constructor(spec.Params, nil)
+	case reposchema.SchemeName_GotOrg:
+		return gotorg.SchemaConstructor(spec.Params, nil)
+	case "":
+		return schema.None{}, nil
+	default:
+		return nil, fmt.Errorf("unknown schema %q", spec.Name)
+	}
 }
 
 // RepoVolumeSpec returns a Blobcache Volume spec which

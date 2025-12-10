@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"blobcache.io/blobcache/src/blobcache"
-	"blobcache.io/blobcache/src/schema/basicns"
+	"blobcache.io/blobcache/src/blobcachecmd"
 
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotorg"
@@ -53,8 +53,12 @@ func ParseVolumeSpec(data []byte) (*VolumeSpec, error) {
 }
 
 func (r *Repo) MakeVolume(ctx context.Context, branchName string, spec VolumeSpec) (branches.Volume, error) {
-	nsc := basicns.Client{Service: r.bc}
-	volh, err := nsc.OpenAt(ctx, blobcache.Handle{}, branchName, blobcache.Action_ALL)
+	nsh, err := r.bc.OpenFiat(ctx, blobcache.OID{}, blobcache.Action_ALL)
+	if err != nil {
+		return nil, err
+	}
+	nsc, err := blobcachecmd.NSClientForVolume(ctx, r.bc, *nsh)
+	volh, err := nsc.OpenAt(ctx, *nsh, branchName, blobcache.Action_ALL)
 	if err != nil {
 		if strings.Contains(err.Error(), "entry not found") {
 			volh, err = nsc.CreateAt(ctx, blobcache.Handle{}, branchName, spec)

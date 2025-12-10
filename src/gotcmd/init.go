@@ -6,7 +6,7 @@ import (
 
 	bcclient "blobcache.io/blobcache/client/go"
 	"blobcache.io/blobcache/src/blobcache"
-	"blobcache.io/blobcache/src/schema/basicns"
+	"blobcache.io/blobcache/src/blobcachecmd"
 	"github.com/gotvc/got/src/gotrepo"
 	"go.brendoncarroll.net/star"
 )
@@ -121,13 +121,14 @@ var mkrepoCmd = star.Command{
 		ctx := c.Context
 		svc := bcclient.NewClientFromEnv()
 		volName := volNameParam.Load(c)
-		bnsc := basicns.Client{
-			Service: svc,
+		nsh := blobcache.Handle{} // assume the root
+		nsc, err := blobcachecmd.NSClientForVolume(ctx, svc, nsh)
+		if err != nil {
+			return err
 		}
-		nsh := blobcache.Handle{}
 
 		spec := gotrepo.RepoVolumeSpec(false)
-		volh, err := bnsc.CreateAt(ctx, nsh, volName, spec)
+		volh, err := nsc.CreateAt(ctx, nsh, volName, spec)
 		if err != nil {
 			return err
 		}
@@ -135,7 +136,7 @@ var mkrepoCmd = star.Command{
 		if err != nil {
 			return err
 		}
-		c.Printf("Successfully created a new volume in the basicns root\n")
+		c.Printf("Successfully created a new volume in the ns root\n")
 		c.Printf("OID: %v\n", volh.OID)
 		c.Printf("INFO: %s\n", prettifyJSON(specJSON))
 

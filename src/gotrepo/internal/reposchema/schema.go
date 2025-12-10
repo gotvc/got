@@ -41,12 +41,12 @@ func NewSchema() *Schema {
 
 func (sch *Schema) ValidateChange(ctx context.Context, change schema.Change) error {
 	var prevRoot, nextRoot gotkv.Root
-	if len(change.PrevCell) > 0 {
-		if err := prevRoot.Unmarshal(change.PrevCell); err != nil {
+	if len(change.Prev.Cell) > 0 {
+		if err := prevRoot.Unmarshal(change.Prev.Cell); err != nil {
 			return err
 		}
 	}
-	if err := nextRoot.Unmarshal(change.NextCell); err != nil {
+	if err := nextRoot.Unmarshal(change.Next.Cell); err != nil {
 		return err
 	}
 	return nil

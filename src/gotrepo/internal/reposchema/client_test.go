@@ -7,6 +7,7 @@ import (
 	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
+	"blobcache.io/blobcache/src/schema"
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
@@ -64,8 +65,18 @@ func TestClient(t *testing.T) {
 
 func newBlobcache(t testing.TB) blobcache.Service {
 	env := bclocal.NewTestEnv(t)
-	env.Schemas[SchemaName_GotRepo] = Constructor
-	env.Schemas[SchemeName_GotOrg] = gotorg.SchemaConstructor
+	env.MkSchema = func(spec blobcache.SchemaSpec) (schema.Schema, error) {
+		switch spec.Name {
+		case SchemaName_GotRepo:
+			return Constructor(spec.Params, nil)
+		case SchemeName_GotOrg:
+			return gotorg.SchemaConstructor(spec.Params, nil)
+		case "":
+			return schema.NoneConstructor(spec.Params, nil)
+		default:
+			return nil, fmt.Errorf("unknown schema %q", spec.Name)
+		}
+	}
 	env.Root = GotRepoVolumeSpec()
 	return bclocal.NewTestServiceFromEnv(t, env)
 }
