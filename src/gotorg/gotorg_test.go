@@ -1,4 +1,4 @@
-package gotns
+package gotorg
 
 import (
 	"testing"
@@ -10,7 +10,7 @@ import (
 	"github.com/cloudflare/circl/sign"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gotvc/got/src/gotns/internal/gotnsop"
+	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 )
@@ -44,7 +44,7 @@ func TestCreateBranch(t *testing.T) {
 	priv := IdenPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}
 	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: priv}
 
-	require.NoError(t, gnsc.EnsureInit(ctx, nsh, []IdentityUnit{gotnsop.NewIDUnit(sigPub, kemPub)}))
+	require.NoError(t, gnsc.EnsureInit(ctx, nsh, []IdentityUnit{gotorgop.NewIDUnit(sigPub, kemPub)}))
 	err := gnsc.CreateAlias(ctx, nsh, "test", nil)
 	require.NoError(t, err)
 	vol, err := gnsc.OpenAt(ctx, nsh, "test", priv, false)

@@ -7,27 +7,27 @@ import (
 	"github.com/cloudflare/circl/kem"
 	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
 	"github.com/cloudflare/circl/sign/ed25519"
-	"github.com/gotvc/got/src/gotns"
+	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/internal/dbutil"
 	"go.inet256.org/inet256/src/inet256"
 )
 
-func (r *Repo) GotNSClient() gotns.Client {
-	return gotns.Client{
-		Machine:   gotns.New(),
+func (r *Repo) GotNSClient() gotorg.Client {
+	return gotorg.Client{
+		Machine:   gotorg.New(),
 		Blobcache: r.bc,
 		ActAs:     r.leafPrivate,
 	}
 }
 
-func (r *Repo) ActiveIdentity(ctx context.Context) (gotns.IdentityUnit, error) {
+func (r *Repo) ActiveIdentity(ctx context.Context) (gotorg.IdentityUnit, error) {
 	return dbutil.DoTx1(ctx, r.db, getActiveIdentity)
 }
 
-func (r *Repo) IntroduceSelf(ctx context.Context) (gotns.ChangeSet, error) {
+func (r *Repo) IntroduceSelf(ctx context.Context) (gotorg.ChangeSet, error) {
 	leaf, err := r.ActiveIdentity(ctx)
 	if err != nil {
-		return gotns.ChangeSet{}, err
+		return gotorg.ChangeSet{}, err
 	}
 	gnsc := r.GotNSClient()
 	return gnsc.IntroduceSelf(leaf.KEMPublicKey), nil
@@ -59,15 +59,15 @@ func setupIdentity(conn *dbutil.Conn) error {
 	if err != nil {
 		return err
 	}
-	kemPubData := gotns.MarshalKEMPublicKey(nil, gotns.KEM_MLKEM1024, kemPub)
-	kemPrivData := gotns.MarshalKEMPrivateKey(nil, gotns.KEM_MLKEM1024, kemPriv)
+	kemPubData := gotorg.MarshalKEMPublicKey(nil, gotorg.KEM_MLKEM1024, kemPub)
+	kemPrivData := gotorg.MarshalKEMPrivateKey(nil, gotorg.KEM_MLKEM1024, kemPriv)
 
 	err = dbutil.Exec(conn, `INSERT INTO idens (id, sign_private_key, sign_public_key, kem_private_key, kem_public_key)
 		VALUES (?, ?, ?, ?, ?)`, id[:], sigPrivData, sigPubData, kemPrivData, kemPubData)
 	return err
 }
 
-func loadIdentity(conn *dbutil.Conn) (*gotns.IdenPrivate, error) {
+func loadIdentity(conn *dbutil.Conn) (*gotorg.IdenPrivate, error) {
 	stmt := conn.Prep(`SELECT id, sign_private_key, kem_private_key FROM idens`)
 	defer stmt.Finalize()
 
@@ -95,22 +95,22 @@ func loadIdentity(conn *dbutil.Conn) (*gotns.IdenPrivate, error) {
 	if err != nil {
 		return nil, err
 	}
-	kemPriv, err := gotns.ParseKEMPrivateKey(row.KemPrivData)
+	kemPriv, err := gotorg.ParseKEMPrivateKey(row.KemPrivData)
 	if err != nil {
 		return nil, err
 	}
-	return &gotns.IdenPrivate{
+	return &gotorg.IdenPrivate{
 		SigPrivateKey: sigPriv,
 		KEMPrivateKey: kemPriv,
 	}, nil
 }
 
-func getActiveIdentity(conn *dbutil.Conn) (gotns.IdentityUnit, error) {
+func getActiveIdentity(conn *dbutil.Conn) (gotorg.IdentityUnit, error) {
 	leafPrivate, err := loadIdentity(conn)
 	if err != nil {
-		return gotns.IdentityUnit{}, err
+		return gotorg.IdentityUnit{}, err
 	}
-	return gotns.NewIDUnit(leafPrivate.SigPrivateKey.Public().(inet256.PublicKey), leafPrivate.KEMPrivateKey.Public().(kem.PublicKey)), nil
+	return gotorg.NewIDUnit(leafPrivate.SigPrivateKey.Public().(inet256.PublicKey), leafPrivate.KEMPrivateKey.Public().(kem.PublicKey)), nil
 }
 
-var pki = gotns.PKI()
+var pki = gotorg.PKI()

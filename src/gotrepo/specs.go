@@ -10,7 +10,7 @@ import (
 	"blobcache.io/blobcache/src/schema/basicns"
 
 	"github.com/gotvc/got/src/branches"
-	"github.com/gotvc/got/src/gotns"
+	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/internal/volumes"
 )
 
@@ -97,7 +97,7 @@ func (r *Repo) MakeSpace(ctx context.Context, spec SpaceSpec) (Space, error) {
 		if err != nil {
 			return nil, err
 		}
-		return gotns.NewSpace(&r.gnsc, *volh), nil
+		return gotorg.NewSpace(&r.gnsc, *volh), nil
 	case spec.Blobcache != nil:
 		return nil, fmt.Errorf("blobcache spaces in arbitrary volumes are not yet supported")
 	case spec.Multi != nil:

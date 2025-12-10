@@ -1,4 +1,4 @@
-package gotns
+package gotorg
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"blobcache.io/blobcache/src/schema/statetrace"
 	"github.com/cloudflare/circl/kem"
 	"github.com/gotvc/got/src/branches"
-	"github.com/gotvc/got/src/gotns/internal/gotnsop"
+	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/exp/slices2"
@@ -63,8 +63,8 @@ func (c *Client) Do(ctx context.Context, volh blobcache.Handle, fn func(txb *Txn
 	})
 }
 
-func (c *Client) LookupGroup(ctx context.Context, volh blobcache.Handle, name string) (*gotnsop.Group, error) {
-	var group *gotnsop.Group
+func (c *Client) LookupGroup(ctx context.Context, volh blobcache.Handle, name string) (*gotorgop.Group, error) {
+	var group *gotorgop.Group
 	if err := c.view(ctx, volh, func(s stores.Reading, state State) error {
 		var err error
 		group, err = c.Machine.LookupGroup(ctx, s, state, name)
@@ -131,7 +131,7 @@ func (c *Client) CreateAlias(ctx context.Context, nsh blobcache.Handle, name str
 		if err := tx.Link(ctx, *svh, blobcache.Action_ALL); err != nil {
 			return err
 		}
-		sec := gotnsop.Secret{}
+		sec := gotorgop.Secret{}
 		if _, err := rand.Read(sec[:]); err != nil {
 			return err
 		}
@@ -142,7 +142,7 @@ func (c *Client) CreateAlias(ctx context.Context, nsh blobcache.Handle, name str
 		}); err != nil {
 			return err
 		}
-		if err := txn.PutAlias(ctx, gotnsop.VolumeAlias{
+		if err := txn.PutAlias(ctx, gotorgop.VolumeAlias{
 			Name:   name,
 			Volume: svh.OID,
 		}, &sec); err != nil {
@@ -152,7 +152,7 @@ func (c *Client) CreateAlias(ctx context.Context, nsh blobcache.Handle, name str
 	})
 }
 
-func (c *Client) PutAlias(ctx context.Context, volh blobcache.Handle, bent VolumeAlias, secret *gotnsop.Secret) error {
+func (c *Client) PutAlias(ctx context.Context, volh blobcache.Handle, bent VolumeAlias, secret *gotorgop.Secret) error {
 	return c.doTx(ctx, volh, c.ActAs, func(tx *bcsdk.Tx, txb *Txn) error {
 		return txb.PutAlias(ctx, bent, secret)
 	})
@@ -182,7 +182,7 @@ func (c *Client) ListAliases(ctx context.Context, volh blobcache.Handle, span br
 	if err != nil {
 		return nil, err
 	}
-	names := slices2.Map(entries, func(e gotnsop.VolumeAlias) string {
+	names := slices2.Map(entries, func(e gotorgop.VolumeAlias) string {
 		return e.Name
 	})
 	return names, nil
@@ -309,11 +309,11 @@ func (c *Client) createSubVolume(ctx context.Context, tx *bcsdk.Tx) (*blobcache.
 // IntroduceSelf creates a signed change set that adds a leaf to the state.
 // Then it returns the signed change set data.
 // It does not contact Blobcache or perform any Volume operations.
-func (c *Client) IntroduceSelf(kemPub kem.PublicKey) gotnsop.ChangeSet {
-	leaf := gotnsop.NewIDUnit(c.ActAs.SigPrivateKey.Public().(inet256.PublicKey), kemPub)
-	cs := gotnsop.ChangeSet{
-		Ops: []Op{
-			&gotnsop.CreateIDUnit{
+func (c *Client) IntroduceSelf(kemPub kem.PublicKey) gotorgop.ChangeSet {
+	leaf := gotorgop.NewIDUnit(c.ActAs.SigPrivateKey.Public().(inet256.PublicKey), kemPub)
+	cs := gotorgop.ChangeSet{
+		Ops: []gotorgop.Op{
+			&gotorgop.CreateIDUnit{
 				Unit: leaf,
 			},
 		},

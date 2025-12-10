@@ -7,7 +7,7 @@ import (
 	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
-	"github.com/gotvc/got/src/gotns"
+	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
@@ -36,8 +36,8 @@ func TestClient(t *testing.T) {
 	}
 
 	// Initialize GotNS
-	gnsc := gotns.Client{Blobcache: bc, Machine: gotns.New(), ActAs: gotns.IdenPrivate{}}
-	require.NoError(t, gnsc.EnsureInit(ctx, *nsh, []gotns.IdentityUnit{}))
+	gnsc := gotorg.Client{Blobcache: bc, Machine: gotorg.New(), ActAs: gotorg.IdenPrivate{}}
+	require.NoError(t, gnsc.EnsureInit(ctx, *nsh, []gotorg.IdentityUnit{}))
 
 	// Write some blobs to a staging area
 	txn, err := bcsdk.BeginTx(ctx, bc, vh, blobcache.TxParams{Modify: true})
@@ -65,7 +65,7 @@ func TestClient(t *testing.T) {
 func newBlobcache(t testing.TB) blobcache.Service {
 	env := bclocal.NewTestEnv(t)
 	env.Schemas[SchemaName_GotRepo] = Constructor
-	env.Schemas[SchemaName_GotNS] = gotns.SchemaConstructor
+	env.Schemas[SchemaName_GotNS] = gotorg.SchemaConstructor
 	env.Root = GotRepoVolumeSpec()
 	return bclocal.NewTestServiceFromEnv(t, env)
 }
