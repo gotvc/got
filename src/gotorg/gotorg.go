@@ -328,7 +328,7 @@ func (m *Machine) mapKV(ctx context.Context, s stores.RW, kvr *gotkv.Root, fn fu
 	if err := fn(tx); err != nil {
 		return err
 	}
-	nextKvr, err := tx.Finish(ctx)
+	nextKvr, err := tx.Flush(ctx)
 	if err != nil {
 		return err
 	}
@@ -337,8 +337,8 @@ func (m *Machine) mapKV(ctx context.Context, s stores.RW, kvr *gotkv.Root, fn fu
 }
 
 // putGroup returns a gotkv mutation that puts a group into the groups table.
-func putGroup(group gotorgop.Group) gotkv.Mutation {
-	return gotkv.Mutation{
+func putGroup(group gotorgop.Group) gotkv.Edit {
+	return gotkv.Edit{
 		Span: gotkv.SingleKeySpan(group.Key(nil)),
 		Entries: []gotkv.Entry{
 			{

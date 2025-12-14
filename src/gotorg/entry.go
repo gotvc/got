@@ -35,7 +35,7 @@ func (m *Machine) GetAlias(ctx context.Context, s stores.Reading, state State, n
 // PutAlias inserts or overwrites an entry in the branches table.
 func (m *Machine) PutAlias(ctx context.Context, s stores.RW, state State, entry gotorgop.VolumeAlias, secret *gotorgop.Secret) (*State, error) {
 	mut1 := putAlias(entry)
-	aliasState, err := m.gotkv.Mutate(ctx, s, state.VolumeNames, mut1)
+	aliasState, err := m.gotkv.Edit(ctx, s, state.VolumeNames, mut1)
 	if err != nil {
 		return nil, err
 	}
@@ -57,9 +57,9 @@ func (m *Machine) DeleteAlias(ctx context.Context, s stores.RW, State State, nam
 	return &State, nil
 }
 
-func putAlias(entry gotorgop.VolumeAlias) gotkv.Mutation {
+func putAlias(entry gotorgop.VolumeAlias) gotkv.Edit {
 	k := entry.Key(nil)
-	return gotkv.Mutation{
+	return gotkv.Edit{
 		Span: gotkv.SingleKeySpan(k),
 		Entries: []gotkv.Entry{
 			{

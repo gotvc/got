@@ -36,7 +36,7 @@ func MemberGroup(gid GroupID) gotorgop.Member {
 // PutLeaf adds a leaf to the leaves table, overwriting whatever was there.
 // Any unreferenced leaves will be deleted.
 func (m *Machine) PutIDUnit(ctx context.Context, s stores.Writing, state State, leaf IdentityUnit) (*State, error) {
-	leafState, err := m.gotkv.Mutate(ctx, s.(stores.RW), state.IDUnits, putLeaf(leaf))
+	leafState, err := m.gotkv.Edit(ctx, s.(stores.RW), state.IDUnits, putLeaf(leaf))
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +87,7 @@ func (m *Machine) ForEachIDUnit(ctx context.Context, s stores.Reading, state Sta
 
 // PutGroup adds or replaces a group by name.
 func (m *Machine) PutGroup(ctx context.Context, s stores.RW, state State, group Group) (*State, error) {
-	groupState, err := m.gotkv.Mutate(ctx, s, state.Groups, putGroup(group))
+	groupState, err := m.gotkv.Edit(ctx, s, state.Groups, putGroup(group))
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +212,7 @@ func (m *Machine) AddMember(ctx context.Context, s stores.RW, x State, gid Group
 	}
 
 	kemCtext := encryptSeed(nil, kemPub, groupSecret)
-	memState, err := m.gotkv.Mutate(ctx, s, x.Memberships,
+	memState, err := m.gotkv.Edit(ctx, s, x.Memberships,
 		putMember(Membership{
 			Group:        gid,
 			Member:       member,
@@ -229,7 +229,7 @@ func (m *Machine) AddMember(ctx context.Context, s stores.RW, x State, gid Group
 // RemoveMember removes a member group from a containing group.
 func (m *Machine) RemoveMember(ctx context.Context, s stores.RW, state State, gid GroupID, mem Member) (*State, error) {
 	// TODO: Need to make sure group exists first.
-	memState, err := m.gotkv.Mutate(ctx, s, state.Memberships,
+	memState, err := m.gotkv.Edit(ctx, s, state.Memberships,
 		rmMember(gid, mem),
 	)
 	if err != nil {
@@ -326,7 +326,7 @@ func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, state State, gid 
 	group.KEM = kemPub
 
 	// update memberships
-	var memMuts []gotkv.Mutation
+	var memMuts []gotkv.Edit
 	if err := m.ForEachMembership(ctx, s, state, &gid, func(mshp Membership) error {
 		mem := mshp.Member
 		switch {
@@ -349,7 +349,7 @@ func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, state State, gid 
 		return nil, err
 	}
 
-	memRoot, err := m.gotkv.Mutate(ctx, s, state.Memberships, memMuts...)
+	memRoot, err := m.gotkv.Edit(ctx, s, state.Memberships, memMuts...)
 	if err != nil {
 		return nil, err
 	}
@@ -472,9 +472,9 @@ func parseMemberKey(key []byte) (GroupID, Member, error) {
 }
 
 // putMember returns a mutation that adds a member to a group.
-func putMember(mem Membership) gotkv.Mutation {
+func putMember(mem Membership) gotkv.Edit {
 	key := memberKey(nil, mem.Group, mem.Member)
-	return gotkv.Mutation{
+	return gotkv.Edit{
 		Span: gotkv.SingleKeySpan(key),
 		Entries: []gotkv.Entry{
 			{
@@ -486,18 +486,18 @@ func putMember(mem Membership) gotkv.Mutation {
 }
 
 // rmMember removes a member from a group.
-func rmMember(gid GroupID, member Member) gotkv.Mutation {
+func rmMember(gid GroupID, member Member) gotkv.Edit {
 	key := memberKey(nil, gid, member)
-	return gotkv.Mutation{
+	return gotkv.Edit{
 		Span:    gotkv.SingleKeySpan(key),
 		Entries: []gotkv.Entry{},
 	}
 }
 
 // putLeaf returns a gotkv mutation that adds a leaf to the leaves table.
-func putLeaf(leaf IdentityUnit) gotkv.Mutation {
+func putLeaf(leaf IdentityUnit) gotkv.Edit {
 	key := leaf.Key(nil)
-	return gotkv.Mutation{
+	return gotkv.Edit{
 		Span: gotkv.SingleKeySpan(key),
 		Entries: []gotkv.Entry{
 			{Key: key, Value: leaf.Value(nil)},

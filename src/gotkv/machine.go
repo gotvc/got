@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
@@ -132,7 +133,7 @@ func (a *Machine) Get(ctx context.Context, s stores.Reading, x Root, key []byte)
 // Put returns a new version of the instance x with the entry at key corresponding to value.
 // If an entry at key already exists it is overwritten, otherwise it will be created.
 func (a *Machine) Put(ctx context.Context, s stores.RW, x Root, key, value []byte) (*Root, error) {
-	return a.Mutate(ctx, s, x, Mutation{
+	return a.Edit(ctx, s, x, Edit{
 		Span:    SingleKeySpan(key),
 		Entries: []Entry{{Key: key, Value: value}},
 	})
@@ -146,7 +147,7 @@ func (a *Machine) Delete(ctx context.Context, s stores.RW, x Root, key []byte) (
 
 // DeleteSpan returns a new version of the instance x where there are no entries contained in span.
 func (a *Machine) DeleteSpan(ctx context.Context, s stores.RW, x Root, span Span) (*Root, error) {
-	return a.Mutate(ctx, s, x, Mutation{
+	return a.Edit(ctx, s, x, Edit{
 		Span: span,
 	})
 }
@@ -265,23 +266,28 @@ func (a *Machine) ForEach(ctx context.Context, s Getter, root Root, span Span, f
 	}
 }
 
-// Mutation represents a declarative change to a Span of entries.
-// The result of applying a Mutation is that the entire contents of the Span are replaced with Entries.
-type Mutation struct {
+// Edit represents a declarative change to a Span of entries.
+// The result of applying a Edit is that the entire contents of the Span are replaced with Entries.
+type Edit struct {
 	Span    Span
 	Entries []Entry
 }
 
-// Mutate applies a batch of mutations to the tree x.
-func (a *Machine) Mutate(ctx context.Context, s stores.RW, x Root, mutations ...Mutation) (*Root, error) {
-	iters := make([]kvstreams.Iterator, 2*len(mutations)+1)
+// Edit applies a batch of edits to the tree x.
+// If edits overlap, the later edit takes prescendence.
+func (a *Machine) Edit(ctx context.Context, s stores.RW, x Root, edits ...Edit) (*Root, error) {
+	//edits = compactEdits(edits)
+	slices.SortFunc(edits, func(a, b Edit) int {
+		return bytes.Compare(a.Span.Begin, b.Span.Begin)
+	})
+	iters := make([]kvstreams.Iterator, 2*len(edits)+1)
 	var begin []byte
-	for i, mut := range mutations {
+	for i, mut := range edits {
 		if err := checkMutation(mut); err != nil {
 			return nil, err
 		}
 		if i > 0 {
-			if bytes.Compare(mut.Span.Begin, mutations[i-1].Span.End) < 0 {
+			if bytes.Compare(mut.Span.Begin, edits[i-1].Span.End) < 0 {
 				return nil, fmt.Errorf("spans out of order %d start: %q < %d end: %q", i, mut.Span.Begin, i-1, mut.Span.End)
 			}
 		}
@@ -300,7 +306,7 @@ func (a *Machine) Mutate(ctx context.Context, s stores.RW, x Root, mutations ...
 	return a.Concat(ctx, s, iters...)
 }
 
-func checkMutation(mut Mutation) error {
+func checkMutation(mut Edit) error {
 	for _, ent := range mut.Entries {
 		if !mut.Span.Contains(ent.Key) {
 			return fmt.Errorf("mutation span %v does not contain entry key %q", mut.Span, ent.Key)
@@ -319,4 +325,67 @@ func (a *Machine) Concat(ctx context.Context, s stores.RW, iters ...kvstreams.It
 		}
 	}
 	return b.Finish(ctx)
+}
+
+// compactEdits produces a (potentially longer) list
+// of edits which have non-overlapping Spans
+func compactEdits(edits []Edit) []Edit {
+	// stable order matters: later edits override earlier ones
+	var out []Edit
+
+	for _, e := range edits {
+		next := make([]Edit, 0, len(out)+1)
+
+		for _, o := range out {
+			// no overlap
+			if bytes.Compare(o.Span.End, e.Span.Begin) <= 0 ||
+				bytes.Compare(e.Span.End, o.Span.Begin) <= 0 {
+				next = append(next, o)
+				continue
+			}
+
+			// o is partially before e
+			if bytes.Compare(o.Span.Begin, e.Span.Begin) < 0 {
+				next = append(next, Edit{
+					Span: Span{
+						Begin: o.Span.Begin,
+						End:   minBytes(o.Span.End, e.Span.Begin),
+					},
+					Entries: o.Entries,
+				})
+			}
+
+			// o is partially after e
+			if bytes.Compare(o.Span.End, e.Span.End) > 0 {
+				next = append(next, Edit{
+					Span: Span{
+						Begin: maxBytes(o.Span.Begin, e.Span.End),
+						End:   o.Span.End,
+					},
+					Entries: o.Entries,
+				})
+			}
+		}
+
+		next = append(next, e)
+		out = next
+	}
+	slices.SortStableFunc(out, func(a, b Edit) int {
+		return bytes.Compare(a.Span.Begin, b.Span.Begin)
+	})
+	return out
+}
+
+func minBytes(a, b []byte) []byte {
+	if bytes.Compare(a, b) < 0 {
+		return a
+	}
+	return b
+}
+
+func maxBytes(a, b []byte) []byte {
+	if bytes.Compare(a, b) > 0 {
+		return a
+	}
+	return b
 }

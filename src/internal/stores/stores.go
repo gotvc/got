@@ -63,6 +63,8 @@ func Hash(x []byte) blobcache.CID {
 	return blake2b.Sum256(x)
 }
 
+const MaxSize = 1 << 21
+
 func NewMem() *schema.MemStore {
 	return schema.NewMem(blobcache.HashAlgo_BLAKE2b_256.HashFunc(), 1<<22)
 }

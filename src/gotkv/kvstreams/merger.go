@@ -1,69 +1,59 @@
 package kvstreams
 
 import (
-	"bytes"
 	"context"
-	"io"
 
+	"go.brendoncarroll.net/exp/maybe"
 	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/state/cadata"
 )
 
-var _ Iterator = &Merger{}
+var _ Iterator = &Merger[Entry]{}
 
-type Merger struct {
-	streams []Iterator
+type Merger[T any] struct {
+	inputs []streams.Peekable[T]
+	cmp    func(a, b T) int
 }
 
-func NewMerger(s cadata.Store, streams []Iterator) *Merger {
-	return &Merger{
-		streams: streams,
+// NewMerger creates a new merging stream and returns it.
+// cmp is used to determine which element should be emitted next.
+func NewMerger[T any](inputs []streams.Peekable[T], cmp func(a, b T) int) *Merger[T] {
+	return &Merger[T]{
+		inputs: inputs,
+		cmp:    cmp,
 	}
 }
 
-func (sm *Merger) Next(ctx context.Context, ent *Entry) error {
+func (sm *Merger[T]) Next(ctx context.Context, dst *T) error {
 	sr, err := sm.selectStream(ctx)
 	if err != nil {
 		return err
 	}
-	if err := sr.Next(ctx, ent); err != nil {
+	if err := sr.Next(ctx, dst); err != nil {
 		return err
 	}
-	if err != nil {
-		return err
-	}
-	return sm.advancePast(ctx, ent.Key)
+	return sm.advancePast(ctx, *dst)
 }
 
-func (sm *Merger) Peek(ctx context.Context, ent *Entry) error {
+func (sm *Merger[T]) Peek(ctx context.Context, dst *T) error {
 	sr, err := sm.selectStream(ctx)
 	if err != nil {
 		return err
 	}
-	return sr.Peek(ctx, ent)
+	return sr.Peek(ctx, dst)
 }
 
-func (m *Merger) Seek(ctx context.Context, gteq []byte) error {
-	for i := range m.streams {
-		if err := m.streams[i].Seek(ctx, gteq); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (sm *Merger) advancePast(ctx context.Context, key []byte) error {
-	var ent Entry
-	for _, sr := range sm.streams {
-		if err := sr.Peek(ctx, &ent); err != nil {
+func (sm *Merger[T]) advancePast(ctx context.Context, k T) error {
+	var x T
+	for _, sr := range sm.inputs {
+		if err := sr.Peek(ctx, &x); err != nil {
 			if streams.IsEOS(err) {
 				continue
 			}
 			return err
 		}
 		// if the stream is behind, advance it.
-		if bytes.Compare(ent.Key, key) <= 0 {
-			if err := sr.Next(ctx, &ent); err != nil {
+		if sm.cmp(x, k) <= 0 {
+			if err := sr.Next(ctx, &x); err != nil {
 				return err
 			}
 		}
@@ -72,24 +62,24 @@ func (sm *Merger) advancePast(ctx context.Context, key []byte) error {
 }
 
 // selectStream will never return an ended stream
-func (sm *Merger) selectStream(ctx context.Context) (Iterator, error) {
-	var minKey []byte
-	nextIndex := len(sm.streams)
-	var ent Entry
-	for i, sr := range sm.streams {
+func (sm *Merger[T]) selectStream(ctx context.Context) (streams.Peekable[T], error) {
+	var minTMaybe maybe.Maybe[T]
+	nextIndex := len(sm.inputs)
+	var ent T
+	for i, sr := range sm.inputs {
 		if err := sr.Peek(ctx, &ent); err != nil {
 			if streams.IsEOS(err) {
 				continue
 			}
 			return nil, err
 		}
-		if minKey == nil || bytes.Compare(ent.Key, minKey) <= 0 {
-			minKey = ent.Key
+		if !minTMaybe.Ok || sm.cmp(ent, minTMaybe.X) <= 0 {
+			minTMaybe = maybe.Just(ent)
 			nextIndex = i
 		}
 	}
-	if nextIndex < len(sm.streams) {
-		return sm.streams[nextIndex], nil
+	if nextIndex < len(sm.inputs) {
+		return sm.inputs[nextIndex], nil
 	}
-	return nil, io.EOF
+	return nil, streams.EOS()
 }
