@@ -9,7 +9,6 @@ import (
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
-	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
@@ -152,7 +151,7 @@ func (tx *Tx) ListNames(ctx context.Context, span branches.Span, limit int) ([]s
 	span2 := gotkv.TotalSpan()
 	it := tx.kvtx.Iterate(ctx, span2)
 	//it := tx.kvmach.NewIterator(tx.tx, *root, span2)
-	it2 := kvstreams.NewMap(it, func(dst *string, x gotkv.Entry) {
+	it2 := streams.NewMap(it, func(dst *string, x gotkv.Entry) {
 		*dst = string(x.Key)
 	})
 	if limit < 1 {

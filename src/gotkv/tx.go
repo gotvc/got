@@ -99,8 +99,8 @@ func (tx *Tx) Iterate(ctx context.Context, span Span) streams.Iterator[Entry] {
 		panic("Iterate cannot be called with pending edits")
 	}
 	base := tx.m.NewIterator(tx.s, tx.prev, span)
-	return kvstreams.NewMerger([]streams.Peekable[Entry]{
-		kvstreams.NewPeeker(kvstreams.NewMutator(base, func(ent *Entry) bool {
+	return streams.NewMerger([]streams.Peekable[Entry]{
+		streams.NewPeeker(streams.NewMutator(base, func(ent *Entry) bool {
 			if editsDelete(tx.edits, ent.Key) {
 				return false
 			}
