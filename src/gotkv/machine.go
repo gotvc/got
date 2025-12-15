@@ -276,10 +276,7 @@ type Edit struct {
 // Edit applies a batch of edits to the tree x.
 // If edits overlap, the later edit takes prescendence.
 func (a *Machine) Edit(ctx context.Context, s stores.RW, x Root, edits ...Edit) (*Root, error) {
-	//edits = compactEdits(edits)
-	slices.SortFunc(edits, func(a, b Edit) int {
-		return bytes.Compare(a.Span.Begin, b.Span.Begin)
-	})
+	edits = compactEdits(edits)
 	iters := make([]kvstreams.Iterator, 2*len(edits)+1)
 	var begin []byte
 	for i, mut := range edits {
