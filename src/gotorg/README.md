@@ -1,11 +1,11 @@
-# GotNS
+# GotOrg
 
-GotNS is a namespace for branches.
+GotOrg is a permissioned namespace for branches.
 It manages all of the public key cryptography needed to enforce permissions for reading and writing from branches.
 
-The branch Volumes are encrypted with AEADs, and the secret keys are stored encrypted in GotNS.
+The branch Volumes are encrypted with AEADs, and the secret keys are stored encrypted in GotOrg.
 
-All actions in GotNS must be signed by a single key.
+All actions in GotOrg must be signed by a single key.
 
 ## Identity
 Identities are a set of public keys used for signing.

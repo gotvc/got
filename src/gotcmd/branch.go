@@ -166,9 +166,9 @@ var dstBranchParam = star.Required[string]{
 	Parse: star.ParseString,
 }
 
-var activeCmd = star.Command{
+var headCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "print the active branch or sets it",
+		Short: "prints or sets the contents of HEAD",
 	},
 	Pos: []star.Positional{branchNameOptParam},
 	F: func(c star.Context) error {

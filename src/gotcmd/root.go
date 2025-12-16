@@ -45,6 +45,7 @@ var rootCmd = star.NewDir(
 		"commit":  commitCmd,
 
 		"status": statusCmd,
+		"wc":     wcCmd,
 
 		"ls":   lsCmd,
 		"cat":  catCmd,
@@ -54,7 +55,7 @@ var rootCmd = star.NewDir(
 		"history": historyCmd,
 		"log":     historyCmd,
 		"branch":  branchCmd,
-		"active":  activeCmd,
+		"head":    headCmd,
 		"fork":    forkCmd,
 		"sync":    syncCmd,
 

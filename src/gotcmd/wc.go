@@ -10,6 +10,10 @@ var wcCmd = star.NewDir(star.Metadata{
 },
 	map[string]star.Command{
 		"cleanup": cleanupCmd,
+		"add":     addCmd,
+		"rm":      rmCmd,
+		"discard": discardCmd,
+		"clear":   clearCmd,
 	},
 )
 
