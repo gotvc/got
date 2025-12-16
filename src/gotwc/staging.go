@@ -195,7 +195,7 @@ func (wc *WC) Put(ctx context.Context, paths ...string) error {
 // Rm deletes a path known to version control.
 func (wc *WC) Rm(ctx context.Context, paths ...string) error {
 	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
-		snap, voltx, err := sctx.Branch.GetHead(ctx)
+		snap, voltx, err := sctx.Branch.GetTarget(ctx)
 		if err != nil {
 			return err
 		}
@@ -300,7 +300,7 @@ type FileOperation struct {
 func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOperation) error) error {
 	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
 		stage := sctx.Stage
-		snap, voltx, err := sctx.Branch.GetHead(ctx)
+		snap, voltx, err := sctx.Branch.GetTarget(ctx)
 		if err != nil {
 			return err
 		}
@@ -344,7 +344,7 @@ func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOpera
 //  2. the active branch head
 func (wc *WC) ForEachUntracked(ctx context.Context, fn func(p string) error) error {
 	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
-		snap, voltx, err := sctx.Branch.GetHead(ctx)
+		snap, voltx, err := sctx.Branch.GetTarget(ctx)
 		if err != nil {
 			return err
 		}

@@ -69,7 +69,7 @@ func (r *Repo) GetBranchRoot(ctx context.Context, name string) (*Snap, error) {
 	if err != nil {
 		return nil, err
 	}
-	snap, tx, err := b.GetHead(ctx)
+	snap, tx, err := b.GetTarget(ctx)
 	if err != nil {
 		return nil, err
 	}

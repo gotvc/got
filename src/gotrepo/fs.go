@@ -56,7 +56,7 @@ func (r *Repo) Check(ctx context.Context, branchName string) error {
 	if err != nil {
 		return err
 	}
-	snap, tx, err := branch.GetHead(ctx)
+	snap, tx, err := branch.GetTarget(ctx)
 	if err != nil {
 		return err
 	}

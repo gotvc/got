@@ -14,7 +14,7 @@ func (r *Repo) DebugFS(ctx context.Context, name string, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	x, tx, err := b.GetHead(ctx)
+	x, tx, err := b.GetTarget(ctx)
 	if err != nil {
 		return err
 	}
@@ -30,7 +30,7 @@ func (r *Repo) DebugKV(ctx context.Context, branchName string, w io.Writer) erro
 	if err != nil {
 		return err
 	}
-	x, tx, err := b.GetHead(ctx)
+	x, tx, err := b.GetTarget(ctx)
 	if err != nil {
 		return err
 	}
