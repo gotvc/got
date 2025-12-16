@@ -5,19 +5,27 @@ import (
 	"go.brendoncarroll.net/star"
 )
 
+var wcCmd = star.NewDir(star.Metadata{
+	Short: "commands for managing working copies",
+},
+	map[string]star.Command{
+		"cleanup": cleanupCmd,
+	},
+)
+
 var cleanupCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "cleanup cleans up unreferenced data associated with branches",
+		Short: "cleanup cleans up unreferenced data in the staging area",
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer wc.Close()
 		ctx, cf := metrics.Child(ctx, "cleanup")
 		defer cf()
-		return repo.Cleanup(ctx)
+		return wc.Cleanup(ctx)
 	},
 }

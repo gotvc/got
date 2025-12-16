@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"os"
 	"path/filepath"
-	"strings"
+	"testing"
 
 	"blobcache.io/blobcache/src/bchttp"
 	"blobcache.io/blobcache/src/bclocal"
@@ -15,6 +16,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
 	"github.com/cloudflare/circl/sign/ed25519"
+	"github.com/stretchr/testify/require"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/kv"
 	"go.brendoncarroll.net/state/posixfs"
@@ -25,11 +27,10 @@ import (
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotorg"
-	"github.com/gotvc/got/src/gotrepo/internal/dbmig"
 	"github.com/gotvc/got/src/gotrepo/internal/reposchema"
 	"github.com/gotvc/got/src/gotvc"
-	"github.com/gotvc/got/src/internal/dbutil"
-	"github.com/gotvc/got/src/internal/migrations"
+	"github.com/gotvc/got/src/internal/testutil"
+	"github.com/gotvc/got/src/internal/volumes"
 )
 
 // fs paths
@@ -42,8 +43,6 @@ const (
 )
 
 type (
-	FS = posixfs.FS
-
 	Space  = branches.Space
 	Volume = branches.Volume
 
@@ -53,16 +52,18 @@ type (
 	Snap = gotvc.Snap
 )
 
+// Repo manages configuration including the connection to Blobcache
+// The Repo can optionally host it's own Blobcache Node.
+// Repos also manage a namespace and multiple stages.
+// Working Copies can be created to manipulate the contents of the stages.
 type Repo struct {
 	rootPath string
-	repoFS   FS // repoFS is the directory that the repo is in
+	repoFS   posixfs.FS // repoFS is the directory that the repo is in
+	config   Config
+	bc       blobcache.Service
 
-	config Config
-	bc     blobcache.Service
-	db     *dbutil.Pool
-
+	idenStore   idenStore
 	leafPrivate gotorg.IdenPrivate
-	workingDir  FS // workingDir is repoFS with reserved paths filtered.
 	repoc       reposchema.Client
 	gnsc        gotorg.Client
 	space       lazySetup[branches.Space]
@@ -104,26 +105,7 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	db, err := dbutil.OpenPool(filepath.Join(p, localDBPath))
-	if err != nil {
-		return nil, err
-	}
 	var leafPrivate *gotorg.IdenPrivate
-	if err := dbutil.Borrow(ctx, db, func(conn *dbutil.Conn) error {
-		if err := migrations.EnsureAll(conn, dbmig.ListMigrations()); err != nil {
-			return err
-		}
-		if err := setupIdentity(conn); err != nil {
-			return err
-		}
-		leafPrivate, err = loadIdentity(conn)
-		if err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return nil, err
-	}
 	sigPrivKey := leafPrivate.SigPrivateKey.(ed25519.PrivateKey)
 	// blobcache
 	var bc blobcache.Service
@@ -153,12 +135,16 @@ func Open(p string) (*Repo, error) {
 	default:
 		return nil, fmt.Errorf("empty blobcache spec: %v", config.Blobcache)
 	}
+	idenRoot, err := os.OpenRoot(filepath.Join(p))
+	if err != nil {
+		return nil, err
+	}
 	r := &Repo{
 		rootPath:    p,
 		repoFS:      repoFS,
-		db:          db,
 		bc:          bc,
 		config:      *config,
+		idenStore:   idenStore{root: idenRoot},
 		leafPrivate: *leafPrivate,
 		repoc:       reposchema.NewClient(bc),
 		gnsc: gotorg.Client{
@@ -166,20 +152,17 @@ func Open(p string) (*Repo, error) {
 			Blobcache: bc,
 			ActAs:     *leafPrivate,
 		},
-		workingDir: posixfs.NewFiltered(repoFS, func(x string) bool {
-			return !strings.HasPrefix(x, gotPrefix)
-		}),
 	}
 	r.space = newLazySetup(func(ctx context.Context) (branches.Space, error) {
 		nsh, err := r.repoc.GetNamespace(ctx, config.RepoVolume, r.useSchema())
 		if err != nil {
 			return nil, err
 		}
-		leaf, err := r.ActiveIdentity(ctx)
+		idenUnit, err := r.ActiveIdentity(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if err := r.gnsc.EnsureInit(ctx, *nsh, []gotorg.IdentityUnit{leaf}); err != nil {
+		if err := r.gnsc.EnsureInit(ctx, *nsh, []gotorg.IdentityUnit{*idenUnit}); err != nil {
 			return nil, err
 		}
 		spaceSpec := config.Spaces
@@ -205,12 +188,6 @@ func (r *Repo) Close() (retErr error) {
 	ctx := context.TODO()
 	for _, fn := range []func() error{
 		func() error {
-			return dbutil.Borrow(context.TODO(), r.db, func(conn *dbutil.Conn) error {
-				return dbutil.WALCheckpoint(conn)
-			})
-		},
-		r.db.Close,
-		func() error {
 			if lsvc, ok := r.bc.(*bclocal.Service); ok {
 				logctx.Infof(ctx, "closing in-process blobcache")
 				return lsvc.Close()
@@ -225,8 +202,9 @@ func (r *Repo) Close() (retErr error) {
 	return retErr
 }
 
-func (r *Repo) WorkingDir() FS {
-	return r.workingDir
+// RootPath is the path given when the Repo was opened
+func (r *Repo) RootPath() string {
+	return r.rootPath
 }
 
 func (r *Repo) GetSpace(ctx context.Context) (Space, error) {
@@ -241,39 +219,17 @@ func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
 	return svc.Serve(ctx, pc)
 }
 
-// Cleanup removes unreferenced data from the repo's local DB.
-func (r *Repo) Cleanup(ctx context.Context) error {
-	if err := dbutil.DoTx(ctx, r.db, func(conn *dbutil.Conn) error {
-		logctx.Infof(ctx, "removing blobs from staging areas")
-		if err := r.cleanupStagingBlobs(ctx, conn); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	if err := dbutil.Borrow(ctx, r.db, func(conn *dbutil.Conn) error {
-		logctx.Infof(ctx, "truncating WAL...")
-		if err := dbutil.WALCheckpoint(conn); err != nil {
-			return err
-		}
-		logctx.Infof(ctx, "running VACUUM...")
-		if err := dbutil.Vacuum(conn); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	return nil
-}
-
 func (r *Repo) Endpoint() blobcache.Endpoint {
 	ep, err := r.bc.Endpoint(context.TODO())
 	if err != nil {
 		panic(err)
 	}
 	return ep
+}
+
+func (r *Repo) Cleanup(ctx context.Context) error {
+	// TODO
+	return nil
 }
 
 // GotNSVolume returns the FQOID of the namespace volume.
@@ -292,6 +248,17 @@ func (r *Repo) GotNSVolume(ctx context.Context) (blobcache.FQOID, error) {
 		Peer: ep.Peer,
 		OID:  nsh.OID,
 	}, nil
+}
+
+// BeginStagingTx begins a new transaction for the staging area with the given paramHash.
+// It is up to the caller to commit or abort the transaction.
+func (r *Repo) BeginStagingTx(ctx context.Context, paramHash *[32]byte, mutate bool) (volumes.Tx, error) {
+	h, err := r.repoc.StagingArea(ctx, r.config.RepoVolume, paramHash)
+	if err != nil {
+		return nil, err
+	}
+	vol := volumes.Blobcache{Service: r.bc, Handle: *h}
+	return vol.BeginTx(ctx, blobcache.TxParams{Modify: mutate})
 }
 
 func (r *Repo) useSchema() bool {
@@ -365,4 +332,20 @@ func RepoVolumeSpec(useSchema bool) blobcache.VolumeSpec {
 		}
 	}
 	return spec
+}
+
+func NewTestRepo(t testing.TB) *Repo {
+	dirpath := t.TempDir()
+	t.Log("testing in", dirpath)
+	require.NoError(t, Init(dirpath, DefaultConfig()))
+	repo, err := Open(dirpath)
+	require.NoError(t, err)
+	require.NotNil(t, repo)
+	t.Cleanup(func() {
+		ctx := testutil.Context(t)
+		// also run cleanup after every test, to make sure that cleanup works after all the situations we are testing.
+		require.NoError(t, repo.Cleanup(ctx))
+		require.NoError(t, repo.Close())
+	})
+	return repo
 }

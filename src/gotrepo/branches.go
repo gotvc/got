@@ -5,9 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gotvc/got/src/branches"
-	"github.com/gotvc/got/src/internal/dbutil"
 	"github.com/gotvc/got/src/internal/metrics"
-	"github.com/gotvc/got/src/internal/staging"
 )
 
 const (
@@ -27,26 +25,8 @@ func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Pa
 	return space.Create(ctx, name, params)
 }
 
-// DeleteBranch deletes a branch
-func (r *Repo) DeleteBranch(ctx context.Context, name string) error {
-	space, err := r.GetSpace(ctx)
-	if err != nil {
-		return err
-	}
-	return space.Delete(ctx, name)
-}
-
-// GetBranch returns the branch with the specified name
+// GetBranch returns a specific branch, or an error if it does not exist
 func (r *Repo) GetBranch(ctx context.Context, name string) (*Branch, error) {
-	if name == "" {
-		_, branch, err := r.GetActiveBranch(ctx)
-		return branch, err
-	}
-	return r.getBranch(ctx, name)
-}
-
-// getBranch returns a specific branch, or an error if it does not exist
-func (r *Repo) getBranch(ctx context.Context, name string) (*Branch, error) {
 	if name == "" {
 		return nil, fmt.Errorf("branch name cannot be empty")
 	}
@@ -57,15 +37,17 @@ func (r *Repo) getBranch(ctx context.Context, name string) (*Branch, error) {
 	return space.Open(ctx, name)
 }
 
+// DeleteBranch deletes a branch
+func (r *Repo) DeleteBranch(ctx context.Context, name string) error {
+	space, err := r.GetSpace(ctx)
+	if err != nil {
+		return err
+	}
+	return space.Delete(ctx, name)
+}
+
 // SetBranch sets branch metadata
 func (r *Repo) SetBranch(ctx context.Context, name string, md branches.Params) error {
-	if name == "" {
-		name2, _, err := r.GetActiveBranch(ctx)
-		if err != nil {
-			return err
-		}
-		name = name2
-	}
 	space, err := r.GetSpace(ctx)
 	if err != nil {
 		return err
@@ -82,82 +64,7 @@ func (r *Repo) ForEachBranch(ctx context.Context, fn func(string) error) error {
 	return branches.ForEach(ctx, space, branches.TotalSpan(), fn)
 }
 
-// SetActiveBranch sets the active branch to name
-func (r *Repo) SetActiveBranch(ctx context.Context, name string) error {
-	desiredBranch, err := r.GetBranch(ctx, name)
-	if err != nil {
-		return err
-	}
-	return dbutil.DoTx(ctx, r.db, func(conn *dbutil.Conn) error {
-		activeName, err := getActiveBranch(conn)
-		if err != nil {
-			return err
-		}
-		activeBranch, err := r.getBranch(ctx, activeName)
-		if err != nil {
-			return err
-		}
-		// if active branch has the same salt as the desired branch, then
-		// there is no check to do.
-		// If they have different salts, then we need to check if the staging area is empty.
-		if desiredBranch.Info.Salt != activeBranch.Info.Salt {
-			sa, err := newStagingArea(conn, &activeBranch.Info)
-			if err != nil {
-				return err
-			}
-			stage := staging.New(sa)
-			isEmpty, err := stage.IsEmpty(ctx)
-			if err != nil {
-				return err
-			}
-			if !isEmpty {
-				return fmt.Errorf("staging must be empty to change to a branch with a different salt")
-			}
-		}
-		return setActiveBranch(conn, name)
-	})
-}
-
-// GetActiveBranch returns the name of the active branch, and the branch
-func (r *Repo) GetActiveBranch(ctx context.Context) (string, *Branch, error) {
-	name, err := dbutil.DoTx1(ctx, r.db, func(conn *dbutil.Conn) (string, error) {
-		return getActiveBranch(conn)
-	})
-	if err != nil {
-		return "", nil, err
-	}
-	space, err := r.GetSpace(ctx)
-	if err != nil {
-		return "", nil, err
-	}
-	branch, err := space.Open(ctx, name)
-	if err != nil {
-		return "", nil, err
-	}
-	return name, branch, nil
-}
-
-// SetBranchHead
-func (r *Repo) SetBranchHead(ctx context.Context, name string, snap Snap) error {
-	branch, err := r.GetBranch(ctx, name)
-	if err != nil {
-		return err
-	}
-	return dbutil.DoTxRO(ctx, r.db, func(conn *dbutil.Conn) error {
-		sa, err := newStagingArea(conn, &branch.Info)
-		if err != nil {
-			return err
-		}
-		stageTxn, err := r.beginStagingTx(ctx, sa.getSalt(), true)
-		if err != nil {
-			return err
-		}
-		defer stageTxn.Abort(ctx)
-		return branch.SetHead(ctx, stageTxn, snap)
-	})
-}
-
-func (r *Repo) GetBranchHead(ctx context.Context, name string) (*Snap, error) {
+func (r *Repo) GetBranchRoot(ctx context.Context, name string) (*Snap, error) {
 	b, err := r.GetBranch(ctx, name)
 	if err != nil {
 		return nil, err
@@ -193,7 +100,7 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	if err := branches.Sync(ctx, baseBranch, nextBranch, false); err != nil {
 		return err
 	}
-	return r.SetActiveBranch(ctx, next)
+	return nil
 }
 
 func (r *Repo) History(ctx context.Context, name string, fn func(ref Ref, s Snap) error) error {
@@ -212,27 +119,6 @@ func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
 	ctx, cf := metrics.Child(ctx, "cleanup volume")
 	defer cf()
 	if err := branches.CleanupVolume(ctx, b.Volume); err != nil {
-		return err
-	}
-	return nil
-}
-
-func getActiveBranch(conn *dbutil.Conn) (string, error) {
-	var ret string
-	if err := dbutil.Get(conn, &ret, `SELECT name FROM branches WHERE active > 0 LIMIT 1`); err != nil {
-		if dbutil.IsErrNoRows(err) {
-			return nameMaster, nil
-		}
-		return "", err
-	}
-	return ret, nil
-}
-
-func setActiveBranch(conn *dbutil.Conn, name string) error {
-	if err := dbutil.Exec(conn, `DELETE FROM branches`); err != nil {
-		return err
-	}
-	if err := dbutil.Exec(conn, `INSERT INTO branches (name, active) VALUES (?, 1)`, name); err != nil {
 		return err
 	}
 	return nil

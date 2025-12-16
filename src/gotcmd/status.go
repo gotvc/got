@@ -6,7 +6,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/gotwc"
 	"go.brendoncarroll.net/star"
 )
 
@@ -16,12 +16,12 @@ var statusCmd = star.Command{
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
-		name, _, err := repo.GetActiveBranch(ctx)
+		defer wc.Close()
+		name, err := wc.GetHead()
 		if err != nil {
 			return err
 		}
@@ -32,7 +32,7 @@ var statusCmd = star.Command{
 		if _, err := fmt.Fprintf(bufw, "STAGED:\n"); err != nil {
 			return err
 		}
-		if err := repo.ForEachStaging(ctx, func(p string, op gotrepo.FileOperation) error {
+		if err := wc.ForEachStaging(ctx, func(p string, op gotwc.FileOperation) error {
 			var desc = "UNKNOWN"
 			switch {
 			case op.Delete != nil:
@@ -50,7 +50,7 @@ var statusCmd = star.Command{
 		if _, err := fmt.Fprintf(bufw, "UNTRACKED:\n"); err != nil {
 			return err
 		}
-		if err := repo.ForEachUntracked(ctx, func(p string) error {
+		if err := wc.ForEachUntracked(ctx, func(p string) error {
 			_, err := fmt.Fprintf(bufw, "\t%s\n", p)
 			return err
 		}); err != nil {
@@ -67,13 +67,17 @@ var lsCmd = star.Command{
 	Pos: []star.Positional{pathParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer wc.Close()
+		b, err := wc.GetHead()
+		if err != nil {
+			return err
+		}
 		p, _ := pathParam.LoadOpt(c)
-		return repo.Ls(ctx, p, func(ent gotfs.DirEnt) error {
+		return wc.Repo().Ls(ctx, b, p, func(ent gotfs.DirEnt) error {
 			_, err := fmt.Fprintf(c.StdOut, "%v %s\n", ent.Mode, ent.Name)
 			return err
 		})
@@ -87,13 +91,17 @@ var catCmd = star.Command{
 	Pos: []star.Positional{pathParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer wc.Close()
+		b, err := wc.GetHead()
+		if err != nil {
+			return err
+		}
 		p, _ := pathParam.LoadOpt(c)
-		return repo.Cat(ctx, p, c.StdOut)
+		return wc.Repo().Cat(ctx, b, p, c.StdOut)
 	},
 }
 
@@ -103,12 +111,16 @@ var scrubCmd = star.Command{
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
-		return repo.Check(ctx)
+		defer wc.Close()
+		b, err := wc.GetHead()
+		if err != nil {
+			return err
+		}
+		return wc.Repo().Check(ctx, b)
 	},
 }
 

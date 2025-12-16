@@ -411,6 +411,14 @@ func (iden *IdenPrivate) GetID() inet256.ID {
 	return pki.NewID(pubKey)
 }
 
+func (iden *IdenPrivate) Public() IdentityUnit {
+	return IdentityUnit{
+		ID:           iden.GetID(),
+		SigPublicKey: iden.SigPrivateKey.Public().(sign.PublicKey),
+		KEMPublicKey: iden.KEMPrivateKey.Public(),
+	}
+}
+
 type Member = gotorgop.Member
 
 // Membership contains the Group's KEM seed encrypted for the target member.

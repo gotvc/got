@@ -1,4 +1,4 @@
-package gotrepo
+package gotwc
 
 import (
 	"context"
@@ -8,9 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/internal/dbutil"
-	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
@@ -30,6 +28,13 @@ import (
 	"github.com/gotvc/got/src/internal/units"
 )
 
+// DoWithStore runs fn with a store for the desired branch
+func (wc *WC) DoWithStore(ctx context.Context, fn func(dst stores.RW) error) error {
+	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
+		return fn(sctx.Store)
+	})
+}
+
 type stagingCtx struct {
 	BranchName string
 	Branch     branches.Branch
@@ -42,26 +47,26 @@ type stagingCtx struct {
 	ActingAs gotorg.IdentityUnit
 }
 
-func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
-	conn, err := r.db.Take(ctx)
+func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
+	conn, err := wc.db.Take(ctx)
 	if err != nil {
 		return err
 	}
-	defer r.db.Put(conn)
+	defer wc.db.Put(conn)
 
 	// this function is to easily defer the transaction and cleanup.
 	if err := func() (retErr error) {
 		defer sqlitex.Transaction(conn)(&retErr)
 
-		branchName, err := getActiveBranch(conn)
+		branchName, err := wc.GetHead()
 		if err != nil {
 			return err
 		}
-		actAs, err := r.ActiveIdentity(ctx)
+		actAs, err := wc.repo.ActiveIdentity(ctx)
 		if err != nil {
 			return err
 		}
-		branch, err := r.getBranch(ctx, branchName)
+		branch, err := wc.repo.GetBranch(ctx, branchName)
 		if err != nil {
 			return err
 		}
@@ -69,7 +74,7 @@ func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error
 		if err != nil {
 			return err
 		}
-		stagingStore, err := r.beginStagingTx(ctx, sa.getSalt(), true)
+		stagingStore, err := wc.repo.BeginStagingTx(ctx, sa.getSalt(), true)
 		if err != nil {
 			return err
 		}
@@ -77,7 +82,7 @@ func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error
 		storePair := [2]stores.RW{stagingStore, stagingStore}
 		dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
 		imp := porting.NewImporter(branch.GotFS(), dirState, storePair)
-		exp := porting.NewExporter(branch.GotFS(), dirState, r.workingDir)
+		exp := porting.NewExporter(branch.GotFS(), dirState, wc.getFilteredFS(nil))
 
 		if err := fn(stagingCtx{
 			BranchName: branchName,
@@ -87,7 +92,7 @@ func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error
 			Store:    stagingStore,
 			Importer: imp,
 			Exporter: exp,
-			ActingAs: actAs,
+			ActingAs: *actAs,
 		}); err != nil {
 			return err
 		}
@@ -99,9 +104,10 @@ func (r *Repo) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error
 	return dbutil.WALCheckpoint(conn)
 }
 
-func (r *Repo) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
-	return dbutil.DoTxRO(ctx, r.db, func(conn *dbutil.Conn) error {
-		branchName, branch, err := r.GetActiveBranch(ctx)
+func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
+	return dbutil.DoTxRO(ctx, wc.db, func(conn *dbutil.Conn) error {
+		branchName, err := wc.GetHead()
+		branch, err := wc.repo.GetBranch(ctx, branchName)
 		if err != nil {
 			return err
 		}
@@ -110,8 +116,8 @@ func (r *Repo) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) 
 			return err
 		}
 		dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
-		exp := porting.NewExporter(branch.GotFS(), dirState, r.workingDir)
-		stagingStore, err := r.beginStagingTx(ctx, sa.getSalt(), false)
+		exp := porting.NewExporter(branch.GotFS(), dirState, wc.workingDir())
+		stagingStore, err := wc.repo.BeginStagingTx(ctx, sa.getSalt(), false)
 		if err != nil {
 			return err
 		}
@@ -131,18 +137,18 @@ func (r *Repo) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) 
 // Directories are traversed, and only paths are added.
 // Adding a directory will update any existing paths and add new ones, it will not remove paths
 // from version control
-func (r *Repo) Add(ctx context.Context, paths ...string) error {
-	return r.modifyStaging(ctx, func(sctx stagingCtx) error {
+func (wc *WC) Add(ctx context.Context, paths ...string) error {
+	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
 		stage := sctx.Stage
 		porter := sctx.Importer
 		for _, target := range paths {
-			if err := posixfs.WalkLeaves(ctx, r.workingDir, target, func(p string, _ posixfs.DirEnt) error {
+			if err := posixfs.WalkLeaves(ctx, wc.workingDir(), target, func(p string, _ posixfs.DirEnt) error {
 				if err := stage.CheckConflict(ctx, p); err != nil {
 					return err
 				}
 				ctx, cf := metrics.Child(ctx, p)
 				defer cf()
-				fileRoot, err := porter.ImportFile(ctx, r.workingDir, p)
+				fileRoot, err := porter.ImportFile(ctx, wc.workingDir(), p)
 				if err != nil {
 					return err
 				}
@@ -158,8 +164,8 @@ func (r *Repo) Add(ctx context.Context, paths ...string) error {
 // Put replaces a path (file or directory) with whatever is in the working directory
 // Adding a file updates the file.
 // Adding a directory will delete paths not in the working directory, and add paths in the working directory.
-func (r *Repo) Put(ctx context.Context, paths ...string) error {
-	return r.modifyStaging(ctx, func(sctx stagingCtx) error {
+func (wc *WC) Put(ctx context.Context, paths ...string) error {
+	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
 		stage := sctx.Stage
 		porter := sctx.Importer
 		for _, p := range paths {
@@ -168,7 +174,7 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 			if err := stage.CheckConflict(ctx, p); err != nil {
 				return err
 			}
-			root, err := porter.ImportPath(ctx, r.workingDir, p)
+			root, err := porter.ImportPath(ctx, wc.workingDir(), p)
 			if err != nil && !posixfs.IsErrNotExist(err) {
 				return err
 			}
@@ -187,8 +193,8 @@ func (r *Repo) Put(ctx context.Context, paths ...string) error {
 }
 
 // Rm deletes a path known to version control.
-func (r *Repo) Rm(ctx context.Context, paths ...string) error {
-	return r.modifyStaging(ctx, func(sctx stagingCtx) error {
+func (wc *WC) Rm(ctx context.Context, paths ...string) error {
+	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
 		snap, voltx, err := sctx.Branch.GetHead(ctx)
 		if err != nil {
 			return err
@@ -211,8 +217,8 @@ func (r *Repo) Rm(ctx context.Context, paths ...string) error {
 }
 
 // Discard removes any staged changes for a path
-func (r *Repo) Discard(ctx context.Context, paths ...string) error {
-	return r.modifyStaging(ctx, func(sctx stagingCtx) error {
+func (wc *WC) Discard(ctx context.Context, paths ...string) error {
+	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
 		stage := sctx.Stage
 		for _, p := range paths {
 			if err := stage.Discard(ctx, p); err != nil {
@@ -224,8 +230,8 @@ func (r *Repo) Discard(ctx context.Context, paths ...string) error {
 }
 
 // Clear clears all entries from the staging area
-func (r *Repo) Clear(ctx context.Context) error {
-	return r.modifyStaging(ctx, func(sctx stagingCtx) error {
+func (wc *WC) Clear(ctx context.Context) error {
+	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
 		if err := sctx.Stage.Reset(ctx); err != nil {
 			return err
 		}
@@ -233,8 +239,8 @@ func (r *Repo) Clear(ctx context.Context) error {
 	})
 }
 
-func (r *Repo) Commit(ctx context.Context, snapInfo branches.SnapInfo) error {
-	return r.modifyStaging(ctx, func(sctx stagingCtx) error {
+func (wc *WC) Commit(ctx context.Context, snapInfo branches.SnapInfo) error {
+	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
 		if yes, err := sctx.Stage.IsEmpty(ctx); err != nil {
 			return err
 		} else if yes {
@@ -247,8 +253,8 @@ func (r *Repo) Commit(ctx context.Context, snapInfo branches.SnapInfo) error {
 		defer cf()
 		scratch := sctx.Store
 		stage := sctx.Stage
-		if err := sctx.Branch.Modify(ctx, scratch, func(mctx branches.ModifyCtx) (*Snap, error) {
-			var root *Root
+		if err := sctx.Branch.Modify(ctx, scratch, func(mctx branches.ModifyCtx) (*gotvc.Snap, error) {
+			var root *gotfs.Root
 			if mctx.Head != nil {
 				root = &mctx.Head.Payload.Root
 			}
@@ -258,9 +264,9 @@ func (r *Repo) Commit(ctx context.Context, snapInfo branches.SnapInfo) error {
 			if err != nil {
 				return nil, err
 			}
-			var parents []Snap
+			var parents []gotvc.Snap
 			if mctx.Head != nil {
-				parents = []Snap{*mctx.Head}
+				parents = []gotvc.Snap{*mctx.Head}
 			}
 			infoJSON, err := json.Marshal(snapInfo)
 			if err != nil {
@@ -291,8 +297,8 @@ type FileOperation struct {
 	Modify *staging.PutOp
 }
 
-func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOperation) error) error {
-	return r.viewStaging(ctx, func(sctx stagingCtx) error {
+func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOperation) error) error {
+	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
 		stage := sctx.Stage
 		snap, voltx, err := sctx.Branch.GetHead(ctx)
 		if err != nil {
@@ -336,8 +342,8 @@ func (r *Repo) ForEachStaging(ctx context.Context, fn func(p string, op FileOper
 // ForEachUntracked lists all the files which are not in either:
 //  1. the staging area
 //  2. the active branch head
-func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) error {
-	return r.viewStaging(ctx, func(sctx stagingCtx) error {
+func (wc *WC) ForEachUntracked(ctx context.Context, fn func(p string) error) error {
+	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
 		snap, voltx, err := sctx.Branch.GetHead(ctx)
 		if err != nil {
 			return err
@@ -345,7 +351,7 @@ func (r *Repo) ForEachUntracked(ctx context.Context, fn func(p string) error) er
 		stage := sctx.Stage
 		fsMach := sctx.Branch.GotFS()
 		defer voltx.Abort(ctx)
-		return posixfs.WalkLeaves(ctx, r.workingDir, "", func(p string, ent posixfs.DirEnt) error {
+		return posixfs.WalkLeaves(ctx, wc.workingDir(), "", func(p string, ent posixfs.DirEnt) error {
 			// filter staging
 			if op, err := stage.Get(ctx, p); err != nil {
 				return err
@@ -480,19 +486,12 @@ func (sa *stagingArea) Delete(ctx context.Context, p string) error {
 	return err
 }
 
-// beginStagingTx begins a new transaction for the staging area with the given paramHash.
-// It is up to the caller to commit or abort the transaction.
-func (r *Repo) beginStagingTx(ctx context.Context, paramHash *[32]byte, mutate bool) (volumes.Tx, error) {
-	h, err := r.repoc.StagingArea(ctx, r.config.RepoVolume, paramHash)
-	if err != nil {
-		return nil, err
-	}
-	vol := volumes.Blobcache{Service: r.bc, Handle: *h}
-	return vol.BeginTx(ctx, blobcache.TxParams{Modify: mutate})
+func (wc *WC) forEachStaging(ctx context.Context, fn func(p string, fsop FileOperation) error) error {
+	return nil
 }
 
 // cleanupStagingBlobs removes blobs from staging areas which do not have ops that reference them.
-func (r *Repo) cleanupStagingBlobs(ctx context.Context, conn *dbutil.Conn) error {
+func (wc *WC) cleanupStagingBlobs(ctx context.Context, conn *dbutil.Conn) error {
 	// get all of the ids for the empty staging areas
 	var areaIDs [][32]byte
 	for areaID, err := range dbutil.Select(conn, scan32Bytes, `SELECT salt FROM staging_areas WHERE NOT EXISTS (SELECT 1 FROM staging_ops WHERE area_id = rowid)`) {
@@ -504,7 +503,7 @@ func (r *Repo) cleanupStagingBlobs(ctx context.Context, conn *dbutil.Conn) error
 	metrics.SetDenom(ctx, "staging_areas", len(areaIDs), units.None)
 	// if the staging area has no ops, then it has no blobs either.
 	for _, areaID := range areaIDs {
-		store, err := r.beginStagingTx(ctx, &areaID, true)
+		store, err := wc.repo.BeginStagingTx(ctx, &areaID, true)
 		if err != nil {
 			return err
 		}

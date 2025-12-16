@@ -14,18 +14,18 @@ var addCmd = star.Command{
 	Pos: []star.Positional{pathsParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer wc.Close()
 		paths := pathsParam.Load(c)
 		if len(paths) < 1 {
 			return fmt.Errorf("path argument required")
 		}
 		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
 		defer r.Close()
-		return repo.Add(ctx, paths...)
+		return wc.Add(ctx, paths...)
 	},
 }
 
@@ -36,18 +36,18 @@ var rmCmd = star.Command{
 	Pos: []star.Positional{pathsParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer wc.Close()
 		paths := pathsParam.Load(c)
 		if len(paths) < 1 {
 			return fmt.Errorf("path argument required")
 		}
 		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
 		defer r.Close()
-		return repo.Rm(ctx, paths...)
+		return wc.Rm(ctx, paths...)
 	},
 }
 
@@ -58,18 +58,18 @@ var putCmd = star.Command{
 	Pos: []star.Positional{pathsParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer wc.Close()
 		paths := pathsParam.Load(c)
 		if len(paths) < 1 {
 			return fmt.Errorf("path argument required")
 		}
 		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
 		defer r.Close()
-		return repo.Put(ctx, paths...)
+		return wc.Put(ctx, paths...)
 	},
 }
 
@@ -80,16 +80,16 @@ var discardCmd = star.Command{
 	Pos: []star.Positional{pathsParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer wc.Close()
 		paths := pathsParam.Load(c)
 		if len(paths) < 1 {
 			return fmt.Errorf("path argument required")
 		}
-		return repo.Discard(ctx, paths...)
+		return wc.Discard(ctx, paths...)
 	},
 }
 
@@ -99,12 +99,12 @@ var clearCmd = star.Command{
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
-		return repo.Clear(ctx)
+		defer wc.Close()
+		return wc.Clear(ctx)
 	},
 }
 

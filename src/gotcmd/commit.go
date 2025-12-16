@@ -21,16 +21,16 @@ var commitCmd = star.Command{
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer wc.Close()
 		// TODO get message from -m flag
 		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
 		defer r.Close()
 		now := tai64.Now().TAI64()
-		return repo.Commit(ctx, branches.SnapInfo{
+		return wc.Commit(ctx, branches.SnapInfo{
 			Message:    "",
 			AuthoredAt: now,
 		})

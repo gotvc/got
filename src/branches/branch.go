@@ -143,7 +143,7 @@ func (b *Branch) GetHead(ctx context.Context) (*Snap, Tx, error) {
 	return getSnapshot(ctx, b.Volume)
 }
 
-// SetHead forcibly sets the head of the branch.
+// SetHead forcibly sets the root of the branch.
 func (b *Branch) SetHead(ctx context.Context, src stores.Reading, snap Snap) error {
 	return applySnapshot(ctx, b.gotvc, b.gotfs, b.Volume, func(dst stores.RW, x *Snap) (*Snap, error) {
 		if err := syncStores(ctx, b.gotvc, b.gotfs, src, dst, snap); err != nil {
