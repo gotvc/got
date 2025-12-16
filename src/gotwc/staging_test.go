@@ -1,4 +1,4 @@
-package gotrepo
+package gotwc
 
 import (
 	"testing"
@@ -9,14 +9,14 @@ import (
 
 func TestStaging(t *testing.T) {
 	t.Parallel()
-	repo := newTestRepo(t)
-	ops := listStaging(t, repo)
+	wc := newTestWC(t)
+	ops := listStaging(t, wc)
 	require.Len(t, ops, 0)
 }
 
-func listStaging(t testing.TB, x *Repo) (ret []FileOperation) {
+func listStaging(t testing.TB, x *WC) (ret []FileOperation) {
 	ctx := testutil.Context(t)
-	err := x.ForEachStaging(ctx, func(p string, op FileOperation) error {
+	err := x.forEachStaging(ctx, func(p string, op FileOperation) error {
 		ret = append(ret, op)
 		return nil
 	})

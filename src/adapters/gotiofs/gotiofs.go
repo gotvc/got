@@ -34,7 +34,7 @@ func New(ctx context.Context, b branches.Branch) *FS {
 
 func (s *FS) Open(name string) (iofs.File, error) {
 	logctx.Infof(s.ctx, "open %q", name)
-	snap, tx, err := s.branch.GetHead(s.ctx)
+	snap, tx, err := s.branch.GetTarget(s.ctx)
 	if err != nil {
 		return nil, err
 	}

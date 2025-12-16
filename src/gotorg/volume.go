@@ -97,6 +97,9 @@ func (m *Machine) OpenAt(ctx context.Context, s stores.Reading, x State, actAs I
 	if err != nil {
 		return blobcache.OID{}, nil, err
 	}
+	if ent == nil {
+		return blobcache.OID{}, nil, branches.ErrNotExist
+	}
 	vw, err := m.Open(ctx, s, x, actAs, ent.Volume, writeAccess)
 	if err != nil {
 		return blobcache.OID{}, nil, err

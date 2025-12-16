@@ -8,6 +8,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/blobcachecmd"
 	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/gotwc"
 	"go.brendoncarroll.net/star"
 )
 
@@ -35,7 +36,6 @@ var initCmd = star.Command{
 		if bcCfg.InProcess == nil && !volumeSet {
 			return fmt.Errorf("must specify oid for out-of-process blobcache")
 		}
-
 		if err := gotrepo.Init(".", config); err != nil {
 			return err
 		}
@@ -43,33 +43,22 @@ var initCmd = star.Command{
 		if err != nil {
 			return err
 		}
-		leaf, err := repo.ActiveIdentity(c.Context)
-		if err != nil {
+		defer repo.Close()
+		if err := gotwc.Init(repo, "."); err != nil {
 			return err
 		}
 		c.Printf("successfully initialized got repo in current directory\n")
-		if config.Blobcache.Remote != nil {
-			c.Printf("You must configure blobcache to allow access")
-			c.Printf("PeerID: %v\n", leaf.ID)
-			c.Printf("Repo Volume: %v\n", config.RepoVolume)
-		}
 		return nil
 	},
 }
 
 // specFromContext makes a Blobcache spec from a star.Context.
 func specFromContext(c star.Context) (ret gotrepo.BlobcacheSpec, _ error) {
-	blobcacheRemote, remoteSet := blobcacheRemoteParam.LoadOpt(c)
 	blobcacheHttp, httpSet := blobcacheHttpParam.LoadOpt(c)
-	if remoteSet && httpSet {
+	if httpSet {
 		return gotrepo.BlobcacheSpec{}, fmt.Errorf("cannot specify both blobcache-remote and blobcache-http")
 	}
 	switch {
-	case remoteSet:
-		c.Printf("using remote blobcache\n")
-		ret.Remote = &gotrepo.RemoteBlobcache{
-			Endpoint: blobcacheRemote,
-		}
 	case httpSet:
 		c.Printf("using HTTP blobcache\n")
 		ret.HTTP = &gotrepo.HTTPBlobcache{

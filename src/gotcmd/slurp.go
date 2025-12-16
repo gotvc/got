@@ -17,11 +17,11 @@ var slurpCmd = star.Command{
 	Pos: []star.Positional{targetParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer wc.Close()
 		p := targetParam.Load(c)
 		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
 		defer r.Close()
@@ -32,7 +32,7 @@ var slurpCmd = star.Command{
 		defer f.Close()
 
 		var root *gotfs.Root
-		if err := repo.DoWithStore(ctx, "", func(st stores.RW) error {
+		if err := wc.DoWithStore(ctx, func(st stores.RW) error {
 			fsag := gotfs.NewMachine()
 			var err error
 			root, err = fsag.FileFromReader(ctx, [2]stores.RW{st, st}, 0o755, f)

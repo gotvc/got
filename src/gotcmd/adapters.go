@@ -16,7 +16,7 @@ var httpCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "serve files over HTTP",
 	},
-	Pos: []star.Positional{branchNameOptParam},
+	Pos: []star.Positional{branchNameParam},
 	Flags: map[string]star.Flag{
 		"addr": addrParam,
 	},
@@ -27,7 +27,7 @@ var httpCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		branchName, _ := branchNameOptParam.LoadOpt(c)
+		branchName := branchNameParam.Load(c)
 		b, err := repo.GetBranch(ctx, branchName)
 		if err != nil {
 			return err
@@ -52,7 +52,7 @@ var ftpCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "serve files over FTP",
 	},
-	Pos: []star.Positional{branchNameOptParam},
+	Pos: []star.Positional{branchNameParam},
 	Flags: map[string]star.Flag{
 		"addr": addrParam,
 	},
@@ -63,7 +63,7 @@ var ftpCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		branchName, _ := branchNameOptParam.LoadOpt(c)
+		branchName := branchNameParam.Load(c)
 		b, err := repo.GetBranch(ctx, branchName)
 		if err != nil {
 			return err

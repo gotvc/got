@@ -139,12 +139,12 @@ func (b *Branch) AsParams() Params {
 	}
 }
 
-func (b *Branch) GetHead(ctx context.Context) (*Snap, Tx, error) {
+func (b *Branch) GetTarget(ctx context.Context) (*Snap, Tx, error) {
 	return getSnapshot(ctx, b.Volume)
 }
 
-// SetHead forcibly sets the head of the branch.
-func (b *Branch) SetHead(ctx context.Context, src stores.Reading, snap Snap) error {
+// SetTarget forcibly sets the root of the branch.
+func (b *Branch) SetTarget(ctx context.Context, src stores.Reading, snap Snap) error {
 	return applySnapshot(ctx, b.gotvc, b.gotfs, b.Volume, func(dst stores.RW, x *Snap) (*Snap, error) {
 		if err := syncStores(ctx, b.gotvc, b.gotfs, src, dst, snap); err != nil {
 			return nil, err
@@ -184,7 +184,7 @@ func (b *Branch) Modify(ctx context.Context, src stores.Reading, fn func(mctx Mo
 
 func (b *Branch) History(ctx context.Context, fn func(ref gdat.Ref, snap Snap) error) error {
 	b.init()
-	snap, tx, err := b.GetHead(ctx)
+	snap, tx, err := b.GetTarget(ctx)
 	if err != nil {
 		return err
 	}
@@ -201,7 +201,7 @@ func (b *Branch) History(ctx context.Context, fn func(ref gdat.Ref, snap Snap) e
 
 func (b *Branch) ViewFS(ctx context.Context, fn func(mach *gotfs.Machine, stores stores.Reading, root gotfs.Root) error) error {
 	b.init()
-	snap, tx, err := b.GetHead(ctx)
+	snap, tx, err := b.GetTarget(ctx)
 	if err != nil {
 		return err
 	}

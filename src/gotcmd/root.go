@@ -8,6 +8,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/gotwc"
 	"github.com/gotvc/got/src/internal/metrics"
 )
 
@@ -44,6 +45,7 @@ var rootCmd = star.NewDir(
 		"commit":  commitCmd,
 
 		"status": statusCmd,
+		"wc":     wcCmd,
 
 		"ls":   lsCmd,
 		"cat":  catCmd,
@@ -53,7 +55,7 @@ var rootCmd = star.NewDir(
 		"history": historyCmd,
 		"log":     historyCmd,
 		"branch":  branchCmd,
-		"active":  activeCmd,
+		"head":    headCmd,
 		"fork":    forkCmd,
 		"sync":    syncCmd,
 
@@ -69,4 +71,8 @@ var rootCmd = star.NewDir(
 
 func openRepo() (*gotrepo.Repo, error) {
 	return gotrepo.Open(".")
+}
+
+func openWC() (*gotwc.WC, error) {
+	return gotwc.Open(".")
 }

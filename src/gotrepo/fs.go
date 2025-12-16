@@ -10,8 +10,8 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 )
 
-func (r *Repo) Ls(ctx context.Context, p string, fn func(gotfs.DirEnt) error) error {
-	_, branch, err := r.GetActiveBranch(ctx)
+func (r *Repo) Ls(ctx context.Context, branchName string, p string, fn func(gotfs.DirEnt) error) error {
+	branch, err := r.GetBranch(ctx, branchName)
 	if err != nil {
 		return err
 	}
@@ -20,8 +20,8 @@ func (r *Repo) Ls(ctx context.Context, p string, fn func(gotfs.DirEnt) error) er
 	})
 }
 
-func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
-	_, branch, err := r.GetActiveBranch(ctx)
+func (r *Repo) Cat(ctx context.Context, branchName, p string, w io.Writer) error {
+	branch, err := r.GetBranch(ctx, branchName)
 	if err != nil {
 		return err
 	}
@@ -35,8 +35,8 @@ func (r *Repo) Cat(ctx context.Context, p string, w io.Writer) error {
 	})
 }
 
-func (r *Repo) Stat(ctx context.Context, p string) (*gotfs.Info, error) {
-	_, branch, err := r.GetActiveBranch(ctx)
+func (r *Repo) Stat(ctx context.Context, branchName, p string) (*gotfs.Info, error) {
+	branch, err := r.GetBranch(ctx, branchName)
 	if err != nil {
 		return nil, err
 	}
@@ -51,12 +51,12 @@ func (r *Repo) Stat(ctx context.Context, p string) (*gotfs.Info, error) {
 	return info, nil
 }
 
-func (r *Repo) Check(ctx context.Context) error {
-	_, branch, err := r.GetActiveBranch(ctx)
+func (r *Repo) Check(ctx context.Context, branchName string) error {
+	branch, err := r.GetBranch(ctx, branchName)
 	if err != nil {
 		return err
 	}
-	snap, tx, err := branch.GetHead(ctx)
+	snap, tx, err := branch.GetTarget(ctx)
 	if err != nil {
 		return err
 	}

@@ -17,7 +17,7 @@ var branchCmd = star.NewDir(
 		"create":   branchCreateCmd,
 		"list":     branchListCmd,
 		"delete":   branchDeleteCmd,
-		"get-head": branchGetHeadCmd,
+		"get-head": branchGetRootCmd,
 		"inspect":  branchInspectCmd,
 		"cp-salt":  branchCpSaltCmd,
 	},
@@ -76,7 +76,7 @@ var branchDeleteCmd = star.Command{
 	},
 }
 
-var branchGetHeadCmd = star.Command{
+var branchGetRootCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "prints the snapshot at the head of the provided branch",
 	},
@@ -89,7 +89,7 @@ var branchGetHeadCmd = star.Command{
 		}
 		defer repo.Close()
 		name, _ := branchNameOptParam.LoadOpt(c)
-		branchHead, err := repo.GetBranchHead(ctx, name)
+		branchHead, err := repo.GetBranchRoot(ctx, name)
 		if err != nil {
 			return err
 		}
@@ -166,28 +166,28 @@ var dstBranchParam = star.Required[string]{
 	Parse: star.ParseString,
 }
 
-var activeCmd = star.Command{
+var headCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "print the active branch or sets it",
+		Short: "prints or sets the contents of HEAD",
 	},
 	Pos: []star.Positional{branchNameOptParam},
 	F: func(c star.Context) error {
-		ctx := c.Context
-		repo, err := openRepo()
+		// Active modifies the working copy not the repo
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer wc.Close()
 		name, hasName := branchNameOptParam.LoadOpt(c)
 		if !hasName {
-			name, _, err := repo.GetActiveBranch(ctx)
+			name, err := wc.GetHead()
 			if err != nil {
 				return err
 			}
 			fmt.Fprintln(c.StdOut, name)
 			return nil
 		}
-		return repo.SetActiveBranch(ctx, name)
+		return wc.SetHead(c, name)
 	},
 }
 
@@ -198,15 +198,22 @@ var forkCmd = star.Command{
 	Pos: []star.Positional{newBranchNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer wc.Close()
 		newName := newBranchNameParam.Load(c)
-		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
-		defer r.Close()
-		return repo.Fork(ctx, "", newName)
+		rend := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
+		defer rend.Close()
+		current, err := wc.GetHead()
+		if err != nil {
+			return err
+		}
+		if err := wc.Repo().Fork(ctx, current, newName); err != nil {
+			return err
+		}
+		return wc.SetHead(ctx, newName)
 	},
 }
 

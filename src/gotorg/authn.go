@@ -7,11 +7,12 @@ import (
 	"iter"
 
 	"github.com/cloudflare/circl/kem"
+	"github.com/cloudflare/circl/kem/mlkem/mlkem1024"
 	"github.com/cloudflare/circl/sign"
+	"github.com/cloudflare/circl/sign/ed25519"
 	"go.inet256.org/inet256/src/inet256"
 	"golang.org/x/crypto/chacha20"
 
-	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
 	"github.com/gotvc/got/src/internal/graphs"
@@ -411,6 +412,14 @@ func (iden *IdenPrivate) GetID() inet256.ID {
 	return pki.NewID(pubKey)
 }
 
+func (iden *IdenPrivate) Public() IdentityUnit {
+	return IdentityUnit{
+		ID:           iden.GetID(),
+		SigPublicKey: iden.SigPrivateKey.Public().(sign.PublicKey),
+		KEMPublicKey: iden.KEMPrivateKey.Public(),
+	}
+}
+
 type Member = gotorgop.Member
 
 // Membership contains the Group's KEM seed encrypted for the target member.
@@ -542,10 +551,6 @@ func appendXOR(out []byte, key *[32]byte, src []byte) []byte {
 	return out
 }
 
-func hashOfKEM(kem kem.PublicKey) [32]byte {
-	return [32]byte(gdat.Hash(MarshalKEMPublicKey(nil, KEM_MLKEM1024, kem)))
-}
-
 const (
 	KEM_MLKEM1024 = "mlkem1024"
 )
@@ -574,4 +579,19 @@ func ParseKEMPrivateKey(data []byte) (kem.PrivateKey, error) {
 
 func ParseKEMPublicKey(data []byte) (kem.PublicKey, error) {
 	return gotorgop.ParseKEMPublicKey(data)
+}
+
+func GenerateIden() IdenPrivate {
+	_, sigPriv, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		panic(err)
+	}
+	_, kemPriv, err := mlkem1024.GenerateKeyPair(nil)
+	if err != nil {
+		panic(err)
+	}
+	return IdenPrivate{
+		SigPrivateKey: sigPriv,
+		KEMPrivateKey: kemPriv,
+	}
 }

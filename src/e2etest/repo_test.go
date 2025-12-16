@@ -14,6 +14,7 @@ import (
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/gotwc"
 	"github.com/gotvc/got/src/internal/testutil"
 )
 
@@ -46,16 +47,17 @@ func TestMultiRepoSync(t *testing.T) {
 		require.NoError(t, err)
 	}
 	r1, r2 := openRepo(t, p1), openRepo(t, p2)
+	wc1, _ := openWC(t, r1, p1), openWC(t, r2, p2)
 
 	// IAM setup
-	gnsc := origin.GotNSClient()
+	gnsc := origin.GotOrgClient()
 	intro1, err := r1.IntroduceSelf(ctx)
 	require.NoError(t, err)
 	intro2, err := r2.IntroduceSelf(ctx)
 	require.NoError(t, err)
-	originLeaf, err := origin.ActiveIdentity(ctx)
+	originIden, err := origin.ActiveIdentity(ctx)
 	require.NoError(t, err)
-	require.NoError(t, gnsc.EnsureInit(ctx, blobcache.Handle{OID: originNS.OID}, []gotorg.IdentityUnit{originLeaf}))
+	require.NoError(t, gnsc.EnsureInit(ctx, blobcache.Handle{OID: originNS.OID}, []gotorg.IdentityUnit{*originIden}))
 	// Handles with empty secrets cause OpenAs to be called instead of OpenFrom.
 	require.NoError(t, gnsc.Do(ctx, blobcache.Handle{OID: originNS.OID}, func(tx *gotorg.Txn) error {
 		for _, intro := range []gotorg.ChangeSet{intro1, intro2} {
@@ -80,19 +82,23 @@ func TestMultiRepoSync(t *testing.T) {
 
 	testData := []byte("hello world\n")
 	createFile(t, p1, "myfile.txt", testData)
-	add(t, r1, "myfile.txt")
-	commit(t, r1)
+	add(t, wc1, "myfile.txt")
+	commit(t, wc1)
 	sync(t, r1, "master", "origin/master")
 
 	sync(t, r2, "origin/master", "master")
-	require.Contains(t, ls(t, r2, ""), "myfile.txt")
-	require.Equal(t, testData, cat(t, r2, "myfile.txt"))
+	require.Contains(t, ls(t, r2, "master", ""), "myfile.txt")
+	require.Equal(t, testData, cat(t, r2, "master", "myfile.txt"))
 }
 
 func initRepo(t testing.TB) string {
 	dirpath := t.TempDir()
 	cfg := gotrepo.DefaultConfig()
 	require.NoError(t, gotrepo.Init(dirpath, cfg))
+	r, err := gotrepo.Open(dirpath)
+	require.NoError(t, err)
+	defer r.Close()
+	require.NoError(t, gotwc.Init(r, dirpath))
 	return dirpath
 }
 
@@ -101,6 +107,15 @@ func openRepo(t testing.TB, p string) *gotrepo.Repo {
 	require.NoError(t, err)
 	t.Cleanup(func() { r.Close() })
 	return r
+}
+
+func openWC(t testing.TB, r *gotrepo.Repo, p string) *gotwc.WC {
+	root, err := os.OpenRoot(p)
+	require.NoError(t, err)
+	wc, err := gotwc.New(r, root)
+	require.NoError(t, err)
+	t.Cleanup(func() { wc.Close() })
+	return wc
 }
 
 func createFile(t testing.TB, repoPath, p string, data []byte) {
@@ -114,9 +129,9 @@ func createBranch(t testing.TB, r *gotrepo.Repo, name string) {
 	require.NoError(t, err)
 }
 
-func commit(t testing.TB, r *gotrepo.Repo) {
+func commit(t testing.TB, wc *gotwc.WC) {
 	ctx := testutil.Context(t)
-	err := r.Commit(ctx, branches.SnapInfo{})
+	err := wc.Commit(ctx, branches.SnapInfo{})
 	require.NoError(t, err)
 }
 
@@ -126,13 +141,13 @@ func sync(t testing.TB, r *gotrepo.Repo, src, dst string) {
 	require.NoError(t, err)
 }
 
-func add(t testing.TB, r *gotrepo.Repo, p string) {
-	err := r.Add(testutil.Context(t), p)
+func add(t testing.TB, wc *gotwc.WC, p string) {
+	err := wc.Add(testutil.Context(t), p)
 	require.NoError(t, err)
 }
 
-func ls(t testing.TB, r *gotrepo.Repo, p string) (ret []string) {
-	err := r.Ls(testutil.Context(t), p, func(de gotfs.DirEnt) error {
+func ls(t testing.TB, r *gotrepo.Repo, b, p string) (ret []string) {
+	err := r.Ls(testutil.Context(t), b, p, func(de gotfs.DirEnt) error {
 		ret = append(ret, de.Name)
 		return nil
 	})
@@ -140,9 +155,9 @@ func ls(t testing.TB, r *gotrepo.Repo, p string) (ret []string) {
 	return ret
 }
 
-func cat(t testing.TB, r *gotrepo.Repo, p string) []byte {
+func cat(t testing.TB, r *gotrepo.Repo, b, p string) []byte {
 	buf := bytes.Buffer{}
-	err := r.Cat(context.TODO(), p, &buf)
+	err := r.Cat(context.TODO(), b, p, &buf)
 	require.NoError(t, err)
 	return buf.Bytes()
 }

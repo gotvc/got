@@ -1,24 +1,17 @@
-package gotrepo
+package gotwc
 
 import (
 	"context"
 	"encoding/json"
 
+	"github.com/gotvc/got/src/gotwc/internal/porting"
 	"github.com/gotvc/got/src/internal/dbutil"
-	"github.com/gotvc/got/src/internal/porting"
-	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/kv"
 )
 
-// DoWithStore runs fn with a store for the desired branch
-func (r *Repo) DoWithStore(ctx context.Context, branchName string, fn func(dst stores.RW) error) error {
-	return r.modifyStaging(ctx, func(sctx stagingCtx) error {
-		return fn(sctx.Store)
-	})
-}
-
 // dirState tracks the state of the working directory.
+// dirState implements porting.DirState
 type dirState struct {
 	conn     *dbutil.Conn
 	saltHash [32]byte

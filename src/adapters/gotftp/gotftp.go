@@ -95,7 +95,7 @@ func (d *Driver) Rename(ctx *ftpserver.Context, oldpath, newpath string) error {
 }
 
 func (d *Driver) getRoot(ctx context.Context) (*gotfs.Root, volumes.Tx, error) {
-	snap, tx, err := d.branch.GetHead(ctx)
+	snap, tx, err := d.branch.GetTarget(ctx)
 	if err != nil {
 		return nil, nil, err
 	}

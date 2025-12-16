@@ -11,17 +11,23 @@ var debugCmd = star.Command{
 	Pos: []star.Positional{debugTypeParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer wc.Close()
+		bname, err := wc.GetHead()
+		if err != nil {
+			return err
+		}
+		repo := wc.Repo()
+
 		p := debugTypeParam.Load(c)
 		switch p {
 		case "fs":
-			return repo.DebugFS(ctx, c.StdOut)
+			return repo.DebugFS(ctx, bname, c.StdOut)
 		case "kv":
-			return repo.DebugKV(ctx, c.StdOut)
+			return repo.DebugKV(ctx, bname, c.StdOut)
 		default:
 			return nil
 		}

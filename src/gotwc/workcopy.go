@@ -1,0 +1,357 @@
+// Package gotwc implements working copies of Got repositories
+package gotwc
+
+import (
+	"context"
+	"fmt"
+	"io/fs"
+	"iter"
+	"os"
+	"path"
+	"path/filepath"
+	"slices"
+	"strings"
+
+	"github.com/gotvc/got/src/gotkv/kvstreams"
+	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/gotwc/internal/dbmig"
+	"github.com/gotvc/got/src/internal/dbutil"
+	"github.com/gotvc/got/src/internal/migrations"
+	"github.com/gotvc/got/src/internal/staging"
+	"go.brendoncarroll.net/state/posixfs"
+	"go.brendoncarroll.net/stdctx/logctx"
+)
+
+const (
+	dbPath          = ".got/wc.db"
+	repoSymLinkPath = ".got/REPO"
+	headPath        = ".got/HEAD"
+
+	defaultFileMode = 0o644
+	nameMaster      = "master"
+)
+
+// Init initializes a new working copy in wcdir
+// The working copy will be associated with the given repo.
+func Init(r *gotrepo.Repo, wcdir string) error {
+	root, err := os.OpenRoot(wcdir)
+	if err != nil {
+		return err
+	}
+	if err := root.Mkdir(".got", 0o755); err != nil && !os.IsExist(err) {
+		return err
+	}
+	return saveRepoSymLink(root, r.RootPath())
+}
+
+// Open opens a directory as a WorkingCopy
+// TODO: maybe this should take a Repo? and Repo should just manage setting up blobcache
+// and creating and deleting stages.
+func Open(p string) (*WC, error) {
+	root, err := os.OpenRoot(p)
+	if err != nil {
+		return nil, err
+	}
+	repoPath, err := loadRepoSymLink(root)
+	if err != nil {
+		return nil, err
+	}
+	repo, err := gotrepo.Open(repoPath)
+	if err != nil {
+		return nil, err
+	}
+	wc, err := New(repo, root)
+	if err != nil {
+		return nil, err
+	}
+	wc.closeRepoOnClose = true
+	return wc, nil
+}
+
+// New creates a new working copy using root and the Repo
+func New(repo *gotrepo.Repo, root *os.Root) (*WC, error) {
+	p := root.Name()
+	db, err := dbutil.OpenPool(filepath.Join(p, dbPath))
+	if err != nil {
+		return nil, err
+	}
+	ctx := context.TODO()
+	// setup database
+	if err := dbutil.Borrow(ctx, db, func(conn *dbutil.Conn) error {
+		if err := migrations.EnsureAll(conn, dbmig.ListMigrations()); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return &WC{
+		root: root,
+		repo: repo,
+		fsys: posixfs.NewDirFS(p),
+
+		db: db,
+	}, nil
+}
+
+// WC is a Working Copy
+// A WC is a directory in the local filesystem, which has a .got/wc.db file
+// WC are associated with a single repository each.
+type WC struct {
+	root             *os.Root
+	repo             *gotrepo.Repo
+	closeRepoOnClose bool
+
+	// TODO: eventually we should move away from this interface, but
+	// the existing importers and exporters use it.
+	fsys posixfs.FS
+	db   *dbutil.Pool
+}
+
+func (wc *WC) Repo() *gotrepo.Repo {
+	return wc.repo
+}
+
+func (wc *WC) Dir() string {
+	return wc.root.Name()
+}
+
+// ListSpans returns the tracked spans
+func (wc *WC) ListSpans(ctx context.Context) ([]Span, error) {
+	return nil, nil
+}
+
+// Track causes the working copy to include another range of files.
+func (wc *WC) Track(ctx context.Context, span Span) error {
+	return dbutil.DoTx(ctx, wc.db, func(conn *dbutil.Conn) error {
+		spans, err := getSpans(conn)
+		if err != nil {
+			return err
+		}
+		spans = append(spans, span)
+		spans = compactSpans(spans)
+		return setSpans(conn, spans)
+	})
+}
+
+// Untrack causes the working copy to exclude a range of files.
+func (wc *WC) Untrack(ctx context.Context, span Span) error {
+	return dbutil.DoTx(ctx, wc.db, func(conn *dbutil.Conn) error {
+		spans, err := getSpans(conn)
+		if err != nil {
+			return err
+		}
+		spans = slices.DeleteFunc(spans, func(x Span) bool {
+			return x == span
+		})
+		spans = compactSpans(spans)
+		return setSpans(conn, spans)
+	})
+}
+
+func (wc *WC) GetHead() (string, error) {
+	data, err := wc.root.ReadFile(headPath)
+	if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+	if len(data) == 0 {
+		return nameMaster, nil
+	}
+	return string(data), nil
+}
+
+// SetHead sets HEAD to name
+// SetHead will check if the staging area is not empty, and if it's not
+// the it will check that the desired branch has the same content parameters
+// as the current branch.
+// If one branch is a fork of another, or they have a common ancestor somewhere,
+// the it is very likely that they have the same content parameters.
+func (wc *WC) SetHead(ctx context.Context, name string) error {
+	desiredBranch, err := wc.repo.GetBranch(ctx, name)
+	if err != nil {
+		return err
+	}
+	return dbutil.DoTx(ctx, wc.db, func(conn *dbutil.Conn) error {
+		activeName, err := wc.GetHead()
+		if err != nil {
+			return err
+		}
+		activeBranch, err := wc.repo.GetBranch(ctx, activeName)
+		if err != nil {
+			return err
+		}
+		// if active branch has the same salt as the desired branch, then
+		// there is no check to do.
+		// If they have different salts, then we need to check if the staging area is empty.
+		if desiredBranch.Info.Salt != activeBranch.Info.Salt {
+			sa, err := newStagingArea(conn, &activeBranch.Info)
+			if err != nil {
+				return err
+			}
+			stage := staging.New(sa)
+			isEmpty, err := stage.IsEmpty(ctx)
+			if err != nil {
+				return err
+			}
+			if !isEmpty {
+				return fmt.Errorf("staging must be empty to change to a branch with a different salt")
+			}
+		}
+		return wc.setHead(name)
+	})
+}
+
+func (wc *WC) setHead(branchName string) error {
+	// we have to check if the new branch has a different param hash
+	return wc.root.WriteFile(headPath, []byte(branchName), defaultFileMode)
+}
+
+func (wc *WC) Close() error {
+	if err := wc.db.Close(); err != nil {
+		return err
+	}
+	if wc.closeRepoOnClose {
+		if err := wc.repo.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Cleanup removes unreferenced data from the stage.
+func (wc *WC) Cleanup(ctx context.Context) error {
+	if err := dbutil.DoTx(ctx, wc.db, func(conn *dbutil.Conn) error {
+		logctx.Infof(ctx, "removing blobs from staging areas")
+		if err := wc.cleanupStagingBlobs(ctx, conn); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	if err := dbutil.Borrow(ctx, wc.db, func(conn *dbutil.Conn) error {
+		logctx.Infof(ctx, "truncating WAL...")
+		if err := dbutil.WALCheckpoint(conn); err != nil {
+			return err
+		}
+		logctx.Infof(ctx, "running VACUUM...")
+		if err := dbutil.Vacuum(conn); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+// AllTracked iterates over all the files that are currently tracked.
+func (wc *WC) AllTracked(ctx context.Context) iter.Seq2[string, error] {
+	return func(yield func(string, error) bool) {
+		if err := func() error {
+			spans, err := wc.ListSpans(ctx)
+			if err != nil {
+				return err
+			}
+			return fs.WalkDir(wc.root.FS(), "", func(p string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				p2 := path.Join(p, d.Name())
+				if spansContain(spans, p2) {
+					if !yield(p2, nil) {
+						return nil
+					}
+				}
+				return nil
+			})
+		}(); err != nil {
+			yield("", err)
+		}
+	}
+}
+
+func (wc *WC) getFilteredFS(spans []Span) posixfs.FS {
+	return posixfs.NewFiltered(wc.fsys, func(x string) bool {
+		if strings.HasPrefix(x, ".got") {
+			return false
+		}
+		return spansContain(spans, x)
+	})
+}
+
+// TODO: this is to be more similar to the repo, remove this.
+func (wc *WC) workingDir() posixfs.FS {
+	return wc.getFilteredFS([]Span{{}})
+}
+
+// Span is a span of paths
+type Span struct {
+	Begin string
+	End   string
+}
+
+func (s Span) String() string {
+	if s.End == "" {
+		return fmt.Sprintf("<= %q", s.Begin)
+	}
+	return fmt.Sprintf("[%q %q)", s.Begin, s.End)
+}
+
+func PrefixSpan(prefix string) Span {
+	return Span{
+		Begin: prefix,
+		End:   string(kvstreams.PrefixEnd([]byte(prefix))),
+	}
+}
+
+func (s Span) Contains(x string) bool {
+	if x < s.Begin {
+		return false
+	}
+	if s.End != "" && x >= s.End {
+		return false
+	}
+	return true
+}
+
+func spansContain(spans []Span, x string) bool {
+	for _, span := range spans {
+		if span.Contains(x) {
+			return true
+		}
+	}
+	return false
+}
+
+func getSpans(conn *dbutil.Conn) ([]Span, error) {
+	return nil, nil
+}
+
+func setSpans(conn *dbutil.Conn, spans []Span) error {
+	return nil
+}
+
+func compactSpans(spans []Span) []Span {
+	return spans
+}
+
+func loadRepoSymLink(root *os.Root) (string, error) {
+	data, err := root.ReadFile(repoSymLinkPath)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func saveRepoSymLink(root *os.Root, repoPath string) error {
+	f, err := root.OpenFile(repoSymLinkPath, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := f.Write([]byte(repoPath)); err != nil {
+		return err
+	}
+	return nil
+}
