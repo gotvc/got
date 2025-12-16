@@ -142,24 +142,43 @@ func Open(p string) (*Repo, error) {
 		if err != nil {
 			return nil, err
 		}
-	case config.Blobcache.Remote != nil:
-		pc, err := net.ListenUDP("udp", nil)
-		if err != nil {
-			return nil, err
-		}
-		bc, err = openRemoteBlobcache(sigPriv, pc, config.Blobcache.Remote.Endpoint)
-		if err != nil {
-			return nil, err
-		}
 	default:
 		return nil, fmt.Errorf("empty blobcache spec: %v", config.Blobcache)
 	}
+	env := Env{
+		Background: ctx,
+		Dir:        p,
+		Blobcache:  bc,
+	}
+	return New(env, *config)
+}
 
+// Env is the environment that the Repo needs to function.
+type Env struct {
+	Background context.Context
+	Dir        string
+	Blobcache  blobcache.Service
+}
+
+// New creates a new repo once the environment is setup.
+func New(env Env, cfg Config) (*Repo, error) {
+	repoFS := posixfs.NewDirFS(env.Dir)
+	bc := env.Blobcache
+
+	idenRoot, err := os.OpenRoot(filepath.Join(env.Dir, idenPath))
+	if err != nil {
+		return nil, err
+	}
+	idens := idenStore{root: idenRoot}
+	idp, err := idens.GetOrCreate("default")
+	if err != nil {
+		return nil, err
+	}
 	r := &Repo{
-		rootPath:    p,
+		rootPath:    env.Dir,
 		repoFS:      repoFS,
 		bc:          bc,
-		config:      *config,
+		config:      cfg,
 		idenStore:   idens,
 		leafPrivate: *idp,
 		repoc:       reposchema.NewClient(bc),
@@ -170,7 +189,7 @@ func Open(p string) (*Repo, error) {
 		},
 	}
 	r.space = newLazySetup(func(ctx context.Context) (branches.Space, error) {
-		nsh, err := r.repoc.GetNamespace(ctx, config.RepoVolume, r.useSchema())
+		nsh, err := r.repoc.GetNamespace(ctx, cfg.RepoVolume, r.useSchema())
 		if err != nil {
 			return nil, err
 		}
@@ -181,7 +200,7 @@ func Open(p string) (*Repo, error) {
 		if err := r.gnsc.EnsureInit(ctx, *nsh, []gotorg.IdentityUnit{*idenUnit}); err != nil {
 			return nil, err
 		}
-		spaceSpec := config.Spaces
+		spaceSpec := cfg.Spaces
 		spaceSpec = append(spaceSpec, SpaceLayerSpec{
 			Prefix: "",
 			Target: SpaceSpec{Local: &nsh.OID},
@@ -196,7 +215,6 @@ func Open(p string) (*Repo, error) {
 		}
 		return space, nil
 	})
-
 	return r, nil
 }
 
@@ -282,8 +300,6 @@ func (r *Repo) useSchema() bool {
 	switch {
 	case bccfg.HTTP != nil:
 		return bccfg.HTTP.UseSchema
-	case bccfg.Remote != nil:
-		return bccfg.Remote.UseSchema
 	default:
 		return true
 	}
