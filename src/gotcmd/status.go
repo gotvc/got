@@ -26,7 +26,7 @@ var statusCmd = star.Command{
 			return err
 		}
 		bufw := bufio.NewWriter(c.StdOut)
-		if _, err := fmt.Fprintf(bufw, "BRANCH: %s\n", name); err != nil {
+		if _, err := fmt.Fprintf(bufw, "HEAD: %s\n", name); err != nil {
 			return err
 		}
 		if _, err := fmt.Fprintf(bufw, "STAGED:\n"); err != nil {

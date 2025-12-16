@@ -8,6 +8,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/blobcachecmd"
 	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/gotwc"
 	"go.brendoncarroll.net/star"
 )
 
@@ -41,6 +42,9 @@ var initCmd = star.Command{
 		}
 		repo, err := gotrepo.Open(".")
 		if err != nil {
+			return err
+		}
+		if err := gotwc.Init(repo, "."); err != nil {
 			return err
 		}
 		leaf, err := repo.ActiveIdentity(c.Context)

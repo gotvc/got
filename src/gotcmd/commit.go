@@ -43,15 +43,20 @@ var historyCmd = star.Command{
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer wc.Close()
+		repo := wc.Repo()
+		bname, err := wc.GetHead()
+		if err != nil {
+			return err
+		}
 		pr, pw := io.Pipe()
 		eg := errgroup.Group{}
 		eg.Go(func() error {
-			err := repo.History(ctx, "", func(ref gdat.Ref, snap gotvc.Snap) error {
+			err := repo.History(ctx, bname, func(ref gdat.Ref, snap gotvc.Snap) error {
 				fmt.Fprintf(pw, "#%04d\t%v\n", snap.N, ref.CID)
 				fmt.Fprintf(pw, "FS: %v\n", snap.Payload.Root.Ref.CID)
 				if len(snap.Parents) == 0 {

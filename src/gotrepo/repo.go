@@ -95,6 +95,10 @@ func Init(p string, config Config) error {
 }
 
 func Open(p string) (*Repo, error) {
+	p, err := filepath.Abs(p)
+	if err != nil {
+		return nil, err
+	}
 	ctx := context.Background()
 	ctx, cf := context.WithCancel(ctx)
 	defer cf()
