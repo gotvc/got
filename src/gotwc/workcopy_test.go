@@ -128,7 +128,7 @@ func TestFork(t *testing.T) {
 		require.NoError(t, wc.Commit(ctx, branches.SnapInfo{}))
 	}
 
-	require.NoError(t, repo.Fork(ctx, "", "branch2"))
+	require.NoError(t, repo.Fork(ctx, nameMaster, "branch2"))
 	require.NoError(t, repo.History(ctx, "branch2", func(_ gotfs.Ref, _ gotvc.Snap) error {
 		return nil
 	}))
@@ -142,7 +142,7 @@ func newTestWC(t testing.TB) *WC {
 	require.NoError(t, Init(r, wcdir))
 	root, err := os.OpenRoot(wcdir)
 	require.NoError(t, err)
-	wc, err := New(r, root, nameMaster)
+	wc, err := New(r, root)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, wc.Close())

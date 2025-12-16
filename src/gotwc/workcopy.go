@@ -26,7 +26,6 @@ const (
 	dbPath          = ".got/wc.db"
 	repoSymLinkPath = ".got/REPO"
 	headPath        = ".got/HEAD"
-	wcidPath        = ".got/WORKING_COPY"
 
 	defaultFileMode = 0o644
 	nameMaster      = "master"
@@ -45,22 +44,6 @@ func Init(r *gotrepo.Repo, wcdir string) error {
 	return saveRepoSymLink(root, r.RootPath())
 }
 
-func loadRepoSymLink(root *os.Root) (string, error) {
-	return os.Readlink(filepath.Join(root.Name(), repoSymLinkPath))
-}
-
-func saveRepoSymLink(root *os.Root, repoPath string) error {
-	f, err := root.OpenFile(repoSymLinkPath, os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if _, err := f.Write([]byte(repoPath)); err != nil {
-		return err
-	}
-	return nil
-}
-
 // Open opens a directory as a WorkingCopy
 // TODO: maybe this should take a Repo? and Repo should just manage setting up blobcache
 // and creating and deleting stages.
@@ -69,14 +52,24 @@ func Open(p string) (*WC, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := loadRepoSymLink(root); err != nil {
+	repoPath, err := loadRepoSymLink(root)
+	if err != nil {
 		return nil, err
 	}
-	return New(nil, root, "")
+	repo, err := gotrepo.Open(repoPath)
+	if err != nil {
+		return nil, err
+	}
+	wc, err := New(repo, root)
+	if err != nil {
+		return nil, err
+	}
+	wc.closeRepoOnClose = true
+	return wc, nil
 }
 
 // New creates a new working copy using root and the Repo
-func New(r *gotrepo.Repo, root *os.Root, head string) (*WC, error) {
+func New(repo *gotrepo.Repo, root *os.Root) (*WC, error) {
 	p := root.Name()
 	db, err := dbutil.OpenPool(filepath.Join(p, dbPath))
 	if err != nil {
@@ -94,6 +87,7 @@ func New(r *gotrepo.Repo, root *os.Root, head string) (*WC, error) {
 	}
 	return &WC{
 		root: root,
+		repo: repo,
 		fsys: posixfs.NewDirFS(p),
 
 		db: db,
@@ -212,29 +206,14 @@ func (wc *WC) setHead(branchName string) error {
 	return wc.root.WriteFile(headPath, []byte(branchName), defaultFileMode)
 }
 
-// // Import
-// func (wc *WC) Import(ctx context.Context, p string) (*gotfs.Root, error) {
-// 	imp := porting.NewImporter(fsmach, nil, [2]stores.RW{dst, dst})
-
-// 	var fsys posixfs.FS = posixfs.NewDirFS(wc.root.Name())
-// 	fsys = posixfs.NewFiltered(fsys, func(x string) bool {
-// 		if strings.HasPrefix(x, ".got") {
-// 			return false
-// 		}
-// 		return true
-// 	})
-// 	return imp.ImportPath(ctx, fsys, p)
-// }
-
-// Export non-destructively writes paths to the working copy.
-// Export replaces known files, which are tracked.
-// func (wc *WC) Export(ctx context.Context, root gotfs.Root, p string) error {
-// 	return nil
-// }
-
 func (wc *WC) Close() error {
 	if err := wc.db.Close(); err != nil {
 		return err
+	}
+	if wc.closeRepoOnClose {
+		if err := wc.repo.Close(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -355,4 +334,24 @@ func setSpans(conn *dbutil.Conn, spans []Span) error {
 
 func compactSpans(spans []Span) []Span {
 	return spans
+}
+
+func loadRepoSymLink(root *os.Root) (string, error) {
+	data, err := root.ReadFile(repoSymLinkPath)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+func saveRepoSymLink(root *os.Root, repoPath string) error {
+	f, err := root.OpenFile(repoSymLinkPath, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if _, err := f.Write([]byte(repoPath)); err != nil {
+		return err
+	}
+	return nil
 }

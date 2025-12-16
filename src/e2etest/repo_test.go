@@ -47,7 +47,7 @@ func TestMultiRepoSync(t *testing.T) {
 		require.NoError(t, err)
 	}
 	r1, r2 := openRepo(t, p1), openRepo(t, p2)
-	wc1, _ := openWC(t, p1), openWC(t, p2)
+	wc1, _ := openWC(t, r1, p1), openWC(t, r2, p2)
 
 	// IAM setup
 	gnsc := origin.GotOrgClient()
@@ -95,6 +95,10 @@ func initRepo(t testing.TB) string {
 	dirpath := t.TempDir()
 	cfg := gotrepo.DefaultConfig()
 	require.NoError(t, gotrepo.Init(dirpath, cfg))
+	r, err := gotrepo.Open(dirpath)
+	require.NoError(t, err)
+	defer r.Close()
+	require.NoError(t, gotwc.Init(r, dirpath))
 	return dirpath
 }
 
@@ -105,8 +109,10 @@ func openRepo(t testing.TB, p string) *gotrepo.Repo {
 	return r
 }
 
-func openWC(t testing.TB, p string) *gotwc.WC {
-	wc, err := gotwc.Open(p)
+func openWC(t testing.TB, r *gotrepo.Repo, p string) *gotwc.WC {
+	root, err := os.OpenRoot(p)
+	require.NoError(t, err)
+	wc, err := gotwc.New(r, root)
 	require.NoError(t, err)
 	t.Cleanup(func() { wc.Close() })
 	return wc

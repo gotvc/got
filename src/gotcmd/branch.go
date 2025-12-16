@@ -204,8 +204,8 @@ var forkCmd = star.Command{
 		}
 		defer wc.Close()
 		newName := newBranchNameParam.Load(c)
-		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
-		defer r.Close()
+		rend := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
+		defer rend.Close()
 		current, err := wc.GetHead()
 		if err != nil {
 			return err
