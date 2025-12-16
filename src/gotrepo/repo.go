@@ -40,6 +40,7 @@ const (
 
 	localDBPath      = ".got/got.db"
 	blobcacheDirPath = ".got/blobcache"
+	idenPath         = ".got/iden"
 )
 
 type (
@@ -105,8 +106,22 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	var leafPrivate *gotorg.IdenPrivate
-	sigPrivKey := leafPrivate.SigPrivateKey.(ed25519.PrivateKey)
+
+	// setup identity store
+	if err := os.Mkdir(filepath.Join(p, idenPath), 0o755); err != nil && !os.IsExist(err) {
+		return nil, err
+	}
+	idenRoot, err := os.OpenRoot(filepath.Join(p, idenPath))
+	if err != nil {
+		return nil, err
+	}
+	idens := idenStore{root: idenRoot}
+	idp, err := idens.GetOrCreate("default")
+	if err != nil {
+		return nil, err
+	}
+	sigPriv := idp.SigPrivateKey.(ed25519.PrivateKey)
+
 	// blobcache
 	var bc blobcache.Service
 	switch {
@@ -114,7 +129,7 @@ func Open(p string) (*Repo, error) {
 		if err := posixfs.MkdirAll(repoFS, blobcacheDirPath, 0o755); err != nil {
 			return nil, err
 		}
-		bc, err = openLocalBlobcache(ctx, sigPrivKey, filepath.Join(p, blobcacheDirPath))
+		bc, err = openLocalBlobcache(ctx, sigPriv, filepath.Join(p, blobcacheDirPath))
 		if err != nil {
 			return nil, err
 		}
@@ -128,29 +143,26 @@ func Open(p string) (*Repo, error) {
 		if err != nil {
 			return nil, err
 		}
-		bc, err = openRemoteBlobcache(sigPrivKey, pc, config.Blobcache.Remote.Endpoint)
+		bc, err = openRemoteBlobcache(sigPriv, pc, config.Blobcache.Remote.Endpoint)
 		if err != nil {
 			return nil, err
 		}
 	default:
 		return nil, fmt.Errorf("empty blobcache spec: %v", config.Blobcache)
 	}
-	idenRoot, err := os.OpenRoot(filepath.Join(p))
-	if err != nil {
-		return nil, err
-	}
+
 	r := &Repo{
 		rootPath:    p,
 		repoFS:      repoFS,
 		bc:          bc,
 		config:      *config,
-		idenStore:   idenStore{root: idenRoot},
-		leafPrivate: *leafPrivate,
+		idenStore:   idens,
+		leafPrivate: *idp,
 		repoc:       reposchema.NewClient(bc),
 		gnsc: gotorg.Client{
 			Machine:   gotorg.New(),
 			Blobcache: bc,
-			ActAs:     *leafPrivate,
+			ActAs:     *idp,
 		},
 	}
 	r.space = newLazySetup(func(ctx context.Context) (branches.Space, error) {

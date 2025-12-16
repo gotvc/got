@@ -50,7 +50,7 @@ func loadRepoSymLink(root *os.Root) (string, error) {
 }
 
 func saveRepoSymLink(root *os.Root, repoPath string) error {
-	f, err := root.OpenFile(repoSymLinkPath, os.O_CREATE|os.O_RDWR, 0o644|os.ModeSymlink)
+	f, err := root.OpenFile(repoSymLinkPath, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return err
 	}
