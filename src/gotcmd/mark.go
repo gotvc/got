@@ -10,24 +10,24 @@ import (
 	"go.brendoncarroll.net/star"
 )
 
-var branchCmd = star.NewDir(
+var mark = star.NewDir(
 	star.Metadata{
-		Short: "manage branches",
+		Short: "manage the contents of a namespace",
 	}, map[string]star.Command{
-		"create":   branchCreateCmd,
-		"list":     branchListCmd,
-		"delete":   branchDeleteCmd,
-		"get-head": branchGetRootCmd,
-		"inspect":  branchInspectCmd,
-		"cp-salt":  branchCpSaltCmd,
+		"create":   markCreateCmd,
+		"list":     markListCmd,
+		"delete":   markDeleteCmd,
+		"get-root": markGetTargetCmd,
+		"inspect":  markInspectCmd,
+		"cp-salt":  markCpSaltCmd,
 	},
 )
 
-var branchCreateCmd = star.Command{
+var markCreateCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "creates a new branch",
+		Short: "creates a new mark",
 	},
-	Pos: []star.Positional{branchNameParam},
+	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
 		repo, err := openRepo()
@@ -35,15 +35,15 @@ var branchCreateCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		branchName := branchNameParam.Load(c)
-		_, err = repo.CreateBranch(ctx, branchName, branches.NewConfig(false))
+		branchName := markNameParam.Load(c)
+		_, err = repo.CreateMark(ctx, branchName, branches.NewConfig(false))
 		return err
 	},
 }
 
-var branchListCmd = star.Command{
+var markListCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "lists the branches",
+		Short: "lists the marks",
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
@@ -52,18 +52,18 @@ var branchListCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		return repo.ForEachBranch(ctx, func(k string) error {
+		return repo.ForEachMark(ctx, "", func(k string) error {
 			fmt.Fprintf(c.StdOut, "%s\n", k)
 			return nil
 		})
 	},
 }
 
-var branchDeleteCmd = star.Command{
+var markDeleteCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "deletes a branch",
+		Short: "deletes a mark",
 	},
-	Pos: []star.Positional{branchNameParam},
+	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
 		repo, err := openRepo()
@@ -71,16 +71,16 @@ var branchDeleteCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		name := branchNameParam.Load(c)
-		return repo.DeleteBranch(ctx, name)
+		name := markNameParam.Load(c)
+		return repo.DeleteMark(ctx, name)
 	},
 }
 
-var branchGetRootCmd = star.Command{
+var markGetTargetCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "prints the snapshot at the head of the provided branch",
+		Short: "prints the snapshot that is the target of the mark",
 	},
-	Pos: []star.Positional{branchNameOptParam},
+	Pos: []star.Positional{markNameOptParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
 		repo, err := openRepo()
@@ -88,8 +88,8 @@ var branchGetRootCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		name, _ := branchNameOptParam.LoadOpt(c)
-		branchHead, err := repo.GetBranchRoot(ctx, name)
+		name, _ := markNameOptParam.LoadOpt(c)
+		branchHead, err := repo.GetMarkRoot(ctx, name)
 		if err != nil {
 			return err
 		}
@@ -97,11 +97,11 @@ var branchGetRootCmd = star.Command{
 	},
 }
 
-var branchInspectCmd = star.Command{
+var markInspectCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "prints branch metadata",
+		Short: "prints any metadata for a mark",
 	},
-	Pos: []star.Positional{branchNameParam},
+	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
 		repo, err := openRepo()
@@ -109,8 +109,8 @@ var branchInspectCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		name := branchNameParam.Load(c)
-		branch, err := repo.GetBranch(ctx, name)
+		name := markNameParam.Load(c)
+		branch, err := repo.GetMark(ctx, name)
 		if err != nil {
 			return err
 		}
@@ -118,11 +118,11 @@ var branchInspectCmd = star.Command{
 	},
 }
 
-var branchCpSaltCmd = star.Command{
+var markCpSaltCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "copies the salt from one branch to another",
+		Short: "copies the salt from one mark to another",
 	},
-	Pos: []star.Positional{srcBranchParam, dstBranchParam},
+	Pos: []star.Positional{srcMarkParam, dstMarkParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
 		repo, err := openRepo()
@@ -130,70 +130,45 @@ var branchCpSaltCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		src := srcBranchParam.Load(c)
-		dst := dstBranchParam.Load(c)
-		srcInfo, err := repo.GetBranch(ctx, src)
+		src := srcMarkParam.Load(c)
+		dst := dstMarkParam.Load(c)
+		srcInfo, err := repo.GetMark(ctx, src)
 		if err != nil {
 			return err
 		}
-		dstInfo, err := repo.GetBranch(ctx, dst)
+		dstInfo, err := repo.GetMark(ctx, dst)
 		if err != nil {
 			return err
 		}
 		cfg := dstInfo.AsParams()
 		cfg.Salt = srcInfo.Info.Salt
-		return repo.SetBranch(ctx, dst, cfg)
+		return repo.ConfigureMark(ctx, dst, cfg)
 	},
 }
 
-var branchNameParam = star.Required[string]{
-	ID:    "branch_name",
+var markNameParam = star.Required[string]{
+	ID:    "mark_name",
 	Parse: star.ParseString,
 }
 
-var branchNameOptParam = star.Optional[string]{
-	ID:    "branch_name",
+var markNameOptParam = star.Optional[string]{
+	ID:    "mark_name",
 	Parse: star.ParseString,
 }
 
-var srcBranchParam = star.Required[string]{
+var srcMarkParam = star.Required[string]{
 	ID:    "src",
 	Parse: star.ParseString,
 }
 
-var dstBranchParam = star.Required[string]{
+var dstMarkParam = star.Required[string]{
 	ID:    "dst",
 	Parse: star.ParseString,
 }
 
-var headCmd = star.Command{
-	Metadata: star.Metadata{
-		Short: "prints or sets the contents of HEAD",
-	},
-	Pos: []star.Positional{branchNameOptParam},
-	F: func(c star.Context) error {
-		// Active modifies the working copy not the repo
-		wc, err := openWC()
-		if err != nil {
-			return err
-		}
-		defer wc.Close()
-		name, hasName := branchNameOptParam.LoadOpt(c)
-		if !hasName {
-			name, err := wc.GetHead()
-			if err != nil {
-				return err
-			}
-			fmt.Fprintln(c.StdOut, name)
-			return nil
-		}
-		return wc.SetHead(c, name)
-	},
-}
-
 var forkCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "creates a new branch based off the provided branch",
+		Short: "creates a new mark based off the provided branch",
 	},
 	Pos: []star.Positional{newBranchNameParam},
 	F: func(c star.Context) error {
@@ -221,7 +196,7 @@ var syncCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "syncs the contents of one branch to another",
 	},
-	Pos: []star.Positional{srcBranchParam, dstBranchParam},
+	Pos: []star.Positional{srcMarkParam, dstMarkParam},
 	Flags: map[string]star.Flag{
 		"force": forceParam,
 	},
@@ -234,8 +209,8 @@ var syncCmd = star.Command{
 		defer repo.Close()
 		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
 		defer r.Close()
-		src := srcBranchParam.Load(c)
-		dst := dstBranchParam.Load(c)
+		src := srcMarkParam.Load(c)
+		dst := dstMarkParam.Load(c)
 		force, _ := forceParam.LoadOpt(c)
 		return repo.Sync(ctx, src, dst, force)
 	},

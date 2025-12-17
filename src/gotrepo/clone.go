@@ -2,6 +2,7 @@ package gotrepo
 
 import (
 	"context"
+	"os"
 
 	"blobcache.io/blobcache/src/blobcache"
 )
@@ -11,16 +12,21 @@ func Clone(ctx context.Context, dirPath string, config Config, u blobcache.FQOID
 	if err := Init(dirPath, config); err != nil {
 		return err
 	}
+	repoRoot, err := os.OpenRoot(dirPath)
+	if err != nil {
+		return err
+	}
+	defer repoRoot.Close()
 	spaceSpec, err := spaceSpecFromURL(u)
 	if err != nil {
 		return err
 	}
-	if err := ConfigureRepo(dirPath, func(x Config) Config {
+	if err := EditConfig(repoRoot, func(x Config) Config {
 		y := x
-		y.Spaces = []SpaceLayerSpec{
+		y.Spaces = []SpaceConfig{
 			{
-				Prefix: "origin/",
-				Target: *spaceSpec,
+				Name: "origin/",
+				Spec: *spaceSpec,
 			},
 		}
 		// there shouldn't be anything here, but just in case, so we don't destroy anything.

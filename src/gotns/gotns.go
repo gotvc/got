@@ -27,9 +27,13 @@ func BeginTx(ctx context.Context, dmach *gdat.Machine, kvmach *gotkv.Machine, vo
 	}, nil
 }
 
+func NewGotKV() gotkv.Machine {
+	return gotkv.NewMachine(1<<13, 1<<18)
+}
+
 // Root is the root of a gotns namespace
 type Root struct {
-	Branches gotkv.Root
+	Marks gotkv.Root
 }
 
 func ParseRoot(data []byte) (*Root, error) {
@@ -45,11 +49,11 @@ func (r *Root) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	return r.Branches.Unmarshal(kvrData)
+	return r.Marks.Unmarshal(kvrData)
 }
 
 func (r Root) Marshal(out []byte) []byte {
-	return sbe.AppendLP16(nil, r.Branches.Marshal(nil))
+	return sbe.AppendLP16(nil, r.Marks.Marshal(nil))
 }
 
 type BranchState struct {
@@ -205,7 +209,7 @@ func (tx *Tx) Commit(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	r := Root{Branches: *kvroot}
+	r := Root{Marks: *kvroot}
 	if err := saveRoot(ctx, tx.tx, r); err != nil {
 		return err
 	}

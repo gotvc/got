@@ -8,7 +8,6 @@ import (
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema/statetrace"
-	"github.com/cloudflare/circl/kem"
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
 	"github.com/gotvc/got/src/internal/stores"
@@ -309,8 +308,9 @@ func (c *Client) createSubVolume(ctx context.Context, tx *bcsdk.Tx) (*blobcache.
 // IntroduceSelf creates a signed change set that adds a leaf to the state.
 // Then it returns the signed change set data.
 // It does not contact Blobcache or perform any Volume operations.
-func (c *Client) IntroduceSelf(kemPub kem.PublicKey) gotorgop.ChangeSet {
-	leaf := gotorgop.NewIDUnit(c.ActAs.SigPrivateKey.Public().(inet256.PublicKey), kemPub)
+func (c *Client) IntroduceSelf() gotorgop.ChangeSet {
+	idu := c.ActAs.Public()
+	leaf := gotorgop.NewIDUnit(idu.SigPublicKey, idu.KEMPublicKey)
 	cs := gotorgop.ChangeSet{
 		Ops: []gotorgop.Op{
 			&gotorgop.CreateIDUnit{
@@ -327,6 +327,22 @@ func BranchVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
 			Schema:   blobcache.SchemaSpec{Name: blobcache.Schema_NONE},
+			HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
+			MaxSize:  1 << 21,
+			Salted:   false,
+		},
+	}
+}
+
+// DefaultVolumeSpec is the volume spec used for gotorg Volumes
+func DefaultVolumeSpec(useSchema bool) blobcache.VolumeSpec {
+	schspec := blobcache.SchemaSpec{}
+	if useSchema {
+		schspec = blobcache.SchemaSpec{Name: SchemaName}
+	}
+	return blobcache.VolumeSpec{
+		Local: &blobcache.VolumeBackend_Local{
+			Schema:   schspec,
 			HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
 			MaxSize:  1 << 21,
 			Salted:   false,

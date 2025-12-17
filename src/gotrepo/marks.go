@@ -16,9 +16,9 @@ type BranchInfo = branches.Info
 
 type Branch = branches.Branch
 
-// CreateBranch creates a branch using the default spec.
-func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Params) (*BranchInfo, error) {
-	space, err := r.GetSpace(ctx)
+// CreateBranch creates a new mark in the repo's local space.
+func (r *Repo) CreateMark(ctx context.Context, name string, params branches.Params) (*BranchInfo, error) {
+	space, err := r.GetSpace(ctx, "")
 	if err != nil {
 		return nil, err
 	}
@@ -26,29 +26,31 @@ func (r *Repo) CreateBranch(ctx context.Context, name string, params branches.Pa
 }
 
 // GetBranch returns a specific branch, or an error if it does not exist
-func (r *Repo) GetBranch(ctx context.Context, name string) (*Branch, error) {
+func (r *Repo) GetMark(ctx context.Context, name string) (*Branch, error) {
 	if name == "" {
 		return nil, fmt.Errorf("branch name cannot be empty")
 	}
-	space, err := r.GetSpace(ctx)
+	space, err := r.GetSpace(ctx, "")
 	if err != nil {
 		return nil, err
 	}
 	return space.Open(ctx, name)
 }
 
-// DeleteBranch deletes a branch
-func (r *Repo) DeleteBranch(ctx context.Context, name string) error {
-	space, err := r.GetSpace(ctx)
+// DeleteBranch deletes a mark
+// The target of the mark may be garbage collected if nothing else
+// references it.
+func (r *Repo) DeleteMark(ctx context.Context, name string) error {
+	space, err := r.GetSpace(ctx, "")
 	if err != nil {
 		return err
 	}
 	return space.Delete(ctx, name)
 }
 
-// SetBranch sets branch metadata
-func (r *Repo) SetBranch(ctx context.Context, name string, md branches.Params) error {
-	space, err := r.GetSpace(ctx)
+// ConfigureMark adjusts metadata
+func (r *Repo) ConfigureMark(ctx context.Context, name string, md branches.Params) error {
+	space, err := r.GetSpace(ctx, "")
 	if err != nil {
 		return err
 	}
@@ -56,16 +58,16 @@ func (r *Repo) SetBranch(ctx context.Context, name string, md branches.Params) e
 }
 
 // ForEachBranch calls fn once for each branch, or until an error is returned from fn
-func (r *Repo) ForEachBranch(ctx context.Context, fn func(string) error) error {
-	space, err := r.GetSpace(ctx)
+func (r *Repo) ForEachMark(ctx context.Context, spaceName string, fn func(string) error) error {
+	space, err := r.GetSpace(ctx, spaceName)
 	if err != nil {
 		return err
 	}
 	return branches.ForEach(ctx, space, branches.TotalSpan(), fn)
 }
 
-func (r *Repo) GetBranchRoot(ctx context.Context, name string) (*Snap, error) {
-	b, err := r.GetBranch(ctx, name)
+func (r *Repo) GetMarkRoot(ctx context.Context, name string) (*Snap, error) {
+	b, err := r.GetMark(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -81,17 +83,17 @@ func (r *Repo) GetBranchRoot(ctx context.Context, name string) (*Snap, error) {
 
 // Fork creates a new branch called next and sets its head to match base's
 func (r *Repo) Fork(ctx context.Context, base, next string) error {
-	baseBranch, err := r.GetBranch(ctx, base)
+	baseBranch, err := r.GetMark(ctx, base)
 	if err != nil {
 		return err
 	}
-	_, err = r.CreateBranch(ctx, next, branches.Params{
+	_, err = r.CreateMark(ctx, next, branches.Params{
 		Salt: baseBranch.Info.Salt,
 	})
 	if err != nil {
 		return err
 	}
-	nextBranch, err := r.GetBranch(ctx, next)
+	nextBranch, err := r.GetMark(ctx, next)
 	if err != nil {
 		return err
 	}
@@ -104,15 +106,15 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 }
 
 func (r *Repo) History(ctx context.Context, name string, fn func(ref Ref, s Snap) error) error {
-	branch, err := r.GetBranch(ctx, name)
+	branch, err := r.GetMark(ctx, name)
 	if err != nil {
 		return err
 	}
 	return branch.History(ctx, fn)
 }
 
-func (r *Repo) CleanupBranch(ctx context.Context, name string) error {
-	b, err := r.GetBranch(ctx, name)
+func (r *Repo) CleanupMark(ctx context.Context, name string) error {
+	b, err := r.GetMark(ctx, name)
 	if err != nil {
 		return err
 	}

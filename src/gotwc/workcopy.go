@@ -23,9 +23,8 @@ import (
 )
 
 const (
-	dbPath          = ".got/wc.db"
-	repoSymLinkPath = ".got/REPO"
-	headPath        = ".got/HEAD"
+	configPath = ".got/wc-config"
+	dbPath     = ".got/wc.db"
 
 	defaultFileMode = 0o644
 	nameMaster      = "master"
@@ -33,30 +32,33 @@ const (
 
 // Init initializes a new working copy in wcdir
 // The working copy will be associated with the given repo.
-func Init(r *gotrepo.Repo, wcdir string) error {
+func Init(r *gotrepo.Repo, wcdir string, cfg Config) error {
 	root, err := os.OpenRoot(wcdir)
 	if err != nil {
 		return err
 	}
-	if err := root.Mkdir(".got", 0o755); err != nil && !os.IsExist(err) {
+	defer root.Close()
+	if err := root.MkdirAll(".got", 0o755); err != nil {
 		return err
 	}
-	return saveRepoSymLink(root, r.RootPath())
+	cfg.RepoDir = r.Dir()
+	return SaveConfig(root, cfg)
 }
 
 // Open opens a directory as a WorkingCopy
 // TODO: maybe this should take a Repo? and Repo should just manage setting up blobcache
 // and creating and deleting stages.
-func Open(p string) (*WC, error) {
-	root, err := os.OpenRoot(p)
+// `wcdir` is a directory containing a .got/wc-config file
+func Open(wcdir string) (*WC, error) {
+	root, err := os.OpenRoot(wcdir)
 	if err != nil {
 		return nil, err
 	}
-	repoPath, err := loadRepoSymLink(root)
+	cfg, err := LoadConfig(root)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := gotrepo.Open(repoPath)
+	repo, err := gotrepo.Open(cfg.RepoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -150,14 +152,11 @@ func (wc *WC) Untrack(ctx context.Context, span Span) error {
 }
 
 func (wc *WC) GetHead() (string, error) {
-	data, err := wc.root.ReadFile(headPath)
-	if err != nil && !os.IsNotExist(err) {
+	cfg, err := LoadConfig(wc.root)
+	if err != nil {
 		return "", err
 	}
-	if len(data) == 0 {
-		return nameMaster, nil
-	}
-	return string(data), nil
+	return cfg.Head, nil
 }
 
 // SetHead sets HEAD to name
@@ -167,16 +166,16 @@ func (wc *WC) GetHead() (string, error) {
 // If one branch is a fork of another, or they have a common ancestor somewhere,
 // the it is very likely that they have the same content parameters.
 func (wc *WC) SetHead(ctx context.Context, name string) error {
-	desiredBranch, err := wc.repo.GetBranch(ctx, name)
+	desiredBranch, err := wc.repo.GetMark(ctx, name)
 	if err != nil {
 		return err
 	}
-	return dbutil.DoTx(ctx, wc.db, func(conn *dbutil.Conn) error {
+	if err := dbutil.DoTx(ctx, wc.db, func(conn *dbutil.Conn) error {
 		activeName, err := wc.GetHead()
 		if err != nil {
 			return err
 		}
-		activeBranch, err := wc.repo.GetBranch(ctx, activeName)
+		activeBranch, err := wc.repo.GetMark(ctx, activeName)
 		if err != nil {
 			return err
 		}
@@ -197,13 +196,33 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 				return fmt.Errorf("staging must be empty to change to a branch with a different salt")
 			}
 		}
-		return wc.setHead(name)
-	})
+		return nil
+	}); err != nil {
+		return err
+	}
+	return wc.setHead(name)
 }
 
 func (wc *WC) setHead(branchName string) error {
-	// we have to check if the new branch has a different param hash
-	return wc.root.WriteFile(headPath, []byte(branchName), defaultFileMode)
+	return EditConfig(wc.root, func(x Config) Config {
+		x.Head = branchName
+		return x
+	})
+}
+
+func (wc *WC) GetActAs() (string, error) {
+	cfg, err := LoadConfig(wc.root)
+	if err != nil {
+		return "", err
+	}
+	return cfg.ActAs, nil
+}
+
+func (wc *WC) SetActAs(idenName string) error {
+	return EditConfig(wc.root, func(x Config) Config {
+		x.ActAs = idenName
+		return x
+	})
 }
 
 func (wc *WC) Close() error {
@@ -334,24 +353,4 @@ func setSpans(conn *dbutil.Conn, spans []Span) error {
 
 func compactSpans(spans []Span) []Span {
 	return spans
-}
-
-func loadRepoSymLink(root *os.Root) (string, error) {
-	data, err := root.ReadFile(repoSymLinkPath)
-	if err != nil {
-		return "", err
-	}
-	return string(data), nil
-}
-
-func saveRepoSymLink(root *os.Root, repoPath string) error {
-	f, err := root.OpenFile(repoSymLinkPath, os.O_CREATE|os.O_RDWR, 0o644)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if _, err := f.Write([]byte(repoPath)); err != nil {
-		return err
-	}
-	return nil
 }

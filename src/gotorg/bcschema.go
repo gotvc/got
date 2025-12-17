@@ -16,6 +16,8 @@ var (
 
 var _ schema.Constructor = SchemaConstructor
 
+const SchemaName = "got/org"
+
 func SchemaConstructor(params json.RawMessage, mkSchema schema.Factory) (schema.Schema, error) {
 	return Schema{}, nil
 }

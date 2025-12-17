@@ -13,8 +13,7 @@ import (
 var _ branches.Space = &Space{}
 
 type Space struct {
-	Blobcache blobcache.Service
-	Tx        *Tx
+	Tx *Tx
 }
 
 // Create implements branches.Space.

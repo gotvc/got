@@ -27,8 +27,7 @@ func TestSpace(t *testing.T) {
 		tx, err := BeginTx(ctx, dmach, &kvmach, vol, true)
 		require.NoError(t, err)
 		return &Space{
-			Blobcache: bc,
-			Tx:        tx,
+			Tx: tx,
 		}
 	})
 }

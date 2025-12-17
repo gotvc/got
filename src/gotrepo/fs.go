@@ -11,7 +11,7 @@ import (
 )
 
 func (r *Repo) Ls(ctx context.Context, branchName string, p string, fn func(gotfs.DirEnt) error) error {
-	branch, err := r.GetBranch(ctx, branchName)
+	branch, err := r.GetMark(ctx, branchName)
 	if err != nil {
 		return err
 	}
@@ -21,7 +21,7 @@ func (r *Repo) Ls(ctx context.Context, branchName string, p string, fn func(gotf
 }
 
 func (r *Repo) Cat(ctx context.Context, branchName, p string, w io.Writer) error {
-	branch, err := r.GetBranch(ctx, branchName)
+	branch, err := r.GetMark(ctx, branchName)
 	if err != nil {
 		return err
 	}
@@ -36,7 +36,7 @@ func (r *Repo) Cat(ctx context.Context, branchName, p string, w io.Writer) error
 }
 
 func (r *Repo) Stat(ctx context.Context, branchName, p string) (*gotfs.Info, error) {
-	branch, err := r.GetBranch(ctx, branchName)
+	branch, err := r.GetMark(ctx, branchName)
 	if err != nil {
 		return nil, err
 	}
@@ -52,7 +52,7 @@ func (r *Repo) Stat(ctx context.Context, branchName, p string) (*gotfs.Info, err
 }
 
 func (r *Repo) Check(ctx context.Context, branchName string) error {
-	branch, err := r.GetBranch(ctx, branchName)
+	branch, err := r.GetMark(ctx, branchName)
 	if err != nil {
 		return err
 	}

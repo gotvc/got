@@ -62,11 +62,15 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		if err != nil {
 			return err
 		}
-		actAs, err := wc.repo.ActiveIdentity(ctx)
+		idenName, err := wc.GetActAs()
 		if err != nil {
 			return err
 		}
-		branch, err := wc.repo.GetBranch(ctx, branchName)
+		actAs, err := wc.repo.GetIdentity(ctx, idenName)
+		if err != nil {
+			return err
+		}
+		branch, err := wc.repo.GetMark(ctx, branchName)
 		if err != nil {
 			return err
 		}
@@ -107,7 +111,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
 	return dbutil.DoTxRO(ctx, wc.db, func(conn *dbutil.Conn) error {
 		branchName, err := wc.GetHead()
-		branch, err := wc.repo.GetBranch(ctx, branchName)
+		branch, err := wc.repo.GetMark(ctx, branchName)
 		if err != nil {
 			return err
 		}

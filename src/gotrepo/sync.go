@@ -7,13 +7,13 @@ import (
 	"github.com/gotvc/got/src/internal/metrics"
 )
 
-// Sync synces 2 branches by name.
+// Sync syncs 2 branches by name.
 func (r *Repo) Sync(ctx context.Context, src, dst string, force bool) error {
-	srcBranch, err := r.GetBranch(ctx, src)
+	srcBranch, err := r.GetMark(ctx, src)
 	if err != nil {
 		return err
 	}
-	dstBranch, err := r.GetBranch(ctx, dst)
+	dstBranch, err := r.GetMark(ctx, dst)
 	if err != nil {
 		return err
 	}

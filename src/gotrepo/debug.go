@@ -10,7 +10,7 @@ import (
 )
 
 func (r *Repo) DebugFS(ctx context.Context, name string, w io.Writer) error {
-	b, err := r.GetBranch(ctx, name)
+	b, err := r.GetMark(ctx, name)
 	if err != nil {
 		return err
 	}
@@ -26,7 +26,7 @@ func (r *Repo) DebugFS(ctx context.Context, name string, w io.Writer) error {
 }
 
 func (r *Repo) DebugKV(ctx context.Context, branchName string, w io.Writer) error {
-	b, err := r.GetBranch(ctx, branchName)
+	b, err := r.GetMark(ctx, branchName)
 	if err != nil {
 		return err
 	}

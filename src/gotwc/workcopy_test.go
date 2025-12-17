@@ -1,6 +1,7 @@
 package gotwc
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -138,8 +139,14 @@ func TestFork(t *testing.T) {
 
 func newTestWC(t testing.TB) *WC {
 	r := gotrepo.NewTestRepo(t)
+	_, err := r.CreateMark(context.TODO(), nameMaster, branches.Params{})
+	require.NoError(t, err)
 	wcdir := t.TempDir()
-	require.NoError(t, Init(r, wcdir))
+	cfg := Config{
+		Head:  nameMaster,
+		ActAs: gotrepo.DefaultIden,
+	}
+	require.NoError(t, Init(r, wcdir, cfg))
 	root, err := os.OpenRoot(wcdir)
 	require.NoError(t, err)
 	wc, err := New(r, root)
