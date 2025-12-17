@@ -20,15 +20,19 @@ func BeginTx(ctx context.Context, dmach *gdat.Machine, kvmach *gotkv.Machine, vo
 	if err != nil {
 		return nil, err
 	}
-	return &Tx{
-		tx:     tx,
-		dmach:  dmach,
-		kvmach: kvmach,
-	}, nil
+	return NewTx(tx, dmach, kvmach), nil
 }
 
 func NewGotKV() gotkv.Machine {
 	return gotkv.NewMachine(1<<13, 1<<18)
+}
+
+func NewTx(tx volumes.Tx, dmach *gdat.Machine, kvmach *gotkv.Machine) *Tx {
+	return &Tx{
+		tx:     tx,
+		dmach:  dmach,
+		kvmach: kvmach,
+	}
 }
 
 // Root is the root of a gotns namespace
@@ -56,12 +60,12 @@ func (r Root) Marshal(out []byte) []byte {
 	return sbe.AppendLP16(nil, r.Marks.Marshal(nil))
 }
 
-type BranchState struct {
-	Info branches.Info `json:"info"`
-	To   gdat.Ref      `json:"to"`
+type MarkState struct {
+	Info   branches.Info `json:"info"`
+	Target gdat.Ref      `json:"target"`
 }
 
-func (b BranchState) Marshal(out []byte) []byte {
+func (b MarkState) Marshal(out []byte) []byte {
 	data, err := json.Marshal(b)
 	if err != nil {
 		panic(err)
@@ -69,11 +73,8 @@ func (b BranchState) Marshal(out []byte) []byte {
 	return append(out, data...)
 }
 
-func (b *BranchState) Unmarshal(data []byte) error {
-	if err := json.Unmarshal(data, b); err != nil {
-		return err
-	}
-	return nil
+func (b *MarkState) Unmarshal(data []byte) error {
+	return json.Unmarshal(data, b)
 }
 
 // Tx is a transaction on a Namespace
@@ -89,6 +90,9 @@ func (tx *Tx) loadKV(ctx context.Context) error {
 	if tx.kvtx != nil {
 		return nil
 	}
+	if tx.tx == nil {
+		return fmt.Errorf("tx is already done")
+	}
 	var root []byte
 	if err := tx.tx.Load(ctx, &root); err != nil {
 		return err
@@ -101,16 +105,17 @@ func (tx *Tx) loadKV(ctx context.Context) error {
 		}
 		kvr = *r
 	} else {
-		if err := kvr.Unmarshal(root); err != nil {
+		r, err := ParseRoot(root)
+		if err != nil {
 			return err
 		}
+		kvr = r.Marks
 	}
-
 	tx.kvtx = tx.kvmach.NewTx(tx.tx, kvr)
 	return nil
 }
 
-func (tx *Tx) Get(ctx context.Context, name string) (*BranchState, error) {
+func (tx *Tx) Get(ctx context.Context, name string) (*MarkState, error) {
 	if err := tx.loadKV(ctx); err != nil {
 		return nil, err
 	}
@@ -120,19 +125,24 @@ func (tx *Tx) Get(ctx context.Context, name string) (*BranchState, error) {
 	} else if !found {
 		return nil, nil
 	}
-	var b BranchState
-	if err := b.Unmarshal(val); err != nil {
+	var ms MarkState
+	if err := ms.Unmarshal(val); err != nil {
 		return nil, err
 	}
-	return &b, nil
+	return &ms, nil
 }
 
-func (tx *Tx) Put(ctx context.Context, name string, b BranchState) error {
+func (tx *Tx) Put(ctx context.Context, name string, b MarkState) error {
 	if err := tx.loadKV(ctx); err != nil {
 		return err
 	}
 	if err := branches.CheckName(name); err != nil {
 		return err
+	}
+	if yes, err := stores.ExistsUnit(ctx, tx.tx, b.Target.CID); err != nil {
+		return err
+	} else if !yes {
+		return fmt.Errorf("mark target not found: %v", b.Target.CID)
 	}
 	return tx.kvtx.Put(ctx, []byte(name), b.Marshal(nil))
 }
@@ -164,20 +174,20 @@ func (tx *Tx) ListNames(ctx context.Context, span branches.Span, limit int) ([]s
 	return streams.Collect(ctx, it2, limit)
 }
 
-func (tx *Tx) SaveBranchRoot(ctx context.Context, name string, data []byte) error {
-	b, err := tx.Get(ctx, name)
+func (tx *Tx) SaveMarkRoot(ctx context.Context, name string, data []byte) error {
+	m, err := tx.Get(ctx, name)
 	if err != nil {
 		return err
 	}
-	if b == nil {
+	if m == nil {
 		return fmt.Errorf("cannot load branch root for %s; it does not exist", name)
 	}
 	ref, err := tx.dmach.Post(ctx, tx.tx, data)
 	if err != nil {
 		return err
 	}
-	b.To = *ref
-	return tx.Put(ctx, name, *b)
+	m.Target = *ref
+	return tx.Put(ctx, name, *m)
 }
 
 func (tx *Tx) LoadBranchRoot(ctx context.Context, name string, dst *[]byte) error {
@@ -188,7 +198,7 @@ func (tx *Tx) LoadBranchRoot(ctx context.Context, name string, dst *[]byte) erro
 	if b == nil {
 		return fmt.Errorf("cannot load branch root for %s; it does not exist", name)
 	}
-	return tx.dmach.GetF(ctx, tx.tx, b.To, func(data []byte) error {
+	return tx.dmach.GetF(ctx, tx.tx, b.Target, func(data []byte) error {
 		*dst = append((*dst)[0:], data...)
 		return nil
 	})
@@ -198,11 +208,16 @@ func (tx *Tx) Abort(ctx context.Context) error {
 	if tx.tx == nil {
 		return nil
 	}
-	return tx.tx.Abort(ctx)
+	if err := tx.tx.Abort(ctx); err != nil {
+		return err
+	}
+	tx.tx = nil
+	tx.kvtx = nil
+	return nil
 }
 
 func (tx *Tx) Commit(ctx context.Context) error {
-	if tx.kvtx == nil {
+	if tx.tx == nil {
 		return fmt.Errorf("tx is already done")
 	}
 	kvroot, err := tx.kvtx.Flush(ctx)
@@ -217,6 +232,7 @@ func (tx *Tx) Commit(ctx context.Context) error {
 		return err
 	}
 	tx.tx = nil
+	tx.kvtx = nil
 	return nil
 }
 
