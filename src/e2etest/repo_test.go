@@ -1,174 +1,77 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
+	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/blobcache"
+	"blobcache.io/blobcache/src/blobcache/blobcachetests"
 	"github.com/stretchr/testify/require"
 
-	"github.com/gotvc/got/src/branches"
-	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo"
-	"github.com/gotvc/got/src/gotwc"
+	"github.com/gotvc/got/src/gottests"
 	"github.com/gotvc/got/src/internal/testutil"
 )
+
+type Site = gottests.Site
 
 func TestMultiRepoSync(t *testing.T) {
 	ctx := testutil.Context(t)
 	ctx, cf := context.WithCancel(ctx)
 	t.Cleanup(cf)
-	p1, p2, pOrigin := initRepo(t), initRepo(t), initRepo(t)
-	origin := openRepo(t, pOrigin)
-	go origin.Serve(ctx, testutil.PacketConn(t))
-	originNS, err := origin.GotNSVolume(ctx)
-	require.NoError(t, err)
-	for _, p := range []string{p1, p2} {
-		err := gotrepo.ConfigureRepo(p, func(x gotrepo.Config) gotrepo.Config {
-			originEP := origin.Endpoint()
 
-			x.Spaces = []gotrepo.SpaceLayerSpec{
+	var sites [3]gottests.Site
+	for i := range sites {
+		sites[i] = gottests.NewSite(t)
+	}
+	origin := sites[0]
+
+	// serve the origin repo
+	go origin.Repo.Serve(ctx, testutil.PacketConn(t))
+	originEP := origin.Repo.Endpoint()
+	originNS, err := origin.Repo.NSVolume(ctx)
+	require.NoError(t, err)
+
+	// configure other repos to use it.
+	for _, s := range sites[1:] {
+		err := s.Repo.Configure(func(x gotrepo.Config) gotrepo.Config {
+			x.Spaces = []gotrepo.SpaceConfig{
 				{
-					Prefix: "origin/",
-					Target: gotrepo.SpaceSpec{Blobcache: &gotrepo.VolumeSpec{
-						Remote: &blobcache.VolumeBackend_Remote{
-							Endpoint: originEP,
-							Volume:   originNS.OID,
+					Name: "origin",
+					Spec: gotrepo.SpaceSpec{
+						Org: &blobcache.VolumeSpec{
+							Remote: &blobcache.VolumeBackend_Remote{
+								Endpoint: originEP,
+								Volume:   originNS.OID,
+							},
 						},
-					}},
+					},
 				},
 			}
 			return x
 		})
 		require.NoError(t, err)
 	}
-	r1, r2 := openRepo(t, p1), openRepo(t, p2)
-	wc1, _ := openWC(t, r1, p1), openWC(t, r2, p2)
 
-	// IAM setup
-	gnsc := origin.GotOrgClient()
-	intro1, err := r1.IntroduceSelf(ctx)
-	require.NoError(t, err)
-	intro2, err := r2.IntroduceSelf(ctx)
-	require.NoError(t, err)
-	originIden, err := origin.ActiveIdentity(ctx)
-	require.NoError(t, err)
-	require.NoError(t, gnsc.EnsureInit(ctx, blobcache.Handle{OID: originNS.OID}, []gotorg.IdentityUnit{*originIden}))
-	// Handles with empty secrets cause OpenAs to be called instead of OpenFrom.
-	require.NoError(t, gnsc.Do(ctx, blobcache.Handle{OID: originNS.OID}, func(tx *gotorg.Txn) error {
-		for _, intro := range []gotorg.ChangeSet{intro1, intro2} {
-			if err := tx.ChangeSet(ctx, intro); err != nil {
-				return err
-			}
-			g, err := tx.LookupGroup(ctx, "admin")
-			require.NoError(t, err)
-			id := getOne(intro.Sigs)
-			if err := tx.AddMember(ctx, g.ID, gotorg.MemberUnit(id)); err != nil {
-				return err
-			}
-		}
-		return nil
-	}))
-
-	t.SkipNow() // TODO: need to be able to create blobcache volumes on the remote.
-	createBranch(t, r1, "origin/master")
-	createBranch(t, r1, "origin/mybranch")
-	require.Contains(t, listBranches(t, r2), "origin/master")
-	require.Contains(t, listBranches(t, r2), "origin/mybranch")
+	t.SkipNow()
+	localMaster := gotrepo.FQM{Name: "master"}
+	originMaster := gotrepo.FQM{Space: "origin", Name: "master"}
+	sites[1].CreateMark(originMaster)
+	sites[1].CreateMark(gotrepo.FQM{Space: "origin", Name: "mybranch"})
+	require.Contains(t, sites[1].ListMarks("origin"), "master")
+	require.Contains(t, sites[1].ListMarks("origin"), "mybranch")
 
 	testData := []byte("hello world\n")
-	createFile(t, p1, "myfile.txt", testData)
-	add(t, wc1, "myfile.txt")
-	commit(t, wc1)
-	sync(t, r1, "master", "origin/master")
+	sites[1].CreateFile("myfile.txt", testData)
+	sites[1].Add("myfile.txt")
+	sites[1].Commit()
+	sites[1].Sync(localMaster, originMaster)
 
-	sync(t, r2, "origin/master", "master")
-	require.Contains(t, ls(t, r2, "master", ""), "myfile.txt")
-	require.Equal(t, testData, cat(t, r2, "master", "myfile.txt"))
-}
-
-func initRepo(t testing.TB) string {
-	dirpath := t.TempDir()
-	cfg := gotrepo.DefaultConfig()
-	require.NoError(t, gotrepo.Init(dirpath, cfg))
-	r, err := gotrepo.Open(dirpath)
-	require.NoError(t, err)
-	defer r.Close()
-	require.NoError(t, gotwc.Init(r, dirpath))
-	return dirpath
-}
-
-func openRepo(t testing.TB, p string) *gotrepo.Repo {
-	r, err := gotrepo.Open(p)
-	require.NoError(t, err)
-	t.Cleanup(func() { r.Close() })
-	return r
-}
-
-func openWC(t testing.TB, r *gotrepo.Repo, p string) *gotwc.WC {
-	root, err := os.OpenRoot(p)
-	require.NoError(t, err)
-	wc, err := gotwc.New(r, root)
-	require.NoError(t, err)
-	t.Cleanup(func() { wc.Close() })
-	return wc
-}
-
-func createFile(t testing.TB, repoPath, p string, data []byte) {
-	err := os.WriteFile(filepath.Join(repoPath, p), data, 0o644)
-	require.NoError(t, err)
-}
-
-func createBranch(t testing.TB, r *gotrepo.Repo, name string) {
-	ctx := testutil.Context(t)
-	_, err := r.CreateBranch(ctx, name, branches.Params{})
-	require.NoError(t, err)
-}
-
-func commit(t testing.TB, wc *gotwc.WC) {
-	ctx := testutil.Context(t)
-	err := wc.Commit(ctx, branches.SnapInfo{})
-	require.NoError(t, err)
-}
-
-func sync(t testing.TB, r *gotrepo.Repo, src, dst string) {
-	ctx := testutil.Context(t)
-	err := r.Sync(ctx, src, dst, false)
-	require.NoError(t, err)
-}
-
-func add(t testing.TB, wc *gotwc.WC, p string) {
-	err := wc.Add(testutil.Context(t), p)
-	require.NoError(t, err)
-}
-
-func ls(t testing.TB, r *gotrepo.Repo, b, p string) (ret []string) {
-	err := r.Ls(testutil.Context(t), b, p, func(de gotfs.DirEnt) error {
-		ret = append(ret, de.Name)
-		return nil
-	})
-	require.NoError(t, err)
-	return ret
-}
-
-func cat(t testing.TB, r *gotrepo.Repo, b, p string) []byte {
-	buf := bytes.Buffer{}
-	err := r.Cat(context.TODO(), b, p, &buf)
-	require.NoError(t, err)
-	return buf.Bytes()
-}
-
-func listBranches(t testing.TB, r *gotrepo.Repo) (ret []string) {
-	err := r.ForEachBranch(context.TODO(), func(name string) error {
-		ret = append(ret, name)
-		return nil
-	})
-	require.NoError(t, err)
-	return ret
+	sites[2].Sync(originMaster, localMaster)
+	require.Contains(t, sites[2].Ls(localMaster, ""), "myfile.txt")
+	require.Equal(t, testData, sites[2].Cat(localMaster, "myfile.txt"))
 }
 
 func getOne[K comparable, V any](m map[K]V) K {
@@ -176,4 +79,64 @@ func getOne[K comparable, V any](m map[K]V) K {
 		return k
 	}
 	panic("no keys in map")
+}
+
+func TestOrg(t *testing.T) {
+	ctx := testutil.Context(t)
+	ctx, cf := context.WithCancel(ctx)
+	t.Cleanup(cf)
+
+	var sites [2]gottests.Site
+	for i := range sites {
+		sites[i] = gottests.NewSite(t)
+	}
+	originBC := bclocal.NewTestService(t)
+	originEP, err := originBC.Endpoint(ctx)
+	require.NoError(t, err)
+	orgVolh := blobcachetests.CreateVolume(t, originBC, nil, gotorg.DefaultVolumeSpec(false))
+	gnsc := sites[0].OrgClient()
+	gnsc.Blobcache = originBC
+	require.NoError(t, gnsc.EnsureInit(ctx, orgVolh, []gotorg.IdentityUnit{
+		sites[0].GetIdentity(gotrepo.DefaultIden),
+		sites[1].GetIdentity(gotrepo.DefaultIden),
+	}))
+
+	// configure other repos to use it.
+	for _, s := range sites[1:] {
+		err := s.Repo.Configure(func(x gotrepo.Config) gotrepo.Config {
+			x.Spaces = []gotrepo.SpaceConfig{
+				{
+					Name: "origin",
+					Spec: gotrepo.SpaceSpec{
+						Org: &blobcache.VolumeSpec{
+							Remote: &blobcache.VolumeBackend_Remote{
+								Endpoint: originEP,
+								Volume:   orgVolh.OID,
+							},
+						},
+					},
+				},
+			}
+			return x
+		})
+		require.NoError(t, err)
+
+		intro := s.IntroduceSelf()
+
+		// Handles with empty secrets cause OpenAs to be called instead of OpenFrom.
+		require.NoError(t, gnsc.Do(ctx, orgVolh, func(tx *gotorg.Txn) error {
+			for _, intro := range []gotorg.ChangeSet{intro} {
+				if err := tx.ChangeSet(ctx, intro); err != nil {
+					return err
+				}
+				g, err := tx.LookupGroup(ctx, "admin")
+				require.NoError(t, err)
+				id := getOne(intro.Sigs)
+				if err := tx.AddMember(ctx, g.ID, gotorg.MemberUnit(id)); err != nil {
+					return err
+				}
+			}
+			return nil
+		}))
+	}
 }

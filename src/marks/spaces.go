@@ -1,4 +1,4 @@
-package branches
+package marks
 
 import (
 	"context"
@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	ErrNotExist = errors.New("branch does not exist")
-	ErrExists   = errors.New("a branch already exists by that name")
+	ErrNotExist = errors.New("mark does not exist")
+	ErrExists   = errors.New("a mark already exists by that name")
 )
 
 func IsNotExist(err error) bool {
@@ -31,7 +31,7 @@ type ErrInvalidName struct {
 }
 
 func (e ErrInvalidName) Error() string {
-	return fmt.Sprintf("invalid branch name: %q reason: %v", e.Name, e.Reason)
+	return fmt.Sprintf("invalid mark name: %q reason: %v", e.Name, e.Reason)
 }
 
 func CheckName(name string) error {
@@ -63,7 +63,7 @@ func (s Span) Contains(x string) bool {
 	return s.Begin <= x && (s.End == "" || s.End > x)
 }
 
-// A Space holds named branches.
+// A Space holds named marks.
 type Space interface {
 	Create(ctx context.Context, name string, cfg Params) (*Info, error)
 	Inspect(ctx context.Context, name string) (*Info, error)
@@ -71,23 +71,23 @@ type Space interface {
 	Delete(ctx context.Context, name string) error
 	List(ctx context.Context, span Span, limit int) ([]string, error)
 
-	// Open returns a volume for viewing and modifying the branch contents.
-	Open(ctx context.Context, name string) (*Branch, error)
+	// Open returns a volume for viewing and modifying the mark contents.
+	Open(ctx context.Context, name string) (*Mark, error)
 }
 
 func CreateIfNotExists(ctx context.Context, r Space, k string, cfg Params) (*Info, error) {
-	branch, err := r.Inspect(ctx, k)
+	mark, err := r.Inspect(ctx, k)
 	if err != nil {
 		if IsNotExist(err) {
 			return r.Create(ctx, k, cfg)
 		}
 		return nil, err
 	}
-	return branch, nil
+	return mark, nil
 }
 
 // ForEach is a convenience function which uses Space.List to call fn with
-// all the branch names contained in span.
+// all the mark names contained in span.
 func ForEach(ctx context.Context, s Space, span Span, fn func(string) error) (retErr error) {
 	for {
 		names, err := s.List(ctx, span, 0)

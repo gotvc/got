@@ -10,27 +10,23 @@ import (
 	"path/filepath"
 	"testing"
 
-	"blobcache.io/blobcache/src/bchttp"
 	"blobcache.io/blobcache/src/bclocal"
-	"blobcache.io/blobcache/src/bcremote"
 	"blobcache.io/blobcache/src/blobcache"
-	"blobcache.io/blobcache/src/schema"
-	"github.com/cloudflare/circl/sign/ed25519"
 	"github.com/stretchr/testify/require"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/kv"
-	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.uber.org/zap"
 
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo/internal/reposchema"
 	"github.com/gotvc/got/src/gotvc"
+	"github.com/gotvc/got/src/internal/gotcfg"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/gotvc/got/src/internal/volumes"
+	"github.com/gotvc/got/src/marks"
 )
 
 // fs paths
@@ -38,14 +34,13 @@ const (
 	gotPrefix  = ".got"
 	configPath = ".got/config"
 
-	localDBPath      = ".got/got.db"
 	blobcacheDirPath = ".got/blobcache"
 	idenPath         = ".got/iden"
 )
 
 type (
-	Space  = branches.Space
-	Volume = branches.Volume
+	Space  = marks.Space
+	Volume = marks.Volume
 
 	Ref  = gotkv.Ref
 	Root = gotfs.Root
@@ -58,35 +53,30 @@ type (
 // Repos also manage a namespace and multiple stages.
 // Working Copies can be created to manipulate the contents of the stages.
 type Repo struct {
-	rootPath string
-	repoFS   posixfs.FS // repoFS is the directory that the repo is in
+	root     *os.Root
 	config   Config
 	bc       blobcache.Service
+	closeAll bool
 
-	idenStore   idenStore
-	leafPrivate gotorg.IdenPrivate
-	repoc       reposchema.Client
-	gnsc        gotorg.Client
-	space       lazySetup[branches.Space]
+	repoc reposchema.Client
 }
 
 // Init initializes a new repo at the given path.
 // If bc is nil, a local blobcache will be created within the .got directory.
 func Init(p string, config Config) error {
-	repoDirFS := posixfs.NewDirFS(p)
-	if _, err := repoDirFS.Stat(configPath); posixfs.IsErrNotExist(err) {
-	} else if err != nil {
+	root, err := os.OpenRoot(p)
+	if err != nil {
 		return err
-	} else {
-		return fmt.Errorf("repo already exists at path %s", p)
 	}
-	if err := repoDirFS.Mkdir(gotPrefix, 0o755); err != nil {
+	defer root.Close()
+	if err := root.Mkdir(gotPrefix, 0o755); err != nil {
 		return err
 	}
 	// config
-	if err := SaveConfig(repoDirFS, configPath, config); err != nil {
-		return err
+	if err := gotcfg.CreateFile(root, configPath, config); err != nil {
+		return fmt.Errorf("could not create repo config, it may already exist. %w", err)
 	}
+	// check that is opens without error
 	r, err := Open(p)
 	if err != nil {
 		return err
@@ -99,134 +89,104 @@ func Open(p string) (*Repo, error) {
 	if err != nil {
 		return nil, err
 	}
-	ctx := context.Background()
-	ctx, cf := context.WithCancel(ctx)
+	root, err := os.OpenRoot(p)
+	if err != nil {
+		return nil, err
+	}
+
+	// background context
+	bgCtx := context.Background()
+	bgCtx, cf := context.WithCancel(bgCtx)
 	defer cf()
 	log, _ := zap.NewProduction()
-	ctx = logctx.NewContext(ctx, log)
-
-	repoFS := posixfs.NewDirFS(p)
-	config, err := LoadConfig(repoFS, configPath)
+	bgCtx = logctx.NewContext(bgCtx, log)
+	// config
+	config, err := LoadConfig(root)
 	if err != nil {
 		return nil, err
 	}
-
 	// setup identity store
-	if err := os.Mkdir(filepath.Join(p, idenPath), 0o755); err != nil && !os.IsExist(err) {
+	if err := root.MkdirAll(idenPath, 0o755); err != nil && !os.IsExist(err) {
 		return nil, err
 	}
-	idenRoot, err := os.OpenRoot(filepath.Join(p, idenPath))
-	if err != nil {
-		return nil, err
+	if len(config.Identities) < 1 {
+		idens, err := openIdenStore(root)
+		if err != nil {
+			return nil, err
+		}
+		defer idens.Close()
+		idp := gotorg.GenerateIden()
+		id, err := idens.Add(idp)
+		if err != nil {
+			return nil, err
+		}
+		if err := EditConfig(root, func(x Config) Config {
+			x.Identities[DefaultIden] = id
+			return x
+		}); err != nil {
+			return nil, err
+		}
+		config, err = LoadConfig(root)
+		if err != nil {
+			return nil, err
+		}
 	}
-	idens := idenStore{root: idenRoot}
-	idp, err := idens.GetOrCreate("default")
-	if err != nil {
-		return nil, err
-	}
-	sigPriv := idp.SigPrivateKey.(ed25519.PrivateKey)
 
 	// blobcache
-	var bc blobcache.Service
-	switch {
-	case config.Blobcache.InProcess != nil:
-		if err := posixfs.MkdirAll(repoFS, blobcacheDirPath, 0o755); err != nil {
-			return nil, err
-		}
-		bc, err = openLocalBlobcache(ctx, sigPriv, filepath.Join(p, blobcacheDirPath))
-		if err != nil {
-			return nil, err
-		}
-	case config.Blobcache.HTTP != nil:
-		bc, err = openHTTPBlobcache(config.Blobcache.HTTP.URL)
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, fmt.Errorf("empty blobcache spec: %v", config.Blobcache)
+	bc, err := makeBlobcache(root, *config, config.Blobcache, bgCtx)
+	if err != nil {
+		return nil, err
 	}
+
 	env := Env{
-		Background: ctx,
-		Dir:        p,
+		Background: bgCtx,
+		Dir:        root,
 		Blobcache:  bc,
+		CloseAll:   true,
 	}
-	return New(env, *config)
+	return New(env, *config), nil
 }
 
 // Env is the environment that the Repo needs to function.
 type Env struct {
 	Background context.Context
-	Dir        string
+	Dir        *os.Root
 	Blobcache  blobcache.Service
+
+	// CloseAll causes Repo.Close to also close these resources.
+	CloseAll bool
 }
 
 // New creates a new repo once the environment is setup.
-func New(env Env, cfg Config) (*Repo, error) {
-	repoFS := posixfs.NewDirFS(env.Dir)
-	bc := env.Blobcache
+func New(env Env, cfg Config) *Repo {
+	return &Repo{
+		root:     env.Dir,
+		bc:       env.Blobcache,
+		config:   cfg,
+		closeAll: env.CloseAll,
 
-	idenRoot, err := os.OpenRoot(filepath.Join(env.Dir, idenPath))
-	if err != nil {
-		return nil, err
+		repoc: reposchema.NewClient(env.Blobcache),
 	}
-	idens := idenStore{root: idenRoot}
-	idp, err := idens.GetOrCreate("default")
-	if err != nil {
-		return nil, err
-	}
-	r := &Repo{
-		rootPath:    env.Dir,
-		repoFS:      repoFS,
-		bc:          bc,
-		config:      cfg,
-		idenStore:   idens,
-		leafPrivate: *idp,
-		repoc:       reposchema.NewClient(bc),
-		gnsc: gotorg.Client{
-			Machine:   gotorg.New(),
-			Blobcache: bc,
-			ActAs:     *idp,
-		},
-	}
-	r.space = newLazySetup(func(ctx context.Context) (branches.Space, error) {
-		nsh, err := r.repoc.GetNamespace(ctx, cfg.RepoVolume, r.useSchema())
-		if err != nil {
-			return nil, err
-		}
-		idenUnit, err := r.ActiveIdentity(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if err := r.gnsc.EnsureInit(ctx, *nsh, []gotorg.IdentityUnit{*idenUnit}); err != nil {
-			return nil, err
-		}
-		spaceSpec := cfg.Spaces
-		spaceSpec = append(spaceSpec, SpaceLayerSpec{
-			Prefix: "",
-			Target: SpaceSpec{Local: &nsh.OID},
-		})
-		space, err := r.MakeSpace(ctx, SpaceSpec{Multi: &spaceSpec})
-		if err != nil {
-			return nil, err
-		}
-		// create the master branch if it doesn't exist
-		if _, err := branches.CreateIfNotExists(ctx, space, nameMaster, branches.NewConfig(false)); err != nil {
-			return nil, err
-		}
-		return space, nil
-	})
-	return r, nil
 }
 
 func (r *Repo) Close() (retErr error) {
 	ctx := context.TODO()
 	for _, fn := range []func() error{
 		func() error {
+			if !r.closeAll {
+				return nil
+			}
 			if lsvc, ok := r.bc.(*bclocal.Service); ok {
 				logctx.Infof(ctx, "closing in-process blobcache")
 				return lsvc.Close()
 			}
 			return nil
+		},
+		func() error {
+			if !r.closeAll {
+				return nil
+			}
+			return r.root.Close()
 		},
 	} {
 		if err := fn(); err != nil {
@@ -236,13 +196,13 @@ func (r *Repo) Close() (retErr error) {
 	return retErr
 }
 
-// RootPath is the path given when the Repo was opened
-func (r *Repo) RootPath() string {
-	return r.rootPath
+func (r *Repo) Config() Config {
+	return r.config
 }
 
-func (r *Repo) GetSpace(ctx context.Context) (Space, error) {
-	return r.space.Use(ctx)
+// Dir is the path given when the Repo was opened
+func (r *Repo) Dir() string {
+	return r.root.Name()
 }
 
 func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
@@ -266,10 +226,22 @@ func (r *Repo) Cleanup(ctx context.Context) error {
 	return nil
 }
 
-// GotNSVolume returns the FQOID of the namespace volume.
+func (r *Repo) OrgClient(actAs string) (gotorg.Client, error) {
+	idp, err := r.getPrivate(actAs)
+	if err != nil {
+		return gotorg.Client{}, err
+	}
+	return gotorg.Client{
+		Blobcache: r.bc,
+		Machine:   gotorg.New(),
+		ActAs:     *idp,
+	}, nil
+}
+
+// NSVolume returns the FQOID of the namespace volume.
 // This can be used to access the namespace from another Blobcache node.
 // It does not modify the contents of the namespace volume.
-func (r *Repo) GotNSVolume(ctx context.Context) (blobcache.FQOID, error) {
+func (r *Repo) NSVolume(ctx context.Context) (blobcache.FQOID, error) {
 	ep, err := r.bc.Endpoint(ctx)
 	if err != nil {
 		return blobcache.FQOID{}, err
@@ -305,6 +277,15 @@ func (r *Repo) useSchema() bool {
 	}
 }
 
+func (r *Repo) reloadConfig() error {
+	cfg, err := LoadConfig(r.root)
+	if err != nil {
+		return err
+	}
+	r.config = *cfg
+	return nil
+}
+
 func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) error {
 	if err := kv.ForEach[[]byte](ctx, s, state.TotalSpan[[]byte](), func(k []byte) error {
 		v, _ := kv.Get(ctx, s, k)
@@ -315,55 +296,6 @@ func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) err
 	}
 	_, err := fmt.Fprintln(w)
 	return err
-}
-
-func openLocalBlobcache(bgCtx context.Context, privKey ed25519.PrivateKey, p string) (*bclocal.Service, error) {
-	// TODO: we should probably let the caller do this.
-	logger := zap.NewNop()
-	logger.Core().Enabled(zap.PanicLevel)
-	bgCtx = logctx.NewContext(bgCtx, logger)
-
-	return bclocal.New(bclocal.Env{
-		Background: bgCtx,
-		StateDir:   p,
-		PrivateKey: privKey,
-		MkSchema:   mkSchema,
-		Root:       reposchema.GotRepoVolumeSpec(),
-		Policy:     &bclocal.AllOrNothingPolicy{},
-	}, bclocal.Config{})
-}
-
-func openHTTPBlobcache(u string) (*bchttp.Client, error) {
-	return bchttp.NewClient(nil, u), nil
-}
-
-func openRemoteBlobcache(privateKey ed25519.PrivateKey, pc net.PacketConn, ep blobcache.Endpoint) (*bcremote.Service, error) {
-	return bcremote.New(privateKey, pc, ep), nil
-}
-
-func mkSchema(spec blobcache.SchemaSpec) (schema.Schema, error) {
-	switch spec.Name {
-	case reposchema.SchemaName_GotRepo:
-		return reposchema.Constructor(spec.Params, nil)
-	case reposchema.SchemeName_GotOrg:
-		return gotorg.SchemaConstructor(spec.Params, nil)
-	case "":
-		return schema.None{}, nil
-	default:
-		return nil, fmt.Errorf("unknown schema %q", spec.Name)
-	}
-}
-
-// RepoVolumeSpec returns a Blobcache Volume spec which
-// can be used to create a Volume suitable for a Repo.
-func RepoVolumeSpec(useSchema bool) blobcache.VolumeSpec {
-	spec := reposchema.GotRepoVolumeSpec()
-	if !useSchema {
-		spec.Local.Schema = blobcache.SchemaSpec{
-			Name: blobcache.Schema_NONE,
-		}
-	}
-	return spec
 }
 
 func NewTestRepo(t testing.TB) *Repo {

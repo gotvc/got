@@ -1,6 +1,7 @@
 package gotwc
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -9,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/testutil"
+	"github.com/gotvc/got/src/marks"
 	"github.com/stretchr/testify/require"
 	"go.brendoncarroll.net/state/posixfs"
 )
@@ -47,7 +48,7 @@ func TestCommit(t *testing.T) {
 	err = wc.Put(ctx, p)
 	require.NoError(t, err)
 
-	err = wc.Commit(ctx, branches.SnapInfo{})
+	err = wc.Commit(ctx, marks.SnapInfo{})
 	require.NoError(t, err)
 
 	checkFileContent(t, wc, p, strings.NewReader(fileContents))
@@ -58,13 +59,13 @@ func TestCommit(t *testing.T) {
 	// track both
 	require.NoError(t, wc.Put(ctx, p))
 	require.NoError(t, wc.Put(ctx, p2))
-	err = wc.Commit(ctx, branches.SnapInfo{})
+	err = wc.Commit(ctx, marks.SnapInfo{})
 	require.NoError(t, err)
 
 	checkNotExists(t, wc, p)
 	checkFileContent(t, wc, p2, strings.NewReader(fileContents))
 
-	require.NoError(t, wc.repo.Check(ctx, nameMaster))
+	require.NoError(t, wc.repo.Check(ctx, gotrepo.FQM{Name: nameMaster}))
 }
 
 func TestCommitLargeFile(t *testing.T) {
@@ -78,7 +79,7 @@ func TestCommitLargeFile(t *testing.T) {
 	const size = 1e9
 	require.NoError(t, posixfs.PutFile(ctx, fs, p, 0o644, testutil.RandomStream(0, size)))
 	require.NoError(t, wc.Put(ctx, p))
-	require.NoError(t, wc.Commit(ctx, branches.SnapInfo{}))
+	require.NoError(t, wc.Commit(ctx, marks.SnapInfo{}))
 	checkExists(t, wc, p)
 	checkFileContent(t, wc, p, testutil.RandomStream(0, size))
 }
@@ -104,7 +105,7 @@ func TestCommitDir(t *testing.T) {
 		require.NoError(t, posixfs.PutFile(ctx, fs, p, 0o644, strings.NewReader(content)))
 	}
 	require.NoError(t, wc.Put(ctx, dirpath))
-	require.NoError(t, wc.Commit(ctx, branches.SnapInfo{}))
+	require.NoError(t, wc.Commit(ctx, marks.SnapInfo{}))
 	for i := 0; i < N; i++ {
 		p := getPath(i)
 		content := getContent(i)
@@ -125,11 +126,11 @@ func TestFork(t *testing.T) {
 	for i := 0; i < N; i++ {
 		posixfs.PutFile(ctx, fs, filePath, 0o644, strings.NewReader("test-"+strconv.Itoa(i)))
 		require.NoError(t, wc.Put(ctx, filePath))
-		require.NoError(t, wc.Commit(ctx, branches.SnapInfo{}))
+		require.NoError(t, wc.Commit(ctx, marks.SnapInfo{}))
 	}
 
 	require.NoError(t, repo.Fork(ctx, nameMaster, "branch2"))
-	require.NoError(t, repo.History(ctx, "branch2", func(_ gotfs.Ref, _ gotvc.Snap) error {
+	require.NoError(t, repo.History(ctx, gotrepo.FQM{Name: "branch2"}, func(_ gotfs.Ref, _ gotvc.Snap) error {
 		return nil
 	}))
 	commitCount := countCommits(t, wc.repo, "branch2")
@@ -138,8 +139,14 @@ func TestFork(t *testing.T) {
 
 func newTestWC(t testing.TB) *WC {
 	r := gotrepo.NewTestRepo(t)
+	_, err := r.CreateMark(context.TODO(), gotrepo.FQM{Name: nameMaster}, marks.Params{})
+	require.NoError(t, err)
 	wcdir := t.TempDir()
-	require.NoError(t, Init(r, wcdir))
+	cfg := Config{
+		Head:  nameMaster,
+		ActAs: gotrepo.DefaultIden,
+	}
+	require.NoError(t, Init(r, wcdir, cfg))
 	root, err := os.OpenRoot(wcdir)
 	require.NoError(t, err)
 	wc, err := New(r, root)
@@ -155,7 +162,7 @@ func checkFileContent(t testing.TB, wc *WC, p string, r io.Reader) {
 	ctx := testutil.Context(t)
 	pr, pw := io.Pipe()
 	go func() {
-		err := wc.repo.Cat(ctx, getHead(t, wc), p, pw)
+		err := wc.repo.Cat(ctx, gotrepo.FQM{Name: getHead(t, wc)}, p, pw)
 		if err != nil {
 			pw.CloseWithError(err)
 		} else {
@@ -174,7 +181,7 @@ func getHead(t testing.TB, wc *WC) string {
 func exists(t testing.TB, wc *WC, p string) bool {
 	ctx := testutil.Context(t)
 	var found bool
-	err := wc.repo.Ls(ctx, getHead(t, wc), path.Dir(p), func(ent gotfs.DirEnt) error {
+	err := wc.repo.Ls(ctx, gotrepo.FQM{Name: getHead(t, wc)}, path.Dir(p), func(ent gotfs.DirEnt) error {
 		found = found || ent.Name == path.Base(p)
 		return nil
 	})
@@ -197,7 +204,7 @@ func checkNotExists(t testing.TB, wc *WC, p string) {
 func countCommits(t testing.TB, repo *gotrepo.Repo, branchName string) int {
 	ctx := testutil.Context(t)
 	var count int
-	repo.History(ctx, branchName, func(_ gotfs.Ref, _ gotvc.Snap) error {
+	repo.History(ctx, gotrepo.FQM{Name: branchName}, func(_ gotfs.Ref, _ gotvc.Snap) error {
 		count++
 		return nil
 	})

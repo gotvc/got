@@ -9,10 +9,10 @@ import (
 	"path"
 	"time"
 
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
+	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 )
@@ -22,10 +22,10 @@ var _ iofs.FS = &FS{}
 // FS implements io/fs.FS
 type FS struct {
 	ctx    context.Context
-	branch branches.Branch
+	branch marks.Mark
 }
 
-func New(ctx context.Context, b branches.Branch) *FS {
+func New(ctx context.Context, b marks.Mark) *FS {
 	return &FS{
 		ctx:    ctx,
 		branch: b,
@@ -243,7 +243,7 @@ func convertError(err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, branches.ErrNotExist):
+	case errors.Is(err, marks.ErrNotExist):
 		return iofs.ErrNotExist
 	case errors.Is(err, posixfs.ErrNotExist):
 		return iofs.ErrNotExist

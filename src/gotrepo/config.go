@@ -1,17 +1,23 @@
 package gotrepo
 
 import (
-	"bytes"
-	"context"
-	"encoding/json"
-	"path/filepath"
+	"fmt"
+	"os"
+	"slices"
+	"strings"
 
 	"blobcache.io/blobcache/src/blobcache"
-	"go.brendoncarroll.net/state/posixfs"
+	"github.com/gotvc/got/src/internal/gotcfg"
+	"go.inet256.org/inet256/src/inet256"
 )
 
+// Config contains runtime parameters for a Repo
 type Config struct {
-	Spaces MultiSpaceSpec `json:"spaces"`
+	// Spaces contain named mutable references to Snapshots
+	// They are most similar to git remotes.
+	Spaces []SpaceConfig `json:"spaces"`
+	// Identities are named identities, which refer to files in the .got/iden directory
+	Identities map[string]inet256.ID `json:"identities"`
 	// Blobcache configures access to a Blobcache service.
 	// Got stores most of it's data in Blobcache.
 	Blobcache BlobcacheSpec `json:"blobcache"`
@@ -21,44 +27,55 @@ type Config struct {
 	RepoVolume blobcache.OID `json:"repo_volume"`
 }
 
+func (c *Config) Validate() error {
+	slices.SortStableFunc(c.Spaces, func(a, b SpaceConfig) int {
+		return strings.Compare(a.Name, b.Name)
+	})
+	for i := 1; i < len(c.Spaces); i++ {
+		if c.Spaces[i-1].Name == c.Spaces[i].Name {
+			return fmt.Errorf("config: spaces must have different names. %v, %v", c.Spaces[i-1], c.Spaces[i])
+		}
+	}
+	return nil
+}
+
+// SpaceConfig is an element of a Config, which configures a named Space.
+type SpaceConfig struct {
+	Name string    `json:"name"`
+	Spec SpaceSpec `json:"spec"`
+}
+
 func DefaultConfig() Config {
 	return Config{
-		Spaces: []SpaceLayerSpec{},
+		Spaces: []SpaceConfig{},
 		Blobcache: BlobcacheSpec{
-			InProcess: &struct{}{},
+			InProcess: &InProcessBlobcache{
+				ActAs: DefaultIden,
+			},
 		},
 		RepoVolume: blobcache.OID{},
 	}
 }
 
-func LoadConfig(fsx posixfs.FS, p string) (*Config, error) {
-	data, err := posixfs.ReadFile(context.TODO(), fsx, p)
+func LoadConfig(repo *os.Root) (*Config, error) {
+	data, err := repo.ReadFile(configPath)
 	if err != nil {
 		return nil, err
 	}
-	config := &Config{}
-	if err := json.Unmarshal(data, config); err != nil {
-		return nil, err
-	}
-	return config, nil
+	return gotcfg.Parse[Config](data)
 }
 
-func SaveConfig(fsx posixfs.FS, p string, c Config) error {
-	data, err := json.MarshalIndent(c, "", "  ")
-	if err != nil {
-		return err
-	}
-	return posixfs.PutFile(context.TODO(), fsx, p, 0o644, bytes.NewReader(data))
+// EditConfig applies fn to the config of the repo at repoPath
+func EditConfig(repo *os.Root, fn func(x Config) Config) error {
+	return gotcfg.EditFile(repo, configPath, func(x Config) Config {
+		if x.Identities == nil {
+			x.Identities = make(map[string]inet256.ID)
+		}
+		return fn(x)
+	})
 }
 
-// ConfigureRepo applies fn to the config of the repo at repoPath
-func ConfigureRepo(repoPath string, fn func(x Config) Config) error {
-	fs := posixfs.NewOSFS()
-	p := filepath.Join(repoPath, filepath.FromSlash(configPath))
-	configX, err := LoadConfig(fs, p)
-	if err != nil {
-		return err
-	}
-	configY := fn(*configX)
-	return SaveConfig(fs, p, configY)
+func (r *Repo) Configure(fn func(x Config) Config) error {
+	defer r.reloadConfig()
+	return EditConfig(r.root, fn)
 }

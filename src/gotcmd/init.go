@@ -17,9 +17,8 @@ var initCmd = star.Command{
 		Short: "initializes a repository in the current directory",
 	},
 	Flags: map[string]star.Flag{
-		"blobcache-remote": blobcacheRemoteParam,
-		"blobcache-http":   blobcacheHttpParam,
-		"volume":           volumeParam,
+		"blobcache-http": blobcacheHttpParam,
+		"volume":         volumeParam,
 	},
 	F: func(c star.Context) error {
 		config := gotrepo.DefaultConfig()
@@ -44,7 +43,10 @@ var initCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		if err := gotwc.Init(repo, "."); err != nil {
+		if err := gotwc.Init(repo, ".", gotwc.Config{
+			Head:  "master",
+			ActAs: gotrepo.DefaultIden,
+		}); err != nil {
 			return err
 		}
 		c.Printf("successfully initialized got repo in current directory\n")
@@ -66,17 +68,11 @@ func specFromContext(c star.Context) (ret gotrepo.BlobcacheSpec, _ error) {
 		}
 	default:
 		c.Printf("using in-process blobcache\n")
-		ret.InProcess = &struct{}{}
+		ret.InProcess = &gotrepo.InProcessBlobcache{
+			ActAs: gotrepo.DefaultIden,
+		}
 	}
 	return ret, nil
-}
-
-var blobcacheRemoteParam = star.Optional[blobcache.Endpoint]{
-	ID: "blobcache-remote",
-	Parse: func(s string) (blobcache.Endpoint, error) {
-		return blobcache.ParseEndpoint(s)
-	},
-	ShortDoc: "the endpoint of the remote blobcache service",
 }
 
 var blobcacheHttpParam = star.Optional[string]{

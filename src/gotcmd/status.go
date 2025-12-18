@@ -6,6 +6,7 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc"
 	"go.brendoncarroll.net/star"
 )
@@ -77,7 +78,8 @@ var lsCmd = star.Command{
 			return err
 		}
 		p, _ := pathParam.LoadOpt(c)
-		return wc.Repo().Ls(ctx, b, p, func(ent gotfs.DirEnt) error {
+		m := gotrepo.FQM{Name: b}
+		return wc.Repo().Ls(ctx, m, p, func(ent gotfs.DirEnt) error {
 			_, err := fmt.Fprintf(c.StdOut, "%v %s\n", ent.Mode, ent.Name)
 			return err
 		})
@@ -101,7 +103,7 @@ var catCmd = star.Command{
 			return err
 		}
 		p, _ := pathParam.LoadOpt(c)
-		return wc.Repo().Cat(ctx, b, p, c.StdOut)
+		return wc.Repo().Cat(ctx, gotrepo.FQM{Name: b}, p, c.StdOut)
 	},
 }
 
@@ -120,7 +122,7 @@ var scrubCmd = star.Command{
 		if err != nil {
 			return err
 		}
-		return wc.Repo().Check(ctx, b)
+		return wc.Repo().Check(ctx, gotrepo.FQM{Name: b})
 	},
 }
 

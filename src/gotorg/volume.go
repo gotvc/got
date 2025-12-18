@@ -8,11 +8,11 @@ import (
 	"github.com/cloudflare/circl/sign"
 	"go.inet256.org/inet256/src/inet256"
 
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
+	"github.com/gotvc/got/src/marks"
 )
 
 // AddVolume adds a new Volume to the namespace.
@@ -68,7 +68,7 @@ func (m *Machine) ForEachVolume(ctx context.Context, s stores.Reading, x State, 
 	})
 }
 
-type VolumeConstructor = func(nsVol, innerVol branches.Volume) *Volume
+type VolumeConstructor = func(nsVol, innerVol marks.Volume) *Volume
 
 func (m *Machine) Open(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, volid blobcache.OID, writeAccess bool) (VolumeConstructor, error) {
 	vent, err := m.GetVolume(ctx, s, x, volid)
@@ -86,7 +86,7 @@ func (m *Machine) Open(ctx context.Context, s stores.Reading, x State, actAs Ide
 	rs := secret.Ratchet(int(ratchet) - 1).DeriveSym()
 	symSecret := &rs
 
-	mkVol := func(nsVol, innerVol branches.Volume) *Volume {
+	mkVol := func(nsVol, innerVol marks.Volume) *Volume {
 		return newVolume(m, actAs.SigPrivateKey, nsVol, innerVol, symSecret)
 	}
 	return mkVol, nil
@@ -98,7 +98,7 @@ func (m *Machine) OpenAt(ctx context.Context, s stores.Reading, x State, actAs I
 		return blobcache.OID{}, nil, err
 	}
 	if ent == nil {
-		return blobcache.OID{}, nil, branches.ErrNotExist
+		return blobcache.OID{}, nil, marks.ErrNotExist
 	}
 	vw, err := m.Open(ctx, s, x, actAs, ent.Volume, writeAccess)
 	if err != nil {

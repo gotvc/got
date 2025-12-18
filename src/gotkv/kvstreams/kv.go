@@ -41,14 +41,9 @@ func (e Entry) String() string {
 //	  }
 //	  // use ent here. ent will be valid until the next call to it.Next
 //	}
-type Iterator interface {
-	streams.Iterator[Entry]
-	streams.Peekable[Entry]
+type Iterator = streams.Iterator[Entry]
 
-	Seek(ctx context.Context, gteq []byte) error
-}
-
-func Peek(ctx context.Context, it Iterator) (*Entry, error) {
+func Peek(ctx context.Context, it streams.Peekable[Entry]) (*Entry, error) {
 	var ent Entry
 	if err := it.Peek(ctx, &ent); err != nil {
 		return nil, err

@@ -37,6 +37,9 @@ var rootCmd = star.NewDir(
 	}, map[string]star.Command{
 		"init": initCmd,
 
+		"status": statusCmd,
+
+		// staging area commands
 		"add":     addCmd,
 		"rm":      rmCmd,
 		"put":     putCmd,
@@ -44,8 +47,9 @@ var rootCmd = star.NewDir(
 		"clear":   clearCmd,
 		"commit":  commitCmd,
 
-		"status": statusCmd,
-		"wc":     wcCmd,
+		// other working copy methods
+		"head": headCmd,
+		"wc":   wcCmd,
 
 		"ls":   lsCmd,
 		"cat":  catCmd,
@@ -54,18 +58,17 @@ var rootCmd = star.NewDir(
 
 		"history": historyCmd,
 		"log":     historyCmd,
-		"branch":  branchCmd,
-		"head":    headCmd,
-		"fork":    forkCmd,
+		"marks":   mark,
 		"sync":    syncCmd,
+		"fork":    forkCmd,
 
-		"local-id": localIDCmd,
-		"serve":    serveCmd,
-		"slurp":    slurpCmd,
-		"cleanup":  cleanupCmd,
-		"debug":    debugCmd,
-		"scrub":    scrubCmd,
-		"bc":       blobcacheCmd,
+		"ns": nsCmd,
+
+		"serve": serveCmd,
+		"slurp": slurpCmd,
+		"debug": debugCmd,
+		"scrub": scrubCmd,
+		"bc":    blobcacheCmd,
 	},
 )
 

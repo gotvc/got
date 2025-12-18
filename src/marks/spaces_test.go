@@ -1,4 +1,4 @@
-package branches
+package marks
 
 import (
 	"testing"

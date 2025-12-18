@@ -20,6 +20,9 @@ var serveCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
+		if cfg := repo.Config(); cfg.Blobcache.InProcess == nil {
+			return fmt.Errorf("serve requires a repository with a local blobcache")
+		}
 		laddrStr := listenAddrParam.Load(c)
 		laddr, err := net.ResolveUDPAddr("udp", laddrStr)
 		if err != nil {
@@ -29,12 +32,8 @@ var serveCmd = star.Command{
 		if err != nil {
 			return err
 		}
-		leaf, err := repo.ActiveIdentity(ctx)
-		if err != nil {
-			return err
-		}
 		ep := blobcache.Endpoint{
-			Peer:   leaf.ID,
+			Peer:   repo.BlobcachePeer(),
 			IPPort: pc.LocalAddr().(*net.UDPAddr).AddrPort(),
 		}
 		fmt.Fprintln(c.StdOut, "BLOBCACHE ENDPOINT:")

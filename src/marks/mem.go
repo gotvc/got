@@ -1,4 +1,4 @@
-package branches
+package marks
 
 import (
 	"context"
@@ -91,7 +91,7 @@ func (r *MemSpace) List(ctx context.Context, span Span, limit int) (ret []string
 	return ret, nil
 }
 
-func (r *MemSpace) Open(ctx context.Context, name string) (*Branch, error) {
+func (r *MemSpace) Open(ctx context.Context, name string) (*Mark, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.volumes[name]; !exists {
@@ -101,7 +101,7 @@ func (r *MemSpace) Open(ctx context.Context, name string) (*Branch, error) {
 	if !exists {
 		return nil, ErrNotExist
 	}
-	return &Branch{
+	return &Mark{
 		Volume: r.volumes[name],
 		Info:   info,
 	}, nil

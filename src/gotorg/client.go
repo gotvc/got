@@ -1,18 +1,19 @@
 package gotorg
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"errors"
+	"slices"
 
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema/statetrace"
-	"github.com/cloudflare/circl/kem"
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
+	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/exp/slices2"
 	"go.inet256.org/inet256/src/inet256"
 )
@@ -31,6 +32,9 @@ func (c *Client) EnsureInit(ctx context.Context, volh blobcache.Handle, admins [
 	if err != nil {
 		return err
 	}
+	slices.SortStableFunc(admins, func(a, b IdentityUnit) int {
+		return bytes.Compare(a.ID[:], b.ID[:])
+	})
 	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Modify: true})
 	if err != nil {
 		return err
@@ -164,7 +168,7 @@ func (c *Client) DeleteAlias(ctx context.Context, volh blobcache.Handle, name st
 	})
 }
 
-func (c *Client) ListAliases(ctx context.Context, volh blobcache.Handle, span branches.Span, limit int) ([]string, error) {
+func (c *Client) ListAliases(ctx context.Context, volh blobcache.Handle, span marks.Span, limit int) ([]string, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return nil, err
@@ -188,7 +192,7 @@ func (c *Client) ListAliases(ctx context.Context, volh blobcache.Handle, span br
 	return names, nil
 }
 
-func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string) (*branches.Info, error) {
+func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string) (*marks.Info, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return nil, err
@@ -201,7 +205,7 @@ func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string
 	return nil, nil
 }
 
-func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, actAs IdenPrivate, writeAccess bool) (branches.Volume, error) {
+func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, actAs IdenPrivate, writeAccess bool) (marks.Volume, error) {
 	nsh, err := c.adjustHandle(ctx, nsh)
 	if err != nil {
 		return nil, err
@@ -309,8 +313,9 @@ func (c *Client) createSubVolume(ctx context.Context, tx *bcsdk.Tx) (*blobcache.
 // IntroduceSelf creates a signed change set that adds a leaf to the state.
 // Then it returns the signed change set data.
 // It does not contact Blobcache or perform any Volume operations.
-func (c *Client) IntroduceSelf(kemPub kem.PublicKey) gotorgop.ChangeSet {
-	leaf := gotorgop.NewIDUnit(c.ActAs.SigPrivateKey.Public().(inet256.PublicKey), kemPub)
+func (c *Client) IntroduceSelf() gotorgop.ChangeSet {
+	idu := c.ActAs.Public()
+	leaf := gotorgop.NewIDUnit(idu.SigPublicKey, idu.KEMPublicKey)
 	cs := gotorgop.ChangeSet{
 		Ops: []gotorgop.Op{
 			&gotorgop.CreateIDUnit{
@@ -322,11 +327,27 @@ func (c *Client) IntroduceSelf(kemPub kem.PublicKey) gotorgop.ChangeSet {
 	return cs
 }
 
-// BranchVolumeSpec is the volume spec used for new branches.
+// BranchVolumeSpec is the volume spec used for new marks.
 func BranchVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
 			Schema:   blobcache.SchemaSpec{Name: blobcache.Schema_NONE},
+			HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
+			MaxSize:  1 << 21,
+			Salted:   false,
+		},
+	}
+}
+
+// DefaultVolumeSpec is the volume spec used for gotorg Volumes
+func DefaultVolumeSpec(useSchema bool) blobcache.VolumeSpec {
+	schspec := blobcache.SchemaSpec{}
+	if useSchema {
+		schspec = blobcache.SchemaSpec{Name: SchemaName}
+	}
+	return blobcache.VolumeSpec{
+		Local: &blobcache.VolumeBackend_Local{
+			Schema:   schspec,
 			HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
 			MaxSize:  1 << 21,
 			Salted:   false,

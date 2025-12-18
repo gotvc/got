@@ -1,4 +1,4 @@
-package branches
+package marks
 
 import (
 	"context"
@@ -24,7 +24,7 @@ type (
 )
 
 // SyncVolumes syncs the contents of src to dst.
-func Sync(ctx context.Context, src, dst *Branch, force bool) error {
+func Sync(ctx context.Context, src, dst *Mark, force bool) error {
 	return applySnapshot(ctx, dst.GotVC(), src.GotFS(), dst.Volume, func(dststore stores.RW, x *Snap) (*Snap, error) {
 		goal, tx, err := getSnapshot(ctx, src.Volume)
 		if err != nil {

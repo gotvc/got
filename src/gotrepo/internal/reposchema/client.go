@@ -9,6 +9,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/internal/stores"
 )
 
@@ -52,7 +53,7 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 	}
 
 	// ns doesn't exist, create it.
-	nsSpec := GotNSVolumeSpec()
+	nsSpec := gotns.DefaultVolumeSpec()
 	if !useSchema {
 		nsSpec.Local.Schema = blobcache.SchemaSpec{Name: blobcache.Schema_NONE}
 	}
@@ -235,17 +236,6 @@ func GotRepoVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
 			Schema:   blobcache.SchemaSpec{Name: SchemaName_GotRepo},
-			HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
-			MaxSize:  1 << 21,
-			Salted:   false,
-		},
-	}
-}
-
-func GotNSVolumeSpec() blobcache.VolumeSpec {
-	return blobcache.VolumeSpec{
-		Local: &blobcache.VolumeBackend_Local{
-			Schema:   blobcache.SchemaSpec{Name: SchemeName_GotOrg},
 			HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
 			MaxSize:  1 << 21,
 			Salted:   false,
