@@ -4,23 +4,23 @@ import (
 	"context"
 	"sync"
 
-	"github.com/gotvc/got/src/branches"
+	"github.com/gotvc/got/src/marks"
 )
 
-var _ branches.Space = &lazySpace{}
+var _ marks.Space = &lazySpace{}
 
 type lazySpace struct {
 	once     sync.Once
 	err      error
-	space    branches.Space
-	newSpace func(ctx context.Context) (branches.Space, error)
+	space    marks.Space
+	newSpace func(ctx context.Context) (marks.Space, error)
 }
 
-func newLazySpace(fn func(ctx context.Context) (branches.Space, error)) *lazySpace {
+func newLazySpace(fn func(ctx context.Context) (marks.Space, error)) *lazySpace {
 	return &lazySpace{newSpace: fn}
 }
 
-func (ls *lazySpace) Create(ctx context.Context, name string, params branches.Params) (*branches.Info, error) {
+func (ls *lazySpace) Create(ctx context.Context, name string, params marks.Params) (*marks.Info, error) {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -28,7 +28,7 @@ func (ls *lazySpace) Create(ctx context.Context, name string, params branches.Pa
 	return space.Create(ctx, name, params)
 }
 
-func (ls *lazySpace) Inspect(ctx context.Context, name string) (*branches.Info, error) {
+func (ls *lazySpace) Inspect(ctx context.Context, name string) (*marks.Info, error) {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -36,7 +36,7 @@ func (ls *lazySpace) Inspect(ctx context.Context, name string) (*branches.Info, 
 	return space.Inspect(ctx, name)
 }
 
-func (ls *lazySpace) Set(ctx context.Context, name string, md branches.Params) error {
+func (ls *lazySpace) Set(ctx context.Context, name string, md marks.Params) error {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return err
@@ -52,7 +52,7 @@ func (ls *lazySpace) Delete(ctx context.Context, name string) error {
 	return space.Delete(ctx, name)
 }
 
-func (ls *lazySpace) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {
+func (ls *lazySpace) List(ctx context.Context, span marks.Span, limit int) ([]string, error) {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -60,7 +60,7 @@ func (ls *lazySpace) List(ctx context.Context, span branches.Span, limit int) ([
 	return space.List(ctx, span, limit)
 }
 
-func (ls *lazySpace) Open(ctx context.Context, name string) (*branches.Branch, error) {
+func (ls *lazySpace) Open(ctx context.Context, name string) (*marks.Mark, error) {
 	space, err := ls.getSpace(ctx)
 	if err != nil {
 		return nil, err
@@ -68,7 +68,7 @@ func (ls *lazySpace) Open(ctx context.Context, name string) (*branches.Branch, e
 	return space.Open(ctx, name)
 }
 
-func (ls *lazySpace) getSpace(ctx context.Context) (branches.Space, error) {
+func (ls *lazySpace) getSpace(ctx context.Context) (marks.Space, error) {
 	ls.once.Do(func() {
 		ls.space, ls.err = ls.newSpace(ctx)
 	})

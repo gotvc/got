@@ -1,4 +1,4 @@
-package branches
+package marks
 
 import (
 	"context"
@@ -57,7 +57,7 @@ func (s PrefixSpace) List(ctx context.Context, span Span, limit int) ([]string, 
 	return names, nil
 }
 
-func (s PrefixSpace) Open(ctx context.Context, name string) (*Branch, error) {
+func (s PrefixSpace) Open(ctx context.Context, name string) (*Mark, error) {
 	return s.Target.Open(ctx, s.downward(name))
 }
 

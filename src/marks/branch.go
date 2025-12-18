@@ -1,4 +1,4 @@
-package branches
+package marks
 
 import (
 	"context"
@@ -15,13 +15,13 @@ import (
 	"golang.org/x/exp/slices"
 )
 
-// Info is the metadata associated with a branch.
+// Info is the metadata associated with a Mark.
 type Info struct {
-	// Salt is a 32-byte salt used to derive the cryptographic keys for the branch.
+	// Salt is a 32-byte salt used to derive the cryptographic keys for the mark.
 	Salt Salt `json:"salt"`
-	// Annotations are arbitrary metadata associated with the branch.
+	// Annotations are arbitrary metadata associated with the mark.
 	Annotations []Annotation `json:"annotations"`
-	// CreatedAt is the time the branch was created.
+	// CreatedAt is the time the mark was created.
 	CreatedAt tai64.TAI64 `json:"created_at"`
 }
 
@@ -51,7 +51,7 @@ func (s *Salt) String() string {
 	return hex.EncodeToString(s[:])
 }
 
-// Params is non-volume, user-modifiable information associated with a branch.
+// Params is non-volume, user-modifiable information associated with a mark.
 type Params struct {
 	Salt        Salt         `json:"salt"`
 	Annotations []Annotation `json:"annotations"`
@@ -79,7 +79,7 @@ func (c Params) Clone() Params {
 	}
 }
 
-// Annotation annotates a branch
+// Annotation annotates a mark
 type Annotation struct {
 	Key   string `json:"k"`
 	Value string `json:"v"`
@@ -104,8 +104,8 @@ func GetAnnotation(as []Annotation, key string) (ret []Annotation) {
 	return ret
 }
 
-// Branch associates metadata with a Volume.
-type Branch struct {
+// Mark associates metadata with a Volume.
+type Mark struct {
 	Volume Volume
 	Info   Info
 
@@ -113,7 +113,7 @@ type Branch struct {
 	gotfs *gotfs.Machine
 }
 
-func (b *Branch) init() {
+func (b *Mark) init() {
 	if b.gotvc == nil {
 		b.gotvc = newGotVC(&b.Info)
 	}
@@ -122,29 +122,29 @@ func (b *Branch) init() {
 	}
 }
 
-func (b *Branch) GotFS() *gotfs.Machine {
+func (b *Mark) GotFS() *gotfs.Machine {
 	b.init()
 	return b.gotfs
 }
 
-func (b *Branch) GotVC() *gotvc.Machine {
+func (b *Mark) GotVC() *gotvc.Machine {
 	b.init()
 	return b.gotvc
 }
 
-func (b *Branch) AsParams() Params {
+func (b *Mark) AsParams() Params {
 	return Params{
 		Salt:        b.Info.Salt,
 		Annotations: b.Info.Annotations,
 	}
 }
 
-func (b *Branch) GetTarget(ctx context.Context) (*Snap, Tx, error) {
+func (b *Mark) GetTarget(ctx context.Context) (*Snap, Tx, error) {
 	return getSnapshot(ctx, b.Volume)
 }
 
-// SetTarget forcibly sets the root of the branch.
-func (b *Branch) SetTarget(ctx context.Context, src stores.Reading, snap Snap) error {
+// SetTarget forcibly sets the root of the mark.
+func (b *Mark) SetTarget(ctx context.Context, src stores.Reading, snap Snap) error {
 	return applySnapshot(ctx, b.gotvc, b.gotfs, b.Volume, func(dst stores.RW, x *Snap) (*Snap, error) {
 		if err := syncStores(ctx, b.gotvc, b.gotfs, src, dst, snap); err != nil {
 			return nil, err
@@ -161,7 +161,7 @@ type ModifyCtx struct {
 	GotFS *gotfs.Machine
 }
 
-func (b *Branch) Modify(ctx context.Context, src stores.Reading, fn func(mctx ModifyCtx) (*Snap, error)) error {
+func (b *Mark) Modify(ctx context.Context, src stores.Reading, fn func(mctx ModifyCtx) (*Snap, error)) error {
 	b.init()
 	return applySnapshot(ctx, b.gotvc, b.gotfs, b.Volume, func(dst stores.RW, x *Snap) (*Snap, error) {
 		y, err := fn(ModifyCtx{
@@ -182,7 +182,7 @@ func (b *Branch) Modify(ctx context.Context, src stores.Reading, fn func(mctx Mo
 	})
 }
 
-func (b *Branch) History(ctx context.Context, fn func(ref gdat.Ref, snap Snap) error) error {
+func (b *Mark) History(ctx context.Context, fn func(ref gdat.Ref, snap Snap) error) error {
 	b.init()
 	snap, tx, err := b.GetTarget(ctx)
 	if err != nil {
@@ -199,7 +199,7 @@ func (b *Branch) History(ctx context.Context, fn func(ref gdat.Ref, snap Snap) e
 	return b.gotvc.ForEach(ctx, tx, snap.Parents, fn)
 }
 
-func (b *Branch) ViewFS(ctx context.Context, fn func(mach *gotfs.Machine, stores stores.Reading, root gotfs.Root) error) error {
+func (b *Mark) ViewFS(ctx context.Context, fn func(mach *gotfs.Machine, stores stores.Reading, root gotfs.Root) error) error {
 	b.init()
 	snap, tx, err := b.GetTarget(ctx)
 	if err != nil {
@@ -209,14 +209,14 @@ func (b *Branch) ViewFS(ctx context.Context, fn func(mach *gotfs.Machine, stores
 	return fn(b.gotfs, tx, snap.Payload.Root)
 }
 
-// NewGotFS creates a new gotfs.Machine suitable for writing to the branch
+// NewGotFS creates a new gotfs.Machine suitable for writing to the mark
 func newGotFS(b *Info, opts ...gotfs.Option) *gotfs.Machine {
 	opts = append(opts, gotfs.WithSalt(deriveFSSalt(b)))
 	fsag := gotfs.NewMachine(opts...)
 	return fsag
 }
 
-// NewGotVC creates a new gotvc.Machine suitable for writing to the branch
+// NewGotVC creates a new gotvc.Machine suitable for writing to the mark
 func newGotVC(b *Info, opts ...gotvc.Option) *gotvc.Machine {
 	opts = append(opts, gotvc.WithSalt(deriveVCSalt(b)))
 	return gotvc.NewMachine(opts...)

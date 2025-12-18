@@ -6,10 +6,10 @@ import (
 	"slices"
 
 	"blobcache.io/blobcache/src/blobcache"
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/internal/volumes"
+	"github.com/gotvc/got/src/marks"
 )
 
 // ListSpaces lists all the spaces that the repository is configured to use
@@ -21,7 +21,7 @@ func (r *Repo) ListSpaces(ctx context.Context) ([]SpaceConfig, error) {
 // if it finds a match, then the spec is used to construct a space
 // and it is returned.
 // If name is empty, then GetSpace returns the repos default namespace.
-func (r *Repo) GetSpace(ctx context.Context, name string) (branches.Space, error) {
+func (r *Repo) GetSpace(ctx context.Context, name string) (marks.Space, error) {
 	if name == "" {
 		return r.makeSpace(ctx, SpaceSpec{
 			Local: &struct{}{},

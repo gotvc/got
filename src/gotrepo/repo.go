@@ -18,7 +18,6 @@ import (
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.uber.org/zap"
 
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotorg"
@@ -27,6 +26,7 @@ import (
 	"github.com/gotvc/got/src/internal/gotcfg"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/gotvc/got/src/internal/volumes"
+	"github.com/gotvc/got/src/marks"
 )
 
 // fs paths
@@ -39,8 +39,8 @@ const (
 )
 
 type (
-	Space  = branches.Space
-	Volume = branches.Volume
+	Space  = marks.Space
+	Volume = marks.Volume
 
 	Ref  = gotkv.Ref
 	Root = gotfs.Root

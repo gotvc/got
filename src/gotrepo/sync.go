@@ -3,8 +3,8 @@ package gotrepo
 import (
 	"context"
 
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/internal/metrics"
+	"github.com/gotvc/got/src/marks"
 )
 
 // Sync syncs 2 branches by name.
@@ -27,7 +27,7 @@ func (r *Repo) Sync(ctx context.Context, src, dst FQM, force bool) error {
 	}
 	ctx, cf := metrics.Child(ctx, "syncing volumes")
 	defer cf()
-	return branches.Sync(ctx, srcBranch, dstBranch, force)
+	return marks.Sync(ctx, srcBranch, dstBranch, force)
 }
 
 type syncTask struct {

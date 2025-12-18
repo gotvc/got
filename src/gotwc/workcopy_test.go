@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/testutil"
+	"github.com/gotvc/got/src/marks"
 	"github.com/stretchr/testify/require"
 	"go.brendoncarroll.net/state/posixfs"
 )
@@ -48,7 +48,7 @@ func TestCommit(t *testing.T) {
 	err = wc.Put(ctx, p)
 	require.NoError(t, err)
 
-	err = wc.Commit(ctx, branches.SnapInfo{})
+	err = wc.Commit(ctx, marks.SnapInfo{})
 	require.NoError(t, err)
 
 	checkFileContent(t, wc, p, strings.NewReader(fileContents))
@@ -59,7 +59,7 @@ func TestCommit(t *testing.T) {
 	// track both
 	require.NoError(t, wc.Put(ctx, p))
 	require.NoError(t, wc.Put(ctx, p2))
-	err = wc.Commit(ctx, branches.SnapInfo{})
+	err = wc.Commit(ctx, marks.SnapInfo{})
 	require.NoError(t, err)
 
 	checkNotExists(t, wc, p)
@@ -79,7 +79,7 @@ func TestCommitLargeFile(t *testing.T) {
 	const size = 1e9
 	require.NoError(t, posixfs.PutFile(ctx, fs, p, 0o644, testutil.RandomStream(0, size)))
 	require.NoError(t, wc.Put(ctx, p))
-	require.NoError(t, wc.Commit(ctx, branches.SnapInfo{}))
+	require.NoError(t, wc.Commit(ctx, marks.SnapInfo{}))
 	checkExists(t, wc, p)
 	checkFileContent(t, wc, p, testutil.RandomStream(0, size))
 }
@@ -105,7 +105,7 @@ func TestCommitDir(t *testing.T) {
 		require.NoError(t, posixfs.PutFile(ctx, fs, p, 0o644, strings.NewReader(content)))
 	}
 	require.NoError(t, wc.Put(ctx, dirpath))
-	require.NoError(t, wc.Commit(ctx, branches.SnapInfo{}))
+	require.NoError(t, wc.Commit(ctx, marks.SnapInfo{}))
 	for i := 0; i < N; i++ {
 		p := getPath(i)
 		content := getContent(i)
@@ -126,7 +126,7 @@ func TestFork(t *testing.T) {
 	for i := 0; i < N; i++ {
 		posixfs.PutFile(ctx, fs, filePath, 0o644, strings.NewReader("test-"+strconv.Itoa(i)))
 		require.NoError(t, wc.Put(ctx, filePath))
-		require.NoError(t, wc.Commit(ctx, branches.SnapInfo{}))
+		require.NoError(t, wc.Commit(ctx, marks.SnapInfo{}))
 	}
 
 	require.NoError(t, repo.Fork(ctx, nameMaster, "branch2"))
@@ -139,7 +139,7 @@ func TestFork(t *testing.T) {
 
 func newTestWC(t testing.TB) *WC {
 	r := gotrepo.NewTestRepo(t)
-	_, err := r.CreateMark(context.TODO(), gotrepo.FQM{Name: nameMaster}, branches.Params{})
+	_, err := r.CreateMark(context.TODO(), gotrepo.FQM{Name: nameMaster}, marks.Params{})
 	require.NoError(t, err)
 	wcdir := t.TempDir()
 	cfg := Config{

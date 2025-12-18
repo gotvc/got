@@ -9,9 +9,9 @@ import (
 
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/adapters/gotiofs"
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/volumes"
+	"github.com/gotvc/got/src/marks"
 	ftpserver "goftp.io/server/v2"
 )
 
@@ -19,10 +19,10 @@ var _ ftpserver.Driver = &Driver{}
 
 type Driver struct {
 	ctx    context.Context
-	branch branches.Branch
+	branch marks.Mark
 }
 
-func NewDriver(ctx context.Context, b branches.Branch) *Driver {
+func NewDriver(ctx context.Context, b marks.Mark) *Driver {
 	return &Driver{
 		ctx:    ctx,
 		branch: b,

@@ -6,12 +6,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc"
 	"github.com/gotvc/got/src/internal/testutil"
+	"github.com/gotvc/got/src/marks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -63,7 +63,7 @@ func (s *Site) CreateFile(p string, data []byte) {
 
 func (s *Site) CreateMark(fqname gotrepo.FQM) {
 	ctx := testutil.Context(s.t)
-	_, err := s.Repo.CreateMark(ctx, fqname, branches.Params{})
+	_, err := s.Repo.CreateMark(ctx, fqname, marks.Params{})
 	require.NoError(s.t, err)
 }
 
@@ -78,7 +78,7 @@ func (s *Site) ListMarks(space string) (ret []string) {
 
 func (s *Site) Commit() {
 	ctx := testutil.Context(s.t)
-	err := s.WC.Commit(ctx, branches.SnapInfo{})
+	err := s.WC.Commit(ctx, marks.SnapInfo{})
 	require.NoError(s.t, err)
 }
 

@@ -6,13 +6,13 @@ import (
 	"fmt"
 
 	"blobcache.io/blobcache/src/blobcache"
-	"github.com/gotvc/got/src/branches"
+	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/tai64"
 )
 
-var _ branches.Space = &Space{}
+var _ marks.Space = &Space{}
 
-// Space implements branches.Space
+// Space implements marks.Space
 type Space struct {
 	client *Client
 	volh   blobcache.Handle
@@ -22,8 +22,8 @@ func NewSpace(client *Client, volh blobcache.Handle) *Space {
 	return &Space{client: client, volh: volh}
 }
 
-func (bs *Space) Create(ctx context.Context, name string, config branches.Params) (*branches.Info, error) {
-	info := branches.Info{
+func (bs *Space) Create(ctx context.Context, name string, config marks.Params) (*marks.Info, error) {
+	info := marks.Info{
 		Salt:        config.Salt,
 		Annotations: config.Annotations,
 		CreatedAt:   tai64.Now().TAI64(),
@@ -38,18 +38,18 @@ func (bs *Space) Create(ctx context.Context, name string, config branches.Params
 	return &info, nil
 }
 
-func (bs *Space) Inspect(ctx context.Context, name string) (*branches.Info, error) {
+func (bs *Space) Inspect(ctx context.Context, name string) (*marks.Info, error) {
 	ent, err := bs.client.GetAlias(ctx, bs.volh, name)
 	if err != nil {
 		return nil, err
 	}
 	if ent == nil {
-		return nil, branches.ErrNotExist
+		return nil, marks.ErrNotExist
 	}
-	return &branches.Info{}, nil
+	return &marks.Info{}, nil
 }
 
-func (bs *Space) Open(ctx context.Context, name string) (*branches.Branch, error) {
+func (bs *Space) Open(ctx context.Context, name string) (*marks.Mark, error) {
 	vol, err := bs.client.OpenAt(ctx, bs.volh, name, bs.client.ActAs, false)
 	if err != nil {
 		return nil, err
@@ -58,7 +58,7 @@ func (bs *Space) Open(ctx context.Context, name string) (*branches.Branch, error
 	if err != nil {
 		return nil, err
 	}
-	return &branches.Branch{
+	return &marks.Mark{
 		Volume: vol,
 		Info:   *info,
 	}, nil
@@ -68,10 +68,10 @@ func (bs *Space) Delete(ctx context.Context, name string) error {
 	return bs.client.DeleteAlias(ctx, bs.volh, name)
 }
 
-func (bs *Space) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {
+func (bs *Space) List(ctx context.Context, span marks.Span, limit int) ([]string, error) {
 	return bs.client.ListAliases(ctx, bs.volh, span, limit)
 }
 
-func (bs *Space) Set(ctx context.Context, name string, config branches.Params) error {
+func (bs *Space) Set(ctx context.Context, name string, config marks.Params) error {
 	return fmt.Errorf("not implemented")
 }

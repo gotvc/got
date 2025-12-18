@@ -4,17 +4,17 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/internal/metrics"
+	"github.com/gotvc/got/src/marks"
 )
 
 const (
 	nameMaster = "master"
 )
 
-type BranchInfo = branches.Info
+type BranchInfo = marks.Info
 
-type Branch = branches.Branch
+type Branch = marks.Mark
 
 // FQM represents a fully qualified Mark name.
 type FQM struct {
@@ -35,8 +35,8 @@ func ParseFQName(s string) FQM {
 }
 
 // CreateBranch creates a new mark in the repo's local space.
-func (r *Repo) CreateMark(ctx context.Context, fqname FQM, params branches.Params) (*BranchInfo, error) {
-	if err := branches.CheckName(fqname.Name); err != nil {
+func (r *Repo) CreateMark(ctx context.Context, fqname FQM, params marks.Params) (*BranchInfo, error) {
+	if err := marks.CheckName(fqname.Name); err != nil {
 		return nil, err
 	}
 	space, err := r.GetSpace(ctx, fqname.Space)
@@ -67,7 +67,7 @@ func (r *Repo) DeleteMark(ctx context.Context, fqname FQM) error {
 }
 
 // ConfigureMark adjusts metadata
-func (r *Repo) ConfigureMark(ctx context.Context, fqname FQM, md branches.Params) error {
+func (r *Repo) ConfigureMark(ctx context.Context, fqname FQM, md marks.Params) error {
 	space, err := r.GetSpace(ctx, fqname.Space)
 	if err != nil {
 		return err
@@ -81,7 +81,7 @@ func (r *Repo) ForEachMark(ctx context.Context, spaceName string, fn func(string
 	if err != nil {
 		return err
 	}
-	return branches.ForEach(ctx, space, branches.TotalSpan(), fn)
+	return marks.ForEach(ctx, space, marks.TotalSpan(), fn)
 }
 
 func (r *Repo) GetMarkRoot(ctx context.Context, mark FQM) (*Snap, error) {
@@ -105,7 +105,7 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	if err != nil {
 		return err
 	}
-	_, err = r.CreateMark(ctx, FQM{Name: next}, branches.Params{
+	_, err = r.CreateMark(ctx, FQM{Name: next}, marks.Params{
 		Salt: baseBranch.Info.Salt,
 	})
 	if err != nil {
@@ -117,7 +117,7 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	}
 	ctx, cf := metrics.Child(ctx, "syncing")
 	defer cf()
-	if err := branches.Sync(ctx, baseBranch, nextBranch, false); err != nil {
+	if err := marks.Sync(ctx, baseBranch, nextBranch, false); err != nil {
 		return err
 	}
 	return nil
@@ -138,7 +138,7 @@ func (r *Repo) CleanupMark(ctx context.Context, mark FQM) error {
 	}
 	ctx, cf := metrics.Child(ctx, "cleanup volume")
 	defer cf()
-	if err := branches.CleanupVolume(ctx, b.Volume); err != nil {
+	if err := marks.CleanupVolume(ctx, b.Volume); err != nil {
 		return err
 	}
 	return nil

@@ -8,12 +8,12 @@ import (
 	"time"
 
 	"blobcache.io/blobcache/src/blobcache"
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
+	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/exp/streams"
 )
 
@@ -65,8 +65,8 @@ func (r Root) Marshal(out []byte) []byte {
 }
 
 type MarkState struct {
-	Info   branches.Info `json:"info"`
-	Target gdat.Ref      `json:"target"`
+	Info   marks.Info `json:"info"`
+	Target gdat.Ref   `json:"target"`
 }
 
 func (b MarkState) Marshal(out []byte) []byte {
@@ -140,7 +140,7 @@ func (tx *Tx) Put(ctx context.Context, name string, b MarkState) error {
 	if err := tx.loadKV(ctx); err != nil {
 		return err
 	}
-	if err := branches.CheckName(name); err != nil {
+	if err := marks.CheckName(name); err != nil {
 		return err
 	}
 	if yes, err := stores.ExistsUnit(ctx, tx.tx, b.Target.CID); err != nil {
@@ -158,7 +158,7 @@ func (tx *Tx) Delete(ctx context.Context, name string) error {
 	return tx.kvtx.Delete(ctx, []byte(name))
 }
 
-func (tx *Tx) ListNames(ctx context.Context, span branches.Span, limit int) ([]string, error) {
+func (tx *Tx) ListNames(ctx context.Context, span marks.Span, limit int) ([]string, error) {
 	if err := tx.loadKV(ctx); err != nil {
 		return nil, err
 	}

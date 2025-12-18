@@ -10,10 +10,10 @@ import (
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema/statetrace"
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
+	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/exp/slices2"
 	"go.inet256.org/inet256/src/inet256"
 )
@@ -168,7 +168,7 @@ func (c *Client) DeleteAlias(ctx context.Context, volh blobcache.Handle, name st
 	})
 }
 
-func (c *Client) ListAliases(ctx context.Context, volh blobcache.Handle, span branches.Span, limit int) ([]string, error) {
+func (c *Client) ListAliases(ctx context.Context, volh blobcache.Handle, span marks.Span, limit int) ([]string, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return nil, err
@@ -192,7 +192,7 @@ func (c *Client) ListAliases(ctx context.Context, volh blobcache.Handle, span br
 	return names, nil
 }
 
-func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string) (*branches.Info, error) {
+func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string) (*marks.Info, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return nil, err
@@ -205,7 +205,7 @@ func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string
 	return nil, nil
 }
 
-func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, actAs IdenPrivate, writeAccess bool) (branches.Volume, error) {
+func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, actAs IdenPrivate, writeAccess bool) (marks.Volume, error) {
 	nsh, err := c.adjustHandle(ctx, nsh)
 	if err != nil {
 		return nil, err
@@ -327,7 +327,7 @@ func (c *Client) IntroduceSelf() gotorgop.ChangeSet {
 	return cs
 }
 
-// BranchVolumeSpec is the volume spec used for new branches.
+// BranchVolumeSpec is the volume spec used for new marks.
 func BranchVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{

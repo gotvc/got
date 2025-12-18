@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/internal/metrics"
+	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/star"
 )
 
@@ -37,7 +37,7 @@ var markCreateCmd = star.Command{
 		}
 		defer repo.Close()
 		branchName := markNameParam.Load(c)
-		_, err = repo.CreateMark(ctx, gotrepo.FQM{Name: branchName}, branches.NewConfig(false))
+		_, err = repo.CreateMark(ctx, gotrepo.FQM{Name: branchName}, marks.NewConfig(false))
 		return err
 	},
 }

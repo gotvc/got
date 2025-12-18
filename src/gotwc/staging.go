@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/internal/dbutil"
+	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
@@ -17,7 +18,6 @@ import (
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotorg"
@@ -38,7 +38,7 @@ func (wc *WC) DoWithStore(ctx context.Context, fn func(dst stores.RW) error) err
 
 type stagingCtx struct {
 	BranchName string
-	Branch     branches.Branch
+	Branch     marks.Mark
 
 	Store    stores.RW
 	Stage    *staging.Stage
@@ -244,7 +244,7 @@ func (wc *WC) Clear(ctx context.Context) error {
 	})
 }
 
-func (wc *WC) Commit(ctx context.Context, snapInfo branches.SnapInfo) error {
+func (wc *WC) Commit(ctx context.Context, snapInfo marks.SnapInfo) error {
 	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
 		if yes, err := sctx.Stage.IsEmpty(ctx); err != nil {
 			return err
@@ -258,7 +258,7 @@ func (wc *WC) Commit(ctx context.Context, snapInfo branches.SnapInfo) error {
 		defer cf()
 		scratch := sctx.Store
 		stage := sctx.Stage
-		if err := sctx.Branch.Modify(ctx, scratch, func(mctx branches.ModifyCtx) (*gotvc.Snap, error) {
+		if err := sctx.Branch.Modify(ctx, scratch, func(mctx marks.ModifyCtx) (*gotvc.Snap, error) {
 			var root *gotfs.Root
 			if mctx.Head != nil {
 				root = &mctx.Head.Payload.Root
@@ -406,13 +406,13 @@ type stagingArea struct {
 	conn  *dbutil.Conn
 	rowid int64
 
-	info *branches.Info
+	info *marks.Info
 	mu   sync.Mutex
 }
 
 // newStagingArea returns a stagingArea for the given salt.
 // If the staging area does not exist, it will be created.
-func newStagingArea(conn *dbutil.Conn, info *branches.Info) (*stagingArea, error) {
+func newStagingArea(conn *dbutil.Conn, info *marks.Info) (*stagingArea, error) {
 	salt := saltFromBranch(info)
 	rowid, err := ensureStagingArea(conn, salt)
 	if err != nil {
@@ -524,6 +524,6 @@ func scan32Bytes(stmt *sqlite.Stmt, dst *[32]byte) error {
 	return nil
 }
 
-func saltFromBranch(b *branches.Info) *[32]byte {
+func saltFromBranch(b *marks.Info) *[32]byte {
 	return (*[32]byte)(&b.Salt)
 }

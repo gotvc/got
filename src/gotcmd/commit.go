@@ -6,11 +6,11 @@ import (
 	"os"
 	"os/exec"
 
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/metrics"
+	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/star"
 	"go.brendoncarroll.net/tai64"
 	"golang.org/x/sync/errgroup"
@@ -31,7 +31,7 @@ var commitCmd = star.Command{
 		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
 		defer r.Close()
 		now := tai64.Now().TAI64()
-		return wc.Commit(ctx, branches.SnapInfo{
+		return wc.Commit(ctx, marks.SnapInfo{
 			Message:    "",
 			AuthoredAt: now,
 		})

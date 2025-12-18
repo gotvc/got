@@ -4,20 +4,20 @@ import (
 	"context"
 
 	"blobcache.io/blobcache/src/blobcache"
-	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
+	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/tai64"
 )
 
 var (
-	_ branches.Space = &Space{}
+	_ marks.Space = &Space{}
 )
 
 type Space struct {
-	Volume branches.Volume
+	Volume marks.Volume
 	DMach  *gdat.Machine
 	KVMach *gotkv.Machine
 }
@@ -43,9 +43,9 @@ func (s *Space) view(ctx context.Context, fn func(space *txSpace) error) error {
 	return fn(&txSpace{vol: s.Volume, tx: tx})
 }
 
-// Create implements branches.Space.
-func (s *Space) Create(ctx context.Context, name string, cfg branches.Params) (*branches.Info, error) {
-	var info *branches.Info
+// Create implements marks.Space.
+func (s *Space) Create(ctx context.Context, name string, cfg marks.Params) (*marks.Info, error) {
+	var info *marks.Info
 	if err := s.modify(ctx, func(s *txSpace) error {
 		info2, err := s.Create(ctx, name, cfg)
 		if err != nil {
@@ -59,16 +59,16 @@ func (s *Space) Create(ctx context.Context, name string, cfg branches.Params) (*
 	return info, nil
 }
 
-// Delete implements branches.Space.
+// Delete implements marks.Space.
 func (s *Space) Delete(ctx context.Context, name string) error {
 	return s.modify(ctx, func(space *txSpace) error {
 		return space.Delete(ctx, name)
 	})
 }
 
-// Inspect implements branches.Space.
-func (s *Space) Inspect(ctx context.Context, name string) (*branches.Info, error) {
-	var info *branches.Info
+// Inspect implements marks.Space.
+func (s *Space) Inspect(ctx context.Context, name string) (*marks.Info, error) {
+	var info *marks.Info
 	if err := s.view(ctx, func(space *txSpace) error {
 		info2, err := space.Inspect(ctx, name)
 		if err != nil {
@@ -82,8 +82,8 @@ func (s *Space) Inspect(ctx context.Context, name string) (*branches.Info, error
 	return info, nil
 }
 
-// List implements branches.Space.
-func (s *Space) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {
+// List implements marks.Space.
+func (s *Space) List(ctx context.Context, span marks.Span, limit int) ([]string, error) {
 	var names []string
 	if err := s.view(ctx, func(space *txSpace) error {
 		names2, err := space.List(ctx, span, limit)
@@ -98,8 +98,8 @@ func (s *Space) List(ctx context.Context, span branches.Span, limit int) ([]stri
 	return names, nil
 }
 
-// Open implements branches.Space.
-func (s *Space) Open(ctx context.Context, name string) (*branches.Branch, error) {
+// Open implements marks.Space.
+func (s *Space) Open(ctx context.Context, name string) (*marks.Mark, error) {
 	info, err := s.Inspect(ctx, name)
 	if err != nil {
 		return nil, err
@@ -111,41 +111,41 @@ func (s *Space) Open(ctx context.Context, name string) (*branches.Branch, error)
 		name:    name,
 		closeTx: true,
 	}
-	return &branches.Branch{
+	return &marks.Mark{
 		Volume: vol,
 		Info:   *info,
 	}, nil
 }
 
-// Set implements branches.Space.
-func (s *Space) Set(ctx context.Context, name string, cfg branches.Params) error {
+// Set implements marks.Space.
+func (s *Space) Set(ctx context.Context, name string, cfg marks.Params) error {
 	return s.modify(ctx, func(s *txSpace) error {
 		return s.Set(ctx, name, cfg)
 	})
 }
 
 type txSpace struct {
-	vol    branches.Volume
+	vol    marks.Volume
 	kvmach *gotkv.Machine
 	dmach  *gdat.Machine
 	tx     *Tx
 }
 
-// Create implements branches.Space.
-func (s *txSpace) Create(ctx context.Context, name string, cfg branches.Params) (*branches.Info, error) {
+// Create implements marks.Space.
+func (s *txSpace) Create(ctx context.Context, name string, cfg marks.Params) (*marks.Info, error) {
 	prevb, err := s.tx.Get(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 	if prevb != nil {
-		return nil, branches.ErrExists
+		return nil, marks.ErrExists
 	}
 	emptyRef, err := s.tx.dmach.Post(ctx, s.tx.tx, nil)
 	if err != nil {
 		return nil, err
 	}
 	b := MarkState{
-		Info: branches.Info{
+		Info: marks.Info{
 			Salt:        cfg.Salt,
 			Annotations: cfg.Annotations,
 			CreatedAt:   tai64.Now().TAI64(),
@@ -158,30 +158,30 @@ func (s *txSpace) Create(ctx context.Context, name string, cfg branches.Params) 
 	return &b.Info, nil
 }
 
-// Delete implements branches.Space.
+// Delete implements marks.Space.
 func (s *txSpace) Delete(ctx context.Context, name string) error {
 	return s.tx.Delete(ctx, name)
 }
 
-// Inspect implements branches.Space.
-func (s *txSpace) Inspect(ctx context.Context, name string) (*branches.Info, error) {
+// Inspect implements marks.Space.
+func (s *txSpace) Inspect(ctx context.Context, name string) (*marks.Info, error) {
 	b, err := s.tx.Get(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 	if b == nil {
-		return nil, branches.ErrNotExist
+		return nil, marks.ErrNotExist
 	}
 	return &b.Info, nil
 }
 
-// List implements branches.Space.
-func (s *txSpace) List(ctx context.Context, span branches.Span, limit int) ([]string, error) {
+// List implements marks.Space.
+func (s *txSpace) List(ctx context.Context, span marks.Span, limit int) ([]string, error) {
 	return s.tx.ListNames(ctx, span, limit)
 }
 
-// Set implements branches.Space.
-func (s *txSpace) Set(ctx context.Context, name string, cfg branches.Params) error {
+// Set implements marks.Space.
+func (s *txSpace) Set(ctx context.Context, name string, cfg marks.Params) error {
 	panic("unimplemented")
 }
 
@@ -189,7 +189,7 @@ var _ volumes.Volume = &VirtVolume{}
 
 // VirtVolume is a virtual volume containing the a Marks root as the VirtVolume root.
 type VirtVolume struct {
-	vol     branches.Volume
+	vol     marks.Volume
 	kvmach  *gotkv.Machine
 	dmach   *gdat.Machine
 	name    string
