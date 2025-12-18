@@ -1,6 +1,7 @@
 package gotcmd
 
 import (
+	"github.com/gotvc/got/src/gotrepo"
 	"go.brendoncarroll.net/star"
 )
 
@@ -25,9 +26,9 @@ var debugCmd = star.Command{
 		p := debugTypeParam.Load(c)
 		switch p {
 		case "fs":
-			return repo.DebugFS(ctx, bname, c.StdOut)
+			return repo.DebugFS(ctx, gotrepo.FQM{Name: bname}, c.StdOut)
 		case "kv":
-			return repo.DebugKV(ctx, bname, c.StdOut)
+			return repo.DebugKV(ctx, gotrepo.FQM{Name: bname}, c.StdOut)
 		default:
 			return nil
 		}

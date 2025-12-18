@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/gotvc/got/src/branches"
+	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/internal/metrics"
 	"go.brendoncarroll.net/star"
 )
@@ -36,7 +37,7 @@ var markCreateCmd = star.Command{
 		}
 		defer repo.Close()
 		branchName := markNameParam.Load(c)
-		_, err = repo.CreateMark(ctx, branchName, branches.NewConfig(false))
+		_, err = repo.CreateMark(ctx, gotrepo.FQM{Name: branchName}, branches.NewConfig(false))
 		return err
 	},
 }
@@ -72,7 +73,7 @@ var markDeleteCmd = star.Command{
 		}
 		defer repo.Close()
 		name := markNameParam.Load(c)
-		return repo.DeleteMark(ctx, name)
+		return repo.DeleteMark(ctx, gotrepo.FQM{Name: name})
 	},
 }
 
@@ -89,7 +90,7 @@ var markGetTargetCmd = star.Command{
 		}
 		defer repo.Close()
 		name, _ := markNameOptParam.LoadOpt(c)
-		branchHead, err := repo.GetMarkRoot(ctx, name)
+		branchHead, err := repo.GetMarkRoot(ctx, gotrepo.FQM{Name: name})
 		if err != nil {
 			return err
 		}
@@ -110,7 +111,7 @@ var markInspectCmd = star.Command{
 		}
 		defer repo.Close()
 		name := markNameParam.Load(c)
-		branch, err := repo.GetMark(ctx, name)
+		branch, err := repo.GetMark(ctx, gotrepo.FQM{Name: name})
 		if err != nil {
 			return err
 		}
@@ -156,14 +157,18 @@ var markNameOptParam = star.Optional[string]{
 	Parse: star.ParseString,
 }
 
-var srcMarkParam = star.Required[string]{
+var srcMarkParam = star.Required[gotrepo.FQM]{
 	ID:    "src",
-	Parse: star.ParseString,
+	Parse: parseFQName,
 }
 
-var dstMarkParam = star.Required[string]{
+var dstMarkParam = star.Required[gotrepo.FQM]{
 	ID:    "dst",
-	Parse: star.ParseString,
+	Parse: parseFQName,
+}
+
+func parseFQName(s string) (gotrepo.FQM, error) {
+	return gotrepo.ParseFQName(s), nil
 }
 
 var forkCmd = star.Command{

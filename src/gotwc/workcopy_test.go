@@ -65,7 +65,7 @@ func TestCommit(t *testing.T) {
 	checkNotExists(t, wc, p)
 	checkFileContent(t, wc, p2, strings.NewReader(fileContents))
 
-	require.NoError(t, wc.repo.Check(ctx, nameMaster))
+	require.NoError(t, wc.repo.Check(ctx, gotrepo.FQM{Name: nameMaster}))
 }
 
 func TestCommitLargeFile(t *testing.T) {
@@ -130,7 +130,7 @@ func TestFork(t *testing.T) {
 	}
 
 	require.NoError(t, repo.Fork(ctx, nameMaster, "branch2"))
-	require.NoError(t, repo.History(ctx, "branch2", func(_ gotfs.Ref, _ gotvc.Snap) error {
+	require.NoError(t, repo.History(ctx, gotrepo.FQM{Name: "branch2"}, func(_ gotfs.Ref, _ gotvc.Snap) error {
 		return nil
 	}))
 	commitCount := countCommits(t, wc.repo, "branch2")
@@ -139,7 +139,7 @@ func TestFork(t *testing.T) {
 
 func newTestWC(t testing.TB) *WC {
 	r := gotrepo.NewTestRepo(t)
-	_, err := r.CreateMark(context.TODO(), nameMaster, branches.Params{})
+	_, err := r.CreateMark(context.TODO(), gotrepo.FQM{Name: nameMaster}, branches.Params{})
 	require.NoError(t, err)
 	wcdir := t.TempDir()
 	cfg := Config{
@@ -162,7 +162,7 @@ func checkFileContent(t testing.TB, wc *WC, p string, r io.Reader) {
 	ctx := testutil.Context(t)
 	pr, pw := io.Pipe()
 	go func() {
-		err := wc.repo.Cat(ctx, getHead(t, wc), p, pw)
+		err := wc.repo.Cat(ctx, gotrepo.FQM{Name: getHead(t, wc)}, p, pw)
 		if err != nil {
 			pw.CloseWithError(err)
 		} else {
@@ -181,7 +181,7 @@ func getHead(t testing.TB, wc *WC) string {
 func exists(t testing.TB, wc *WC, p string) bool {
 	ctx := testutil.Context(t)
 	var found bool
-	err := wc.repo.Ls(ctx, getHead(t, wc), path.Dir(p), func(ent gotfs.DirEnt) error {
+	err := wc.repo.Ls(ctx, gotrepo.FQM{Name: getHead(t, wc)}, path.Dir(p), func(ent gotfs.DirEnt) error {
 		found = found || ent.Name == path.Base(p)
 		return nil
 	})
@@ -204,7 +204,7 @@ func checkNotExists(t testing.TB, wc *WC, p string) {
 func countCommits(t testing.TB, repo *gotrepo.Repo, branchName string) int {
 	ctx := testutil.Context(t)
 	var count int
-	repo.History(ctx, branchName, func(_ gotfs.Ref, _ gotvc.Snap) error {
+	repo.History(ctx, gotrepo.FQM{Name: branchName}, func(_ gotfs.Ref, _ gotvc.Snap) error {
 		count++
 		return nil
 	})

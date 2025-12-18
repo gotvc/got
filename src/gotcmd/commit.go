@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/metrics"
 	"go.brendoncarroll.net/star"
@@ -56,7 +57,7 @@ var historyCmd = star.Command{
 		pr, pw := io.Pipe()
 		eg := errgroup.Group{}
 		eg.Go(func() error {
-			err := repo.History(ctx, bname, func(ref gdat.Ref, snap gotvc.Snap) error {
+			err := repo.History(ctx, gotrepo.FQM{Name: bname}, func(ref gdat.Ref, snap gotvc.Snap) error {
 				fmt.Fprintf(pw, "#%04d\t%v\n", snap.N, ref.CID)
 				fmt.Fprintf(pw, "FS: %v\n", snap.Payload.Root.Ref.CID)
 				if len(snap.Parents) == 0 {

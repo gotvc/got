@@ -166,7 +166,7 @@ func (wc *WC) GetHead() (string, error) {
 // If one branch is a fork of another, or they have a common ancestor somewhere,
 // the it is very likely that they have the same content parameters.
 func (wc *WC) SetHead(ctx context.Context, name string) error {
-	desiredBranch, err := wc.repo.GetMark(ctx, name)
+	desiredBranch, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: name})
 	if err != nil {
 		return err
 	}
@@ -175,7 +175,7 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 		if err != nil {
 			return err
 		}
-		activeBranch, err := wc.repo.GetMark(ctx, activeName)
+		activeBranch, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: activeName})
 		if err != nil {
 			return err
 		}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/internal/dbutil"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/posixfs"
@@ -70,7 +71,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		if err != nil {
 			return err
 		}
-		branch, err := wc.repo.GetMark(ctx, branchName)
+		branch, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: branchName})
 		if err != nil {
 			return err
 		}
@@ -111,7 +112,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
 	return dbutil.DoTxRO(ctx, wc.db, func(conn *dbutil.Conn) error {
 		branchName, err := wc.GetHead()
-		branch, err := wc.repo.GetMark(ctx, branchName)
+		branch, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: branchName})
 		if err != nil {
 			return err
 		}

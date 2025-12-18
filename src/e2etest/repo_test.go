@@ -55,9 +55,11 @@ func TestMultiRepoSync(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	t.SkipNow() // TODO: need to be able to create blobcache volumes on the remote.
-	sites[1].CreateMark("origin/master")
-	sites[1].CreateMark("origin/mybranch")
+	t.SkipNow()
+	localMaster := gotrepo.FQM{Name: "master"}
+	originMaster := gotrepo.FQM{Space: "origin", Name: "master"}
+	sites[1].CreateMark(originMaster)
+	sites[1].CreateMark(gotrepo.FQM{Space: "origin", Name: "mybranch"})
 	require.Contains(t, sites[1].ListMarks("origin"), "master")
 	require.Contains(t, sites[1].ListMarks("origin"), "mybranch")
 
@@ -65,11 +67,11 @@ func TestMultiRepoSync(t *testing.T) {
 	sites[1].CreateFile("myfile.txt", testData)
 	sites[1].Add("myfile.txt")
 	sites[1].Commit()
-	sites[1].Sync("master", "origin/master")
+	sites[1].Sync(localMaster, originMaster)
 
-	sites[2].Sync("origin/master", "master")
-	require.Contains(t, sites[2].Ls("master", ""), "myfile.txt")
-	require.Equal(t, testData, sites[2].Cat("master", "myfile.txt"))
+	sites[2].Sync(originMaster, localMaster)
+	require.Contains(t, sites[2].Ls(localMaster, ""), "myfile.txt")
+	require.Equal(t, testData, sites[2].Cat(localMaster, "myfile.txt"))
 }
 
 func getOne[K comparable, V any](m map[K]V) K {

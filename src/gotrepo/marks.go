@@ -2,7 +2,7 @@ package gotrepo
 
 import (
 	"context"
-	"fmt"
+	"strings"
 
 	"github.com/gotvc/got/src/branches"
 	"github.com/gotvc/got/src/internal/metrics"
@@ -16,45 +16,63 @@ type BranchInfo = branches.Info
 
 type Branch = branches.Branch
 
+// FQM represents a fully qualified Mark name.
+type FQM struct {
+	Space string
+	Name  string
+}
+
+func ParseFQName(s string) FQM {
+	parts := strings.SplitN(s, ":", 2)
+	switch len(parts) {
+	case 1:
+		return FQM{Name: parts[0]}
+	case 2:
+		return FQM{Space: parts[0], Name: parts[1]}
+	default:
+		panic(s)
+	}
+}
+
 // CreateBranch creates a new mark in the repo's local space.
-func (r *Repo) CreateMark(ctx context.Context, name string, params branches.Params) (*BranchInfo, error) {
-	space, err := r.GetSpace(ctx, "")
+func (r *Repo) CreateMark(ctx context.Context, fqname FQM, params branches.Params) (*BranchInfo, error) {
+	if err := branches.CheckName(fqname.Name); err != nil {
+		return nil, err
+	}
+	space, err := r.GetSpace(ctx, fqname.Space)
 	if err != nil {
 		return nil, err
 	}
-	return space.Create(ctx, name, params)
+	return space.Create(ctx, fqname.Name, params)
 }
 
 // GetBranch returns a specific branch, or an error if it does not exist
-func (r *Repo) GetMark(ctx context.Context, name string) (*Branch, error) {
-	if name == "" {
-		return nil, fmt.Errorf("branch name cannot be empty")
-	}
-	space, err := r.GetSpace(ctx, "")
+func (r *Repo) GetMark(ctx context.Context, fqname FQM) (*Branch, error) {
+	space, err := r.GetSpace(ctx, fqname.Space)
 	if err != nil {
 		return nil, err
 	}
-	return space.Open(ctx, name)
+	return space.Open(ctx, fqname.Name)
 }
 
 // DeleteBranch deletes a mark
 // The target of the mark may be garbage collected if nothing else
 // references it.
-func (r *Repo) DeleteMark(ctx context.Context, name string) error {
-	space, err := r.GetSpace(ctx, "")
+func (r *Repo) DeleteMark(ctx context.Context, fqname FQM) error {
+	space, err := r.GetSpace(ctx, fqname.Space)
 	if err != nil {
 		return err
 	}
-	return space.Delete(ctx, name)
+	return space.Delete(ctx, fqname.Name)
 }
 
 // ConfigureMark adjusts metadata
-func (r *Repo) ConfigureMark(ctx context.Context, name string, md branches.Params) error {
-	space, err := r.GetSpace(ctx, "")
+func (r *Repo) ConfigureMark(ctx context.Context, fqname FQM, md branches.Params) error {
+	space, err := r.GetSpace(ctx, fqname.Space)
 	if err != nil {
 		return err
 	}
-	return space.Set(ctx, name, md)
+	return space.Set(ctx, fqname.Name, md)
 }
 
 // ForEachBranch calls fn once for each branch, or until an error is returned from fn
@@ -66,8 +84,8 @@ func (r *Repo) ForEachMark(ctx context.Context, spaceName string, fn func(string
 	return branches.ForEach(ctx, space, branches.TotalSpan(), fn)
 }
 
-func (r *Repo) GetMarkRoot(ctx context.Context, name string) (*Snap, error) {
-	b, err := r.GetMark(ctx, name)
+func (r *Repo) GetMarkRoot(ctx context.Context, mark FQM) (*Snap, error) {
+	b, err := r.GetMark(ctx, mark)
 	if err != nil {
 		return nil, err
 	}
@@ -83,17 +101,17 @@ func (r *Repo) GetMarkRoot(ctx context.Context, name string) (*Snap, error) {
 
 // Fork creates a new branch called next and sets its head to match base's
 func (r *Repo) Fork(ctx context.Context, base, next string) error {
-	baseBranch, err := r.GetMark(ctx, base)
+	baseBranch, err := r.GetMark(ctx, FQM{Name: base})
 	if err != nil {
 		return err
 	}
-	_, err = r.CreateMark(ctx, next, branches.Params{
+	_, err = r.CreateMark(ctx, FQM{Name: next}, branches.Params{
 		Salt: baseBranch.Info.Salt,
 	})
 	if err != nil {
 		return err
 	}
-	nextBranch, err := r.GetMark(ctx, next)
+	nextBranch, err := r.GetMark(ctx, FQM{Name: next})
 	if err != nil {
 		return err
 	}
@@ -105,16 +123,16 @@ func (r *Repo) Fork(ctx context.Context, base, next string) error {
 	return nil
 }
 
-func (r *Repo) History(ctx context.Context, name string, fn func(ref Ref, s Snap) error) error {
-	branch, err := r.GetMark(ctx, name)
+func (r *Repo) History(ctx context.Context, mark FQM, fn func(ref Ref, s Snap) error) error {
+	branch, err := r.GetMark(ctx, mark)
 	if err != nil {
 		return err
 	}
 	return branch.History(ctx, fn)
 }
 
-func (r *Repo) CleanupMark(ctx context.Context, name string) error {
-	b, err := r.GetMark(ctx, name)
+func (r *Repo) CleanupMark(ctx context.Context, mark FQM) error {
+	b, err := r.GetMark(ctx, mark)
 	if err != nil {
 		return err
 	}

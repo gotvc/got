@@ -9,8 +9,8 @@ import (
 	"github.com/gotvc/got/src/gotkv"
 )
 
-func (r *Repo) DebugFS(ctx context.Context, name string, w io.Writer) error {
-	b, err := r.GetMark(ctx, name)
+func (r *Repo) DebugFS(ctx context.Context, mark FQM, w io.Writer) error {
+	b, err := r.GetMark(ctx, mark)
 	if err != nil {
 		return err
 	}
@@ -25,8 +25,8 @@ func (r *Repo) DebugFS(ctx context.Context, name string, w io.Writer) error {
 	return gotfs.Dump(ctx, tx, x.Payload.Root, w)
 }
 
-func (r *Repo) DebugKV(ctx context.Context, branchName string, w io.Writer) error {
-	b, err := r.GetMark(ctx, branchName)
+func (r *Repo) DebugKV(ctx context.Context, mark FQM, w io.Writer) error {
+	b, err := r.GetMark(ctx, mark)
 	if err != nil {
 		return err
 	}

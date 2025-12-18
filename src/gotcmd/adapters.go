@@ -10,6 +10,7 @@ import (
 
 	"github.com/gotvc/got/src/adapters/gotftp"
 	"github.com/gotvc/got/src/adapters/gotiofs"
+	"github.com/gotvc/got/src/gotrepo"
 )
 
 var httpCmd = star.Command{
@@ -28,7 +29,7 @@ var httpCmd = star.Command{
 		}
 		defer repo.Close()
 		branchName := markNameParam.Load(c)
-		b, err := repo.GetMark(ctx, branchName)
+		b, err := repo.GetMark(ctx, gotrepo.FQM{Name: branchName})
 		if err != nil {
 			return err
 		}
@@ -64,7 +65,7 @@ var ftpCmd = star.Command{
 		}
 		defer repo.Close()
 		branchName := markNameParam.Load(c)
-		b, err := repo.GetMark(ctx, branchName)
+		b, err := repo.GetMark(ctx, gotrepo.FQM{Name: branchName})
 		if err != nil {
 			return err
 		}

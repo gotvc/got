@@ -61,9 +61,9 @@ func (s *Site) CreateFile(p string, data []byte) {
 	require.NoError(s.t, s.Root.WriteFile(p, data, 0o644))
 }
 
-func (s *Site) CreateMark(name string) {
+func (s *Site) CreateMark(fqname gotrepo.FQM) {
 	ctx := testutil.Context(s.t)
-	_, err := s.Repo.CreateMark(ctx, name, branches.Params{})
+	_, err := s.Repo.CreateMark(ctx, fqname, branches.Params{})
 	require.NoError(s.t, err)
 }
 
@@ -82,7 +82,7 @@ func (s *Site) Commit() {
 	require.NoError(s.t, err)
 }
 
-func (s *Site) Sync(src, dst string) {
+func (s *Site) Sync(src, dst gotrepo.FQM) {
 	ctx := testutil.Context(s.t)
 	err := s.Repo.Sync(ctx, src, dst, false)
 	require.NoError(s.t, err)
@@ -93,7 +93,7 @@ func (s *Site) Add(p string) {
 	require.NoError(s.t, err)
 }
 
-func (s *Site) Ls(b, p string) (ret []string) {
+func (s *Site) Ls(b gotrepo.FQM, p string) (ret []string) {
 	err := s.Repo.Ls(testutil.Context(s.t), b, p, func(de gotfs.DirEnt) error {
 		ret = append(ret, de.Name)
 		return nil
@@ -102,7 +102,7 @@ func (s *Site) Ls(b, p string) (ret []string) {
 	return ret
 }
 
-func (s *Site) Cat(b, p string) []byte {
+func (s *Site) Cat(b gotrepo.FQM, p string) []byte {
 	buf := bytes.Buffer{}
 	err := s.Repo.Cat(testutil.Context(s.t), b, p, &buf)
 	require.NoError(s.t, err)
