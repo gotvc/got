@@ -79,7 +79,7 @@ func getOne[K comparable, V any](m map[K]V) K {
 	panic("no keys in map")
 }
 
-func TestOrgSync(t *testing.T) {
+func TestOrg(t *testing.T) {
 	ctx := testutil.Context(t)
 	ctx, cf := context.WithCancel(ctx)
 	t.Cleanup(cf)
@@ -92,10 +92,8 @@ func TestOrgSync(t *testing.T) {
 	originEP, err := originBC.Endpoint(ctx)
 	require.NoError(t, err)
 	orgVolh := blobcachetests.CreateVolume(t, originBC, nil, gotorg.DefaultVolumeSpec(false))
-	gnsc := gotorg.Client{
-		Blobcache: originBC,
-		Machine:   gotorg.New(),
-	}
+	gnsc := sites[0].OrgClient()
+	gnsc.Blobcache = originBC
 	require.NoError(t, gnsc.EnsureInit(ctx, orgVolh, []gotorg.IdentityUnit{
 		sites[0].GetIdentity(gotrepo.DefaultIden),
 		sites[1].GetIdentity(gotrepo.DefaultIden),

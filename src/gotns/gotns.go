@@ -3,7 +3,9 @@ package gotns
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"time"
 
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/branches"
@@ -16,6 +18,8 @@ import (
 )
 
 func BeginTx(ctx context.Context, dmach *gdat.Machine, kvmach *gotkv.Machine, vol volumes.Volume, modify bool) (*Tx, error) {
+	ctx, cf := context.WithTimeoutCause(ctx, 3*time.Second, errors.New("trying to begin transaction"))
+	defer cf()
 	tx, err := vol.BeginTx(ctx, blobcache.TxParams{Modify: true})
 	if err != nil {
 		return nil, err

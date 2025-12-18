@@ -1,9 +1,11 @@
 package gotorg
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"errors"
+	"slices"
 
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
@@ -30,6 +32,9 @@ func (c *Client) EnsureInit(ctx context.Context, volh blobcache.Handle, admins [
 	if err != nil {
 		return err
 	}
+	slices.SortStableFunc(admins, func(a, b IdentityUnit) int {
+		return bytes.Compare(a.ID[:], b.ID[:])
+	})
 	tx, err := bcsdk.BeginTx(ctx, c.Blobcache, volh, blobcache.TxParams{Modify: true})
 	if err != nil {
 		return err

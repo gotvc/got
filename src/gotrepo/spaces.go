@@ -61,12 +61,10 @@ func (r *Repo) makeSpace(ctx context.Context, spec SpaceSpec) (Space, error) {
 			Handle:  *volh,
 		}
 		kvmach := gotns.NewGotKV()
-		tx, err := gotns.BeginTx(ctx, gdat.NewMachine(), &kvmach, vol, true)
-		if err != nil {
-			return nil, err
-		}
 		return &gotns.Space{
-			Tx: tx,
+			Volume: vol,
+			KVMach: &kvmach,
+			DMach:  gdat.NewMachine(),
 		}, nil
 	default:
 		return nil, fmt.Errorf("empty SpaceSpec")
