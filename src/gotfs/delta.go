@@ -137,7 +137,6 @@ func (db *DeltaBuilder) write(ctx context.Context, x DeltaEntry) error {
 	case x.Delete != nil:
 		return db.b.Put(ctx, makeInfoKey(x.Path), nil)
 	case x.PutInfo != nil:
-		x.PutInfo.Nonempty = true
 		return db.b.Put(ctx, makeInfoKey(x.Path), x.PutInfo.marshal())
 	case x.PutContent != nil:
 		k := makeExtentPrefix(x.Path)

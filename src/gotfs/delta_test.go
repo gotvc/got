@@ -55,6 +55,8 @@ func TestDeltaRW(t *testing.T) {
 func requireEqualDeltas(t testing.TB, e, a DeltaEntry) {
 	require.Equal(t, cleanPath(e.Path), cleanPath(a.Path))
 	require.Equal(t, e.Delete, a.Delete)
-	require.Equal(t, e.PutInfo.marshal(), a.PutInfo.marshal())
+	if e.PutInfo != nil || a.PutInfo != nil {
+		require.Equal(t, e.PutInfo.marshal(), a.PutInfo.marshal())
+	}
 	require.Equal(t, e.PutContent, a.PutContent)
 }

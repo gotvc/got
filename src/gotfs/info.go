@@ -8,25 +8,85 @@ import (
 
 	"errors"
 
+	"capnproto.org/go/capnp/v3"
+	"github.com/gotvc/got/src/gotfs/gotfscnp"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
-	"google.golang.org/protobuf/proto"
 )
 
-func (m *Info) marshal() []byte {
-	data, err := proto.Marshal(m)
+type Info struct {
+	Mode  uint32
+	Attrs map[string][]byte
+}
+
+func (info *Info) marshal() []byte {
+	if info == nil {
+		panic("info is nil")
+	}
+	_, seg, err := capnp.NewMessage(capnp.SingleSegment(nil))
+	if err != nil {
+		panic(err)
+	}
+	infoc, err := gotfscnp.NewRootInfo(seg)
+	if err != nil {
+		panic(err)
+	}
+	infoc.SetMode(info.Mode)
+	al, err := infoc.NewAttrs(int32(len(info.Attrs)))
+	if err != nil {
+		panic(err)
+	}
+	var acount int
+	for k, v := range info.Attrs {
+		attr := al.At(acount)
+		attr.SetKey(k)
+		attr.SetValue(v)
+		acount++
+	}
+	data, err := capnp.Canonicalize(capnp.Struct(infoc))
 	if err != nil {
 		panic(err)
 	}
 	return data
 }
 
+func (info *Info) unmarshal(data []byte) error {
+	msg, _, err := capnp.NewMessage(capnp.SingleSegment(data))
+	if err != nil {
+		return err
+	}
+	infoc, err := gotfscnp.ReadRootInfo(msg)
+	if err != nil {
+		return err
+	}
+	al, err := infoc.Attrs()
+	if err != nil {
+		return err
+	}
+	attrs := make(map[string][]byte)
+	for i := 0; i < al.Len(); i++ {
+		attr := al.At(i)
+		key, err := attr.Key()
+		if err != nil {
+			return err
+		}
+		value, err := attr.Value()
+		if err != nil {
+			return err
+		}
+		attrs[key] = value
+	}
+	info.Mode = infoc.Mode()
+	info.Attrs = attrs
+	return nil
+}
+
 func parseInfo(data []byte) (*Info, error) {
-	md := &Info{}
-	if err := proto.Unmarshal(data, md); err != nil {
+	var ret Info
+	if err := ret.unmarshal(data); err != nil {
 		return nil, err
 	}
-	return md, nil
+	return &ret, nil
 }
 
 func makeInfoKey(p string) []byte {

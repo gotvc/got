@@ -6,6 +6,7 @@ toolchain go1.24.1
 
 require (
 	blobcache.io/blobcache v0.0.3-0.20251215225741-1b948500027b
+	capnproto.org/go/capnp/v3 v3.1.0-alpha.2
 	github.com/cloudflare/circl v1.6.1
 	github.com/dchest/siphash v1.2.3
 	github.com/fatih/color v1.13.0
@@ -22,13 +23,11 @@ require (
 	golang.org/x/crypto v0.46.1-0.20251210140736-7dacc380ba00
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
 	golang.org/x/sync v0.19.0
-	google.golang.org/protobuf v1.35.1
 	zombiezen.com/go/sqlite v1.4.2
 )
 
 require (
 	blobcache.io/glfs v0.0.0-20251015013643-959eae5a0508 // indirect
-	capnproto.org/go/capnp/v3 v3.1.0-alpha.2 // indirect
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -71,6 +70,7 @@ require (
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sys v0.39.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
+	google.golang.org/protobuf v1.35.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/blake3 v1.2.1 // indirect
 	modernc.org/libc v1.65.10 // indirect

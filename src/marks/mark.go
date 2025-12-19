@@ -21,6 +21,7 @@ type Info struct {
 	Salt Salt `json:"salt"`
 	// Annotations are arbitrary metadata associated with the mark.
 	Annotations []Annotation `json:"annotations"`
+
 	// CreatedAt is the time the mark was created.
 	CreatedAt tai64.TAI64 `json:"created_at"`
 }
