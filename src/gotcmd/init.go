@@ -9,6 +9,7 @@ import (
 	"blobcache.io/blobcache/src/blobcachecmd"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc"
+	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/star"
 )
 
@@ -43,6 +44,9 @@ var initCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
+		if _, err := repo.CreateMark(c, gotrepo.FQM{Name: "master"}, marks.Params{}); err != nil {
+			return err
+		}
 		if err := gotwc.Init(repo, ".", gotwc.Config{
 			Head:  "master",
 			ActAs: gotrepo.DefaultIden,

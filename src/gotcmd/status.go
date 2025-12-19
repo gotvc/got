@@ -48,10 +48,10 @@ var statusCmd = star.Command{
 		}); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(bufw, "UNTRACKED:\n"); err != nil {
+		if _, err := fmt.Fprintf(bufw, "NOT STAGED:\n"); err != nil {
 			return err
 		}
-		if err := wc.ForEachUntracked(ctx, func(p string) error {
+		if err := wc.ForEachNotStaged(ctx, func(p string) error {
 			_, err := fmt.Fprintf(bufw, "\t%s\n", p)
 			return err
 		}); err != nil {
