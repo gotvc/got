@@ -58,7 +58,7 @@ var rootCmd = star.NewDir(
 
 		"history": historyCmd,
 		"log":     historyCmd,
-		"marks":   mark,
+		"mark":    mark,
 		"sync":    syncCmd,
 		"fork":    forkCmd,
 

@@ -1,27 +1,23 @@
 
-test: protobuf
+test: capnp
 	go test ./...
 
-testv: protobuf
+testv: capnp
 	go test -v -count=1 ./...
 
 bench:
 	go test -v -bench=. ./... -run Benchmark
 
-install: protobuf
+install: capnp
 	go install ./cmd/got
 
-protobuf:
-	cd ./src/gotfs && ./build_protobuf.sh
+capnp:
+	cd ./src/gotfs/gotfscnp && ./build_cnp.sh
 
-install-protoc-gen-go:
-	go install github.com/golang/protobuf/protoc-gen-go
-
-build: protobuf
+build: capnp
 	rm -r ./out/*
-	GOOS=darwin GOARCH=amd64 ./etc/build_go_binary.sh out/got_darwin-amd64_$(TAG) ./cmd/got
+	GOOS=darwin GOARCH=arm64 ./etc/build_go_binary.sh out/got_darwin-amd64_$(TAG) ./cmd/got
 	GOOS=linux GOARCH=amd64 ./etc/build_go_binary.sh out/got_linux-amd64_$(TAG) ./cmd/got
-	GOOS=windows GOARCH=amd64 ./etc/build_go_binary.sh out/got_windows-amd64_$(TAG) ./cmd/got
 
 docker:
 	docker build -t got:local .

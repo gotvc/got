@@ -344,10 +344,10 @@ func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOpera
 	})
 }
 
-// ForEachUntracked lists all the files which are not in either:
+// ForEachNotStaged lists all the files which are not in either:
 //  1. the staging area
 //  2. the active branch head
-func (wc *WC) ForEachUntracked(ctx context.Context, fn func(p string) error) error {
+func (wc *WC) ForEachNotStaged(ctx context.Context, fn func(p string) error) error {
 	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
 		snap, voltx, err := sctx.Branch.GetTarget(ctx)
 		if err != nil {
