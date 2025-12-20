@@ -84,7 +84,7 @@ func (s *Site) Commit() {
 
 func (s *Site) Sync(src, dst gotrepo.FQM) {
 	ctx := testutil.Context(s.t)
-	err := s.Repo.Sync(ctx, src, dst, false)
+	err := s.Repo.SyncMarks(ctx, src, dst, false)
 	require.NoError(s.t, err)
 }
 

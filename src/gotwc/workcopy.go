@@ -225,6 +225,23 @@ func (wc *WC) SetActAs(idenName string) error {
 	})
 }
 
+// Fork calls CloneMark on the repo with the current head, creating a new
+// mark `next`.
+// Then the WC's head is set to next.
+func (wc *WC) Fork(ctx context.Context, next string) error {
+	head, err := wc.GetHead()
+	if err != nil {
+		return err
+	}
+	if err := wc.repo.CloneMark(ctx, gotrepo.FQM{Name: head}, gotrepo.FQM{Name: next}); err != nil {
+		return err
+	}
+	if err := wc.SetHead(ctx, next); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (wc *WC) Close() error {
 	if err := wc.db.Close(); err != nil {
 		return err

@@ -1,11 +1,11 @@
 package gotcmd
 
 import (
+	"encoding/json"
 	"os"
 
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/metrics"
-	"github.com/gotvc/got/src/internal/serde"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/star"
 )
@@ -44,7 +44,7 @@ var slurpCmd = star.Command{
 			return err
 		}
 		r.Close()
-		pemData, err := serde.MarshalPEM(root)
+		pemData, err := json.MarshalIndent(root, "", "  ")
 		if err != nil {
 			return err
 		}

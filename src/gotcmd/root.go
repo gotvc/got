@@ -48,21 +48,21 @@ var rootCmd = star.NewDir(
 		"commit":  commitCmd,
 
 		// other working copy methods
-		"head": headCmd,
 		"wc":   wcCmd,
+		"head": headCmd,
+		"fork": forkCmd,
 
 		"ls":   lsCmd,
 		"cat":  catCmd,
 		"http": httpCmd,
 		"ftp":  ftpCmd,
 
+		// marks
+		"mark":    mark,
 		"history": historyCmd,
 		"log":     historyCmd,
-		"mark":    mark,
-		"sync":    syncCmd,
-		"fork":    forkCmd,
 
-		"ns": nsCmd,
+		"space": spaceCmd,
 
 		"serve": serveCmd,
 		"slurp": slurpCmd,

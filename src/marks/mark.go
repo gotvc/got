@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 	"strings"
 
 	"github.com/gotvc/got/src/gdat"
@@ -207,6 +208,9 @@ func (b *Mark) ViewFS(ctx context.Context, fn func(mach *gotfs.Machine, stores s
 		return err
 	}
 	defer tx.Abort(ctx)
+	if snap == nil {
+		return fmt.Errorf("mark has no target")
+	}
 	return fn(b.gotfs, tx, snap.Payload.Root)
 }
 

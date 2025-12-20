@@ -2,9 +2,14 @@ package gotcmd
 
 import (
 	"fmt"
+	"io"
+	"os"
+	"os/exec"
 
 	"github.com/gotvc/got/src/internal/metrics"
+	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/star"
+	"go.brendoncarroll.net/tai64"
 )
 
 var addCmd = star.Command{
@@ -108,8 +113,37 @@ var clearCmd = star.Command{
 	},
 }
 
+var commitCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "commits the contents of staging applied to the contents of the active volume",
+	},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		wc, err := openWC()
+		if err != nil {
+			return err
+		}
+		defer wc.Close()
+		// TODO get message from -m flag
+		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
+		defer r.Close()
+		now := tai64.Now().TAI64()
+		return wc.Commit(ctx, marks.SnapInfo{
+			Message:    "",
+			AuthoredAt: now,
+		})
+	},
+}
+
 var pathsParam = star.Repeated[string]{
 	ID:       "paths",
 	ShortDoc: "one or more paths to add, remove, put, or discard",
 	Parse:    star.ParseString,
+}
+
+func pipeToLess(r io.Reader) error {
+	cmd := exec.Command("/usr/bin/less")
+	cmd.Stdin = r
+	cmd.Stdout = os.Stdout
+	return cmd.Run()
 }

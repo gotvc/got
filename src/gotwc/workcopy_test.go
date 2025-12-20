@@ -129,7 +129,7 @@ func TestFork(t *testing.T) {
 		require.NoError(t, wc.Commit(ctx, marks.SnapInfo{}))
 	}
 
-	require.NoError(t, repo.Fork(ctx, nameMaster, "branch2"))
+	require.NoError(t, wc.Fork(ctx, "branch2"))
 	require.NoError(t, repo.History(ctx, gotrepo.FQM{Name: "branch2"}, func(_ gotfs.Ref, _ gotvc.Snap) error {
 		return nil
 	}))

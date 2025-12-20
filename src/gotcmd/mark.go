@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/star"
+	"golang.org/x/sync/errgroup"
 )
 
 var mark = star.NewDir(
 	star.Metadata{
-		Short: "manage the contents of a namespace",
+		Short: "manage the marks in a space and what they point at",
 	}, map[string]star.Command{
 		"create":   markCreateCmd,
 		"list":     markListCmd,
@@ -21,6 +24,8 @@ var mark = star.NewDir(
 		"get-root": markGetTargetCmd,
 		"inspect":  markInspectCmd,
 		"cp-salt":  markCpSaltCmd,
+		"sync":     markSyncCmd,
+		"as":       markAsCmd,
 	},
 )
 
@@ -147,6 +152,83 @@ var markCpSaltCmd = star.Command{
 	},
 }
 
+var markAsCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "creates a new mark pointed at the target of the current mark",
+	},
+	Pos: []star.Positional{newMarkNameParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		wc, err := openWC()
+		if err != nil {
+			return err
+		}
+		defer wc.Close()
+		head, err := wc.GetHead()
+		if err != nil {
+			return err
+		}
+		repo := wc.Repo()
+		newfqn := gotrepo.FQM{Name: newMarkNameParam.Load(c)}
+		if err := repo.CloneMark(ctx,
+			gotrepo.FQM{Name: head},
+			newfqn); err != nil {
+			return err
+		}
+		c.Printf("marked snapshot as %v", newfqn)
+		return nil
+	},
+}
+
+var historyCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "prints the snapshot log",
+	},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		wc, err := openWC()
+		if err != nil {
+			return err
+		}
+		defer wc.Close()
+		repo := wc.Repo()
+		bname, err := wc.GetHead()
+		if err != nil {
+			return err
+		}
+		pr, pw := io.Pipe()
+		eg := errgroup.Group{}
+		eg.Go(func() error {
+			err := repo.History(ctx, gotrepo.FQM{Name: bname}, func(ref gdat.Ref, snap gotvc.Snap) error {
+				fmt.Fprintf(pw, "#%04d\t%v\n", snap.N, ref.CID)
+				fmt.Fprintf(pw, "FS: %v\n", snap.Payload.Root.Ref.CID)
+				if len(snap.Parents) == 0 {
+					fmt.Fprintf(pw, "Parents: (none)\n")
+				} else {
+					fmt.Fprintf(pw, "Parents:\n")
+					for _, parent := range snap.Parents {
+						fmt.Fprintf(pw, "  %v\n", parent.CID)
+					}
+				}
+				fmt.Fprintf(pw, "Created At: %v\n", snap.CreatedAt.GoTime().Local().String())
+				fmt.Fprintf(pw, "Created By: %v\n", snap.Creator)
+				pw.Write([]byte(prettifyJSON(snap.Payload.Aux)))
+				fmt.Fprintln(pw)
+				return nil
+			})
+			pw.CloseWithError(err)
+			return err
+		})
+		eg.Go(func() error {
+			err := pipeToLess(pr)
+			//_, err := io.Copy(c.Stdout, pr)
+			pr.CloseWithError(err)
+			return err
+		})
+		return eg.Wait()
+	},
+}
+
 var markNameParam = star.Required[string]{
 	ID:    "mark_name",
 	Parse: star.ParseString,
@@ -173,9 +255,9 @@ func parseFQName(s string) (gotrepo.FQM, error) {
 
 var forkCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "creates a new mark based off the provided branch",
+		Short: "creates a new mark pointed at the target of the current mark",
 	},
-	Pos: []star.Positional{newBranchNameParam},
+	Pos: []star.Positional{newMarkNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
 		wc, err := openWC()
@@ -183,21 +265,11 @@ var forkCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		newName := newBranchNameParam.Load(c)
-		rend := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
-		defer rend.Close()
-		current, err := wc.GetHead()
-		if err != nil {
-			return err
-		}
-		if err := wc.Repo().Fork(ctx, current, newName); err != nil {
-			return err
-		}
-		return wc.SetHead(ctx, newName)
+		return wc.Fork(ctx, newMarkNameParam.Load(c))
 	},
 }
 
-var syncCmd = star.Command{
+var markSyncCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "syncs the contents of one branch to another",
 	},
@@ -217,11 +289,11 @@ var syncCmd = star.Command{
 		src := srcMarkParam.Load(c)
 		dst := dstMarkParam.Load(c)
 		force, _ := forceParam.LoadOpt(c)
-		return repo.Sync(ctx, src, dst, force)
+		return repo.SyncMarks(ctx, src, dst, force)
 	},
 }
 
-var newBranchNameParam = star.Required[string]{
+var newMarkNameParam = star.Required[string]{
 	ID:    "new_name",
 	Parse: star.ParseString,
 }

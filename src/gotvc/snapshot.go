@@ -63,6 +63,7 @@ type Snapshot struct {
 	// Creator is the ID of the user who created the snapshot.
 	Creator inet256.ID
 
+	// Payload is the thing being snapshotted.
 	Payload Payload
 }
 
@@ -89,7 +90,7 @@ func (a Snapshot) Marshal(out []byte) []byte {
 
 	out = append(out, a.Creator[:]...)
 
-	out = a.Payload.Marshal(out)
+	out = sbe.AppendLP(out, a.Payload.Marshal(nil))
 	return out
 }
 
@@ -137,7 +138,11 @@ func (a *Snapshot) Unmarshal(data []byte) error {
 	a.Creator = inet256.ID(creatorData)
 
 	// payload
-	if err := a.Payload.Unmarshal(data); err != nil {
+	payloadData, _, err := sbe.ReadLP(data)
+	if err != nil {
+		return err
+	}
+	if err := a.Payload.Unmarshal(payloadData); err != nil {
 		return err
 	}
 	return nil

@@ -42,6 +42,9 @@ func NewTx(tx volumes.Tx, dmach *gdat.Machine, kvmach *gotkv.Machine) *Tx {
 // Root is the root of a gotns namespace
 type Root struct {
 	Marks gotkv.Root
+	// BrokenSet is the set of CIDs which the Space cannot dereference.
+	// This is used to correctly Sync even with incomplete structures.
+	BrokenSet gotkv.Root
 }
 
 func ParseRoot(data []byte) (*Root, error) {
@@ -53,15 +56,27 @@ func ParseRoot(data []byte) (*Root, error) {
 }
 
 func (r *Root) Unmarshal(data []byte) error {
-	kvrData, _, err := sbe.ReadLP16(data)
+	kvrData, data, err := sbe.ReadLP16(data)
 	if err != nil {
 		return err
 	}
-	return r.Marks.Unmarshal(kvrData)
+	bsData, _, err := sbe.ReadLP16(data)
+	if err != nil {
+		return err
+	}
+	if err := r.Marks.Unmarshal(kvrData); err != nil {
+		return err
+	}
+	if err := r.BrokenSet.Unmarshal(bsData); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (r Root) Marshal(out []byte) []byte {
-	return sbe.AppendLP16(nil, r.Marks.Marshal(nil))
+	out = sbe.AppendLP16(out, r.Marks.Marshal(nil))
+	out = sbe.AppendLP16(out, r.BrokenSet.Marshal(nil))
+	return out
 }
 
 type MarkState struct {
@@ -167,6 +182,12 @@ func (tx *Tx) ListNames(ctx context.Context, span marks.Span, limit int) ([]stri
 		return nil, err
 	}
 	span2 := gotkv.TotalSpan()
+	if span.Begin != "" {
+		span2.Begin = []byte(span.Begin)
+	}
+	if span.End != "" {
+		span2.End = []byte(span.End)
+	}
 	it := tx.kvtx.Iterate(ctx, span2)
 	//it := tx.kvmach.NewIterator(tx.tx, *root, span2)
 	it2 := streams.NewMap(it, func(dst *string, x gotkv.Entry) {
@@ -228,7 +249,11 @@ func (tx *Tx) Commit(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	r := Root{Marks: *kvroot}
+	bsroot, err := tx.kvmach.NewEmpty(ctx, tx.tx)
+	if err != nil {
+		return err
+	}
+	r := Root{Marks: *kvroot, BrokenSet: *bsroot}
 	if err := saveRoot(ctx, tx.tx, r); err != nil {
 		return err
 	}

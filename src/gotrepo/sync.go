@@ -7,8 +7,8 @@ import (
 	"github.com/gotvc/got/src/marks"
 )
 
-// Sync syncs 2 branches by name.
-func (r *Repo) Sync(ctx context.Context, src, dst FQM, force bool) error {
+// SyncMarks syncs 2 marks by name.
+func (r *Repo) SyncMarks(ctx context.Context, src, dst FQM, force bool) error {
 	srcSpace, err := r.GetSpace(ctx, src.Space)
 	if err != nil {
 		return err
@@ -30,6 +30,34 @@ func (r *Repo) Sync(ctx context.Context, src, dst FQM, force bool) error {
 	return marks.Sync(ctx, srcBranch, dstBranch, force)
 }
 
-type syncTask struct {
-	Dst, Src string
+// SyncSpacesTask contains parameters needed to
+// copy marks from one space to another.
+type SyncSpacesTask struct {
+	// Src is name of the space to read from.
+	Src string
+	// Filter is applied to src to determine what to copy.
+	// If nil, then all marks are copied.
+	Filter func(string) bool
+	// MapName is applied to go from names in the Src space, to name in the Dst space.
+	MapName func(string) string
+	// Dst is the name of the space to write to.
+	Dst string
+}
+
+// Fetch executes a fetch task.
+func (r *Repo) SyncSpaces(ctx context.Context, task SyncSpacesTask) error {
+	srcSpace, err := r.GetSpace(ctx, task.Src)
+	if err != nil {
+		return err
+	}
+	dstSpace, err := r.GetSpace(ctx, task.Dst)
+	if err != nil {
+		return err
+	}
+	return marks.SyncSpaces(ctx, marks.SyncSpacesTask{
+		Src:     srcSpace,
+		Dst:     dstSpace,
+		Filter:  task.Filter,
+		MapName: task.MapName,
+	})
 }

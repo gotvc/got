@@ -12,9 +12,7 @@ const (
 	nameMaster = "master"
 )
 
-type BranchInfo = marks.Info
-
-type Branch = marks.Mark
+type MarkInfo = marks.Info
 
 // FQM represents a fully qualified Mark name.
 type FQM struct {
@@ -35,7 +33,7 @@ func ParseFQName(s string) FQM {
 }
 
 // CreateBranch creates a new mark in the repo's local space.
-func (r *Repo) CreateMark(ctx context.Context, fqname FQM, params marks.Params) (*BranchInfo, error) {
+func (r *Repo) CreateMark(ctx context.Context, fqname FQM, params marks.Params) (*MarkInfo, error) {
 	if err := marks.CheckName(fqname.Name); err != nil {
 		return nil, err
 	}
@@ -47,7 +45,7 @@ func (r *Repo) CreateMark(ctx context.Context, fqname FQM, params marks.Params) 
 }
 
 // GetBranch returns a specific branch, or an error if it does not exist
-func (r *Repo) GetMark(ctx context.Context, fqname FQM) (*Branch, error) {
+func (r *Repo) GetMark(ctx context.Context, fqname FQM) (*marks.Mark, error) {
 	space, err := r.GetSpace(ctx, fqname.Space)
 	if err != nil {
 		return nil, err
@@ -99,19 +97,19 @@ func (r *Repo) GetMarkRoot(ctx context.Context, mark FQM) (*Snap, error) {
 	return snap, nil
 }
 
-// Fork creates a new branch called next and sets its head to match base's
-func (r *Repo) Fork(ctx context.Context, base, next string) error {
-	baseBranch, err := r.GetMark(ctx, FQM{Name: base})
+// CloneMark creates a new branch called next and sets its head to match base's
+func (r *Repo) CloneMark(ctx context.Context, base, next FQM) error {
+	baseBranch, err := r.GetMark(ctx, base)
 	if err != nil {
 		return err
 	}
-	_, err = r.CreateMark(ctx, FQM{Name: next}, marks.Params{
+	_, err = r.CreateMark(ctx, next, marks.Params{
 		Salt: baseBranch.Info.Salt,
 	})
 	if err != nil {
 		return err
 	}
-	nextBranch, err := r.GetMark(ctx, FQM{Name: next})
+	nextBranch, err := r.GetMark(ctx, next)
 	if err != nil {
 		return err
 	}

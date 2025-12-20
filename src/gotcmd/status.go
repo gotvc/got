@@ -118,11 +118,11 @@ var scrubCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		b, err := wc.GetHead()
+		head, err := wc.GetHead()
 		if err != nil {
 			return err
 		}
-		return wc.Repo().Check(ctx, gotrepo.FQM{Name: b})
+		return wc.Repo().Check(ctx, gotrepo.FQM{Name: head})
 	},
 }
 
