@@ -1,4 +1,4 @@
-package dbutil
+package sqlutil
 
 import (
 	"context"

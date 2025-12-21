@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/gotvc/got/src/gotwc/internal/porting"
-	"github.com/gotvc/got/src/internal/dbutil"
+	"github.com/gotvc/got/src/internal/sqlutil"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/kv"
 )
@@ -13,11 +13,11 @@ import (
 // dirState tracks the state of the working directory.
 // dirState implements porting.DirState
 type dirState struct {
-	conn     *dbutil.Conn
+	conn     *sqlutil.Conn
 	saltHash [32]byte
 }
 
-func newDirState(conn *dbutil.Conn, saltHash [32]byte) *dirState {
+func newDirState(conn *sqlutil.Conn, saltHash [32]byte) *dirState {
 	return &dirState{
 		conn:     conn,
 		saltHash: saltHash,

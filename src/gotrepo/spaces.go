@@ -56,17 +56,28 @@ func (r *Repo) makeSpace(ctx context.Context, spec SpaceSpec) (Space, error) {
 		if err != nil {
 			return nil, err
 		}
-		vol := &volumes.Blobcache{
-			Service: r.bc,
-			Handle:  *volh,
+		return spaceFromHandle(r.bc, *volh), nil
+	case spec.Blobcache != nil:
+		vspec := *spec.Blobcache
+		volh, err := r.bc.CreateVolume(ctx, nil, vspec)
+		if err != nil {
+			return nil, err
 		}
-		kvmach := gotns.NewGotKV()
-		return &gotns.Space{
-			Volume: vol,
-			KVMach: &kvmach,
-			DMach:  gdat.NewMachine(),
-		}, nil
+		return spaceFromHandle(r.bc, *volh), nil
 	default:
 		return nil, fmt.Errorf("empty SpaceSpec")
+	}
+}
+
+func spaceFromHandle(bc blobcache.Service, volh blobcache.Handle) Space {
+	vol := &volumes.Blobcache{
+		Service: bc,
+		Handle:  volh,
+	}
+	kvmach := gotns.NewGotKV()
+	return &gotns.Space{
+		Volume: vol,
+		KVMach: &kvmach,
+		DMach:  gdat.NewMachine(),
 	}
 }

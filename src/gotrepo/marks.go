@@ -121,6 +121,19 @@ func (r *Repo) CloneMark(ctx context.Context, base, next FQM) error {
 	return nil
 }
 
+// Modify calls fn to modify the target of a Mark.
+func (r *Repo) Modify(ctx context.Context, fqm FQM, fn func(mc marks.ModifyCtx) (*Snap, error)) error {
+	space, err := r.GetSpace(ctx, fqm.Space)
+	if err != nil {
+		return err
+	}
+	m, err := space.Open(ctx, fqm.Name)
+	if err != nil {
+		return err
+	}
+	return m.Modify(ctx, fn)
+}
+
 func (r *Repo) History(ctx context.Context, mark FQM, fn func(ref Ref, s Snap) error) error {
 	branch, err := r.GetMark(ctx, mark)
 	if err != nil {

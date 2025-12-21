@@ -54,6 +54,8 @@ type (
 // Working Copies can be created to manipulate the contents of the stages.
 type Repo struct {
 	root     *os.Root
+	bgCtx    context.Context
+	cf       context.CancelFunc
 	config   Config
 	bc       blobcache.Service
 	closeAll bool
@@ -84,7 +86,7 @@ func Init(p string, config Config) error {
 	return r.Close()
 }
 
-func Open(p string) (*Repo, error) {
+func Open(p string) (_ *Repo, retErr error) {
 	p, err := filepath.Abs(p)
 	if err != nil {
 		return nil, err
@@ -94,12 +96,6 @@ func Open(p string) (*Repo, error) {
 		return nil, err
 	}
 
-	// background context
-	bgCtx := context.Background()
-	bgCtx, cf := context.WithCancel(bgCtx)
-	defer cf()
-	log, _ := zap.NewProduction()
-	bgCtx = logctx.NewContext(bgCtx, log)
 	// config
 	config, err := LoadConfig(root)
 	if err != nil {
@@ -131,7 +127,16 @@ func Open(p string) (*Repo, error) {
 			return nil, err
 		}
 	}
-
+	// background context
+	bgCtx := context.Background()
+	bgCtx, cf := context.WithCancel(bgCtx)
+	defer func() {
+		if retErr != nil {
+			cf()
+		}
+	}()
+	log, _ := zap.NewProduction()
+	bgCtx = logctx.NewContext(bgCtx, log)
 	// blobcache
 	bc, err := makeBlobcache(root, *config, config.Blobcache, bgCtx)
 	if err != nil {
@@ -144,7 +149,9 @@ func Open(p string) (*Repo, error) {
 		Blobcache:  bc,
 		CloseAll:   true,
 	}
-	return New(env, *config), nil
+	r := New(env, *config)
+	r.cf = cf
+	return r, nil
 }
 
 // Env is the environment that the Repo needs to function.
@@ -172,6 +179,12 @@ func New(env Env, cfg Config) *Repo {
 func (r *Repo) Close() (retErr error) {
 	ctx := context.TODO()
 	for _, fn := range []func() error{
+		func() error {
+			if r.cf != nil {
+				r.cf()
+			}
+			return nil
+		},
 		func() error {
 			if !r.closeAll {
 				return nil

@@ -157,26 +157,37 @@ func (b *Mark) SetTarget(ctx context.Context, src stores.Reading, snap Snap) err
 
 // ModifyCtx is the context passed to the modify function.
 type ModifyCtx struct {
+	VC    *gotvc.Machine
+	FS    *gotfs.Machine
 	Store stores.RW
-	Head  *Snap
-	GotVC *gotvc.Machine
-	GotFS *gotfs.Machine
+	Root  *Snap
 }
 
-func (b *Mark) Modify(ctx context.Context, src stores.Reading, fn func(mctx ModifyCtx) (*Snap, error)) error {
+// Sync syncs a snapshot into the store
+func (mctx *ModifyCtx) Sync(ctx context.Context, srcs [3]stores.Reading, root Snap) error {
+	return mctx.VC.Sync(ctx, srcs[2], mctx.Store, root, func(payload gotvc.Payload) error {
+		return mctx.FS.Sync(ctx,
+			[2]stores.Reading{srcs[0], srcs[1]},
+			[2]stores.Writing{mctx.Store, mctx.Store},
+			payload.Root,
+		)
+	})
+}
+
+func (b *Mark) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Snap, error)) error {
 	b.init()
 	return applySnapshot(ctx, b.gotvc, b.gotfs, b.Volume, func(dst stores.RW, x *Snap) (*Snap, error) {
 		y, err := fn(ModifyCtx{
 			Store: dst,
-			Head:  x,
-			GotVC: b.gotvc,
-			GotFS: b.gotfs,
+			Root:  x,
+			VC:    b.gotvc,
+			FS:    b.gotfs,
 		})
 		if err != nil {
 			return nil, err
 		}
 		if y != nil {
-			if err := syncStores(ctx, b.gotvc, b.gotfs, src, dst, *y); err != nil {
+			if err := syncStores(ctx, b.gotvc, b.gotfs, dst, dst, *y); err != nil {
 				return nil, err
 			}
 		}

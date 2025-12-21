@@ -29,6 +29,15 @@ func TestMultiRepoSync(t *testing.T) {
 	origin := sites[0]
 
 	// serve the origin repo
+	origin.ConfigureRepo(func(cfg gotrepo.Config) gotrepo.Config {
+		// add the PeerIDs to the origin policy
+		list := cfg.Blobcache.InProcess.CanTouch
+		for _, s := range sites[1:] {
+			list = append(list, s.Repo.BlobcachePeer())
+		}
+		cfg.Blobcache.InProcess.CanTouch = list
+		return cfg
+	})
 	go origin.Repo.Serve(ctx, testutil.PacketConn(t))
 	originEP := origin.Repo.Endpoint()
 	originNS, err := origin.Repo.NSVolume(ctx)
@@ -41,7 +50,7 @@ func TestMultiRepoSync(t *testing.T) {
 				{
 					Name: "origin",
 					Spec: gotrepo.SpaceSpec{
-						Org: &blobcache.VolumeSpec{
+						Blobcache: &blobcache.VolumeSpec{
 							Remote: &blobcache.VolumeBackend_Remote{
 								Endpoint: originEP,
 								Volume:   originNS.OID,
@@ -53,9 +62,10 @@ func TestMultiRepoSync(t *testing.T) {
 			return x
 		})
 		require.NoError(t, err)
+		go s.Repo.Serve(ctx, testutil.PacketConn(t))
 	}
 
-	t.SkipNow()
+	// use sites[1] to create marks on origin.
 	localMaster := gotrepo.FQM{Name: "master"}
 	originMaster := gotrepo.FQM{Space: "origin", Name: "master"}
 	sites[1].CreateMark(originMaster)
@@ -63,12 +73,16 @@ func TestMultiRepoSync(t *testing.T) {
 	require.Contains(t, sites[1].ListMarks("origin"), "master")
 	require.Contains(t, sites[1].ListMarks("origin"), "mybranch")
 
+	// create local master branch on sites[1] add some content, and sync.
 	testData := []byte("hello world\n")
+	sites[1].CreateMark(localMaster)
 	sites[1].CreateFile("myfile.txt", testData)
 	sites[1].Add("myfile.txt")
 	sites[1].Commit()
 	sites[1].Sync(localMaster, originMaster)
 
+	// create local master on sites[2] and sync content into it.
+	sites[2].CreateMark(localMaster)
 	sites[2].Sync(originMaster, localMaster)
 	require.Contains(t, sites[2].Ls(localMaster, ""), "myfile.txt")
 	require.Equal(t, testData, sites[2].Cat(localMaster, "myfile.txt"))
@@ -90,10 +104,12 @@ func TestOrg(t *testing.T) {
 	for i := range sites {
 		sites[i] = gottests.NewSite(t)
 	}
+	// Setup a standalone blobcache (not part of Got)
 	originBC := bclocal.NewTestService(t)
 	originEP, err := originBC.Endpoint(ctx)
 	require.NoError(t, err)
 	orgVolh := blobcachetests.CreateVolume(t, originBC, nil, gotorg.DefaultVolumeSpec(false))
+
 	gnsc := sites[0].OrgClient()
 	gnsc.Blobcache = originBC
 	require.NoError(t, gnsc.EnsureInit(ctx, orgVolh, []gotorg.IdentityUnit{

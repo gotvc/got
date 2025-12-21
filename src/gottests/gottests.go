@@ -57,6 +57,10 @@ func NewSite(t testing.TB) Site {
 	}
 }
 
+func (s *Site) ConfigureRepo(fn func(gotrepo.Config) gotrepo.Config) {
+	require.NoError(s.t, s.Repo.Configure(fn))
+}
+
 func (s *Site) CreateFile(p string, data []byte) {
 	require.NoError(s.t, s.Root.WriteFile(p, data, 0o644))
 }
