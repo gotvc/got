@@ -2,7 +2,6 @@ package marks
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	"blobcache.io/blobcache/src/blobcache"
@@ -68,8 +67,7 @@ func getSnapshot(ctx context.Context, vol Volume) (*Snap, Tx, error) {
 	}
 	var ret *Snap
 	if len(data) > 0 {
-		ret = &Snap{}
-		if err := json.Unmarshal(data, ret); err != nil {
+		if ret, err = gotvc.ParseSnapshot(data); err != nil {
 			tx.Abort(ctx)
 			return nil, nil, err
 		}
@@ -89,8 +87,7 @@ func applySnapshot(ctx context.Context, vcmach *gotvc.Machine, fsmach *gotfs.Mac
 	}
 	var xSnap *Snap
 	if len(xData) > 0 {
-		xSnap = &Snap{}
-		if err := json.Unmarshal(xData, xSnap); err != nil {
+		if xSnap, err = gotvc.ParseSnapshot(xData); err != nil {
 			return err
 		}
 	}
@@ -104,10 +101,7 @@ func applySnapshot(ctx context.Context, vcmach *gotvc.Machine, fsmach *gotfs.Mac
 		if err := syncStores(ctx, vcmach, fsmach, stores.NewMem(), tx, *ySnap); err != nil {
 			return err
 		}
-		yData, err = json.Marshal(*ySnap)
-		if err != nil {
-			return err
-		}
+		yData = ySnap.Marshal(nil)
 	}
 	if err := tx.Save(ctx, yData); err != nil {
 		return err
@@ -118,7 +112,7 @@ func applySnapshot(ctx context.Context, vcmach *gotvc.Machine, fsmach *gotfs.Mac
 func syncStores(ctx context.Context, vcmach *gotvc.Machine, fsmach *gotfs.Machine, src stores.Reading, dst stores.Writing, snap gotvc.Snapshot) (err error) {
 	ctx, cf := metrics.Child(ctx, "syncing gotvc")
 	defer cf()
-	return gotvc.Sync(ctx, src, dst, snap, func(payload gotvc.Payload) error {
+	return vcmach.Sync(ctx, src, dst, snap, func(payload gotvc.Payload) error {
 		return fsmach.Sync(ctx, [2]stores.Reading{src, src}, [2]stores.Writing{dst, dst}, payload.Root)
 	})
 }

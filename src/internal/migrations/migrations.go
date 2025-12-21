@@ -3,7 +3,7 @@ package migrations
 import (
 	"context"
 
-	"github.com/gotvc/got/src/internal/dbutil"
+	"github.com/gotvc/got/src/internal/sqlutil"
 	"go.brendoncarroll.net/exp/slices2"
 	"zombiezen.com/go/sqlite/sqlitemigration"
 )
@@ -15,7 +15,7 @@ type Migration struct {
 }
 
 // EnsureAll ensures all migrations have been applied.
-func EnsureAll(conn *dbutil.Conn, migrations []Migration) error {
+func EnsureAll(conn *sqlutil.Conn, migrations []Migration) error {
 	// Convert our Migration structs to a schema for sqlitemigration
 	schema := sqlitemigration.Schema{
 		Migrations: slices2.Map(migrations, func(mig Migration) string {

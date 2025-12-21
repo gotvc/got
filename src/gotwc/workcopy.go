@@ -15,9 +15,9 @@ import (
 	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/dbmig"
-	"github.com/gotvc/got/src/internal/dbutil"
+	"github.com/gotvc/got/src/gotwc/internal/staging"
 	"github.com/gotvc/got/src/internal/migrations"
-	"github.com/gotvc/got/src/internal/staging"
+	"github.com/gotvc/got/src/internal/sqlutil"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 )
@@ -73,13 +73,13 @@ func Open(wcdir string) (*WC, error) {
 // New creates a new working copy using root and the Repo
 func New(repo *gotrepo.Repo, root *os.Root) (*WC, error) {
 	p := root.Name()
-	db, err := dbutil.OpenPool(filepath.Join(p, dbPath))
+	db, err := sqlutil.OpenPool(filepath.Join(p, dbPath))
 	if err != nil {
 		return nil, err
 	}
 	ctx := context.TODO()
 	// setup database
-	if err := dbutil.Borrow(ctx, db, func(conn *dbutil.Conn) error {
+	if err := sqlutil.Borrow(ctx, db, func(conn *sqlutil.Conn) error {
 		if err := migrations.EnsureAll(conn, dbmig.ListMigrations()); err != nil {
 			return err
 		}
@@ -107,7 +107,7 @@ type WC struct {
 	// TODO: eventually we should move away from this interface, but
 	// the existing importers and exporters use it.
 	fsys posixfs.FS
-	db   *dbutil.Pool
+	db   *sqlutil.Pool
 }
 
 func (wc *WC) Repo() *gotrepo.Repo {
@@ -125,7 +125,7 @@ func (wc *WC) ListSpans(ctx context.Context) ([]Span, error) {
 
 // Track causes the working copy to include another range of files.
 func (wc *WC) Track(ctx context.Context, span Span) error {
-	return dbutil.DoTx(ctx, wc.db, func(conn *dbutil.Conn) error {
+	return sqlutil.DoTx(ctx, wc.db, func(conn *sqlutil.Conn) error {
 		spans, err := getSpans(conn)
 		if err != nil {
 			return err
@@ -138,7 +138,7 @@ func (wc *WC) Track(ctx context.Context, span Span) error {
 
 // Untrack causes the working copy to exclude a range of files.
 func (wc *WC) Untrack(ctx context.Context, span Span) error {
-	return dbutil.DoTx(ctx, wc.db, func(conn *dbutil.Conn) error {
+	return sqlutil.DoTx(ctx, wc.db, func(conn *sqlutil.Conn) error {
 		spans, err := getSpans(conn)
 		if err != nil {
 			return err
@@ -170,7 +170,7 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if err := dbutil.DoTx(ctx, wc.db, func(conn *dbutil.Conn) error {
+	if err := sqlutil.DoTx(ctx, wc.db, func(conn *sqlutil.Conn) error {
 		activeName, err := wc.GetHead()
 		if err != nil {
 			return err
@@ -256,7 +256,7 @@ func (wc *WC) Close() error {
 
 // Cleanup removes unreferenced data from the stage.
 func (wc *WC) Cleanup(ctx context.Context) error {
-	if err := dbutil.DoTx(ctx, wc.db, func(conn *dbutil.Conn) error {
+	if err := sqlutil.DoTx(ctx, wc.db, func(conn *sqlutil.Conn) error {
 		logctx.Infof(ctx, "removing blobs from staging areas")
 		if err := wc.cleanupStagingBlobs(ctx, conn); err != nil {
 			return err
@@ -265,13 +265,13 @@ func (wc *WC) Cleanup(ctx context.Context) error {
 	}); err != nil {
 		return err
 	}
-	if err := dbutil.Borrow(ctx, wc.db, func(conn *dbutil.Conn) error {
+	if err := sqlutil.Borrow(ctx, wc.db, func(conn *sqlutil.Conn) error {
 		logctx.Infof(ctx, "truncating WAL...")
-		if err := dbutil.WALCheckpoint(conn); err != nil {
+		if err := sqlutil.WALCheckpoint(conn); err != nil {
 			return err
 		}
 		logctx.Infof(ctx, "running VACUUM...")
-		if err := dbutil.Vacuum(conn); err != nil {
+		if err := sqlutil.Vacuum(conn); err != nil {
 			return err
 		}
 		return nil
@@ -360,11 +360,11 @@ func spansContain(spans []Span, x string) bool {
 	return false
 }
 
-func getSpans(conn *dbutil.Conn) ([]Span, error) {
+func getSpans(conn *sqlutil.Conn) ([]Span, error) {
 	return nil, nil
 }
 
-func setSpans(conn *dbutil.Conn, spans []Span) error {
+func setSpans(conn *sqlutil.Conn, spans []Span) error {
 	return nil
 }
 

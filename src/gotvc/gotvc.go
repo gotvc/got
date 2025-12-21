@@ -94,9 +94,9 @@ func (mach *Machine) isDescendentOf(ctx context.Context, m map[Ref]struct{}, s s
 }
 
 // Sync ensures dst has all of the data reachable from snap.
-func Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Snapshot, syncp func(Payload) error) error {
-	ag := NewMachine()
-	ag.readOnly = true
+func (m *Machine) Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Snapshot, syncp func(Payload) error) error {
+	m2 := *m
+	m2.readOnly = true
 	var sync func(snap Snapshot) error
 	sync = func(snap Snapshot) error {
 		for _, parentRef := range snap.Parents {
@@ -104,7 +104,7 @@ func Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Snap
 			if exists, err := stores.ExistsUnit(ctx, dst, parentRef.CID); err != nil {
 				return err
 			} else if !exists {
-				parent, err := ag.GetSnapshot(ctx, src, parentRef)
+				parent, err := m2.GetSnapshot(ctx, src, parentRef)
 				if err != nil {
 					return err
 				}
@@ -116,10 +116,6 @@ func Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Snap
 				}
 			}
 		}
-		// fsmach := gotfs.NewMachine()
-		// if err := fsmach.Sync(ctx, [2]stores.Reading{src, src}, [2]stores.Writing{dst, dst}, snap.Payload.Root); err != nil {
-		// 	return err
-		// }
 		if err := syncp(snap.Payload); err != nil {
 			return err
 		}

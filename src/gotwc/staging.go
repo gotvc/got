@@ -9,7 +9,7 @@ import (
 	"sync"
 
 	"github.com/gotvc/got/src/gotrepo"
-	"github.com/gotvc/got/src/internal/dbutil"
+	"github.com/gotvc/got/src/internal/sqlutil"
 	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/posixfs"
@@ -23,8 +23,8 @@ import (
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/gotwc/internal/porting"
+	"github.com/gotvc/got/src/gotwc/internal/staging"
 	"github.com/gotvc/got/src/internal/metrics"
-	"github.com/gotvc/got/src/internal/staging"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/units"
 )
@@ -106,11 +106,11 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		return err
 	}
 	// This has to be done outside of the transaction.
-	return dbutil.WALCheckpoint(conn)
+	return sqlutil.WALCheckpoint(conn)
 }
 
 func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
-	return dbutil.DoTxRO(ctx, wc.db, func(conn *dbutil.Conn) error {
+	return sqlutil.DoTxRO(ctx, wc.db, func(conn *sqlutil.Conn) error {
 		branchName, err := wc.GetHead()
 		branch, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: branchName})
 		if err != nil {
@@ -258,10 +258,10 @@ func (wc *WC) Commit(ctx context.Context, snapInfo marks.SnapInfo) error {
 		defer cf()
 		scratch := sctx.Store
 		stage := sctx.Stage
-		if err := sctx.Branch.Modify(ctx, scratch, func(mctx marks.ModifyCtx) (*gotvc.Snap, error) {
+		if err := sctx.Branch.Modify(ctx, func(mctx marks.ModifyCtx) (*gotvc.Snap, error) {
 			var root *gotfs.Root
-			if mctx.Head != nil {
-				root = &mctx.Head.Payload.Root
+			if mctx.Root != nil {
+				root = &mctx.Root.Payload.Root
 			}
 			s := stores.AddWriteLayer(mctx.Store, scratch)
 			ss := [2]stores.RW{s, s}
@@ -270,14 +270,14 @@ func (wc *WC) Commit(ctx context.Context, snapInfo marks.SnapInfo) error {
 				return nil, err
 			}
 			var parents []gotvc.Snap
-			if mctx.Head != nil {
-				parents = []gotvc.Snap{*mctx.Head}
+			if mctx.Root != nil {
+				parents = []gotvc.Snap{*mctx.Root}
 			}
 			infoJSON, err := json.Marshal(snapInfo)
 			if err != nil {
 				return nil, err
 			}
-			return sctx.Branch.GotVC().NewSnapshot(ctx, s, gotvc.SnapParams{
+			nextSnap, err := sctx.Branch.GotVC().NewSnapshot(ctx, s, gotvc.SnapParams{
 				Parents:   parents,
 				Creator:   sctx.ActingAs.ID,
 				CreatedAt: tai64.Now().TAI64(),
@@ -285,6 +285,10 @@ func (wc *WC) Commit(ctx context.Context, snapInfo marks.SnapInfo) error {
 				Root: *nextRoot,
 				Aux:  infoJSON,
 			})
+			if err := mctx.Sync(ctx, [3]stores.Reading{s, s, s}, *nextSnap); err != nil {
+				return nil, err
+			}
+			return nextSnap, nil
 		}); err != nil {
 			return err
 		}
@@ -378,9 +382,9 @@ func (wc *WC) ForEachNotStaged(ctx context.Context, fn func(p string) error) err
 }
 
 // createStagingArea creates a new staging area and returns its id.
-func createStagingArea(conn *dbutil.Conn, salt *[32]byte) (int64, error) {
+func createStagingArea(conn *sqlutil.Conn, salt *[32]byte) (int64, error) {
 	var rowid int64
-	err := dbutil.Get(conn, &rowid, `INSERT INTO staging_areas (salt) VALUES (?) RETURNING rowid`, salt[:])
+	err := sqlutil.Get(conn, &rowid, `INSERT INTO staging_areas (salt) VALUES (?) RETURNING rowid`, salt[:])
 	if err != nil {
 		return 0, err
 	}
@@ -388,11 +392,11 @@ func createStagingArea(conn *dbutil.Conn, salt *[32]byte) (int64, error) {
 }
 
 // ensureStagingArea finds the staging area with the given salt, or creates a new one if it doesn't exist.
-func ensureStagingArea(conn *dbutil.Conn, salt *[32]byte) (int64, error) {
+func ensureStagingArea(conn *sqlutil.Conn, salt *[32]byte) (int64, error) {
 	var id int64
-	err := dbutil.Get(conn, &id, `SELECT rowid FROM staging_areas WHERE salt = ?`, salt[:])
+	err := sqlutil.Get(conn, &id, `SELECT rowid FROM staging_areas WHERE salt = ?`, salt[:])
 	if err != nil {
-		if dbutil.IsErrNoRows(err) {
+		if sqlutil.IsErrNoRows(err) {
 			return createStagingArea(conn, salt)
 		}
 		return id, err
@@ -403,7 +407,7 @@ func ensureStagingArea(conn *dbutil.Conn, salt *[32]byte) (int64, error) {
 var _ staging.Storage = (*stagingArea)(nil)
 
 type stagingArea struct {
-	conn  *dbutil.Conn
+	conn  *sqlutil.Conn
 	rowid int64
 
 	info *marks.Info
@@ -412,7 +416,7 @@ type stagingArea struct {
 
 // newStagingArea returns a stagingArea for the given salt.
 // If the staging area does not exist, it will be created.
-func newStagingArea(conn *dbutil.Conn, info *marks.Info) (*stagingArea, error) {
+func newStagingArea(conn *sqlutil.Conn, info *marks.Info) (*stagingArea, error) {
 	salt := saltFromBranch(info)
 	rowid, err := ensureStagingArea(conn, salt)
 	if err != nil {
@@ -436,7 +440,7 @@ func (sa *stagingArea) Put(ctx context.Context, p string, op staging.Operation) 
 	if err != nil {
 		return err
 	}
-	err = dbutil.Exec(sa.conn, `INSERT INTO staging_ops (area_id, p, data) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`, sa.rowid, p, data)
+	err = sqlutil.Exec(sa.conn, `INSERT INTO staging_ops (area_id, p, data) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`, sa.rowid, p, data)
 	return err
 }
 
@@ -444,8 +448,8 @@ func (sa *stagingArea) Get(ctx context.Context, p string, dst *staging.Operation
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
 	var data []byte
-	if err := dbutil.Get(sa.conn, &data, `SELECT data FROM staging_ops WHERE area_id = ? AND p = ?`, sa.rowid, p); err != nil {
-		if dbutil.IsErrNoRows(err) {
+	if err := sqlutil.Get(sa.conn, &data, `SELECT data FROM staging_ops WHERE area_id = ? AND p = ?`, sa.rowid, p); err != nil {
+		if sqlutil.IsErrNoRows(err) {
 			return state.ErrNotFound[string]{Key: p}
 		}
 		return err
@@ -457,7 +461,7 @@ func (sa *stagingArea) List(ctx context.Context, span state.Span[string], buf []
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
 	var n int
-	for p, err := range dbutil.Select(sa.conn, dbutil.ScanString, `SELECT p FROM staging_ops WHERE area_id = ? ORDER BY p`, sa.rowid) {
+	for p, err := range sqlutil.Select(sa.conn, sqlutil.ScanString, `SELECT p FROM staging_ops WHERE area_id = ? ORDER BY p`, sa.rowid) {
 		if err != nil {
 			return 0, err
 		}
@@ -478,7 +482,7 @@ func (sa *stagingArea) Exists(ctx context.Context, p string) (bool, error) {
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
 	var exists bool
-	err := dbutil.Get(sa.conn, &exists, `SELECT EXISTS (
+	err := sqlutil.Get(sa.conn, &exists, `SELECT EXISTS (
 		SELECT 1 FROM staging_ops WHERE area_id = ? AND p = ?
 	)`, sa.rowid, p)
 	return exists, err
@@ -487,7 +491,7 @@ func (sa *stagingArea) Exists(ctx context.Context, p string) (bool, error) {
 func (sa *stagingArea) Delete(ctx context.Context, p string) error {
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
-	err := dbutil.Exec(sa.conn, `DELETE FROM staging_ops WHERE area_id = ? AND p = ?`, sa.rowid, p)
+	err := sqlutil.Exec(sa.conn, `DELETE FROM staging_ops WHERE area_id = ? AND p = ?`, sa.rowid, p)
 	return err
 }
 
@@ -496,10 +500,10 @@ func (wc *WC) forEachStaging(ctx context.Context, fn func(p string, fsop FileOpe
 }
 
 // cleanupStagingBlobs removes blobs from staging areas which do not have ops that reference them.
-func (wc *WC) cleanupStagingBlobs(ctx context.Context, conn *dbutil.Conn) error {
+func (wc *WC) cleanupStagingBlobs(ctx context.Context, conn *sqlutil.Conn) error {
 	// get all of the ids for the empty staging areas
 	var areaIDs [][32]byte
-	for areaID, err := range dbutil.Select(conn, scan32Bytes, `SELECT salt FROM staging_areas WHERE NOT EXISTS (SELECT 1 FROM staging_ops WHERE area_id = rowid)`) {
+	for areaID, err := range sqlutil.Select(conn, scan32Bytes, `SELECT salt FROM staging_areas WHERE NOT EXISTS (SELECT 1 FROM staging_ops WHERE area_id = rowid)`) {
 		if err != nil {
 			return err
 		}

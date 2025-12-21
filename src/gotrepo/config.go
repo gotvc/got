@@ -13,11 +13,6 @@ import (
 
 // Config contains runtime parameters for a Repo
 type Config struct {
-	// Spaces contain named mutable references to Snapshots
-	// They are most similar to git remotes.
-	Spaces []SpaceConfig `json:"spaces"`
-	// Identities are named identities, which refer to files in the .got/iden directory
-	Identities map[string]inet256.ID `json:"identities"`
 	// Blobcache configures access to a Blobcache service.
 	// Got stores most of it's data in Blobcache.
 	Blobcache BlobcacheSpec `json:"blobcache"`
@@ -25,6 +20,12 @@ type Config struct {
 	// This is different than the volume for the namespace.
 	// This volume will have a link to the namespace volume.
 	RepoVolume blobcache.OID `json:"repo_volume"`
+
+	// Spaces contain named mutable references to Snapshots
+	// They are most similar to git remotes.
+	Spaces []SpaceConfig `json:"spaces"`
+	// Identities are named identities, which refer to files in the .got/iden directory
+	Identities map[string]inet256.ID `json:"identities"`
 }
 
 func (c *Config) Validate() error {
