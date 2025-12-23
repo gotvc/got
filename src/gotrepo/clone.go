@@ -3,12 +3,13 @@ package gotrepo
 import (
 	"context"
 	"os"
+	"regexp"
 
 	"blobcache.io/blobcache/src/blobcache"
 )
 
 // Clone creates a new Repo at dirPath with origin mapping to the space at URL.
-func Clone(ctx context.Context, dirPath string, config Config, u blobcache.FQOID) error {
+func Clone(ctx context.Context, dirPath string, config Config, u blobcache.URL) error {
 	if err := Init(dirPath, config); err != nil {
 		return err
 	}
@@ -17,27 +18,19 @@ func Clone(ctx context.Context, dirPath string, config Config, u blobcache.FQOID
 		return err
 	}
 	defer repoRoot.Close()
-	spaceSpec, err := spaceSpecFromURL(u)
-	if err != nil {
-		return err
-	}
 	if err := EditConfig(repoRoot, func(x Config) Config {
 		y := x
-		y.Spaces = []SpaceConfig{
+		y.Spaces["origin"] = SpaceSpec{Blobcache: &u}
+		y.Fetch = []FetchConfig{
 			{
-				Name: "origin/",
-				Spec: *spaceSpec,
+				From:      "origin",
+				Filter:    regexp.MustCompile(".*"),
+				AddPrefix: "remote/origin",
 			},
 		}
-		// there shouldn't be anything here, but just in case, so we don't destroy anything.
-		y.Spaces = append(y.Spaces, x.Spaces...)
 		return y
 	}); err != nil {
 		return err
 	}
 	return nil
-}
-
-func spaceSpecFromURL(u blobcache.FQOID) (*SpaceSpec, error) {
-	return &SpaceSpec{}, nil
 }

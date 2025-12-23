@@ -29,7 +29,10 @@ func NewSite(t testing.TB) Site {
 	dirpath := t.TempDir()
 	repoCfg := gotrepo.DefaultConfig()
 	require.NoError(t, gotrepo.Init(dirpath, repoCfg))
+	return openSite(t, dirpath)
+}
 
+func openSite(t testing.TB, dirpath string) Site {
 	root, err := os.OpenRoot(dirpath)
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -59,6 +62,18 @@ func NewSite(t testing.TB) Site {
 
 func (s *Site) ConfigureRepo(fn func(gotrepo.Config) gotrepo.Config) {
 	require.NoError(s.t, s.Repo.Configure(fn))
+}
+
+// Clone creates a new site, by cloning the this site.
+func (s *Site) Clone() Site {
+	ctx := testutil.Context(s.t)
+	dirpath := s.t.TempDir()
+	repoCfg := gotrepo.DefaultConfig()
+	u, err := s.Repo.NSVolumeURL(ctx)
+	require.NoError(s.t, err)
+	require.NoError(s.t, gotrepo.Clone(ctx, dirpath, repoCfg, *u))
+
+	return openSite(s.t, dirpath)
 }
 
 func (s *Site) CreateFile(p string, data []byte) {

@@ -39,26 +39,13 @@ func TestMultiRepoSync(t *testing.T) {
 		return cfg
 	})
 	go origin.Repo.Serve(ctx, testutil.PacketConn(t))
-	originEP := origin.Repo.Endpoint()
-	originNS, err := origin.Repo.NSVolume(ctx)
+	originURL, err := origin.Repo.NSVolumeURL(ctx)
 	require.NoError(t, err)
 
 	// configure other repos to use it.
 	for _, s := range sites[1:] {
 		err := s.Repo.Configure(func(x gotrepo.Config) gotrepo.Config {
-			x.Spaces = []gotrepo.SpaceConfig{
-				{
-					Name: "origin",
-					Spec: gotrepo.SpaceSpec{
-						Blobcache: &blobcache.VolumeSpec{
-							Remote: &blobcache.VolumeBackend_Remote{
-								Endpoint: originEP,
-								Volume:   originNS.OID,
-							},
-						},
-					},
-				},
-			}
+			x.Spaces["origin"] = gotrepo.SpaceSpec{Blobcache: originURL}
 			return x
 		})
 		require.NoError(t, err)
@@ -88,11 +75,7 @@ func TestMultiRepoSync(t *testing.T) {
 	require.Equal(t, testData, sites[2].Cat(localMaster, "myfile.txt"))
 }
 
-func getOne[K comparable, V any](m map[K]V) K {
-	for k := range m {
-		return k
-	}
-	panic("no keys in map")
+func TestClone(t *testing.T) {
 }
 
 func TestOrg(t *testing.T) {
@@ -120,15 +103,12 @@ func TestOrg(t *testing.T) {
 	// configure other repos to use it.
 	for _, s := range sites[1:] {
 		err := s.Repo.Configure(func(x gotrepo.Config) gotrepo.Config {
-			x.Spaces = []gotrepo.SpaceConfig{
-				{
-					Name: "origin",
-					Spec: gotrepo.SpaceSpec{
-						Org: &blobcache.VolumeSpec{
-							Remote: &blobcache.VolumeBackend_Remote{
-								Endpoint: originEP,
-								Volume:   orgVolh.OID,
-							},
+			x.Spaces = map[string]gotrepo.SpaceSpec{
+				"origin": gotrepo.SpaceSpec{
+					Org: &blobcache.VolumeSpec{
+						Remote: &blobcache.VolumeBackend_Remote{
+							Endpoint: originEP,
+							Volume:   orgVolh.OID,
 						},
 					},
 				},
@@ -155,4 +135,11 @@ func TestOrg(t *testing.T) {
 			return nil
 		}))
 	}
+}
+
+func getOne[K comparable, V any](m map[K]V) K {
+	for k := range m {
+		return k
+	}
+	panic("no keys in map")
 }

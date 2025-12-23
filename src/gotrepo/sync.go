@@ -2,9 +2,11 @@ package gotrepo
 
 import (
 	"context"
+	"strings"
 
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/marks"
+	"golang.org/x/sync/errgroup"
 )
 
 // SyncMarks syncs 2 marks by name.
@@ -60,4 +62,55 @@ func (r *Repo) SyncSpaces(ctx context.Context, task SyncSpacesTask) error {
 		Filter:  task.Filter,
 		MapName: task.MapName,
 	})
+}
+
+func (r *Repo) Fetch(ctx context.Context) error {
+	var tasks []SyncSpacesTask
+	for _, fcfg := range r.config.Fetch {
+		tasks = append(tasks, SyncSpacesTask{
+			Src: fcfg.From,
+			Filter: func(x string) bool {
+				return fcfg.Filter.MatchString(x)
+			},
+			MapName: func(name string) string {
+				name = strings.TrimPrefix(name, fcfg.CutPrefix)
+				name = fcfg.AddPrefix + name
+				return name
+			},
+			Dst: "",
+		})
+	}
+	var eg errgroup.Group
+	for _, task := range tasks {
+		eg.Go(func() error {
+			return r.SyncSpaces(ctx, task)
+		})
+	}
+	return eg.Wait()
+}
+
+// Distribute is the opposite of Fetch.
+func (r *Repo) Distribute(ctx context.Context) error {
+	var tasks []SyncSpacesTask
+	for _, fcfg := range r.config.Fetch {
+		tasks = append(tasks, SyncSpacesTask{
+			Src: "", // local space
+			Filter: func(x string) bool {
+				return fcfg.Filter.MatchString(x)
+			},
+			MapName: func(name string) string {
+				// this is the reverse of what we do in Fetch
+				name = strings.TrimPrefix(name, fcfg.AddPrefix)
+				name = fcfg.CutPrefix + name
+				return name
+			},
+			Dst: fcfg.From,
+		})
+	}
+	for _, task := range tasks {
+		if err := r.SyncSpaces(ctx, task); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -25,9 +25,9 @@ var spaceListCmd = star.Command{
 		if err != nil {
 			return err
 		}
-		for _, scfg := range spaces {
-			data, _ := json.Marshal(scfg.Spec)
-			c.Printf("%s %s\n", scfg.Name, data)
+		for name, scfg := range spaces {
+			data, _ := json.Marshal(scfg)
+			c.Printf("%s %s\n", name, data)
 		}
 		if len(spaces) == 0 {
 			c.Printf("  (no spaces other than the default space)\n")
@@ -53,6 +53,26 @@ var spaceSyncCmd = star.Command{
 			Dst: dstSpaceParam.Load(c),
 		}
 		return repo.SyncSpaces(ctx, task)
+	},
+}
+
+var fetchCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "fetches marks from a remote space",
+	},
+	Pos: []star.Positional{},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		if err := repo.Fetch(ctx); err != nil {
+			return err
+		}
+		c.Printf("All fetch tasks completed successfully\n")
+		return nil
 	},
 }
 

@@ -269,6 +269,22 @@ func (r *Repo) NSVolume(ctx context.Context) (blobcache.FQOID, error) {
 	}, nil
 }
 
+func (r *Repo) NSVolumeURL(ctx context.Context) (*blobcache.URL, error) {
+	ep, err := r.bc.Endpoint(ctx)
+	if err != nil {
+		return nil, err
+	}
+	nsfqoid, err := r.NSVolume(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &blobcache.URL{
+		Node:   nsfqoid.Peer,
+		IPPort: &ep.IPPort,
+		Base:   nsfqoid.OID,
+	}, nil
+}
+
 // BeginStagingTx begins a new transaction for the staging area with the given paramHash.
 // It is up to the caller to commit or abort the transaction.
 func (r *Repo) BeginStagingTx(ctx context.Context, paramHash *[32]byte, mutate bool) (volumes.Tx, error) {

@@ -16,8 +16,8 @@ type MarkInfo = marks.Info
 
 // FQM represents a fully qualified Mark name.
 type FQM struct {
-	Space string
-	Name  string
+	Space string `json:"space"`
+	Name  string `json:"name"`
 }
 
 func ParseFQName(s string) FQM {

@@ -3,8 +3,9 @@ package gotrepo
 import (
 	"context"
 	"fmt"
-	"slices"
+	"maps"
 
+	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotns"
@@ -13,8 +14,8 @@ import (
 )
 
 // ListSpaces lists all the spaces that the repository is configured to use
-func (r *Repo) ListSpaces(ctx context.Context) ([]SpaceConfig, error) {
-	return slices.Clone(r.config.Spaces), nil
+func (r *Repo) ListSpaces(ctx context.Context) (map[string]SpaceSpec, error) {
+	return maps.Clone(r.config.Spaces), nil
 }
 
 // GetSpace looks for a space with a matching name in the configuration
@@ -23,43 +24,36 @@ func (r *Repo) ListSpaces(ctx context.Context) ([]SpaceConfig, error) {
 // If name is empty, then GetSpace returns the repos default namespace.
 func (r *Repo) GetSpace(ctx context.Context, name string) (marks.Space, error) {
 	if name == "" {
-		return r.makeSpace(ctx, SpaceSpec{
-			Local: &struct{}{},
-		})
+		return r.makeLocalSpace(ctx)
 	}
-	for _, scfg := range r.config.Spaces {
-		if scfg.Name == "" {
-			return nil, fmt.Errorf("spaces cannot have an empty name. fix .got/config")
-		}
-		if scfg.Name == name {
-			return r.makeSpace(ctx, scfg.Spec)
-		}
+	spec, ok := r.config.Spaces[name]
+	if !ok {
+		return nil, fmt.Errorf("space %q not found", name)
 	}
-	return nil, nil
+	return r.makeSpace(ctx, spec)
 }
 
 type SpaceSpec struct {
-	// Local is the namespace included in every repo.
-	Local *struct{} `json:"local,omitempty"`
 	// Blobcache is a arbitrary Blobcache Volume
 	// The contents of the Volume are expected to be in the GotNS format.
-	Blobcache *blobcache.VolumeSpec `json:"blobcache,omitempty"`
+	Blobcache *blobcache.URL `json:"bc,omitempty"`
 	// Org is an arbitrary Blobcache Volume
 	// The contents of the Volume are expected to be in the GotOrg format
 	Org *blobcache.VolumeSpec `json:"org,omitempty"`
 }
 
+func (r *Repo) makeLocalSpace(ctx context.Context) (Space, error) {
+	volh, err := r.repoc.GetNamespace(ctx, r.config.RepoVolume, r.useSchema())
+	if err != nil {
+		return nil, err
+	}
+	return spaceFromHandle(r.bc, *volh), nil
+}
+
 func (r *Repo) makeSpace(ctx context.Context, spec SpaceSpec) (Space, error) {
 	switch {
-	case spec.Local != nil:
-		volh, err := r.repoc.GetNamespace(ctx, r.config.RepoVolume, r.useSchema())
-		if err != nil {
-			return nil, err
-		}
-		return spaceFromHandle(r.bc, *volh), nil
 	case spec.Blobcache != nil:
-		vspec := *spec.Blobcache
-		volh, err := r.bc.CreateVolume(ctx, nil, vspec)
+		volh, err := bcsdk.OpenURL(ctx, r.bc, *spec.Blobcache)
 		if err != nil {
 			return nil, err
 		}

@@ -32,7 +32,8 @@ const (
 
 // Init initializes a new working copy in wcdir
 // The working copy will be associated with the given repo.
-func Init(r *gotrepo.Repo, wcdir string, cfg Config) error {
+// cfg.RepoDir will be overriden with repo.Dir().
+func Init(repo *gotrepo.Repo, wcdir string, cfg Config) error {
 	root, err := os.OpenRoot(wcdir)
 	if err != nil {
 		return err
@@ -41,14 +42,15 @@ func Init(r *gotrepo.Repo, wcdir string, cfg Config) error {
 	if err := root.MkdirAll(".got", 0o755); err != nil {
 		return err
 	}
-	cfg.RepoDir = r.Dir()
+	cfg.RepoDir = repo.Dir()
 	return SaveConfig(root, cfg)
 }
 
 // Open opens a directory as a WorkingCopy
+// `wcdir` is a directory containing a .got/wc-config file
+//
 // TODO: maybe this should take a Repo? and Repo should just manage setting up blobcache
 // and creating and deleting stages.
-// `wcdir` is a directory containing a .got/wc-config file
 func Open(wcdir string) (*WC, error) {
 	root, err := os.OpenRoot(wcdir)
 	if err != nil {
