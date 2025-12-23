@@ -76,6 +76,7 @@ func TestMultiRepoSync(t *testing.T) {
 }
 
 func TestClone(t *testing.T) {
+
 }
 
 func TestOrg(t *testing.T) {
@@ -92,6 +93,11 @@ func TestOrg(t *testing.T) {
 	originEP, err := originBC.Endpoint(ctx)
 	require.NoError(t, err)
 	orgVolh := blobcachetests.CreateVolume(t, originBC, nil, gotorg.DefaultVolumeSpec(false))
+	originURL := &blobcache.URL{
+		Node:   originEP.Peer,
+		IPPort: &originEP.IPPort,
+		Base:   orgVolh.OID,
+	}
 
 	gnsc := sites[0].OrgClient()
 	gnsc.Blobcache = originBC
@@ -104,14 +110,7 @@ func TestOrg(t *testing.T) {
 	for _, s := range sites[1:] {
 		err := s.Repo.Configure(func(x gotrepo.Config) gotrepo.Config {
 			x.Spaces = map[string]gotrepo.SpaceSpec{
-				"origin": gotrepo.SpaceSpec{
-					Org: &blobcache.VolumeSpec{
-						Remote: &blobcache.VolumeBackend_Remote{
-							Endpoint: originEP,
-							Volume:   orgVolh.OID,
-						},
-					},
-				},
+				"origin": {Org: originURL},
 			}
 			return x
 		})

@@ -39,7 +39,7 @@ type SpaceSpec struct {
 	Blobcache *blobcache.URL `json:"bc,omitempty"`
 	// Org is an arbitrary Blobcache Volume
 	// The contents of the Volume are expected to be in the GotOrg format
-	Org *blobcache.VolumeSpec `json:"org,omitempty"`
+	Org *blobcache.URL `json:"org,omitempty"`
 }
 
 func (r *Repo) makeLocalSpace(ctx context.Context) (Space, error) {
