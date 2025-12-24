@@ -1,7 +1,6 @@
 package gotvc
 
 import (
-	"container/list"
 	"context"
 
 	"github.com/gotvc/got/src/gdat"
@@ -9,67 +8,19 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 )
 
-// ForEach calls fn once for each Ref in the snapshot graph.
-func (m *Machine) ForEach(ctx context.Context, s stores.Reading, xs []Ref, fn func(Ref, Snapshot) error) error {
-	visited := map[Ref]struct{}{}
-	refs := newRefQueue()
-	refs.push(xs...)
-	for refs.len() > 0 {
-		ref := refs.pop()
-		snap, err := m.GetSnapshot(ctx, s, ref)
-		if err != nil {
-			return err
-		}
-		if err := fn(ref, *snap); err != nil {
-			return err
-		}
-		visited[ref] = struct{}{}
-		for _, parentRef := range snap.Parents {
-			if _, exists := visited[parentRef]; !exists {
-				refs.push(parentRef)
-			}
-		}
-	}
-	return nil
-}
-
-type refQueue struct {
-	list *list.List
-}
-
-func newRefQueue() *refQueue {
-	rq := &refQueue{
-		list: list.New(),
-	}
-	return rq
-}
-
-func (rq *refQueue) push(xs ...Ref) {
-	for _, x := range xs {
-		rq.list.PushBack(x)
-	}
-}
-
-func (rq *refQueue) pop() Ref {
-	el := rq.list.Front()
-	ret := el.Value.(Ref)
-	rq.list.Remove(el)
-	return ret
-}
-
-func (rq *refQueue) len() int {
-	return rq.list.Len()
-}
+type (
+	Ref = gdat.Ref
+)
 
 // IsDescendentOf returns true if any of x's parents are equal to a.
-func IsDescendentOf(ctx context.Context, s stores.Reading, x, a Snapshot) (bool, error) {
+func IsDescendentOf[T Snapshotable](ctx context.Context, s stores.Reading, x, a Snapshot[T]) (bool, error) {
 	m := map[Ref]struct{}{}
-	var mach Machine
+	var mach Machine[T]
 	mach.readOnly = true
 	return mach.isDescendentOf(ctx, m, s, x, a)
 }
 
-func (mach *Machine) isDescendentOf(ctx context.Context, m map[Ref]struct{}, s stores.Reading, x, a Snapshot) (bool, error) {
+func (mach *Machine[T]) isDescendentOf(ctx context.Context, m map[Ref]struct{}, s stores.Reading, x, a Snapshot[T]) (bool, error) {
 	for _, parentRef := range x.Parents {
 		if _, exists := m[parentRef]; exists {
 			continue
@@ -94,11 +45,11 @@ func (mach *Machine) isDescendentOf(ctx context.Context, m map[Ref]struct{}, s s
 }
 
 // Sync ensures dst has all of the data reachable from snap.
-func (m *Machine) Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Snapshot, syncp func(Payload) error) error {
+func (m *Machine[T]) Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Snapshot[T], syncp func(T) error) error {
 	m2 := *m
 	m2.readOnly = true
-	var sync func(snap Snapshot) error
-	sync = func(snap Snapshot) error {
+	var sync func(snap Snapshot[T]) error
+	sync = func(snap Snapshot[T]) error {
 		for _, parentRef := range snap.Parents {
 			// Skip if the parent is already copieda.
 			if exists, err := stores.ExistsUnit(ctx, dst, parentRef.CID); err != nil {
@@ -127,19 +78,18 @@ func (m *Machine) Sync(ctx context.Context, src stores.Reading, dst stores.Writi
 
 // Populate adds all the blobcache.CIDs reachable from start to set.
 // This will not include the CID for start itself, which has not yet been computed.
-func Populate(ctx context.Context, s stores.Reading, start Snapshot, set stores.Set, rootFn func(Payload) error) error {
+func (mach *Machine[T]) Populate(ctx context.Context, s stores.Reading, start Snapshot[T], set stores.Set, rootFn func(T) error) error {
 	for _, parentRef := range start.Parents {
 		parentCID := parentRef.CID
 		exists, err := set.Exists(ctx, parentCID)
 		if err != nil {
 			return err
 		} else if !exists {
-			ag := NewMachine()
-			parent, err := ag.GetSnapshot(ctx, s, parentRef)
+			parent, err := mach.GetSnapshot(ctx, s, parentRef)
 			if err != nil {
 				return err
 			}
-			if err := Populate(ctx, s, *parent, set, rootFn); err != nil {
+			if err := mach.Populate(ctx, s, *parent, set, rootFn); err != nil {
 				return err
 			}
 			if err := set.Add(ctx, parentCID); err != nil {

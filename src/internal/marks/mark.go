@@ -16,6 +16,11 @@ import (
 	"golang.org/x/exp/slices"
 )
 
+type (
+	FSMach = gotfs.Machine
+	VCMach = gotvc.Machine[Payload]
+)
+
 // Info is the metadata associated with a Mark.
 type Info struct {
 	// Salt is a 32-byte salt used to derive the cryptographic keys for the mark.
@@ -111,8 +116,8 @@ type Mark struct {
 	Volume Volume
 	Info   Info
 
-	gotvc *gotvc.Machine
-	gotfs *gotfs.Machine
+	gotvc *VCMach
+	gotfs *FSMach
 }
 
 func (b *Mark) init() {
@@ -129,7 +134,7 @@ func (b *Mark) GotFS() *gotfs.Machine {
 	return b.gotfs
 }
 
-func (b *Mark) GotVC() *gotvc.Machine {
+func (b *Mark) GotVC() *VCMach {
 	b.init()
 	return b.gotvc
 }
@@ -157,15 +162,15 @@ func (b *Mark) SetTarget(ctx context.Context, src stores.Reading, snap Snap) err
 
 // ModifyCtx is the context passed to the modify function.
 type ModifyCtx struct {
-	VC    *gotvc.Machine
-	FS    *gotfs.Machine
+	VC    *VCMach
+	FS    *FSMach
 	Store stores.RW
 	Root  *Snap
 }
 
 // Sync syncs a snapshot into the store
 func (mctx *ModifyCtx) Sync(ctx context.Context, srcs [3]stores.Reading, root Snap) error {
-	return mctx.VC.Sync(ctx, srcs[2], mctx.Store, root, func(payload gotvc.Payload) error {
+	return mctx.VC.Sync(ctx, srcs[2], mctx.Store, root, func(payload Payload) error {
 		return mctx.FS.Sync(ctx,
 			[2]stores.Reading{srcs[0], srcs[1]},
 			[2]stores.Writing{mctx.Store, mctx.Store},
@@ -233,9 +238,9 @@ func newGotFS(b *Info, opts ...gotfs.Option) *gotfs.Machine {
 }
 
 // NewGotVC creates a new gotvc.Machine suitable for writing to the mark
-func newGotVC(b *Info, opts ...gotvc.Option) *gotvc.Machine {
-	opts = append(opts, gotvc.WithSalt(deriveVCSalt(b)))
-	return gotvc.NewMachine(opts...)
+func newGotVC(b *Info, opts ...gotvc.Option[Payload]) *VCMach {
+	opts = append(opts, gotvc.WithSalt[Payload](deriveVCSalt(b)))
+	return gotvc.NewMachine(ParsePayload, opts...)
 }
 
 func deriveFSSalt(b *Info) *[32]byte {

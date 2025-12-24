@@ -22,7 +22,6 @@ import (
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo/internal/reposchema"
-	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/gotcfg"
 	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/testutil"
@@ -45,7 +44,7 @@ type (
 	Ref  = gotkv.Ref
 	Root = gotfs.Root
 
-	Snap = gotvc.Snap
+	Snap = marks.Snap
 )
 
 // Repo manages configuration including the connection to Blobcache

@@ -149,7 +149,7 @@ func (r *Repo) CleanupMark(ctx context.Context, mark FQM) error {
 	}
 	ctx, cf := metrics.Child(ctx, "cleanup volume")
 	defer cf()
-	if err := marks.CleanupVolume(ctx, b.Volume); err != nil {
+	if err := marks.CleanupVolume(ctx, b.Volume, b.Info); err != nil {
 		return err
 	}
 	return nil

@@ -12,7 +12,6 @@ import (
 
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotrepo"
-	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
@@ -130,7 +129,7 @@ func TestFork(t *testing.T) {
 	}
 
 	require.NoError(t, wc.Fork(ctx, "branch2"))
-	require.NoError(t, repo.History(ctx, gotrepo.FQM{Name: "branch2"}, func(_ gotfs.Ref, _ gotvc.Snap) error {
+	require.NoError(t, repo.History(ctx, gotrepo.FQM{Name: "branch2"}, func(_ gotfs.Ref, _ marks.Snap) error {
 		return nil
 	}))
 	commitCount := countCommits(t, wc.repo, "branch2")
@@ -204,7 +203,7 @@ func checkNotExists(t testing.TB, wc *WC, p string) {
 func countCommits(t testing.TB, repo *gotrepo.Repo, branchName string) int {
 	ctx := testutil.Context(t)
 	var count int
-	repo.History(ctx, gotrepo.FQM{Name: branchName}, func(_ gotfs.Ref, _ gotvc.Snap) error {
+	repo.History(ctx, gotrepo.FQM{Name: branchName}, func(_ gotfs.Ref, _ marks.Snap) error {
 		count++
 		return nil
 	})

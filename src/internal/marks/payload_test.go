@@ -1,10 +1,11 @@
-package gotvc
+package marks
 
 import (
 	"fmt"
 	"testing"
 
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,7 @@ func TestMarshalSnapshot(t *testing.T) {
 		{
 			N:         1,
 			CreatedAt: tai64.Now().TAI64(),
-			Parents: []Ref{
+			Parents: []gotvc.Ref{
 				{},
 				{},
 				{},
@@ -39,7 +40,7 @@ func TestMarshalSnapshot(t *testing.T) {
 			x := tc
 			data := x.Marshal(nil)
 			var y Snap
-			require.NoError(t, y.Unmarshal(data))
+			require.NoError(t, y.Unmarshal(data, ParsePayload))
 			require.Equal(t, x, y)
 		})
 	}

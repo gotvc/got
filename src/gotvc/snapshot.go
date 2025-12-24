@@ -11,48 +11,15 @@ import (
 	"go.inet256.org/inet256/src/inet256"
 
 	"github.com/gotvc/got/src/gdat"
-	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 )
 
-type (
-	Ref  = gdat.Ref
-	Root = gotfs.Root
-	Snap = Snapshot
-)
-
-// Payload is the thing being snapshotted.
-type Payload struct {
-	Root gotfs.Root
-	Aux  []byte
+type Snapshotable interface {
+	Marshal(out []byte) []byte
 }
 
-func (p Payload) Marshal(out []byte) []byte {
-	out = p.Root.Marshal(out)
-	out = sbe.AppendLP(out, p.Aux)
-	return out
-}
-
-func (p *Payload) Unmarshal(data []byte) error {
-	rootData, data, err := sbe.ReadN(data, gotfs.RootSize)
-	if err != nil {
-		return err
-	}
-	root, err := gotfs.ParseRoot(rootData)
-	if err != nil {
-		return err
-	}
-	p.Root = *root
-	auxData, _, err := sbe.ReadLP(data)
-	if err != nil {
-		return err
-	}
-	p.Aux = auxData
-	return nil
-}
-
-type Snapshot struct {
+type Snapshot[T Snapshotable] struct {
 	// N is the critical distance to the root.
 	// N is 0 if there are no parents.
 	// N is the max of the parents' N + 1.
@@ -64,18 +31,18 @@ type Snapshot struct {
 	Creator inet256.ID
 
 	// Payload is the thing being snapshotted.
-	Payload Payload
+	Payload T
 }
 
-func ParseSnapshot(data []byte) (*Snapshot, error) {
-	var a Snapshot
-	if err := a.Unmarshal(data); err != nil {
+func ParseSnapshot[T Snapshotable](data []byte, parser Parser[T]) (*Snapshot[T], error) {
+	var a Snapshot[T]
+	if err := a.Unmarshal(data, parser); err != nil {
 		return nil, err
 	}
 	return &a, nil
 }
 
-func (a Snapshot) Marshal(out []byte) []byte {
+func (a Snapshot[T]) Marshal(out []byte) []byte {
 	out = sbe.AppendUint64(out, a.N)
 	out = append(out, a.CreatedAt.Marshal()...)
 
@@ -94,7 +61,7 @@ func (a Snapshot) Marshal(out []byte) []byte {
 	return out
 }
 
-func (a *Snapshot) Unmarshal(data []byte) error {
+func (a *Snapshot[T]) Unmarshal(data []byte, parsePayload Parser[T]) error {
 	// N
 	n, data, err := sbe.ReadUint64(data)
 	if err != nil {
@@ -142,13 +109,16 @@ func (a *Snapshot) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	if err := a.Payload.Unmarshal(payloadData); err != nil {
+	payload, err := parsePayload(payloadData)
+	if err != nil {
 		return err
 	}
+	a.Payload = payload
+
 	return nil
 }
 
-func (a Snapshot) Equals(b Snapshot) bool {
+func (a Snapshot[T]) Equals(b Snapshot[T]) bool {
 	var parentsEqual bool
 	if len(a.Parents) != len(b.Parents) {
 		parentsEqual = false
@@ -162,18 +132,20 @@ func (a Snapshot) Equals(b Snapshot) bool {
 		}
 	}
 	return a.N == b.N &&
-		gotfs.Equal(a.Payload.Root, b.Payload.Root) &&
+		bytes.Equal(a.Payload.Marshal(nil), b.Payload.Marshal(nil)) &&
 		parentsEqual
 }
 
-// SnapParams are the parameters required to create a new snapshot.
-type SnapParams struct {
-	Parents   []Snapshot
+// SnapshotParams are the parameters required to create a new snapshot.
+type SnapshotParams[T Snapshotable] struct {
+	Parents   []Snapshot[T]
 	Creator   inet256.ID
 	CreatedAt tai64.TAI64
+	// Payload is the thing being snapshot
+	Payload T
 }
 
-func (a *Machine) NewSnapshot(ctx context.Context, s stores.Writing, sp SnapParams, payload Payload) (*Snapshot, error) {
+func (a *Machine[T]) NewSnapshot(ctx context.Context, s stores.Writing, sp SnapshotParams[T]) (*Snapshot[T], error) {
 	var n uint64
 	parentRefs := make([]Ref, len(sp.Parents))
 	for i, parent := range sp.Parents {
@@ -190,24 +162,23 @@ func (a *Machine) NewSnapshot(ctx context.Context, s stores.Writing, sp SnapPara
 		a, b := parentRefs[i].CID, parentRefs[j].CID
 		return a.Compare(b) < 0
 	})
-	return &Snapshot{
+	return &Snapshot[T]{
 		N:         n,
 		CreatedAt: sp.CreatedAt,
 		Parents:   parentRefs,
 		Creator:   sp.Creator,
-
-		Payload: payload,
+		Payload:   sp.Payload,
 	}, nil
 }
 
 // NewZero creates a new snapshot with no parent
-func (mach *Machine) NewZero(ctx context.Context, s stores.Writing, sp SnapParams, payload Payload) (*Snapshot, error) {
+func (mach *Machine[T]) NewZero(ctx context.Context, s stores.Writing, sp SnapshotParams[T]) (*Snapshot[T], error) {
 	sp.Parents = nil
-	return mach.NewSnapshot(ctx, s, sp, payload)
+	return mach.NewSnapshot(ctx, s, sp)
 }
 
 // PostSnapshot marshals the snapshot and posts it to the store
-func (ag *Machine) PostSnapshot(ctx context.Context, s stores.Writing, x Snapshot) (*Ref, error) {
+func (ag *Machine[T]) PostSnapshot(ctx context.Context, s stores.Writing, x Snapshot[T]) (*Ref, error) {
 	if ag.readOnly {
 		panic("gotvc: operator is read-only. This is a bug.")
 	}
@@ -215,11 +186,11 @@ func (ag *Machine) PostSnapshot(ctx context.Context, s stores.Writing, x Snapsho
 }
 
 // GetSnapshot retrieves the snapshot referenced by ref from the store.
-func (ag *Machine) GetSnapshot(ctx context.Context, s stores.Reading, ref Ref) (*Snapshot, error) {
-	var x *Snapshot
+func (ag *Machine[T]) GetSnapshot(ctx context.Context, s stores.Reading, ref Ref) (*Snapshot[T], error) {
+	var x *Snapshot[T]
 	if err := ag.da.GetF(ctx, s, ref, func(data []byte) error {
 		var err error
-		x, err = ParseSnapshot(data)
+		x, err = ParseSnapshot[T](data, ag.parse)
 		return err
 	}); err != nil {
 		return nil, err
@@ -229,7 +200,7 @@ func (ag *Machine) GetSnapshot(ctx context.Context, s stores.Reading, ref Ref) (
 
 // Squash turns multiple snapshots into one.
 // It preserves the latest version of the data, but destroys versioning granularity
-func (ag *Machine) Squash(ctx context.Context, s stores.RW, x Snapshot, n int) (*Snapshot, error) {
+func (ag *Machine[T]) Squash(ctx context.Context, s stores.RW, x Snapshot[T], n int) (*Snapshot[T], error) {
 	if n < 1 {
 		return nil, fmt.Errorf("cannot squash single commit")
 	}
@@ -244,7 +215,7 @@ func (ag *Machine) Squash(ctx context.Context, s stores.RW, x Snapshot, n int) (
 		return nil, err
 	}
 	if n == 1 {
-		return &Snapshot{
+		return &Snapshot[T]{
 			N:       parent.N,
 			Payload: x.Payload,
 			Parents: parent.Parents,
@@ -260,7 +231,7 @@ func (ag *Machine) Squash(ctx context.Context, s stores.RW, x Snapshot, n int) (
 
 // RefFromSnapshot computes a ref for snap if it was posted to s.
 // It only calls s.Hash and s.MaxSize; it does not mutate s.
-func (ag *Machine) RefFromSnapshot(snap Snapshot) Ref {
+func (ag *Machine[T]) RefFromSnapshot(snap Snapshot[T]) Ref {
 	s2 := stores.NewVoid()
 	ref, err := ag.PostSnapshot(context.TODO(), s2, snap)
 	if err != nil {
@@ -270,7 +241,7 @@ func (ag *Machine) RefFromSnapshot(snap Snapshot) Ref {
 }
 
 // Check ensures that snapshot is valid.
-func (a *Machine) Check(ctx context.Context, s stores.Reading, snap Snapshot, checkRoot func(Payload) error) error {
+func (a *Machine[T]) Check(ctx context.Context, s stores.Reading, snap Snapshot[T], checkRoot func(T) error) error {
 	logctx.Infof(ctx, "checking snapshot #%d", snap.N)
 	if err := checkRoot(snap.Payload); err != nil {
 		return err

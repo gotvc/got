@@ -275,7 +275,7 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 		defer cf()
 		scratch := sctx.Store
 		stage := sctx.Stage
-		if err := sctx.Branch.Modify(ctx, func(mctx marks.ModifyCtx) (*gotvc.Snap, error) {
+		if err := sctx.Branch.Modify(ctx, func(mctx marks.ModifyCtx) (*marks.Snap, error) {
 			var root *gotfs.Root
 			if mctx.Root != nil {
 				root = &mctx.Root.Payload.Root
@@ -286,9 +286,9 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			if err != nil {
 				return nil, err
 			}
-			var parents []gotvc.Snap
+			var parents []marks.Snap
 			if mctx.Root != nil {
-				parents = []gotvc.Snap{*mctx.Root}
+				parents = []marks.Snap{*mctx.Root}
 			}
 			infoJSON, err := json.Marshal(params)
 			if err != nil {
@@ -303,13 +303,14 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			if params.Authors == nil {
 				params.Authors = append(params.Authors, params.Committer)
 			}
-			nextSnap, err := sctx.Branch.GotVC().NewSnapshot(ctx, s, gotvc.SnapParams{
+			nextSnap, err := sctx.Branch.GotVC().NewSnapshot(ctx, s, gotvc.SnapshotParams[marks.Payload]{
 				Parents:   parents,
 				Creator:   params.Committer,
 				CreatedAt: tai64.Now().TAI64(),
-			}, gotvc.Payload{
-				Root: *nextRoot,
-				Aux:  infoJSON,
+				Payload: marks.Payload{
+					Root: *nextRoot,
+					Aux:  infoJSON,
+				},
 			})
 			if err := mctx.Sync(ctx, [3]stores.Reading{s, s, s}, *nextSnap); err != nil {
 				return nil, err

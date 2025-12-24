@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo"
-	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/metrics"
 	"go.brendoncarroll.net/star"
@@ -58,8 +58,15 @@ var markListCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
+		fmt.Fprintf(c.StdOut, "%-16s %-20s %-10s\n", "NAME", "CREATED_AT", "ANNOTATIONS")
 		return repo.ForEachMark(ctx, "", func(k string) error {
-			fmt.Fprintf(c.StdOut, "%s\n", k)
+			mark, err := repo.GetMark(ctx, gotrepo.FQM{Name: k})
+			if err != nil {
+				return err
+			}
+			createdAt := mark.Info.CreatedAt.GoTime().Local().Format(time.DateTime)
+			annots := len(mark.Info.Annotations)
+			fmt.Fprintf(c.StdOut, "%-16s %-20s %-10d\n", k, createdAt, annots)
 			return nil
 		})
 	},
@@ -175,7 +182,7 @@ var markAsCmd = star.Command{
 			newfqn); err != nil {
 			return err
 		}
-		c.Printf("marked snapshot as %v", newfqn)
+		c.Printf("marked snapshot as %v", newfqn.Name)
 		return nil
 	},
 }
@@ -199,7 +206,7 @@ var historyCmd = star.Command{
 		pr, pw := io.Pipe()
 		eg := errgroup.Group{}
 		eg.Go(func() error {
-			err := repo.History(ctx, gotrepo.FQM{Name: bname}, func(ref gdat.Ref, snap gotvc.Snap) error {
+			err := repo.History(ctx, gotrepo.FQM{Name: bname}, func(ref gdat.Ref, snap gotrepo.Snap) error {
 				fmt.Fprintf(pw, "#%04d\t%v\n", snap.N, ref.CID)
 				fmt.Fprintf(pw, "FS: %v\n", snap.Payload.Root.Ref.CID)
 				if len(snap.Parents) == 0 {
