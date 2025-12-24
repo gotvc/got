@@ -76,6 +76,26 @@ var fetchCmd = star.Command{
 	},
 }
 
+var distCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "distributes marks to remote spaces according to the config",
+	},
+	Pos: []star.Positional{},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		if err := repo.Distribute(ctx); err != nil {
+			return err
+		}
+		c.Printf("All distribute tasks completed successfully\n")
+		return nil
+	},
+}
+
 var srcSpaceParam = star.Required[string]{
 	ID:    "src_space",
 	Parse: star.ParseString,

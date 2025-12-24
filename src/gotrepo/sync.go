@@ -2,11 +2,12 @@ package gotrepo
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
+	"github.com/gotvc/got/src/internal/gotjob"
 	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/metrics"
-	"golang.org/x/sync/errgroup"
 )
 
 // SyncUnit syncs 2 marks by name.
@@ -64,6 +65,46 @@ func (r *Repo) SyncSpaces(ctx context.Context, task SyncSpacesTask) error {
 	})
 }
 
+func (r *Repo) syncSpaces(jc *gotjob.Ctx, task SyncSpacesTask) error {
+	srcSpace, err := r.GetSpace(jc.Context, task.Src)
+	if err != nil {
+		return err
+	}
+	dstSpace, err := r.GetSpace(jc.Context, task.Dst)
+	if err != nil {
+		return err
+	}
+	return marks.SyncSpaces(jc, marks.SyncSpacesTask{
+		Src:     srcSpace,
+		Dst:     dstSpace,
+		Filter:  task.Filter,
+		MapName: task.MapName,
+	})
+}
+
+func (r *Repo) doSyncTasks(jc *gotjob.Ctx, tasks []SyncSpacesTask) error {
+	for _, task := range tasks {
+		srcSpace, err := r.GetSpace(jc.Context, task.Src)
+		if err != nil {
+			return err
+		}
+		dstSpace, err := r.GetSpace(jc.Context, task.Dst)
+		if err != nil {
+			return err
+		}
+		jc2 := jc.Child(fmt.Sprintf("sync-space %q -> %q", task.Src, task.Dst))
+		if err := marks.SyncSpaces(jc2.Context, marks.SyncSpacesTask{
+			Src:     srcSpace,
+			Dst:     dstSpace,
+			Filter:  task.Filter,
+			MapName: task.MapName,
+		}); err != nil {
+			return err
+		}
+	}
+	return jc.Wait()
+}
+
 func (r *Repo) Fetch(ctx context.Context) error {
 	var tasks []SyncSpacesTask
 	for _, fcfg := range r.config.Fetch {
@@ -80,19 +121,14 @@ func (r *Repo) Fetch(ctx context.Context) error {
 			Dst: "",
 		})
 	}
-	var eg errgroup.Group
-	for _, task := range tasks {
-		eg.Go(func() error {
-			return r.SyncSpaces(ctx, task)
-		})
-	}
-	return eg.Wait()
+	jc := gotjob.New(ctx)
+	return r.doSyncTasks(&jc, tasks)
 }
 
 // Distribute is the opposite of Fetch.
 func (r *Repo) Distribute(ctx context.Context) error {
 	var tasks []SyncSpacesTask
-	for _, fcfg := range r.config.Fetch {
+	for _, fcfg := range r.config.Dist {
 		tasks = append(tasks, SyncSpacesTask{
 			Src: "", // local space
 			Filter: func(x string) bool {
@@ -104,13 +140,9 @@ func (r *Repo) Distribute(ctx context.Context) error {
 				name = fcfg.CutPrefix + name
 				return name
 			},
-			Dst: fcfg.From,
+			Dst: fcfg.To,
 		})
 	}
-	for _, task := range tasks {
-		if err := r.SyncSpaces(ctx, task); err != nil {
-			return err
-		}
-	}
-	return nil
+	jc := gotjob.New(ctx)
+	return r.doSyncTasks(&jc, tasks)
 }
