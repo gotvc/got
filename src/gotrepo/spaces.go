@@ -9,8 +9,8 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotns"
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/volumes"
-	"github.com/gotvc/got/src/marks"
 )
 
 // ListSpaces lists all the spaces that the repository is configured to use

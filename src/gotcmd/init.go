@@ -9,7 +9,7 @@ import (
 	"blobcache.io/blobcache/src/blobcachecmd"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc"
-	"github.com/gotvc/got/src/marks"
+	"github.com/gotvc/got/src/internal/marks"
 	"go.brendoncarroll.net/star"
 )
 

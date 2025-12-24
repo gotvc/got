@@ -8,8 +8,8 @@ import (
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotvc"
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/metrics"
-	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/star"
 	"golang.org/x/sync/errgroup"
 )
@@ -289,7 +289,7 @@ var markSyncCmd = star.Command{
 		src := srcMarkParam.Load(c)
 		dst := dstMarkParam.Load(c)
 		force, _ := forceParam.LoadOpt(c)
-		return repo.SyncMarks(ctx, src, dst, force)
+		return repo.SyncUnit(ctx, src, dst, force)
 	},
 }
 

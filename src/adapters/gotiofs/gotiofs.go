@@ -10,9 +10,9 @@ import (
 	"time"
 
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
-	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 )

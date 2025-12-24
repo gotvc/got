@@ -24,9 +24,9 @@ import (
 	"github.com/gotvc/got/src/gotrepo/internal/reposchema"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/gotcfg"
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/gotvc/got/src/internal/volumes"
-	"github.com/gotvc/got/src/marks"
 )
 
 // fs paths

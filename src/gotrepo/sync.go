@@ -4,13 +4,13 @@ import (
 	"context"
 	"strings"
 
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/metrics"
-	"github.com/gotvc/got/src/marks"
 	"golang.org/x/sync/errgroup"
 )
 
-// SyncMarks syncs 2 marks by name.
-func (r *Repo) SyncMarks(ctx context.Context, src, dst FQM, force bool) error {
+// SyncUnit syncs 2 marks by name.
+func (r *Repo) SyncUnit(ctx context.Context, src, dst FQM, force bool) error {
 	srcSpace, err := r.GetSpace(ctx, src.Space)
 	if err != nil {
 		return err
@@ -46,7 +46,7 @@ type SyncSpacesTask struct {
 	Dst string
 }
 
-// Fetch executes a fetch task.
+// SyncSpaces executes a SyncSpaceTask
 func (r *Repo) SyncSpaces(ctx context.Context, task SyncSpacesTask) error {
 	srcSpace, err := r.GetSpace(ctx, task.Src)
 	if err != nil {

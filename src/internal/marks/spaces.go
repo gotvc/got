@@ -101,6 +101,9 @@ func ForEach(ctx context.Context, s Space, span Span, fn func(string) error) (re
 			break
 		}
 		for _, name := range names {
+			if !span.Contains(name) {
+				return fmt.Errorf("marks.ForEach: Space implementation is broken got %s when asking for %v", name, span)
+			}
 			if err := fn(name); err != nil {
 				return err
 			}

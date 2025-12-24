@@ -8,8 +8,8 @@ import (
 	"blobcache.io/blobcache/src/schema/schematests"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/volumes"
-	"github.com/gotvc/got/src/marks"
 )
 
 func TestSpace(t *testing.T) {

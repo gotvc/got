@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/metrics"
-	"github.com/gotvc/got/src/marks"
 )
 
 const (

@@ -9,12 +9,13 @@ import (
 	"sync"
 
 	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/sqlutil"
-	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
+	"go.inet256.org/inet256/src/inet256"
 	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 
@@ -244,7 +245,25 @@ func (wc *WC) Clear(ctx context.Context) error {
 	})
 }
 
-func (wc *WC) Commit(ctx context.Context, snapInfo marks.SnapInfo) error {
+type CommitParams struct {
+	// Message is the commit message, it is taken from this value as is.
+	Message string
+	// Authors is the list of authors of the commit
+	// if not-nil, it is taken from this value as is.
+	// If nil, then the Author will be the same as the committer.
+	Authors []inet256.ID
+	// AuthoredAt is the time at which the commit was authored, it is taken from this value as is.
+	AuthoredAt tai64.TAI64
+
+	// CommittedAt, if not zero, overrides the commit time
+	// If CommittedAt is not greater than that of all the parents,
+	// then an error is returned.
+	CommittedAt tai64.TAI64
+	// Committer if not zero, overrides the ID of the committer
+	Committer inet256.ID
+}
+
+func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
 		if yes, err := sctx.Stage.IsEmpty(ctx); err != nil {
 			return err
@@ -252,8 +271,6 @@ func (wc *WC) Commit(ctx context.Context, snapInfo marks.SnapInfo) error {
 			logctx.Warnf(ctx, "nothing to commit")
 			return nil
 		}
-		snapInfo.Authors = append(snapInfo.Authors, sctx.ActingAs.ID)
-		snapInfo.AuthoredAt = tai64.Now().TAI64()
 		ctx, cf := metrics.Child(ctx, "applying changes")
 		defer cf()
 		scratch := sctx.Store
@@ -273,13 +290,22 @@ func (wc *WC) Commit(ctx context.Context, snapInfo marks.SnapInfo) error {
 			if mctx.Root != nil {
 				parents = []gotvc.Snap{*mctx.Root}
 			}
-			infoJSON, err := json.Marshal(snapInfo)
+			infoJSON, err := json.Marshal(params)
 			if err != nil {
 				return nil, err
 			}
+			if params.CommittedAt == 0 {
+				params.CommittedAt = tai64.Now().TAI64()
+			}
+			if params.Committer.IsZero() {
+				params.Committer = sctx.ActingAs.ID
+			}
+			if params.Authors == nil {
+				params.Authors = append(params.Authors, params.Committer)
+			}
 			nextSnap, err := sctx.Branch.GotVC().NewSnapshot(ctx, s, gotvc.SnapParams{
 				Parents:   parents,
-				Creator:   sctx.ActingAs.ID,
+				Creator:   params.Committer,
 				CreatedAt: tai64.Now().TAI64(),
 			}, gotvc.Payload{
 				Root: *nextRoot,

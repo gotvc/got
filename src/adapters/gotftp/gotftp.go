@@ -10,8 +10,8 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/adapters/gotiofs"
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/volumes"
-	"github.com/gotvc/got/src/marks"
 	ftpserver "goftp.io/server/v2"
 )
 

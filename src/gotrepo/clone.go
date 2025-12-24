@@ -25,7 +25,7 @@ func Clone(ctx context.Context, dirPath string, config Config, u blobcache.URL) 
 			{
 				From:      "origin",
 				Filter:    regexp.MustCompile(".*"),
-				AddPrefix: "remote/origin",
+				AddPrefix: "remote/origin/",
 			},
 		}
 		return y

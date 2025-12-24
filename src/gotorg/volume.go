@@ -10,9 +10,9 @@ import (
 
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
-	"github.com/gotvc/got/src/marks"
 )
 
 // AddVolume adds a new Volume to the namespace.

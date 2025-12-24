@@ -6,8 +6,8 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/gotvc/got/src/gotwc"
 	"github.com/gotvc/got/src/internal/metrics"
-	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/star"
 	"go.brendoncarroll.net/tai64"
 )
@@ -128,7 +128,7 @@ var commitCmd = star.Command{
 		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
 		defer r.Close()
 		now := tai64.Now().TAI64()
-		return wc.Commit(ctx, marks.SnapInfo{
+		return wc.Commit(ctx, gotwc.CommitParams{
 			Message:    "",
 			AuthoredAt: now,
 		})

@@ -3,8 +3,8 @@ package gotrepo
 import (
 	"testing"
 
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/testutil"
-	"github.com/gotvc/got/src/marks"
 	"github.com/stretchr/testify/require"
 )
 

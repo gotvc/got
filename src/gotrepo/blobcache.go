@@ -93,11 +93,11 @@ func makeBlobcache(repo *os.Root, config Config, spec BlobcacheSpec, bgCtx conte
 // This depends on the ActAs parameter in the Blobcache config.
 // If the Blobcache is not local, then the zero value is returned
 func (r *Repo) BlobcachePeer() blobcache.PeerID {
-	lbc, ok := r.bc.(*bclocal.Service)
-	if !ok {
+	bcfg := r.config.Blobcache
+	if bcfg.InProcess == nil {
 		return blobcache.PeerID{}
 	}
-	return lbc.LocalID()
+	return r.config.Identities[bcfg.InProcess.ActAs]
 }
 
 func openLocalBlobcache(bgCtx context.Context, privKey ed25519.PrivateKey, stateDir string, pol *bcPolicy) (*bclocal.Service, error) {

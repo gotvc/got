@@ -11,9 +11,9 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema/statetrace"
 	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
-	"github.com/gotvc/got/src/marks"
 	"go.brendoncarroll.net/exp/slices2"
 	"go.inet256.org/inet256/src/inet256"
 )
