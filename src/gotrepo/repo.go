@@ -298,8 +298,8 @@ func (r *Repo) BeginStagingTx(ctx context.Context, paramHash *[32]byte, mutate b
 func (r *Repo) useSchema() bool {
 	bccfg := r.config.Blobcache
 	switch {
-	case bccfg.HTTP != nil:
-		return bccfg.HTTP.UseSchema
+	case bccfg.Client != nil:
+		return bccfg.Client.UseSchema
 	default:
 		return true
 	}

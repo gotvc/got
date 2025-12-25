@@ -256,7 +256,7 @@ type CommitParams struct {
 	AuthoredAt tai64.TAI64
 
 	// CommittedAt, if not zero, overrides the commit time
-	// If CommittedAt is not greater than that of all the parents,
+	// If CommittedAt is not zero and not >= that of all the parents,
 	// then an error is returned.
 	CommittedAt tai64.TAI64
 	// Committer if not zero, overrides the ID of the committer
@@ -276,6 +276,18 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 		scratch := sctx.Store
 		stage := sctx.Stage
 		if err := sctx.Branch.Modify(ctx, func(mctx marks.ModifyCtx) (*marks.Snap, error) {
+			if params.CommittedAt == 0 {
+				params.CommittedAt = tai64.Now().TAI64()
+			}
+			if params.Committer.IsZero() {
+				params.Committer = sctx.ActingAs.ID
+			}
+			if params.Authors == nil {
+				params.Authors = append(params.Authors, params.Committer)
+			}
+			if params.AuthoredAt == 0 {
+				params.AuthoredAt = params.CommittedAt
+			}
 			var root *gotfs.Root
 			if mctx.Root != nil {
 				root = &mctx.Root.Payload.Root
@@ -290,18 +302,16 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			if mctx.Root != nil {
 				parents = []marks.Snap{*mctx.Root}
 			}
-			infoJSON, err := json.Marshal(params)
+
+			infoJSON, err := json.Marshal(struct {
+				Authors    []inet256.ID `json:"authors"`
+				AuthoredAt tai64.TAI64  `json:"authored_at"`
+			}{
+				Authors:    params.Authors,
+				AuthoredAt: params.AuthoredAt,
+			})
 			if err != nil {
 				return nil, err
-			}
-			if params.CommittedAt == 0 {
-				params.CommittedAt = tai64.Now().TAI64()
-			}
-			if params.Committer.IsZero() {
-				params.Committer = sctx.ActingAs.ID
-			}
-			if params.Authors == nil {
-				params.Authors = append(params.Authors, params.Committer)
 			}
 			nextSnap, err := sctx.Branch.GotVC().NewSnapshot(ctx, s, gotvc.SnapshotParams[marks.Payload]{
 				Parents:   parents,

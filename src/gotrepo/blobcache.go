@@ -3,16 +3,15 @@ package gotrepo
 import (
 	"context"
 	"fmt"
-	"net"
 	"os"
 	"path/filepath"
 	"slices"
 	"sync"
 	"time"
 
+	bcclient "blobcache.io/blobcache/client/go"
 	"blobcache.io/blobcache/src/bchttp"
 	"blobcache.io/blobcache/src/bclocal"
-	"blobcache.io/blobcache/src/bcremote"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
 	"github.com/cloudflare/circl/sign/ed25519"
@@ -31,10 +30,8 @@ type BlobcacheSpec struct {
 	// This is the default.
 	// The state can get quite large for large datasets, so it is recommended to use the system's Blobcache.
 	InProcess *InProcessBlobcache `json:"in_process,omitempty"`
-	// HTTP uses an HTTP Blobcache service.
-	// This is plaintext, non-encrypted HTTP, and it does not require authentication.
-	// This should only be used for connecting on local host or via a unix socket.
-	HTTP *HTTPBlobcache `json:"http,omitempty"`
+	// Client uses the Client Blobcache service, as configured through BLOBCACHE_API
+	Client *ExternalBlobcache `json:"client,omitempty"`
 }
 
 type InProcessBlobcache struct {
@@ -43,7 +40,7 @@ type InProcessBlobcache struct {
 	CanTouch []inet256.ID `json:"can_touch"`
 }
 
-type HTTPBlobcache struct {
+type ExternalBlobcache struct {
 	URL       string `json:"url"`
 	UseSchema bool   `json:"schema"`
 }
@@ -78,8 +75,8 @@ func makeBlobcache(repo *os.Root, config Config, spec BlobcacheSpec, bgCtx conte
 			return nil, err
 		}
 		return bc, nil
-	case spec.HTTP != nil:
-		bc, err := openHTTPBlobcache(spec.HTTP.URL)
+	case spec.Client != nil:
+		bc, err := openHTTPBlobcache(spec.Client.URL)
 		if err != nil {
 			return nil, err
 		}
@@ -117,11 +114,7 @@ func openLocalBlobcache(bgCtx context.Context, privKey ed25519.PrivateKey, state
 }
 
 func openHTTPBlobcache(u string) (*bchttp.Client, error) {
-	return bchttp.NewClient(nil, u), nil
-}
-
-func openRemoteBlobcache(privateKey ed25519.PrivateKey, pc net.PacketConn, ep blobcache.Endpoint) (*bcremote.Service, error) {
-	return bcremote.New(privateKey, pc, ep), nil
+	return bcclient.NewClient(u).(*bchttp.Client), nil
 }
 
 func mkSchema(spec blobcache.SchemaSpec) (schema.Schema, error) {

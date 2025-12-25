@@ -65,23 +65,6 @@ func (r *Repo) SyncSpaces(ctx context.Context, task SyncSpacesTask) error {
 	})
 }
 
-func (r *Repo) syncSpaces(jc *gotjob.Ctx, task SyncSpacesTask) error {
-	srcSpace, err := r.GetSpace(jc.Context, task.Src)
-	if err != nil {
-		return err
-	}
-	dstSpace, err := r.GetSpace(jc.Context, task.Dst)
-	if err != nil {
-		return err
-	}
-	return marks.SyncSpaces(jc, marks.SyncSpacesTask{
-		Src:     srcSpace,
-		Dst:     dstSpace,
-		Filter:  task.Filter,
-		MapName: task.MapName,
-	})
-}
-
 func (r *Repo) doSyncTasks(jc *gotjob.Ctx, tasks []SyncSpacesTask) error {
 	for _, task := range tasks {
 		srcSpace, err := r.GetSpace(jc.Context, task.Src)
