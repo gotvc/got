@@ -33,7 +33,7 @@ func ParseFQName(s string) FQM {
 }
 
 // CreateBranch creates a new mark in the repo's local space.
-func (r *Repo) CreateMark(ctx context.Context, fqname FQM, params marks.Params) (*MarkInfo, error) {
+func (r *Repo) CreateMark(ctx context.Context, fqname FQM, params marks.Metadata) (*MarkInfo, error) {
 	if err := marks.CheckName(fqname.Name); err != nil {
 		return nil, err
 	}
@@ -65,7 +65,7 @@ func (r *Repo) DeleteMark(ctx context.Context, fqname FQM) error {
 }
 
 // ConfigureMark adjusts metadata
-func (r *Repo) ConfigureMark(ctx context.Context, fqname FQM, md marks.Params) error {
+func (r *Repo) ConfigureMark(ctx context.Context, fqname FQM, md marks.Metadata) error {
 	space, err := r.GetSpace(ctx, fqname.Space)
 	if err != nil {
 		return err
@@ -82,12 +82,13 @@ func (r *Repo) ForEachMark(ctx context.Context, spaceName string, fn func(string
 	return marks.ForEach(ctx, space, marks.TotalSpan(), fn)
 }
 
-func (r *Repo) GetMarkRoot(ctx context.Context, mark FQM) (*Snap, error) {
-	b, err := r.GetMark(ctx, mark)
+// MarkLoad loads the Snapshot that the mark points to.
+func (r *Repo) MarkLoad(ctx context.Context, mark FQM) (*Snap, error) {
+	m, err := r.GetMark(ctx, mark)
 	if err != nil {
 		return nil, err
 	}
-	snap, tx, err := b.GetTarget(ctx)
+	snap, tx, err := m.GetTarget(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +104,7 @@ func (r *Repo) CloneMark(ctx context.Context, base, next FQM) error {
 	if err != nil {
 		return err
 	}
-	_, err = r.CreateMark(ctx, next, marks.Params{
+	_, err = r.CreateMark(ctx, next, marks.Metadata{
 		Salt: baseBranch.Info.Salt,
 	})
 	if err != nil {

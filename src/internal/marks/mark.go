@@ -38,8 +38,8 @@ func (i Info) Clone() Info {
 	return i2
 }
 
-func (i Info) AsConfig() Params {
-	return Params{Salt: i.Salt, Annotations: i.Annotations}
+func (i Info) AsConfig() Metadata {
+	return Metadata{Salt: i.Salt, Annotations: i.Annotations}
 }
 
 // Salt is a 32-byte salt
@@ -58,29 +58,29 @@ func (s *Salt) String() string {
 	return hex.EncodeToString(s[:])
 }
 
-// Params is non-volume, user-modifiable information associated with a mark.
-type Params struct {
+// Metadata is non-volume, user-modifiable information associated with a mark.
+type Metadata struct {
 	Salt        Salt         `json:"salt"`
 	Annotations []Annotation `json:"annotations"`
 }
 
-func (c Params) AsInfo() Info {
+func (c Metadata) AsInfo() Info {
 	return Info{Salt: c.Salt, Annotations: c.Annotations}
 }
 
-func NewConfig(public bool) Params {
+func NewConfig(public bool) Metadata {
 	var salt Salt
 	if !public {
 		readRandom(salt[:])
 	}
-	return Params{
+	return Metadata{
 		Salt: salt,
 	}
 }
 
 // Clone returns a deep copy of md
-func (c Params) Clone() Params {
-	return Params{
+func (c Metadata) Clone() Metadata {
+	return Metadata{
 		Salt:        c.Salt,
 		Annotations: slices.Clone(c.Annotations),
 	}
@@ -139,8 +139,8 @@ func (b *Mark) GotVC() *VCMach {
 	return b.gotvc
 }
 
-func (b *Mark) AsParams() Params {
-	return Params{
+func (b *Mark) AsParams() Metadata {
+	return Metadata{
 		Salt:        b.Info.Salt,
 		Annotations: b.Info.Annotations,
 	}

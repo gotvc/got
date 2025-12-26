@@ -18,14 +18,14 @@ var mark = star.NewDir(
 	star.Metadata{
 		Short: "manage the marks in a space and what they point at",
 	}, map[string]star.Command{
-		"create":   markCreateCmd,
-		"list":     markListCmd,
-		"delete":   markDeleteCmd,
-		"get-root": markGetTargetCmd,
-		"inspect":  markInspectCmd,
-		"cp-salt":  markCpSaltCmd,
-		"sync":     markSyncCmd,
-		"as":       markAsCmd,
+		"create":  markCreateCmd,
+		"list":    markListCmd,
+		"delete":  markDeleteCmd,
+		"load":    markLoadCmd,
+		"inspect": markInspectCmd,
+		"cp-salt": markCpSaltCmd,
+		"sync":    markSyncCmd,
+		"as":      markAsCmd,
 	},
 )
 
@@ -89,11 +89,11 @@ var markDeleteCmd = star.Command{
 	},
 }
 
-var markGetTargetCmd = star.Command{
+var markLoadCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "prints the snapshot that is the target of the mark",
 	},
-	Pos: []star.Positional{markNameOptParam},
+	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
 		repo, err := openRepo()
@@ -101,12 +101,13 @@ var markGetTargetCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		name, _ := markNameOptParam.LoadOpt(c)
-		branchHead, err := repo.GetMarkRoot(ctx, gotrepo.FQM{Name: name})
+		name := markNameParam.Load(c)
+		snap, err := repo.MarkLoad(ctx, gotrepo.FQM{Name: name})
 		if err != nil {
 			return err
 		}
-		return prettyPrintJSON(c.StdOut, branchHead)
+		c.Printf("%x\n", snap.Marshal(nil))
+		return nil
 	},
 }
 
@@ -237,11 +238,6 @@ var historyCmd = star.Command{
 }
 
 var markNameParam = star.Required[string]{
-	ID:    "mark_name",
-	Parse: star.ParseString,
-}
-
-var markNameOptParam = star.Optional[string]{
 	ID:    "mark_name",
 	Parse: star.ParseString,
 }

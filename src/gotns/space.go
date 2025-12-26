@@ -44,7 +44,7 @@ func (s *Space) view(ctx context.Context, fn func(space *txSpace) error) error {
 }
 
 // Create implements marks.Space.
-func (s *Space) Create(ctx context.Context, name string, cfg marks.Params) (*marks.Info, error) {
+func (s *Space) Create(ctx context.Context, name string, cfg marks.Metadata) (*marks.Info, error) {
 	var info *marks.Info
 	if err := s.modify(ctx, func(s *txSpace) error {
 		info2, err := s.Create(ctx, name, cfg)
@@ -118,7 +118,7 @@ func (s *Space) Open(ctx context.Context, name string) (*marks.Mark, error) {
 }
 
 // Set implements marks.Space.
-func (s *Space) Set(ctx context.Context, name string, cfg marks.Params) error {
+func (s *Space) Set(ctx context.Context, name string, cfg marks.Metadata) error {
 	return s.modify(ctx, func(s *txSpace) error {
 		return s.Set(ctx, name, cfg)
 	})
@@ -132,7 +132,7 @@ type txSpace struct {
 }
 
 // Create implements marks.Space.
-func (s *txSpace) Create(ctx context.Context, name string, cfg marks.Params) (*marks.Info, error) {
+func (s *txSpace) Create(ctx context.Context, name string, cfg marks.Metadata) (*marks.Info, error) {
 	prevb, err := s.tx.Get(ctx, name)
 	if err != nil {
 		return nil, err
@@ -181,7 +181,7 @@ func (s *txSpace) List(ctx context.Context, span marks.Span, limit int) ([]strin
 }
 
 // Set implements marks.Space.
-func (s *txSpace) Set(ctx context.Context, name string, cfg marks.Params) error {
+func (s *txSpace) Set(ctx context.Context, name string, cfg marks.Metadata) error {
 	panic("unimplemented")
 }
 

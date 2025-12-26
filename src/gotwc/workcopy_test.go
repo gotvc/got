@@ -64,7 +64,7 @@ func TestCommit(t *testing.T) {
 	checkNotExists(t, wc, p)
 	checkFileContent(t, wc, p2, strings.NewReader(fileContents))
 
-	require.NoError(t, wc.repo.Check(ctx, gotrepo.FQM{Name: nameMaster}))
+	require.NoError(t, wc.repo.CheckAll(ctx))
 }
 
 func TestCommitLargeFile(t *testing.T) {
@@ -138,7 +138,7 @@ func TestFork(t *testing.T) {
 
 func newTestWC(t testing.TB) *WC {
 	r := gotrepo.NewTestRepo(t)
-	_, err := r.CreateMark(context.TODO(), gotrepo.FQM{Name: nameMaster}, marks.Params{})
+	_, err := r.CreateMark(context.TODO(), gotrepo.FQM{Name: nameMaster}, marks.Metadata{})
 	require.NoError(t, err)
 	wcdir := t.TempDir()
 	cfg := Config{

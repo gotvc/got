@@ -8,6 +8,7 @@ import (
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/stores"
+	"go.brendoncarroll.net/stdctx/logctx"
 )
 
 func (r *Repo) Ls(ctx context.Context, mark FQM, p string, fn func(gotfs.DirEnt) error) error {
@@ -51,23 +52,27 @@ func (r *Repo) Stat(ctx context.Context, mark FQM, p string) (*gotfs.Info, error
 	return info, nil
 }
 
-func (r *Repo) Check(ctx context.Context, mark FQM) error {
-	branch, err := r.GetMark(ctx, mark)
-	if err != nil {
-		return err
-	}
-	snap, tx, err := branch.GetTarget(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Abort(ctx)
-	if snap == nil {
-		return nil
-	}
-	vcag := branch.GotVC()
-	return vcag.Check(ctx, tx, *snap, func(payload marks.Payload) error {
-		return branch.GotFS().Check(ctx, tx, payload.Root, func(ref gdat.Ref) error {
+// CheckAll runs integrity checks on all marks in the local Space.
+func (r *Repo) CheckAll(ctx context.Context) error {
+	return r.ForEachMark(ctx, "", func(name string) error {
+		logctx.Infof(ctx, "checking mark %q", name)
+		mark, err := r.GetMark(ctx, FQM{Name: name})
+		if err != nil {
+			return err
+		}
+		snap, tx, err := mark.GetTarget(ctx)
+		if err != nil {
+			return err
+		}
+		if snap == nil {
 			return nil
+		}
+		defer tx.Abort(ctx)
+		vcmach := mark.GotVC()
+		return vcmach.Check(ctx, tx, *snap, func(payload marks.Payload) error {
+			return mark.GotFS().Check(ctx, tx, payload.Root, func(ref gdat.Ref) error {
+				return nil
+			})
 		})
 	})
 }

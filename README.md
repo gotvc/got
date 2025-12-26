@@ -51,9 +51,9 @@ All content will be stored in the `.got/blobcache` directory.
 > This is the recommended way to try out blobcache.
 
 A repo can also be initially configured to use the system (or any) blobcache instance.
-There are two ways to do this:
-1. Using BCP with `got init --blobcache-remote <bcp endpoint>`
-2. Using HTTP with `got init --blobcache-http <http endpoint>`
+```shell
+$ got init --blobcache-client <http endpoint> --volume <volume-oid>
+```
 
 > For large repositories, it is recommended to use an out of process blobcache
 

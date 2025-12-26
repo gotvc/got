@@ -20,24 +20,20 @@ var initCmd = star.Command{
 		Short: "initializes a repository in the current directory",
 	},
 	Flags: map[string]star.Flag{
-		"blobcache-http": blobcacheSysParam,
-		"volume":         volumeParam,
+		"blobcache-client": blobcacheClientParam,
+		"volume":           volumeParam,
 	},
 	F: func(c star.Context) error {
 		config := gotrepo.DefaultConfig()
-		// configure blobcache
 		volume, volumeSet := volumeParam.LoadOpt(c)
 		if volumeSet {
 			config.RepoVolume = volume
 		}
-		bcCfg, err := specFromContext(c)
-		if err != nil {
+		// configure blobcache
+		if err := configureBlobcache(c, &config); err != nil {
 			return err
 		}
-		config.Blobcache = bcCfg
-		if bcCfg.InProcess == nil && !volumeSet {
-			return fmt.Errorf("must specify oid for out-of-process blobcache")
-		}
+		// setup repo
 		if err := gotrepo.Init(".", config); err != nil {
 			return err
 		}
@@ -46,9 +42,11 @@ var initCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		if _, err := repo.CreateMark(c, gotrepo.FQM{Name: "master"}, marks.Params{}); err != nil {
+		// create the first branch
+		if _, err := repo.CreateMark(c, gotrepo.FQM{Name: "master"}, marks.Metadata{}); err != nil {
 			return err
 		}
+		// setup a working copy in the same directory
 		if err := gotwc.Init(repo, ".", gotwc.Config{
 			Head:  "master",
 			ActAs: gotrepo.DefaultIden,
@@ -60,29 +58,30 @@ var initCmd = star.Command{
 	},
 }
 
-// specFromContext makes a Blobcache spec from a star.Context.
-func specFromContext(c star.Context) (ret gotrepo.BlobcacheSpec, _ error) {
-	blobcacheHttp, httpSet := blobcacheSysParam.LoadOpt(c)
-	if httpSet {
-		return gotrepo.BlobcacheSpec{}, fmt.Errorf("cannot specify both blobcache-remote and blobcache-http")
-	}
+func configureBlobcache(c star.Context, cfg *gotrepo.Config) error {
+	blobcacheAPI, clientOK := blobcacheClientParam.LoadOpt(c)
+	var bcspec gotrepo.BlobcacheSpec
 	switch {
-	case httpSet:
-		c.Printf("using HTTP blobcache\n")
-		ret.Client = &gotrepo.ExternalBlobcache{
-			URL: blobcacheHttp,
+	case clientOK:
+		if _, hasVol := volumeParam.LoadOpt(c); !hasVol {
+			return fmt.Errorf("must provide volume when using --blobcache-client")
+		}
+		c.Printf("using blobcache client at %v\n", blobcacheAPI)
+		bcspec.Client = &gotrepo.ExternalBlobcache{
+			URL: blobcacheAPI,
 		}
 	default:
 		c.Printf("using in-process blobcache\n")
-		ret.InProcess = &gotrepo.InProcessBlobcache{
+		bcspec.InProcess = &gotrepo.InProcessBlobcache{
 			ActAs: gotrepo.DefaultIden,
 		}
 	}
-	return ret, nil
+	cfg.Blobcache = bcspec
+	return nil
 }
 
-var blobcacheSysParam = star.Optional[string]{
-	ID: "blobcache-sys",
+var blobcacheClientParam = star.Optional[string]{
+	ID: "blobcache-client",
 	Parse: func(s string) (string, error) {
 		return s, nil
 	},
@@ -95,6 +94,25 @@ var volumeParam = star.Optional[blobcache.OID]{
 		return blobcache.ParseOID(s)
 	},
 	ShortDoc: "the OID of the volume to use for the repo",
+}
+
+var scrubCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "runs integrity checks",
+	},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		if err := repo.CheckAll(ctx); err != nil {
+			return err
+		}
+		c.Printf("everything is OK\n")
+		return nil
+	},
 }
 
 var blobcacheCmd = star.NewDir(
@@ -136,7 +154,7 @@ var mkrepoCmd = star.Command{
 		c.Printf("\nNEXT:\n")
 		c.Printf("  |> If you are accessing blobcache over the local socket, then you should have access already.\n")
 		c.Printf("  |> Provide this volume in a call to got init like this:\n")
-		c.Printf("  |> got init --blobcache-http %s --volume %v\n", bcAPIStr, volh.OID)
+		c.Printf("  |> got init --blobcache-client %s --volume %v\n", bcAPIStr, volh.OID)
 
 		return nil
 	},

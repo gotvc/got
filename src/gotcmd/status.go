@@ -107,25 +107,6 @@ var catCmd = star.Command{
 	},
 }
 
-var scrubCmd = star.Command{
-	Metadata: star.Metadata{
-		Short: "runs integrity checks on the current branch",
-	},
-	F: func(c star.Context) error {
-		ctx := c.Context
-		wc, err := openWC()
-		if err != nil {
-			return err
-		}
-		defer wc.Close()
-		head, err := wc.GetHead()
-		if err != nil {
-			return err
-		}
-		return wc.Repo().Check(ctx, gotrepo.FQM{Name: head})
-	},
-}
-
 var pathParam = star.Optional[string]{
 	ID:    "path",
 	Parse: star.ParseString,

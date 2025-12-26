@@ -80,20 +80,32 @@ func (r Root) Marshal(out []byte) []byte {
 }
 
 type MarkState struct {
-	Info   marks.Info `json:"info"`
-	Target gdat.Ref   `json:"target"`
+	// Info is stored as json
+	Info marks.Info `json:"info"`
+	// Target is stored as json.
+	Target gdat.Ref `json:"target"`
 }
 
 func (b MarkState) Marshal(out []byte) []byte {
-	data, err := json.Marshal(b)
+	infoJSON, err := json.Marshal(b)
 	if err != nil {
 		panic(err)
 	}
-	return append(out, data...)
+	out = append(out, infoJSON...)
+	out = append(out, b.Target.Marshal()...)
+	return out
 }
 
-func (b *MarkState) Unmarshal(data []byte) error {
-	return json.Unmarshal(data, b)
+func (s *MarkState) Unmarshal(data []byte) error {
+	infoJSON := data[:len(data)-gdat.RefSize]
+	refData := data[len(data)-gdat.RefSize:]
+	if err := s.Target.Unmarshal(refData); err != nil {
+		return err
+	}
+	if err := json.Unmarshal(infoJSON, &s.Info); err != nil {
+		return err
+	}
+	return nil
 }
 
 // Tx is a transaction on a Namespace

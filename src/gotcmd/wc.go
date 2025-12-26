@@ -39,7 +39,7 @@ var cleanupCmd = star.Command{
 
 var headCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "prints or sets the contents of HEAD",
+		Short: "prints or sets HEAD.  HEAD is the name of a mark in the local Space",
 	},
 	Pos: []star.Positional{markNameOptParam},
 	F: func(c star.Context) error {
@@ -60,4 +60,9 @@ var headCmd = star.Command{
 		}
 		return wc.SetHead(c, name)
 	},
+}
+
+var markNameOptParam = star.Optional[string]{
+	ID:    "mark_name",
+	Parse: star.ParseString,
 }

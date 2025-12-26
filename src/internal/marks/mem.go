@@ -37,7 +37,7 @@ func (r *MemSpace) Inspect(ctx context.Context, name string) (*Info, error) {
 	return &info, nil
 }
 
-func (r *MemSpace) Create(ctx context.Context, name string, cfg Params) (*Info, error) {
+func (r *MemSpace) Create(ctx context.Context, name string, cfg Metadata) (*Info, error) {
 	if err := CheckName(name); err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (r *MemSpace) Create(ctx context.Context, name string, cfg Params) (*Info, 
 	return &info, nil
 }
 
-func (r *MemSpace) Set(ctx context.Context, name string, cfg Params) error {
+func (r *MemSpace) Set(ctx context.Context, name string, cfg Metadata) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if _, exists := r.infos[name]; !exists {

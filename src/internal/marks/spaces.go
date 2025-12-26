@@ -68,9 +68,9 @@ func (s Span) Contains(x string) bool {
 
 // A Space holds named marks.
 type Space interface {
-	Create(ctx context.Context, name string, cfg Params) (*Info, error)
+	Create(ctx context.Context, name string, cfg Metadata) (*Info, error)
 	Inspect(ctx context.Context, name string) (*Info, error)
-	Set(ctx context.Context, name string, cfg Params) error
+	Set(ctx context.Context, name string, cfg Metadata) error
 	Delete(ctx context.Context, name string) error
 	List(ctx context.Context, span Span, limit int) ([]string, error)
 
@@ -78,7 +78,7 @@ type Space interface {
 	Open(ctx context.Context, name string) (*Mark, error)
 }
 
-func CreateIfNotExists(ctx context.Context, r Space, k string, cfg Params) (*Info, error) {
+func CreateIfNotExists(ctx context.Context, r Space, k string, cfg Metadata) (*Info, error) {
 	mark, err := r.Inspect(ctx, k)
 	if err != nil {
 		if IsNotExist(err) {

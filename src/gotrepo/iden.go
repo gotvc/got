@@ -3,7 +3,6 @@ package gotrepo
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"log"
 	"os"
 
@@ -13,13 +12,21 @@ import (
 
 const DefaultIden = "default"
 
-func (r *Repo) ListIdentities(ctx context.Context) ([]string, error) {
+func (r *Repo) Identities(ctx context.Context) (map[string]gotorg.IdentityUnit, error) {
 	s, err := r.openIdenStore()
 	if err != nil {
 		return nil, err
 	}
 	defer s.Close()
-	return s.ListNames()
+	ret := make(map[string]gotorg.IdentityUnit)
+	for name, id := range r.config.Identities {
+		idp, err := s.Get(id)
+		if err != nil {
+			return nil, err
+		}
+		ret[name] = idp.Public()
+	}
+	return ret, nil
 }
 
 // Create
@@ -114,18 +121,6 @@ func (s *idenStore) Get(id inet256.Addr) (*gotorg.IdenPrivate, error) {
 		return nil, err
 	}
 	return parseIden(data)
-}
-
-func (s *idenStore) ListNames() ([]string, error) {
-	ents, err := fs.ReadDir(s.root.FS(), ".")
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	for _, ent := range ents {
-		names = append(names, ent.Name())
-	}
-	return names, nil
 }
 
 func marshalIden(idp gotorg.IdenPrivate) ([]byte, error) {

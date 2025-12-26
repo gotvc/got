@@ -15,7 +15,7 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 		b, err := x.Inspect(ctx, "test")
 		require.ErrorIs(t, err, ErrNotExist)
 		require.Nil(t, b)
-		_, err = x.Create(ctx, "test", Params{})
+		_, err = x.Create(ctx, "test", Metadata{})
 		require.NoError(t, err)
 		b, err = x.Inspect(ctx, "test")
 		require.NoError(t, err)
@@ -27,7 +27,7 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 		const N = 20
 		t.Log("creating", N, "markes")
 		for i := 0; i < N; i++ {
-			_, err := x.Create(ctx, "test"+strconv.Itoa(i), Params{})
+			_, err := x.Create(ctx, "test"+strconv.Itoa(i), Metadata{})
 			require.NoError(t, err)
 		}
 		t.Log("done creating markes, now listing...")
@@ -39,9 +39,9 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 		ctx := testutil.Context(t)
 		x := newSpace(t)
 		var err error
-		_, err = x.Create(ctx, "test1", Params{})
+		_, err = x.Create(ctx, "test1", Metadata{})
 		require.NoError(t, err)
-		_, err = x.Create(ctx, "test2", Params{})
+		_, err = x.Create(ctx, "test2", Metadata{})
 		require.NoError(t, err)
 
 		_, err = x.Inspect(ctx, "test1")

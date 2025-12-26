@@ -58,7 +58,7 @@ var spaceSyncCmd = star.Command{
 
 var fetchCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "fetches marks from a remote space",
+		Short: "fetches marks from spaces according to the config",
 	},
 	Pos: []star.Positional{},
 	F: func(c star.Context) error {
@@ -76,9 +76,9 @@ var fetchCmd = star.Command{
 	},
 }
 
-var distCmd = star.Command{
+var pushCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "distributes marks to remote spaces according to the config",
+		Short: "distributes marks to spaces according to the config",
 	},
 	Pos: []star.Positional{},
 	F: func(c star.Context) error {

@@ -10,7 +10,7 @@ import (
 
 var serveCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "serve the repository",
+		Short: "serves the local space over Blobcache Protocol (BCP)",
 	},
 	Pos: []star.Positional{listenAddrParam},
 	F: func(c star.Context) error {

@@ -13,7 +13,7 @@ require (
 	github.com/hashicorp/golang-lru v1.0.2
 	github.com/stretchr/testify v1.11.1
 	go.brendoncarroll.net/exp v0.0.0-20251214173953-6263a5ff1b6d
-	go.brendoncarroll.net/star v0.0.0-20251101181839-d7285e010b23
+	go.brendoncarroll.net/star v0.0.0-20251226172902-a1111c13c6b3
 	go.brendoncarroll.net/state v0.0.0-20241118200920-627c9c196901
 	go.brendoncarroll.net/stdctx v0.0.0-20241118190518-40d09f4d11e7
 	go.brendoncarroll.net/tai64 v0.0.0-20241118171318-6e12d283d5e4

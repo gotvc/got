@@ -31,12 +31,48 @@ func Root() star.Command {
 	return rootCmd
 }
 
-var rootCmd = star.NewDir(
+var rootCmd = star.NewGroupedDir(
 	star.Metadata{
 		Short: "got is like git, but with an 'o'",
+	}, []star.Group{
+		{Title: "REPO", Commands: []string{
+			"init",
+			"serve",
+			"iden",
+		}},
+		{Title: "WORKING COPY & STAGING", Commands: []string{
+			"wc",
+			"status",
+			"add",
+			"rm",
+			"put",
+			"discard",
+			"clear",
+			"commit",
+			"head",
+			"fork",
+		}},
+		{Title: "MARKS", Commands: []string{
+			"mark",
+			"history",
+			"cat",
+			"ls",
+		}},
+		{Title: "SPACES", Commands: []string{
+			"space",
+			"push",
+			"fetch",
+		}},
+		{Title: "ADAPTERS", Commands: []string{
+			"http",
+			"ftp",
+		}},
+		{Title: "MISCELLANEOUS", Commands: []string{
+			"scrub",
+			"bc",
+		}},
 	}, map[string]star.Command{
-		"init": initCmd,
-
+		"init":   initCmd,
 		"status": statusCmd,
 
 		// staging area commands
@@ -64,12 +100,14 @@ var rootCmd = star.NewDir(
 
 		"space": spaceCmd,
 		"fetch": fetchCmd,
-		"dist":  distCmd,
+		"push":  pushCmd,
 
 		// misc
+		"iden":  idenCmd,
+		"org":   orgCmd,
 		"serve": serveCmd,
 		"slurp": slurpCmd,
-		"debug": debugCmd,
+		"debug": debugCmd, // intentionally left out of the groups above.
 		"scrub": scrubCmd,
 		"bc":    blobcacheCmd,
 	},
