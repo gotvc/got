@@ -3,13 +3,15 @@ package gotcmd
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	bcclient "blobcache.io/blobcache/client/go"
 	"blobcache.io/blobcache/src/blobcache"
-	"blobcache.io/blobcache/src/blobcachecmd"
+	"blobcache.io/blobcache/src/schema/bcns"
+	"blobcache.io/blobcache/src/schema/jsonns"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc"
-	"github.com/gotvc/got/src/marks"
+	"github.com/gotvc/got/src/internal/marks"
 	"go.brendoncarroll.net/star"
 )
 
@@ -18,7 +20,7 @@ var initCmd = star.Command{
 		Short: "initializes a repository in the current directory",
 	},
 	Flags: map[string]star.Flag{
-		"blobcache-http": blobcacheHttpParam,
+		"blobcache-http": blobcacheSysParam,
 		"volume":         volumeParam,
 	},
 	F: func(c star.Context) error {
@@ -60,14 +62,14 @@ var initCmd = star.Command{
 
 // specFromContext makes a Blobcache spec from a star.Context.
 func specFromContext(c star.Context) (ret gotrepo.BlobcacheSpec, _ error) {
-	blobcacheHttp, httpSet := blobcacheHttpParam.LoadOpt(c)
+	blobcacheHttp, httpSet := blobcacheSysParam.LoadOpt(c)
 	if httpSet {
 		return gotrepo.BlobcacheSpec{}, fmt.Errorf("cannot specify both blobcache-remote and blobcache-http")
 	}
 	switch {
 	case httpSet:
 		c.Printf("using HTTP blobcache\n")
-		ret.HTTP = &gotrepo.HTTPBlobcache{
+		ret.Client = &gotrepo.ExternalBlobcache{
 			URL: blobcacheHttp,
 		}
 	default:
@@ -79,12 +81,12 @@ func specFromContext(c star.Context) (ret gotrepo.BlobcacheSpec, _ error) {
 	return ret, nil
 }
 
-var blobcacheHttpParam = star.Optional[string]{
-	ID: "blobcache-http",
+var blobcacheSysParam = star.Optional[string]{
+	ID: "blobcache-sys",
 	Parse: func(s string) (string, error) {
 		return s, nil
 	},
-	ShortDoc: "the URL of the HTTP blobcache service",
+	ShortDoc: "the URL of the system Blobcache service (this is usually a unix socket)",
 }
 
 var volumeParam = star.Optional[blobcache.OID]{
@@ -99,7 +101,8 @@ var blobcacheCmd = star.NewDir(
 	star.Metadata{Short: "manage blobcache"},
 	map[string]star.Command{
 		"mkrepo": mkrepoCmd,
-	})
+	},
+)
 
 var mkrepoCmd = star.Command{
 	Metadata: star.Metadata{
@@ -109,12 +112,13 @@ var mkrepoCmd = star.Command{
 	F: func(c star.Context) error {
 		ctx := c.Context
 		svc := bcclient.NewClientFromEnv()
+		bcAPIStr := os.Getenv(bcclient.EnvBlobcacheAPI)
 		volName := volNameParam.Load(c)
-		nsh := blobcache.Handle{} // assume the root
-		nsc, err := blobcachecmd.NSClientForVolume(ctx, svc, nsh)
-		if err != nil {
-			return err
+		nsc := bcns.Client{
+			Service: svc,
+			Schema:  jsonns.Schema{},
 		}
+		nsh := blobcache.Handle{} // assume the root
 
 		spec := gotrepo.RepoVolumeSpec(false)
 		volh, err := nsc.CreateAt(ctx, nsh, volName, spec)
@@ -131,9 +135,8 @@ var mkrepoCmd = star.Command{
 
 		c.Printf("\nNEXT:\n")
 		c.Printf("  |> If you are accessing blobcache over the local socket, then you should have access already.\n")
-		c.Printf("  |> If you are accessing blobcache over BCP then make sure the Node is configured to allow Got to access the volume\n")
 		c.Printf("  |> Provide this volume in a call to got init like this:\n")
-		c.Printf("  |> got init --volume %v\n", volh.OID)
+		c.Printf("  |> got init --blobcache-http %s --volume %v\n", bcAPIStr, volh.OID)
 
 		return nil
 	},

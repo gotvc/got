@@ -1,10 +1,8 @@
 package gotrepo
 
 import (
-	"fmt"
 	"os"
-	"slices"
-	"strings"
+	"regexp"
 
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/internal/gotcfg"
@@ -21,37 +19,82 @@ type Config struct {
 	// This volume will have a link to the namespace volume.
 	RepoVolume blobcache.OID `json:"repo_volume"`
 
-	// Spaces contain named mutable references to Snapshots
-	// They are most similar to git remotes.
-	Spaces []SpaceConfig `json:"spaces"`
 	// Identities are named identities, which refer to files in the .got/iden directory
 	Identities map[string]inet256.ID `json:"identities"`
+	// Spaces contain named mutable references to Snapshots
+	// They are most similar to git remotes.
+	Spaces map[string]SpaceSpec `json:"spaces"`
+	Fetch  []FetchConfig        `json:"fetch"`
+	Dist   []DistConfig         `json:"dist"`
 }
 
 func (c *Config) Validate() error {
-	slices.SortStableFunc(c.Spaces, func(a, b SpaceConfig) int {
-		return strings.Compare(a.Name, b.Name)
-	})
-	for i := 1; i < len(c.Spaces); i++ {
-		if c.Spaces[i-1].Name == c.Spaces[i].Name {
-			return fmt.Errorf("config: spaces must have different names. %v, %v", c.Spaces[i-1], c.Spaces[i])
-		}
-	}
 	return nil
 }
 
-// SpaceConfig is an element of a Config, which configures a named Space.
-type SpaceConfig struct {
-	Name string    `json:"name"`
-	Spec SpaceSpec `json:"spec"`
+func (c *Config) SetBlobcache(spec BlobcacheSpec) *Config {
+	c.Blobcache = spec
+	return c
+}
+
+func (c *Config) PutSpace(name string, spec SpaceSpec) *Config {
+	c.Spaces[name] = spec
+	return c
+}
+
+func (c *Config) AddFetch(fc FetchConfig) *Config {
+	c.Fetch = append(c.Fetch, fc)
+	return c
+}
+
+// FetchConfig configures a fetch task.
+type FetchConfig struct {
+	// From is the name of the space to pull from.
+	// The destination space is always assumed to be the local space.
+	From string `json:"from"`
+	// Filter is a regexp for which marks to fetch from the source space.
+	Filter *regexp.Regexp `json:"filter"`
+	// CutPrefix is the prefix to remove from the name
+	// The zero value does not change the name at all.
+	CutPrefix string `json:"cut_prefix"`
+	// AddPrefix is the prefix to add to the name
+	// before inserting into the local space.
+	// The zero value does not change the name at all.
+	AddPrefix string `json:"add_prefix"`
+	// Delete is the regexp for which marks to delete from the destination space.
+	// Only names starting with AddPrefix in the destination space are considered.
+	// The regexp should match the entire name including the prefix.
+	Delete *regexp.Regexp `json:"delete"`
+}
+
+// DistConfig configures a distribution  task.
+type DistConfig struct {
+	// Filter is a regexp for which marks to fetch from the source space.
+	// In the case of distribution, the is always the local space.
+	Filter *regexp.Regexp `json:"filter"`
+	// CutPrefix is the prefix to remove from the name
+	// The zero value does not change the name at all.
+	CutPrefix string `json:"cut_prefix"`
+	// AddPrefix is the prefix to add to the name
+	// before inserting into the local space.
+	// The zero value does not change the name at all.
+	AddPrefix string `json:"add_prefix"`
+	// To is the name of the space to write to.
+	To string `json:"to"`
+	// Delete is the regexp for which marks to delete from the destination space.
+	// Only names starting with AddPrefix in the destination space are considered.
+	// The regexp should match the entire name including the prefix.
+	Delete *regexp.Regexp `json:"delete"`
 }
 
 func DefaultConfig() Config {
 	return Config{
-		Spaces: []SpaceConfig{},
+		Spaces: map[string]SpaceSpec{},
 		Blobcache: BlobcacheSpec{
 			InProcess: &InProcessBlobcache{
-				ActAs: DefaultIden,
+				ActAs:    DefaultIden,
+				CanLook:  []inet256.ID{},
+				CanTouch: []inet256.ID{},
 			},
 		},
 		RepoVolume: blobcache.OID{},
@@ -69,14 +112,27 @@ func LoadConfig(repo *os.Root) (*Config, error) {
 // EditConfig applies fn to the config of the repo at repoPath
 func EditConfig(repo *os.Root, fn func(x Config) Config) error {
 	return gotcfg.EditFile(repo, configPath, func(x Config) Config {
+		// maps
 		if x.Identities == nil {
 			x.Identities = make(map[string]inet256.ID)
+		}
+		if x.Spaces == nil {
+			x.Spaces = map[string]SpaceSpec{}
+		}
+		// slices
+		if x.Fetch == nil {
+			x.Fetch = []FetchConfig{}
+		}
+		if x.Dist == nil {
+			x.Dist = []DistConfig{}
 		}
 		return fn(x)
 	})
 }
 
 func (r *Repo) Configure(fn func(x Config) Config) error {
-	defer r.reloadConfig()
-	return EditConfig(r.root, fn)
+	if err := EditConfig(r.root, fn); err != nil {
+		return err
+	}
+	return r.reloadConfig()
 }

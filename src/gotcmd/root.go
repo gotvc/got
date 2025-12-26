@@ -63,7 +63,10 @@ var rootCmd = star.NewDir(
 		"log":     historyCmd,
 
 		"space": spaceCmd,
+		"fetch": fetchCmd,
+		"dist":  distCmd,
 
+		// misc
 		"serve": serveCmd,
 		"slurp": slurpCmd,
 		"debug": debugCmd,

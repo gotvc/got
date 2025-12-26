@@ -4,14 +4,16 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"regexp"
 	"testing"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc"
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/testutil"
-	"github.com/gotvc/got/src/marks"
 	"github.com/stretchr/testify/require"
 )
 
@@ -29,7 +31,10 @@ func NewSite(t testing.TB) Site {
 	dirpath := t.TempDir()
 	repoCfg := gotrepo.DefaultConfig()
 	require.NoError(t, gotrepo.Init(dirpath, repoCfg))
+	return openSite(t, dirpath)
+}
 
+func openSite(t testing.TB, dirpath string) Site {
 	root, err := os.OpenRoot(dirpath)
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -61,6 +66,32 @@ func (s *Site) ConfigureRepo(fn func(gotrepo.Config) gotrepo.Config) {
 	require.NoError(s.t, s.Repo.Configure(fn))
 }
 
+// Clone creates a new site, by cloning the this site.
+func (s *Site) Clone() Site {
+	ctx := testutil.Context(s.t)
+	dirpath := s.t.TempDir()
+
+	repoCfg := gotrepo.DefaultConfig()
+	u, err := s.Repo.NSVolumeURL(ctx)
+	require.NoError(s.t, err)
+	repoCfg.PutSpace("origin", gotrepo.SpaceSpec{Blobcache: u})
+	repoCfg.AddFetch(gotrepo.FetchConfig{
+		From:      "origin",
+		Filter:    regexp.MustCompile(".*"),
+		AddPrefix: "remote/origin/",
+	})
+
+	require.NoError(s.t, gotrepo.Init(dirpath, repoCfg))
+	other := openSite(s.t, dirpath)
+	s.ConfigureRepo(ConfigAddTouch(other.Repo.BlobcachePeer()))
+	return other
+}
+
+func (s *Site) Fetch() {
+	ctx := testutil.Context(s.t)
+	require.NoError(s.t, s.Repo.Fetch(ctx))
+}
+
 func (s *Site) CreateFile(p string, data []byte) {
 	require.NoError(s.t, s.Root.WriteFile(p, data, 0o644))
 }
@@ -80,21 +111,23 @@ func (s *Site) ListMarks(space string) (ret []string) {
 	return ret
 }
 
-func (s *Site) Commit() {
+func (s *Site) Commit(cp gotwc.CommitParams) {
 	ctx := testutil.Context(s.t)
-	err := s.WC.Commit(ctx, marks.SnapInfo{})
+	err := s.WC.Commit(ctx, cp)
 	require.NoError(s.t, err)
 }
 
 func (s *Site) Sync(src, dst gotrepo.FQM) {
 	ctx := testutil.Context(s.t)
-	err := s.Repo.SyncMarks(ctx, src, dst, false)
+	err := s.Repo.SyncUnit(ctx, src, dst, false)
 	require.NoError(s.t, err)
 }
 
-func (s *Site) Add(p string) {
-	err := s.WC.Add(testutil.Context(s.t), p)
-	require.NoError(s.t, err)
+func (s *Site) Add(ps ...string) {
+	for _, p := range ps {
+		err := s.WC.Add(testutil.Context(s.t), p)
+		require.NoError(s.t, err)
+	}
 }
 
 func (s *Site) Ls(b gotrepo.FQM, p string) (ret []string) {
@@ -128,4 +161,13 @@ func (s *Site) OrgClient() gotorg.Client {
 func (s *Site) IntroduceSelf() gotorg.ChangeSet {
 	oc := s.OrgClient()
 	return oc.IntroduceSelf()
+}
+
+func ConfigAddTouch(peer blobcache.PeerID) func(cfg gotrepo.Config) gotrepo.Config {
+	return func(cfg gotrepo.Config) gotrepo.Config {
+		allowed := cfg.Blobcache.InProcess.CanTouch
+		allowed = append(allowed, peer)
+		cfg.Blobcache.InProcess.CanTouch = allowed
+		return cfg
+	}
 }

@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.1
 
 require (
-	blobcache.io/blobcache v0.0.3-0.20251215225741-1b948500027b
+	blobcache.io/blobcache v0.0.3-0.20251223213955-c17952f9118a
 	capnproto.org/go/capnp/v3 v3.1.0-alpha.2
 	github.com/cloudflare/circl v1.6.1
 	github.com/dchest/siphash v1.2.3

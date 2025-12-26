@@ -22,11 +22,10 @@ import (
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo/internal/reposchema"
-	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/gotcfg"
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/gotvc/got/src/internal/volumes"
-	"github.com/gotvc/got/src/marks"
 )
 
 // fs paths
@@ -45,7 +44,7 @@ type (
 	Ref  = gotkv.Ref
 	Root = gotfs.Root
 
-	Snap = gotvc.Snap
+	Snap = marks.Snap
 )
 
 // Repo manages configuration including the connection to Blobcache
@@ -269,6 +268,22 @@ func (r *Repo) NSVolume(ctx context.Context) (blobcache.FQOID, error) {
 	}, nil
 }
 
+func (r *Repo) NSVolumeURL(ctx context.Context) (*blobcache.URL, error) {
+	ep, err := r.bc.Endpoint(ctx)
+	if err != nil {
+		return nil, err
+	}
+	nsfqoid, err := r.NSVolume(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &blobcache.URL{
+		Node:   nsfqoid.Peer,
+		IPPort: &ep.IPPort,
+		Base:   nsfqoid.OID,
+	}, nil
+}
+
 // BeginStagingTx begins a new transaction for the staging area with the given paramHash.
 // It is up to the caller to commit or abort the transaction.
 func (r *Repo) BeginStagingTx(ctx context.Context, paramHash *[32]byte, mutate bool) (volumes.Tx, error) {
@@ -283,8 +298,8 @@ func (r *Repo) BeginStagingTx(ctx context.Context, paramHash *[32]byte, mutate b
 func (r *Repo) useSchema() bool {
 	bccfg := r.config.Blobcache
 	switch {
-	case bccfg.HTTP != nil:
-		return bccfg.HTTP.UseSchema
+	case bccfg.Client != nil:
+		return bccfg.Client.UseSchema
 	default:
 		return true
 	}

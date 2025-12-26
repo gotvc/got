@@ -4,8 +4,8 @@ import (
 	"context"
 	"strings"
 
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/metrics"
-	"github.com/gotvc/got/src/marks"
 )
 
 const (
@@ -16,8 +16,8 @@ type MarkInfo = marks.Info
 
 // FQM represents a fully qualified Mark name.
 type FQM struct {
-	Space string
-	Name  string
+	Space string `json:"space"`
+	Name  string `json:"name"`
 }
 
 func ParseFQName(s string) FQM {
@@ -149,7 +149,7 @@ func (r *Repo) CleanupMark(ctx context.Context, mark FQM) error {
 	}
 	ctx, cf := metrics.Child(ctx, "cleanup volume")
 	defer cf()
-	if err := marks.CleanupVolume(ctx, b.Volume); err != nil {
+	if err := marks.CleanupVolume(ctx, b.Volume, b.Info); err != nil {
 		return err
 	}
 	return nil

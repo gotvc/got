@@ -6,7 +6,7 @@ import (
 	"fmt"
 
 	"blobcache.io/blobcache/src/blobcache"
-	"github.com/gotvc/got/src/marks"
+	"github.com/gotvc/got/src/internal/marks"
 	"go.brendoncarroll.net/tai64"
 )
 

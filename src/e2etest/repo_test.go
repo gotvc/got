@@ -12,10 +12,16 @@ import (
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gottests"
+	"github.com/gotvc/got/src/gotwc"
 	"github.com/gotvc/got/src/internal/testutil"
 )
 
 type Site = gottests.Site
+
+var (
+	localMaster  = gotrepo.FQM{Name: "master"}
+	originMaster = gotrepo.FQM{Space: "origin", Name: "master"}
+)
 
 func TestMultiRepoSync(t *testing.T) {
 	ctx := testutil.Context(t)
@@ -39,26 +45,13 @@ func TestMultiRepoSync(t *testing.T) {
 		return cfg
 	})
 	go origin.Repo.Serve(ctx, testutil.PacketConn(t))
-	originEP := origin.Repo.Endpoint()
-	originNS, err := origin.Repo.NSVolume(ctx)
+	originURL, err := origin.Repo.NSVolumeURL(ctx)
 	require.NoError(t, err)
 
 	// configure other repos to use it.
 	for _, s := range sites[1:] {
 		err := s.Repo.Configure(func(x gotrepo.Config) gotrepo.Config {
-			x.Spaces = []gotrepo.SpaceConfig{
-				{
-					Name: "origin",
-					Spec: gotrepo.SpaceSpec{
-						Blobcache: &blobcache.VolumeSpec{
-							Remote: &blobcache.VolumeBackend_Remote{
-								Endpoint: originEP,
-								Volume:   originNS.OID,
-							},
-						},
-					},
-				},
-			}
+			x.Spaces["origin"] = gotrepo.SpaceSpec{Blobcache: originURL}
 			return x
 		})
 		require.NoError(t, err)
@@ -66,8 +59,6 @@ func TestMultiRepoSync(t *testing.T) {
 	}
 
 	// use sites[1] to create marks on origin.
-	localMaster := gotrepo.FQM{Name: "master"}
-	originMaster := gotrepo.FQM{Space: "origin", Name: "master"}
 	sites[1].CreateMark(originMaster)
 	sites[1].CreateMark(gotrepo.FQM{Space: "origin", Name: "mybranch"})
 	require.Contains(t, sites[1].ListMarks("origin"), "master")
@@ -78,7 +69,7 @@ func TestMultiRepoSync(t *testing.T) {
 	sites[1].CreateMark(localMaster)
 	sites[1].CreateFile("myfile.txt", testData)
 	sites[1].Add("myfile.txt")
-	sites[1].Commit()
+	sites[1].Commit(gotwc.CommitParams{})
 	sites[1].Sync(localMaster, originMaster)
 
 	// create local master on sites[2] and sync content into it.
@@ -88,11 +79,25 @@ func TestMultiRepoSync(t *testing.T) {
 	require.Equal(t, testData, sites[2].Cat(localMaster, "myfile.txt"))
 }
 
-func getOne[K comparable, V any](m map[K]V) K {
-	for k := range m {
-		return k
-	}
-	panic("no keys in map")
+func TestClone(t *testing.T) {
+	ctx := testutil.Context(t)
+	origin := gottests.NewSite(t)
+	go origin.Repo.Serve(ctx, testutil.PacketConn(t))
+	origin.CreateMark(localMaster)
+	origin.CreateFile("test.txt", []byte("hello world\n"))
+	origin.Add("test.txt")
+	origin.Commit(gotwc.CommitParams{})
+
+	s1 := origin.Clone()
+	s2 := origin.Clone()
+	go s1.Repo.Serve(ctx, testutil.PacketConn(t))
+	go s2.Repo.Serve(ctx, testutil.PacketConn(t))
+
+	s1.Fetch()
+	s2.Fetch()
+
+	require.Contains(t, s1.ListMarks(""), "remote/origin/master")
+	require.Contains(t, s2.ListMarks(""), "remote/origin/master")
 }
 
 func TestOrg(t *testing.T) {
@@ -109,6 +114,11 @@ func TestOrg(t *testing.T) {
 	originEP, err := originBC.Endpoint(ctx)
 	require.NoError(t, err)
 	orgVolh := blobcachetests.CreateVolume(t, originBC, nil, gotorg.DefaultVolumeSpec(false))
+	originURL := &blobcache.URL{
+		Node:   originEP.Peer,
+		IPPort: &originEP.IPPort,
+		Base:   orgVolh.OID,
+	}
 
 	gnsc := sites[0].OrgClient()
 	gnsc.Blobcache = originBC
@@ -120,18 +130,8 @@ func TestOrg(t *testing.T) {
 	// configure other repos to use it.
 	for _, s := range sites[1:] {
 		err := s.Repo.Configure(func(x gotrepo.Config) gotrepo.Config {
-			x.Spaces = []gotrepo.SpaceConfig{
-				{
-					Name: "origin",
-					Spec: gotrepo.SpaceSpec{
-						Org: &blobcache.VolumeSpec{
-							Remote: &blobcache.VolumeBackend_Remote{
-								Endpoint: originEP,
-								Volume:   orgVolh.OID,
-							},
-						},
-					},
-				},
+			x.Spaces = map[string]gotrepo.SpaceSpec{
+				"origin": {Org: originURL},
 			}
 			return x
 		})
@@ -155,4 +155,11 @@ func TestOrg(t *testing.T) {
 			return nil
 		}))
 	}
+}
+
+func getOne[K comparable, V any](m map[K]V) K {
+	for k := range m {
+		return k
+	}
+	panic("no keys in map")
 }

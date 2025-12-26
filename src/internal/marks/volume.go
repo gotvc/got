@@ -14,8 +14,6 @@ import (
 	"github.com/gotvc/got/src/internal/volumes"
 )
 
-type Snap = gotvc.Snap
-
 type (
 	Volume   = volumes.Volume
 	Tx       = volumes.Tx
@@ -67,7 +65,7 @@ func getSnapshot(ctx context.Context, vol Volume) (*Snap, Tx, error) {
 	}
 	var ret *Snap
 	if len(data) > 0 {
-		if ret, err = gotvc.ParseSnapshot(data); err != nil {
+		if ret, err = gotvc.ParseSnapshot[Payload](data, ParsePayload); err != nil {
 			tx.Abort(ctx)
 			return nil, nil, err
 		}
@@ -75,7 +73,7 @@ func getSnapshot(ctx context.Context, vol Volume) (*Snap, Tx, error) {
 	return ret, tx, nil
 }
 
-func applySnapshot(ctx context.Context, vcmach *gotvc.Machine, fsmach *gotfs.Machine, dstVol Volume, fn func(stores.RW, *Snap) (*Snap, error)) error {
+func applySnapshot(ctx context.Context, vcmach *VCMach, fsmach *gotfs.Machine, dstVol Volume, fn func(stores.RW, *Snap) (*Snap, error)) error {
 	tx, err := dstVol.BeginTx(ctx, blobcache.TxParams{Modify: true})
 	if err != nil {
 		return err
@@ -87,7 +85,7 @@ func applySnapshot(ctx context.Context, vcmach *gotvc.Machine, fsmach *gotfs.Mac
 	}
 	var xSnap *Snap
 	if len(xData) > 0 {
-		if xSnap, err = gotvc.ParseSnapshot(xData); err != nil {
+		if xSnap, err = gotvc.ParseSnapshot[Payload](xData, ParsePayload); err != nil {
 			return err
 		}
 	}
@@ -109,24 +107,25 @@ func applySnapshot(ctx context.Context, vcmach *gotvc.Machine, fsmach *gotfs.Mac
 	return tx.Commit(ctx)
 }
 
-func syncStores(ctx context.Context, vcmach *gotvc.Machine, fsmach *gotfs.Machine, src stores.Reading, dst stores.Writing, snap gotvc.Snapshot) (err error) {
+func syncStores(ctx context.Context, vcmach *VCMach, fsmach *gotfs.Machine, src stores.Reading, dst stores.Writing, snap Snap) (err error) {
 	ctx, cf := metrics.Child(ctx, "syncing gotvc")
 	defer cf()
-	return vcmach.Sync(ctx, src, dst, snap, func(payload gotvc.Payload) error {
+	return vcmach.Sync(ctx, src, dst, snap, func(payload Payload) error {
 		return fsmach.Sync(ctx, [2]stores.Reading{src, src}, [2]stores.Writing{dst, dst}, payload.Root)
 	})
 }
 
 // Cleanup ensures that there are no unreachable blobs in volume.
-func CleanupVolume(ctx context.Context, vol Volume) error {
+func CleanupVolume(ctx context.Context, vol Volume, info Info) error {
 	start, tx, err := getSnapshot(ctx, vol)
 	if err != nil {
 		return err
 	}
 	defer tx.Abort(ctx)
 	keep := &stores.MemSet{}
+	vcmach := newGotVC(&info)
 	if start != nil {
-		if err := gotvc.Populate(ctx, tx, *start, keep, func(payload gotvc.Payload) error {
+		if err := vcmach.Populate(ctx, tx, *start, keep, func(payload Payload) error {
 			fsag := gotfs.NewMachine()
 			return fsag.Populate(ctx, tx, payload.Root, keep, keep)
 		}); err != nil {
