@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"os"
+	"regexp"
 	"testing"
 
 	"blobcache.io/blobcache/src/blobcache"
@@ -69,11 +70,18 @@ func (s *Site) ConfigureRepo(fn func(gotrepo.Config) gotrepo.Config) {
 func (s *Site) Clone() Site {
 	ctx := testutil.Context(s.t)
 	dirpath := s.t.TempDir()
+
 	repoCfg := gotrepo.DefaultConfig()
 	u, err := s.Repo.NSVolumeURL(ctx)
 	require.NoError(s.t, err)
-	require.NoError(s.t, gotrepo.Clone(ctx, dirpath, repoCfg, *u))
+	repoCfg.PutSpace("origin", gotrepo.SpaceSpec{Blobcache: u})
+	repoCfg.AddFetch(gotrepo.FetchConfig{
+		From:      "origin",
+		Filter:    regexp.MustCompile(".*"),
+		AddPrefix: "remote/origin/",
+	})
 
+	require.NoError(s.t, gotrepo.Init(dirpath, repoCfg))
 	other := openSite(s.t, dirpath)
 	s.ConfigureRepo(ConfigAddTouch(other.Repo.BlobcachePeer()))
 	return other

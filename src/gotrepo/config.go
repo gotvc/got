@@ -32,6 +32,21 @@ func (c *Config) Validate() error {
 	return nil
 }
 
+func (c *Config) SetBlobcache(spec BlobcacheSpec) *Config {
+	c.Blobcache = spec
+	return c
+}
+
+func (c *Config) PutSpace(name string, spec SpaceSpec) *Config {
+	c.Spaces[name] = spec
+	return c
+}
+
+func (c *Config) AddFetch(fc FetchConfig) *Config {
+	c.Fetch = append(c.Fetch, fc)
+	return c
+}
+
 // FetchConfig configures a fetch task.
 type FetchConfig struct {
 	// From is the name of the space to pull from.
