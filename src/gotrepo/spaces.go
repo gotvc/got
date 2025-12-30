@@ -33,41 +33,47 @@ func (r *Repo) GetSpace(ctx context.Context, name string) (marks.Space, error) {
 	return r.makeSpace(ctx, spec)
 }
 
+type VolumeSpec struct {
+	URL    blobcache.URL `json:"url"`
+	Secret gdat.DEK      `json:"secret"`
+}
+
 type SpaceSpec struct {
 	// Blobcache is a arbitrary Blobcache Volume
 	// The contents of the Volume are expected to be in the GotNS format.
-	Blobcache *blobcache.URL `json:"bc,omitempty"`
+	Blobcache *VolumeSpec `json:"bc,omitempty"`
 	// Org is an arbitrary Blobcache Volume
 	// The contents of the Volume are expected to be in the GotOrg format
 	Org *blobcache.URL `json:"org,omitempty"`
 }
 
 func (r *Repo) makeLocalSpace(ctx context.Context) (Space, error) {
-	volh, err := r.repoc.GetNamespace(ctx, r.config.RepoVolume, r.useSchema())
+	volh, secret, err := r.repoc.GetNamespace(ctx, r.config.RepoVolume, r.useSchema())
 	if err != nil {
 		return nil, err
 	}
-	return spaceFromHandle(r.bc, *volh), nil
+	return spaceFromHandle(r.bc, *volh, secret), nil
 }
 
 func (r *Repo) makeSpace(ctx context.Context, spec SpaceSpec) (Space, error) {
 	switch {
 	case spec.Blobcache != nil:
-		volh, err := bcsdk.OpenURL(ctx, r.bc, *spec.Blobcache)
+		volh, err := bcsdk.OpenURL(ctx, r.bc, spec.Blobcache.URL)
 		if err != nil {
 			return nil, err
 		}
-		return spaceFromHandle(r.bc, *volh), nil
+		return spaceFromHandle(r.bc, *volh, &spec.Blobcache.Secret), nil
 	default:
 		return nil, fmt.Errorf("empty SpaceSpec")
 	}
 }
 
-func spaceFromHandle(bc blobcache.Service, volh blobcache.Handle) Space {
-	vol := &volumes.Blobcache{
+func spaceFromHandle(bc blobcache.Service, volh blobcache.Handle, secret *gdat.DEK) Space {
+	var vol volumes.Volume = &volumes.Blobcache{
 		Service: bc,
 		Handle:  volh,
 	}
+	vol = volumes.NewChaCha20Poly1305(vol, (*[32]byte)(secret))
 	kvmach := gotns.NewGotKV()
 	return &gotns.Space{
 		Volume: vol,

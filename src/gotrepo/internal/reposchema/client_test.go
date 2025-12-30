@@ -19,7 +19,7 @@ func TestClient(t *testing.T) {
 	bc := newBlobcache(t)
 	client := NewClient(bc)
 	repoVol := blobcache.OID{}
-	nsh, err := client.GetNamespace(ctx, repoVol, true)
+	nsh, _, err := client.GetNamespace(ctx, repoVol, true)
 	require.NoError(t, err)
 
 	var vh blobcache.Handle

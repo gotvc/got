@@ -3,11 +3,14 @@ package reposchema
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/hex"
+	"fmt"
 
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/internal/stores"
@@ -28,28 +31,32 @@ func NewClient(svc blobcache.Service) Client {
 
 // GetNamespace returns a handle to the namespace volume, creating it if it doesn't exist.
 // It does not modify the contents of the namespace volume.
-func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSchema bool) (*blobcache.Handle, error) {
+func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSchema bool) (*blobcache.Handle, *gdat.DEK, error) {
 	rootH, err := c.rootHandle(ctx, repoVol)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Modify: true})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer txn.Abort(ctx)
 
 	root, err := c.getRoot(ctx, txn)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	subVolID, err := c.getNS(ctx, txn, *root)
+	subVolID, secret, err := c.getNS(ctx, txn, *root)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if subVolID != nil {
 		// ns exists, return it.
-		return c.Service.OpenFrom(ctx, *rootH, *subVolID, blobcache.Action_ALL)
+		volh, err := c.Service.OpenFrom(ctx, *rootH, *subVolID, blobcache.Action_ALL)
+		if err != nil {
+			return nil, nil, err
+		}
+		return volh, secret, nil
 	}
 
 	// ns doesn't exist, create it.
@@ -59,19 +66,23 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 	}
 	subVol, err := c.createSubVolume(ctx, txn, nsSpec)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	root, err = c.putNS(ctx, txn, *root, subVol.OID)
+	secret = &gdat.DEK{}
+	if _, err := rand.Read(secret[:]); err != nil {
+		return nil, nil, err
+	}
+	root, err = c.putNS(ctx, txn, *root, subVol.OID, secret)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := txn.Save(ctx, root.Marshal(nil)); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := txn.Commit(ctx); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return subVol, nil
+	return subVol, nil, nil
 }
 
 // StagingArea returns a handle to a staging area, creating it if it doesn't exist.
@@ -207,22 +218,31 @@ func (c *Client) putStage(ctx context.Context, s stores.RW, root gotkv.Root, par
 }
 
 // getNS returns the Namespace Volume OID if it exists, or (nil, nil) if it doesn't.
-func (c *Client) getNS(ctx context.Context, s stores.Reading, root gotkv.Root) (*blobcache.OID, error) {
+func (c *Client) getNS(ctx context.Context, s stores.Reading, root gotkv.Root) (*blobcache.OID, *gdat.DEK, error) {
 	val, err := c.GotKV.Get(ctx, s, root, nsKey)
 	if err != nil {
 		if gotkv.IsErrKeyNotFound(err) {
-			return nil, nil
+			return nil, nil, nil
 		}
-		return nil, err
+		return nil, nil, err
 	}
+	if len(val) != blobcache.OIDSize+32 {
+		return nil, nil, fmt.Errorf("ns entry is wrong size %d", len(val))
+	}
+	subVolData := val[:blobcache.OIDSize]
+	var secret [32]byte
+	copy(secret[:], subVolData[blobcache.OIDSize:])
 	var subVolID blobcache.OID
 	if err := subVolID.Unmarshal(val); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return &subVolID, nil
+	return &subVolID, nil, nil
 }
 
-func (c *Client) putNS(ctx context.Context, s stores.RW, root gotkv.Root, subVolID blobcache.OID) (*gotkv.Root, error) {
+func (c *Client) putNS(ctx context.Context, s stores.RW, root gotkv.Root, subVolID blobcache.OID, secret *gdat.DEK) (*gotkv.Root, error) {
+	var val []byte
+	val = subVolID.Marshal(val)
+	val = append(val, secret[:]...)
 	return c.GotKV.Put(ctx, s, root, nsKey, subVolID.Marshal(nil))
 }
 

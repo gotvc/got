@@ -72,9 +72,9 @@ func (s *Site) Clone() Site {
 	dirpath := s.t.TempDir()
 
 	repoCfg := gotrepo.DefaultConfig()
-	u, err := s.Repo.NSVolumeURL(ctx)
+	vspec, err := s.Repo.NSVolumeSpec(ctx)
 	require.NoError(s.t, err)
-	repoCfg.PutSpace("origin", gotrepo.SpaceSpec{Blobcache: u})
+	repoCfg.PutSpace("origin", gotrepo.SpaceSpec{Blobcache: vspec})
 	repoCfg.AddFetch(gotrepo.FetchConfig{
 		From:      "origin",
 		Filter:    regexp.MustCompile(".*"),

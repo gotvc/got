@@ -258,7 +258,7 @@ func (r *Repo) NSVolume(ctx context.Context) (blobcache.FQOID, error) {
 	if err != nil {
 		return blobcache.FQOID{}, err
 	}
-	nsh, err := r.repoc.GetNamespace(ctx, r.config.RepoVolume, r.useSchema())
+	nsh, _, err := r.repoc.GetNamespace(ctx, r.config.RepoVolume, r.useSchema())
 	if err != nil {
 		return blobcache.FQOID{}, err
 	}
@@ -268,7 +268,7 @@ func (r *Repo) NSVolume(ctx context.Context) (blobcache.FQOID, error) {
 	}, nil
 }
 
-func (r *Repo) NSVolumeURL(ctx context.Context) (*blobcache.URL, error) {
+func (r *Repo) NSVolumeSpec(ctx context.Context) (*VolumeSpec, error) {
 	ep, err := r.bc.Endpoint(ctx)
 	if err != nil {
 		return nil, err
@@ -277,10 +277,13 @@ func (r *Repo) NSVolumeURL(ctx context.Context) (*blobcache.URL, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &blobcache.URL{
-		Node:   nsfqoid.Peer,
-		IPPort: &ep.IPPort,
-		Base:   nsfqoid.OID,
+	return &VolumeSpec{
+		URL: blobcache.URL{
+			Node:   nsfqoid.Peer,
+			IPPort: &ep.IPPort,
+			Base:   nsfqoid.OID,
+		},
+		Secret: ,
 	}, nil
 }
 
