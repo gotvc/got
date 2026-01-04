@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/gotvc/got/src/gotwc/internal/porting"
-	"github.com/gotvc/got/src/internal/sqlutil"
+	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/kv"
 )

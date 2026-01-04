@@ -3,7 +3,7 @@ package migrations
 import (
 	"context"
 
-	"github.com/gotvc/got/src/internal/sqlutil"
+	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"go.brendoncarroll.net/exp/slices2"
 	"zombiezen.com/go/sqlite/sqlitemigration"
 )

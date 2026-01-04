@@ -15,9 +15,9 @@ import (
 	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/dbmig"
+	"github.com/gotvc/got/src/gotwc/internal/migrations"
+	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/gotwc/internal/staging"
-	"github.com/gotvc/got/src/internal/migrations"
-	"github.com/gotvc/got/src/internal/sqlutil"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 )

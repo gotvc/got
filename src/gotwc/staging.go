@@ -9,8 +9,8 @@ import (
 	"sync"
 
 	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/internal/marks"
-	"github.com/gotvc/got/src/internal/sqlutil"
 	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"

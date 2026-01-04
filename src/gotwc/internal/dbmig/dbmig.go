@@ -6,7 +6,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gotvc/got/src/internal/migrations"
+	"github.com/gotvc/got/src/gotwc/internal/migrations"
 )
 
 //go:embed *.sql
