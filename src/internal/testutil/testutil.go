@@ -9,6 +9,7 @@ import (
 	"math"
 	mrand "math/rand"
 	"net"
+	"os"
 	"strconv"
 	"testing"
 
@@ -27,6 +28,15 @@ func Context(t testing.TB) context.Context {
 	require.NoError(t, err)
 	ctx = logctx.NewContext(ctx, l)
 	return ctx
+}
+
+func OpenRoot(t testing.TB, p string) *os.Root {
+	r, err := os.OpenRoot(p)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, r.Close())
+	})
+	return r
 }
 
 func StreamsEqual(t testing.TB, expected, actual io.Reader) {

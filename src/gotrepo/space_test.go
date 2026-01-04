@@ -13,9 +13,10 @@ func TestSpace(t *testing.T) {
 	ctx := testutil.Context(t)
 	marks.TestSpace(t, func(t testing.TB) marks.Space {
 		dir := t.TempDir()
-		err := Init(dir, DefaultConfig())
+		root := testutil.OpenRoot(t, dir)
+		err := Init(root, DefaultConfig())
 		require.NoError(t, err)
-		r, err := Open(dir)
+		r, err := Open(root)
 		require.NoError(t, err)
 		t.Cleanup(func() {
 			require.NoError(t, r.Close())

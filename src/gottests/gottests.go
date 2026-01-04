@@ -19,7 +19,6 @@ import (
 
 // Site is a gotrepo and working copy
 type Site struct {
-	Path string
 	Root *os.Root
 	Repo *gotrepo.Repo
 	WC   *gotwc.WC
@@ -30,17 +29,16 @@ type Site struct {
 func NewSite(t testing.TB) Site {
 	dirpath := t.TempDir()
 	repoCfg := gotrepo.DefaultConfig()
-	require.NoError(t, gotrepo.Init(dirpath, repoCfg))
-	return openSite(t, dirpath)
+	repoRoot := testutil.OpenRoot(t, dirpath)
+	t.Cleanup(func() {
+		require.NoError(t, repoRoot.Close())
+	})
+	require.NoError(t, gotrepo.Init(repoRoot, repoCfg))
+	return openSite(t, repoRoot)
 }
 
-func openSite(t testing.TB, dirpath string) Site {
-	root, err := os.OpenRoot(dirpath)
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		root.Close()
-	})
-	repo, err := gotrepo.Open(dirpath)
+func openSite(t testing.TB, root *os.Root) Site {
+	repo, err := gotrepo.Open(root)
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		repo.Close()
@@ -49,11 +47,10 @@ func openSite(t testing.TB, dirpath string) Site {
 		Head:  "master",
 		ActAs: gotrepo.DefaultIden,
 	}
-	require.NoError(t, gotwc.Init(repo, dirpath, wcCfg))
+	require.NoError(t, gotwc.Init(repo, root, wcCfg))
 	wc, err := gotwc.New(repo, root)
 	require.NoError(t, err)
 	return Site{
-		Path: dirpath,
 		Root: root,
 		Repo: repo,
 		WC:   wc,
@@ -70,19 +67,19 @@ func (s *Site) ConfigureRepo(fn func(gotrepo.Config) gotrepo.Config) {
 func (s *Site) Clone() Site {
 	ctx := testutil.Context(s.t)
 	dirpath := s.t.TempDir()
+	repoRoot := testutil.OpenRoot(s.t, dirpath)
 
 	repoCfg := gotrepo.DefaultConfig()
-	u, err := s.Repo.NSVolumeURL(ctx)
+	vspec, err := s.Repo.NSVolumeSpec(ctx)
 	require.NoError(s.t, err)
-	repoCfg.PutSpace("origin", gotrepo.SpaceSpec{Blobcache: u})
+	repoCfg.PutSpace("origin", gotrepo.SpaceSpec{Blobcache: vspec})
 	repoCfg.AddFetch(gotrepo.FetchConfig{
 		From:      "origin",
 		Filter:    regexp.MustCompile(".*"),
 		AddPrefix: "remote/origin/",
 	})
-
-	require.NoError(s.t, gotrepo.Init(dirpath, repoCfg))
-	other := openSite(s.t, dirpath)
+	require.NoError(s.t, gotrepo.Init(repoRoot, repoCfg))
+	other := openSite(s.t, repoRoot)
 	s.ConfigureRepo(ConfigAddTouch(other.Repo.BlobcachePeer()))
 	return other
 }

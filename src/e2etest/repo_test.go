@@ -45,13 +45,13 @@ func TestMultiRepoSync(t *testing.T) {
 		return cfg
 	})
 	go origin.Repo.Serve(ctx, testutil.PacketConn(t))
-	originURL, err := origin.Repo.NSVolumeURL(ctx)
+	originSpec, err := origin.Repo.NSVolumeSpec(ctx)
 	require.NoError(t, err)
 
 	// configure other repos to use it.
 	for _, s := range sites[1:] {
 		err := s.Repo.Configure(func(x gotrepo.Config) gotrepo.Config {
-			x.Spaces["origin"] = gotrepo.SpaceSpec{Blobcache: originURL}
+			x.Spaces["origin"] = gotrepo.SpaceSpec{Blobcache: originSpec}
 			return x
 		})
 		require.NoError(t, err)

@@ -19,12 +19,12 @@ func TestClient(t *testing.T) {
 	bc := newBlobcache(t)
 	client := NewClient(bc)
 	repoVol := blobcache.OID{}
-	nsh, err := client.GetNamespace(ctx, repoVol, true)
+	nsh, _, err := client.GetNamespace(ctx, repoVol, true)
 	require.NoError(t, err)
 
 	var vh blobcache.Handle
 	for i := 0; i < 3; i++ {
-		vh2, err := client.StagingArea(ctx, repoVol, new([32]byte))
+		vh2, _, err := client.StagingArea(ctx, repoVol, new([32]byte))
 		require.NoError(t, err)
 		if vh != (blobcache.Handle{}) {
 			// Check that the same OID comes back each time.

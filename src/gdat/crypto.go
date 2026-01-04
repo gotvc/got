@@ -2,6 +2,7 @@ package gdat
 
 import (
 	"context"
+	"encoding/hex"
 	"io"
 	"math"
 
@@ -75,6 +76,15 @@ func Convergent(ptextHash blobcache.CID) DEK {
 const DEKSize = 32
 
 type DEK [DEKSize]byte
+
+func (dek DEK) MarshalText() ([]byte, error) {
+	return []byte(hex.EncodeToString(dek[:])), nil
+}
+
+func (dek *DEK) UnmarshalText(data []byte) error {
+	_, err := hex.Decode(dek[:], data)
+	return err
+}
 
 func (*DEK) String() string {
 	return "{ 32 byte DEK }"
