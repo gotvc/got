@@ -33,17 +33,12 @@ const (
 // Init initializes a new working copy in wcdir
 // The working copy will be associated with the given repo.
 // cfg.RepoDir will be overriden with repo.Dir().
-func Init(repo *gotrepo.Repo, wcdir string, cfg Config) error {
-	root, err := os.OpenRoot(wcdir)
-	if err != nil {
-		return err
-	}
-	defer root.Close()
-	if err := root.MkdirAll(".got", 0o755); err != nil {
+func Init(repo *gotrepo.Repo, wcRoot *os.Root, cfg Config) error {
+	if err := wcRoot.MkdirAll(".got", 0o755); err != nil {
 		return err
 	}
 	cfg.RepoDir = repo.Dir()
-	return SaveConfig(root, cfg)
+	return SaveConfig(wcRoot, cfg)
 }
 
 // Open opens a directory as a WorkingCopy
@@ -51,16 +46,16 @@ func Init(repo *gotrepo.Repo, wcdir string, cfg Config) error {
 //
 // TODO: maybe this should take a Repo? and Repo should just manage setting up blobcache
 // and creating and deleting stages.
-func Open(wcdir string) (*WC, error) {
-	root, err := os.OpenRoot(wcdir)
-	if err != nil {
-		return nil, err
-	}
+func Open(root *os.Root) (*WC, error) {
 	cfg, err := LoadConfig(root)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := gotrepo.Open(cfg.RepoDir)
+	repoRoot, err := os.OpenRoot(cfg.RepoDir)
+	if err != nil {
+		return nil, err
+	}
+	repo, err := gotrepo.Open(repoRoot)
 	if err != nil {
 		return nil, err
 	}

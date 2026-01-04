@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path"
 	"strconv"
 	"strings"
@@ -141,13 +140,12 @@ func newTestWC(t testing.TB) *WC {
 	_, err := r.CreateMark(context.TODO(), gotrepo.FQM{Name: nameMaster}, marks.Metadata{})
 	require.NoError(t, err)
 	wcdir := t.TempDir()
+	root := testutil.OpenRoot(t, wcdir)
 	cfg := Config{
 		Head:  nameMaster,
 		ActAs: gotrepo.DefaultIden,
 	}
-	require.NoError(t, Init(r, wcdir, cfg))
-	root, err := os.OpenRoot(wcdir)
-	require.NoError(t, err)
+	require.NoError(t, Init(r, root, cfg))
 	wc, err := New(r, root)
 	require.NoError(t, err)
 	t.Cleanup(func() {

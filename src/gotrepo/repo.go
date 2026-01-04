@@ -7,7 +7,6 @@ import (
 	"io"
 	"net"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"blobcache.io/blobcache/src/bclocal"
@@ -64,12 +63,7 @@ type Repo struct {
 
 // Init initializes a new repo at the given path.
 // If bc is nil, a local blobcache will be created within the .got directory.
-func Init(p string, config Config) error {
-	root, err := os.OpenRoot(p)
-	if err != nil {
-		return err
-	}
-	defer root.Close()
+func Init(root *os.Root, config Config) error {
 	if err := root.Mkdir(gotPrefix, 0o755); err != nil {
 		return err
 	}
@@ -78,23 +72,14 @@ func Init(p string, config Config) error {
 		return fmt.Errorf("could not create repo config, it may already exist. %w", err)
 	}
 	// check that is opens without error
-	r, err := Open(p)
+	r, err := Open(root)
 	if err != nil {
 		return err
 	}
 	return r.Close()
 }
 
-func Open(p string) (_ *Repo, retErr error) {
-	p, err := filepath.Abs(p)
-	if err != nil {
-		return nil, err
-	}
-	root, err := os.OpenRoot(p)
-	if err != nil {
-		return nil, err
-	}
-
+func Open(root *os.Root) (_ *Repo, retErr error) {
 	// config
 	config, err := LoadConfig(root)
 	if err != nil {
@@ -193,12 +178,6 @@ func (r *Repo) Close() (retErr error) {
 				return lsvc.Close()
 			}
 			return nil
-		},
-		func() error {
-			if !r.closeAll {
-				return nil
-			}
-			return r.root.Close()
 		},
 	} {
 		if err := fn(); err != nil {
@@ -333,8 +312,9 @@ func dumpStore(ctx context.Context, w io.Writer, s kv.Store[[]byte, []byte]) err
 func NewTestRepo(t testing.TB) *Repo {
 	dirpath := t.TempDir()
 	t.Log("testing in", dirpath)
-	require.NoError(t, Init(dirpath, DefaultConfig()))
-	repo, err := Open(dirpath)
+	r := testutil.OpenRoot(t, dirpath)
+	require.NoError(t, Init(r, DefaultConfig()))
+	repo, err := Open(r)
 	require.NoError(t, err)
 	require.NotNil(t, repo)
 	t.Cleanup(func() {

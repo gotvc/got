@@ -2,6 +2,7 @@ package gotcmd
 
 import (
 	"context"
+	"os"
 
 	"go.brendoncarroll.net/star"
 	"go.brendoncarroll.net/stdctx/logctx"
@@ -114,9 +115,17 @@ var rootCmd = star.NewGroupedDir(
 )
 
 func openRepo() (*gotrepo.Repo, error) {
-	return gotrepo.Open(".")
+	r, err := os.OpenRoot(".")
+	if err != nil {
+		return nil, err
+	}
+	return gotrepo.Open(r)
 }
 
 func openWC() (*gotwc.WC, error) {
-	return gotwc.Open(".")
+	r, err := os.OpenRoot(".")
+	if err != nil {
+		return nil, err
+	}
+	return gotwc.Open(r)
 }

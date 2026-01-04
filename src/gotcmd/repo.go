@@ -33,11 +33,16 @@ var initCmd = star.Command{
 		if err := configureBlobcache(c, &config); err != nil {
 			return err
 		}
-		// setup repo
-		if err := gotrepo.Init(".", config); err != nil {
+		root, err := os.OpenRoot(".")
+		if err != nil {
 			return err
 		}
-		repo, err := gotrepo.Open(".")
+		defer root.Close()
+		// setup repo
+		if err := gotrepo.Init(root, config); err != nil {
+			return err
+		}
+		repo, err := gotrepo.Open(root)
 		if err != nil {
 			return err
 		}
@@ -47,7 +52,7 @@ var initCmd = star.Command{
 			return err
 		}
 		// setup a working copy in the same directory
-		if err := gotwc.Init(repo, ".", gotwc.Config{
+		if err := gotwc.Init(repo, root, gotwc.Config{
 			Head:  "master",
 			ActAs: gotrepo.DefaultIden,
 		}); err != nil {
