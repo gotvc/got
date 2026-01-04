@@ -289,13 +289,14 @@ func (r *Repo) NSVolumeSpec(ctx context.Context) (*VolumeSpec, error) {
 
 // BeginStagingTx begins a new transaction for the staging area with the given paramHash.
 // It is up to the caller to commit or abort the transaction.
-func (r *Repo) BeginStagingTx(ctx context.Context, paramHash *[32]byte, mutate bool) (volumes.Tx, error) {
-	h, err := r.repoc.StagingArea(ctx, r.config.RepoVolume, paramHash)
+func (r *Repo) BeginStagingTx(ctx context.Context, paramHash *[32]byte, modify bool) (volumes.Tx, error) {
+	h, dek, err := r.repoc.StagingArea(ctx, r.config.RepoVolume, paramHash)
 	if err != nil {
 		return nil, err
 	}
-	vol := volumes.Blobcache{Service: r.bc, Handle: *h}
-	return vol.BeginTx(ctx, blobcache.TxParams{Modify: mutate})
+	var vol volumes.Volume = &volumes.Blobcache{Service: r.bc, Handle: *h}
+	vol = volumes.NewChaCha20Poly1305(vol, (*[32]byte)(dek))
+	return vol.BeginTx(ctx, blobcache.TxParams{Modify: modify})
 }
 
 func (r *Repo) useSchema() bool {
