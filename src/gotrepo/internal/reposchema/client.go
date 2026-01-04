@@ -68,11 +68,8 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 	if err != nil {
 		return nil, nil, err
 	}
-	secret = &gdat.DEK{}
-	if _, err := rand.Read(secret[:]); err != nil {
-		return nil, nil, err
-	}
-	root, err = c.putNS(ctx, txn, *root, subVol.OID, secret)
+	secret = generateDEK()
+	root, err = c.setNS(ctx, txn, *root, subVol.OID, secret)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -82,7 +79,7 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 	if err := txn.Commit(ctx); err != nil {
 		return nil, nil, err
 	}
-	return subVol, nil, nil
+	return subVol, secret, nil
 }
 
 // StagingArea returns a handle to a staging area, creating it if it doesn't exist.
@@ -229,21 +226,24 @@ func (c *Client) getNS(ctx context.Context, s stores.Reading, root gotkv.Root) (
 	if len(val) != blobcache.OIDSize+32 {
 		return nil, nil, fmt.Errorf("ns entry is wrong size %d", len(val))
 	}
+
 	subVolData := val[:blobcache.OIDSize]
-	var secret [32]byte
-	copy(secret[:], subVolData[blobcache.OIDSize:])
 	var subVolID blobcache.OID
-	if err := subVolID.Unmarshal(val); err != nil {
-		return nil, nil, err
-	}
-	return &subVolID, nil, nil
+	copy(subVolID[:], subVolData)
+	var secret gdat.DEK
+	copy(secret[:], val[blobcache.OIDSize:])
+
+	return &subVolID, &secret, nil
 }
 
-func (c *Client) putNS(ctx context.Context, s stores.RW, root gotkv.Root, subVolID blobcache.OID, secret *gdat.DEK) (*gotkv.Root, error) {
+func (c *Client) setNS(ctx context.Context, s stores.RW, root gotkv.Root, subVolID blobcache.OID, secret *gdat.DEK) (*gotkv.Root, error) {
+	if secret == nil {
+		return nil, fmt.Errorf("secret cannot be nil")
+	}
 	var val []byte
-	val = subVolID.Marshal(val)
+	val = append(val, subVolID[:]...)
 	val = append(val, secret[:]...)
-	return c.GotKV.Put(ctx, s, root, nsKey, subVolID.Marshal(nil))
+	return c.GotKV.Put(ctx, s, root, nsKey, val)
 }
 
 func stageKey(paramHash *[32]byte) []byte {
@@ -272,4 +272,14 @@ func StageVolumeSpec() blobcache.VolumeSpec {
 			Salted:   false,
 		},
 	}
+}
+
+func generateDEK() *gdat.DEK {
+	var secret gdat.DEK
+	if n, err := rand.Read(secret[:]); err != nil {
+		panic(err)
+	} else if n != len(secret) {
+		panic(n)
+	}
+	return &secret
 }

@@ -58,11 +58,12 @@ func (r *Repo) makeLocalSpace(ctx context.Context) (Space, error) {
 func (r *Repo) makeSpace(ctx context.Context, spec SpaceSpec) (Space, error) {
 	switch {
 	case spec.Blobcache != nil:
-		volh, err := bcsdk.OpenURL(ctx, r.bc, spec.Blobcache.URL)
+		bspec := *spec.Blobcache
+		volh, err := bcsdk.OpenURL(ctx, r.bc, bspec.URL)
 		if err != nil {
 			return nil, err
 		}
-		return spaceFromHandle(r.bc, *volh, &spec.Blobcache.Secret), nil
+		return spaceFromHandle(r.bc, *volh, &bspec.Secret), nil
 	default:
 		return nil, fmt.Errorf("empty SpaceSpec")
 	}

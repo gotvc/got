@@ -273,17 +273,17 @@ func (r *Repo) NSVolumeSpec(ctx context.Context) (*VolumeSpec, error) {
 	if err != nil {
 		return nil, err
 	}
-	nsfqoid, err := r.NSVolume(ctx)
+	nsh, secret, err := r.repoc.GetNamespace(ctx, r.config.RepoVolume, r.useSchema())
 	if err != nil {
 		return nil, err
 	}
 	return &VolumeSpec{
 		URL: blobcache.URL{
-			Node:   nsfqoid.Peer,
+			Node:   ep.Peer,
 			IPPort: &ep.IPPort,
-			Base:   nsfqoid.OID,
+			Base:   nsh.OID,
 		},
-		Secret: ,
+		Secret: *secret,
 	}, nil
 }
 
