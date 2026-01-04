@@ -46,17 +46,17 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 	if err != nil {
 		return nil, nil, err
 	}
-	subVolID, secret, err := c.getNS(ctx, txn, *root)
+	sve, err := c.getNS(ctx, txn, *root)
 	if err != nil {
 		return nil, nil, err
 	}
-	if subVolID != nil {
+	if sve != nil {
 		// ns exists, return it.
-		volh, err := c.Service.OpenFrom(ctx, *rootH, *subVolID, blobcache.Action_ALL)
+		volh, err := c.Service.OpenFrom(ctx, *rootH, sve.OID, blobcache.Action_ALL)
 		if err != nil {
 			return nil, nil, err
 		}
-		return volh, secret, nil
+		return volh, &sve.Secret, nil
 	}
 
 	// ns doesn't exist, create it.
@@ -68,8 +68,11 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 	if err != nil {
 		return nil, nil, err
 	}
-	secret = generateDEK()
-	root, err = c.setNS(ctx, txn, *root, subVol.OID, secret)
+	sve = &subvolEntry{
+		OID:    subVol.OID,
+		Secret: generateDEK(),
+	}
+	root, err = c.setNS(ctx, txn, *root, *sve)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -79,7 +82,7 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 	if err := txn.Commit(ctx); err != nil {
 		return nil, nil, err
 	}
-	return subVol, secret, nil
+	return subVol, &sve.Secret, nil
 }
 
 // StagingArea returns a handle to a staging area, creating it if it doesn't exist.
@@ -114,7 +117,11 @@ func (c *Client) StagingArea(ctx context.Context, repoVol blobcache.OID, paramHa
 	if err != nil {
 		return nil, err
 	}
-	root, err = c.putStage(ctx, txn, *root, paramHash, subVol.OID)
+	sve := subvolEntry{
+		OID:    subVol.OID,
+		Secret: generateDEK(),
+	}
+	root, err = c.putStage(ctx, txn, *root, paramHash, sve)
 	if err != nil {
 		return nil, err
 	}
@@ -210,40 +217,24 @@ func (c *Client) getStage(ctx context.Context, s stores.Reading, root gotkv.Root
 	return &subVolID, nil
 }
 
-func (c *Client) putStage(ctx context.Context, s stores.RW, root gotkv.Root, paramHash *[32]byte, subVolID blobcache.OID) (*gotkv.Root, error) {
-	return c.GotKV.Put(ctx, s, root, stageKey(paramHash), subVolID.Marshal(nil))
+func (c *Client) putStage(ctx context.Context, s stores.RW, root gotkv.Root, paramHash *[32]byte, sve subvolEntry) (*gotkv.Root, error) {
+	return c.GotKV.Put(ctx, s, root, stageKey(paramHash), sve.Marshal(nil))
 }
 
 // getNS returns the Namespace Volume OID if it exists, or (nil, nil) if it doesn't.
-func (c *Client) getNS(ctx context.Context, s stores.Reading, root gotkv.Root) (*blobcache.OID, *gdat.DEK, error) {
+func (c *Client) getNS(ctx context.Context, s stores.Reading, root gotkv.Root) (*subvolEntry, error) {
 	val, err := c.GotKV.Get(ctx, s, root, nsKey)
 	if err != nil {
 		if gotkv.IsErrKeyNotFound(err) {
-			return nil, nil, nil
+			return nil, nil
 		}
-		return nil, nil, err
+		return nil, err
 	}
-	if len(val) != blobcache.OIDSize+32 {
-		return nil, nil, fmt.Errorf("ns entry is wrong size %d", len(val))
-	}
-
-	subVolData := val[:blobcache.OIDSize]
-	var subVolID blobcache.OID
-	copy(subVolID[:], subVolData)
-	var secret gdat.DEK
-	copy(secret[:], val[blobcache.OIDSize:])
-
-	return &subVolID, &secret, nil
+	return parseSubvolEntry(val)
 }
 
-func (c *Client) setNS(ctx context.Context, s stores.RW, root gotkv.Root, subVolID blobcache.OID, secret *gdat.DEK) (*gotkv.Root, error) {
-	if secret == nil {
-		return nil, fmt.Errorf("secret cannot be nil")
-	}
-	var val []byte
-	val = append(val, subVolID[:]...)
-	val = append(val, secret[:]...)
-	return c.GotKV.Put(ctx, s, root, nsKey, val)
+func (c *Client) setNS(ctx context.Context, s stores.RW, root gotkv.Root, sve subvolEntry) (*gotkv.Root, error) {
+	return c.GotKV.Put(ctx, s, root, nsKey, sve.Marshal(nil))
 }
 
 func stageKey(paramHash *[32]byte) []byte {
@@ -274,12 +265,33 @@ func StageVolumeSpec() blobcache.VolumeSpec {
 	}
 }
 
-func generateDEK() *gdat.DEK {
+func generateDEK() gdat.DEK {
 	var secret gdat.DEK
 	if n, err := rand.Read(secret[:]); err != nil {
 		panic(err)
 	} else if n != len(secret) {
 		panic(n)
 	}
-	return &secret
+	return secret
+}
+
+type subvolEntry struct {
+	OID    blobcache.OID
+	Secret gdat.DEK
+}
+
+func parseSubvolEntry(data []byte) (*subvolEntry, error) {
+	if len(data) != blobcache.OIDSize+gdat.DEKSize {
+		return nil, fmt.Errorf("value is wrong size for subvolume entry HAVE=%d", len(data))
+	}
+	var ret subvolEntry
+	copy(ret.OID[:], data[:blobcache.OIDSize])
+	copy(ret.Secret[:], data[blobcache.OIDSize:])
+	return &ret, nil
+}
+
+func (sve subvolEntry) Marshal(out []byte) []byte {
+	out = append(out, sve.OID[:]...)
+	out = append(out, sve.Secret[:]...)
+	return out
 }
