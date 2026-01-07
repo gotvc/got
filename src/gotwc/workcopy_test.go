@@ -21,16 +21,30 @@ func TestSetup(t *testing.T) {
 	newTestWC(t)
 }
 
-func SetGetHead(t *testing.T) {
+func TestSetGetHead(t *testing.T) {
 	ctx := testutil.Context(t)
 	wc := newTestWC(t)
 	name, err := wc.GetHead()
 	require.NoError(t, err)
-	require.Equal(t, "", name)
+	require.Equal(t, nameMaster, name)
 	require.NoError(t, wc.SetHead(ctx, nameMaster))
 	name, err = wc.GetHead()
 	require.NoError(t, err)
 	require.Equal(t, nameMaster, name)
+}
+
+func TestEditTracking(t *testing.T) {
+	ctx := testutil.Context(t)
+	wc := newTestWC(t)
+	spans, err := wc.ListSpans(ctx)
+	require.NoError(t, err)
+	require.Empty(t, spans)
+	require.NoError(t, wc.Track(ctx, PrefixSpan("a")))
+	require.NoError(t, wc.Track(ctx, PrefixSpan("b")))
+	require.NoError(t, wc.Track(ctx, PrefixSpan("c")))
+	spans, err = wc.ListSpans(ctx)
+	require.NoError(t, err)
+	require.Len(t, spans, 3)
 }
 
 func TestCommit(t *testing.T) {

@@ -18,6 +18,7 @@ import (
 	"github.com/gotvc/got/src/gotwc/internal/migrations"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/gotwc/internal/staging"
+	"go.brendoncarroll.net/exp/slices2"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 )
@@ -117,34 +118,39 @@ func (wc *WC) Dir() string {
 
 // ListSpans returns the tracked spans
 func (wc *WC) ListSpans(ctx context.Context) ([]Span, error) {
-	return nil, nil
+	cfg, err := LoadConfig(wc.root)
+	if err != nil {
+		return nil, err
+	}
+	return slices2.Map(cfg.Tracking, func(p string) Span {
+		return PrefixSpan(p)
+	}), nil
 }
 
 // Track causes the working copy to include another range of files.
 func (wc *WC) Track(ctx context.Context, span Span) error {
-	return sqlutil.DoTx(ctx, wc.db, func(conn *sqlutil.Conn) error {
-		spans, err := getSpans(conn)
-		if err != nil {
-			return err
-		}
-		spans = append(spans, span)
-		spans = compactSpans(spans)
-		return setSpans(conn, spans)
+	if !span.IsPrefix() {
+		return fmt.Errorf("only prefix spans are supported")
+	}
+	newPrefix := span.Begin
+	return EditConfig(wc.root, func(x Config) Config {
+		x.Tracking = append(x.Tracking, newPrefix)
+		x.Tracking = compactPrefixes(x.Tracking)
+		return x
 	})
 }
 
 // Untrack causes the working copy to exclude a range of files.
 func (wc *WC) Untrack(ctx context.Context, span Span) error {
-	return sqlutil.DoTx(ctx, wc.db, func(conn *sqlutil.Conn) error {
-		spans, err := getSpans(conn)
-		if err != nil {
-			return err
-		}
-		spans = slices.DeleteFunc(spans, func(x Span) bool {
-			return x == span
+	if !span.IsPrefix() {
+		return fmt.Errorf("only prefix spans are supported")
+	}
+	delPrefix := span.Begin
+	return EditConfig(wc.root, func(x Config) Config {
+		x.Tracking = slices.DeleteFunc(x.Tracking, func(p string) bool {
+			return p == delPrefix
 		})
-		spans = compactSpans(spans)
-		return setSpans(conn, spans)
+		return x
 	})
 }
 
@@ -324,6 +330,10 @@ type Span struct {
 	End   string
 }
 
+func (s Span) IsPrefix() bool {
+	return s.End == string(kvstreams.PrefixEnd([]byte(s.Begin)))
+}
+
 func (s Span) String() string {
 	if s.End == "" {
 		return fmt.Sprintf("<= %q", s.Begin)
@@ -357,14 +367,7 @@ func spansContain(spans []Span, x string) bool {
 	return false
 }
 
-func getSpans(conn *sqlutil.Conn) ([]Span, error) {
-	return nil, nil
-}
-
-func setSpans(conn *sqlutil.Conn, spans []Span) error {
-	return nil
-}
-
-func compactSpans(spans []Span) []Span {
-	return spans
+func compactPrefixes(xs []string) []string {
+	slices.Sort(xs)
+	return slices.Compact(xs)
 }

@@ -222,6 +222,7 @@ var historyCmd = star.Command{
 				fmt.Fprintf(pw, "Created By: %v\n", snap.Creator)
 				pw.Write([]byte(prettifyJSON(snap.Payload.Aux)))
 				fmt.Fprintln(pw)
+				fmt.Fprintln(pw)
 				return nil
 			})
 			pw.CloseWithError(err)
