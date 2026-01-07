@@ -6,8 +6,9 @@ import (
 
 	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/blobcache"
-	"blobcache.io/blobcache/src/blobcachecmd"
 	"blobcache.io/blobcache/src/schema"
+	"blobcache.io/blobcache/src/schema/bcns"
+	_ "blobcache.io/blobcache/src/schema/jsonns"
 	"github.com/cloudflare/circl/kem"
 	"github.com/cloudflare/circl/sign"
 	"github.com/stretchr/testify/require"
@@ -20,10 +21,12 @@ import (
 func TestInit(t *testing.T) {
 	ctx := testutil.Context(t)
 	bc := bclocal.NewTestService(t)
-	nsh, err := bc.OpenFiat(ctx, blobcache.OID{}, blobcache.Action_ALL)
+	rootish := bcns.Objectish{}
+	nsc, err := bcns.ClientForVolume(ctx, bc, rootish)
 	require.NoError(t, err)
-	nsc, err := blobcachecmd.NSClientForVolume(ctx, bc, *nsh)
+	nsh, err := rootish.Open(ctx, bc)
 	require.NoError(t, err)
+
 	volh, err := nsc.CreateAt(ctx, *nsh, "test", BranchVolumeSpec())
 	require.NoError(t, err)
 

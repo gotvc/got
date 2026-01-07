@@ -26,7 +26,7 @@ func (m *Machine) AddVolume(ctx context.Context, s stores.RW, state State, entry
 		if found, err := tx.Get(ctx, entry.Key(nil), &val); err != nil {
 			return err
 		} else if found {
-			return fmt.Errorf("volume %v is already in this namespace", entry.Volume)
+			return fmt.Errorf("volume %v is already in this namespace", entry.Target)
 		}
 		if err := tx.Put(ctx, entry.Key(nil), entry.Value(nil)); err != nil {
 			return err
@@ -70,10 +70,10 @@ func (m *Machine) ForEachVolume(ctx context.Context, s stores.Reading, x State, 
 
 type VolumeConstructor = func(nsVol, innerVol marks.Volume) *Volume
 
-func (m *Machine) Open(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, volid blobcache.OID, writeAccess bool) (VolumeConstructor, error) {
+func (m *Machine) Open(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, volid blobcache.OID, writeAccess bool) (*blobcache.LinkToken, VolumeConstructor, error) {
 	vent, err := m.GetVolume(ctx, s, x, volid)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	minRatchet := uint8(1)
 	if writeAccess {
@@ -81,7 +81,7 @@ func (m *Machine) Open(ctx context.Context, s stores.Reading, x State, actAs Ide
 	}
 	secret, ratchet, err := m.FindSecret(ctx, s, x, actAs, &vent.HashOfSecrets[0], minRatchet)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	rs := secret.Ratchet(int(ratchet) - 1).DeriveSym()
 	symSecret := &rs
@@ -89,22 +89,23 @@ func (m *Machine) Open(ctx context.Context, s stores.Reading, x State, actAs Ide
 	mkVol := func(nsVol, innerVol marks.Volume) *Volume {
 		return newVolume(m, actAs.SigPrivateKey, nsVol, innerVol, symSecret)
 	}
-	return mkVol, nil
+	lt := vent.LinkToken()
+	return &lt, mkVol, nil
 }
 
-func (m *Machine) OpenAt(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, name string, writeAccess bool) (blobcache.OID, VolumeConstructor, error) {
+func (m *Machine) OpenAt(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, name string, writeAccess bool) (*blobcache.LinkToken, VolumeConstructor, error) {
 	ent, err := m.GetAlias(ctx, s, x, name)
 	if err != nil {
-		return blobcache.OID{}, nil, err
+		return nil, nil, err
 	}
 	if ent == nil {
-		return blobcache.OID{}, nil, marks.ErrNotExist
+		return nil, nil, marks.ErrNotExist
 	}
-	vw, err := m.Open(ctx, s, x, actAs, ent.Volume, writeAccess)
+	ltok, vw, err := m.Open(ctx, s, x, actAs, ent.Volume, writeAccess)
 	if err != nil {
-		return blobcache.OID{}, nil, err
+		return nil, nil, err
 	}
-	return ent.Volume, vw, nil
+	return ltok, vw, nil
 }
 
 var _ volumes.Volume = &Volume{}

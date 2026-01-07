@@ -8,7 +8,12 @@ import (
 )
 
 type VolumeEntry struct {
-	Volume blobcache.OID
+	Target blobcache.OID
+	Rights blobcache.ActionSet
+
+	// TODO: encrypt different LinkTokens for readers and writers.
+	TokenSecret blobcache.LTSecret
+
 	// The hash of the secret shared amongst readers of the volume.
 	// The double hash of the secret shared amongst writers of the volume.
 	// There should never be more than two of these, or less than one.
@@ -20,11 +25,14 @@ type VolumeEntry struct {
 }
 
 func (e VolumeEntry) Key(buf []byte) []byte {
-	buf = append(buf, e.Volume[:]...)
+	buf = append(buf, e.Target[:]...)
 	return buf
 }
 
 func (e VolumeEntry) Value(buf []byte) []byte {
+	buf = e.Rights.Marshal(buf)
+	buf = append(buf, e.TokenSecret[:]...)
+
 	buf = sbe.AppendUint16(buf, uint16(len(e.HashOfSecrets)))
 	for _, hash := range e.HashOfSecrets {
 		buf = append(buf, hash[:]...)
@@ -33,12 +41,32 @@ func (e VolumeEntry) Value(buf []byte) []byte {
 	return buf
 }
 
+func (e VolumeEntry) LinkToken() blobcache.LinkToken {
+	return blobcache.LinkToken{
+		Target: e.Target,
+		Rights: e.Rights,
+		Secret: e.TokenSecret,
+	}
+}
+
 func ParseVolumeEntry(key, value []byte) (*VolumeEntry, error) {
 	var entry VolumeEntry
 	if len(key) != 16 {
 		return nil, fmt.Errorf("volume entry key too short: %d", len(key))
 	}
-	entry.Volume = blobcache.OID(key)
+	entry.Target = blobcache.OID(key)
+
+	if len(value) < blobcache.LinkTokenSize {
+		return nil, fmt.Errorf("value too small to contain LinkToken")
+	}
+	// rights
+	if err := entry.Rights.Unmarshal(value[0:8]); err != nil {
+		return nil, err
+	}
+	value = value[8:]
+	// lt secret
+	copy(entry.TokenSecret[:], value[:24])
+	value = value[24:]
 
 	numHashes, data, err := sbe.ReadUint16(value)
 	if err != nil {

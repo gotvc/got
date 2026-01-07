@@ -52,7 +52,7 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 	}
 	if sve != nil {
 		// ns exists, return it.
-		volh, err := c.Service.OpenFrom(ctx, *rootH, sve.OID, blobcache.Action_ALL)
+		volh, err := c.Service.OpenFrom(ctx, *rootH, sve.Token, blobcache.Action_ALL)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -64,12 +64,12 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 	if !useSchema {
 		nsSpec.Local.Schema = blobcache.SchemaSpec{Name: blobcache.Schema_NONE}
 	}
-	subVol, err := c.createSubVolume(ctx, txn, nsSpec)
+	subVol, ltok, err := c.createSubVolume(ctx, txn, nsSpec)
 	if err != nil {
 		return nil, nil, err
 	}
 	sve = &subvolEntry{
-		OID:    subVol.OID,
+		Token:  *ltok,
 		Secret: generateDEK(),
 	}
 	root, err = c.setNS(ctx, txn, *root, *sve)
@@ -110,12 +110,12 @@ func (c *Client) StagingArea(ctx context.Context, repoVol blobcache.OID, paramHa
 	}
 
 	// stage doesn't exist, create it.
-	subVol, err := c.createSubVolume(ctx, txn, StageVolumeSpec())
+	svh, svTok, err := c.createSubVolume(ctx, txn, StageVolumeSpec())
 	if err != nil {
 		return nil, nil, err
 	}
 	sve := subvolEntry{
-		OID:    subVol.OID,
+		Token:  *svTok,
 		Secret: generateDEK(),
 	}
 	root, err = c.putStage(ctx, txn, *root, paramHash, sve)
@@ -128,7 +128,7 @@ func (c *Client) StagingArea(ctx context.Context, repoVol blobcache.OID, paramHa
 	if err := txn.Commit(ctx); err != nil {
 		return nil, nil, err
 	}
-	return subVol, &sve.Secret, nil
+	return svh, &sve.Secret, nil
 }
 
 func (c *Client) ForEachStage(ctx context.Context, repoVol blobcache.OID, fn func(paramHash *[32]byte, volid blobcache.OID) error) error {
@@ -162,15 +162,16 @@ func (c *Client) ForEachStage(ctx context.Context, repoVol blobcache.OID, fn fun
 
 // createSubVolume creates a new volume and calls txn.AllowLink so it can be persisted indefinitely
 // by the root Volume's Schema.
-func (c *Client) createSubVolume(ctx context.Context, txn *bcsdk.Tx, spec blobcache.VolumeSpec) (*blobcache.Handle, error) {
+func (c *Client) createSubVolume(ctx context.Context, txn *bcsdk.Tx, spec blobcache.VolumeSpec) (*blobcache.Handle, *blobcache.LinkToken, error) {
 	subVol, err := c.Service.CreateVolume(ctx, nil, spec)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err := txn.Link(ctx, *subVol, blobcache.Action_ALL); err != nil {
-		return nil, err
+	ltok, err := txn.Link(ctx, *subVol, blobcache.Action_ALL)
+	if err != nil {
+		return nil, nil, err
 	}
-	return subVol, nil
+	return subVol, ltok, nil
 }
 
 func (c *Client) rootHandle(ctx context.Context, repoVol blobcache.OID) (*blobcache.Handle, error) {
@@ -232,7 +233,7 @@ func (c *Client) setNS(ctx context.Context, s stores.RW, root gotkv.Root, sve su
 
 func (c *Client) openSubvolume(ctx context.Context, rooth blobcache.Handle, sve subvolEntry) (*blobcache.Handle, *gdat.DEK, error) {
 	// stage exists, return it.
-	volh, err := c.Service.OpenFrom(ctx, rooth, sve.OID, blobcache.Action_ALL)
+	volh, err := c.Service.OpenFrom(ctx, rooth, sve.Token, blobcache.Action_ALL)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -278,22 +279,24 @@ func generateDEK() gdat.DEK {
 }
 
 type subvolEntry struct {
-	OID    blobcache.OID
+	Token  blobcache.LinkToken
 	Secret gdat.DEK
 }
 
 func parseSubvolEntry(data []byte) (*subvolEntry, error) {
-	if len(data) != blobcache.OIDSize+gdat.DEKSize {
+	if len(data) != blobcache.LinkTokenSize+gdat.DEKSize {
 		return nil, fmt.Errorf("value is wrong size for subvolume entry HAVE=%d", len(data))
 	}
 	var ret subvolEntry
-	copy(ret.OID[:], data[:blobcache.OIDSize])
-	copy(ret.Secret[:], data[blobcache.OIDSize:])
+	if err := ret.Token.Unmarshal(data[:blobcache.LinkTokenSize]); err != nil {
+		return nil, err
+	}
+	copy(ret.Secret[:], data[blobcache.LinkTokenSize:])
 	return &ret, nil
 }
 
 func (sve subvolEntry) Marshal(out []byte) []byte {
-	out = append(out, sve.OID[:]...)
+	out = sve.Token.Marshal(out)
 	out = append(out, sve.Secret[:]...)
 	return out
 }
