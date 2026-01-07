@@ -6,7 +6,6 @@ import (
 	"context"
 	"encoding/json"
 
-	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
 	"github.com/gotvc/got/src/gotkv"
 )
@@ -18,7 +17,6 @@ const (
 
 var (
 	_ schema.Schema = &Schema{}
-	_ schema.Opener = &Schema{}
 )
 
 // Schema implements a Blobcache Schema for a Got Repo.
@@ -50,8 +48,4 @@ func (sch *Schema) ValidateChange(ctx context.Context, change schema.Change) err
 		return err
 	}
 	return nil
-}
-
-func (sch *Schema) OpenAs(ctx context.Context, s schema.RO, root []byte, peer blobcache.PeerID) (blobcache.ActionSet, error) {
-	return blobcache.Action_ALL, nil
 }

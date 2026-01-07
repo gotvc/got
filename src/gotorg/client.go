@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
+	"log"
 	"slices"
 
 	"blobcache.io/blobcache/src/bcsdk"
@@ -128,11 +129,8 @@ func (c *Client) CreateAlias(ctx context.Context, nsh blobcache.Handle, name str
 		if idu == nil {
 			return errors.New("cannot create alias: actor identity is not in the namespace")
 		}
-		svh, err := c.createSubVolume(ctx, tx)
+		svh, ltok, err := c.createSubVolume(ctx, tx)
 		if err != nil {
-			return err
-		}
-		if err := tx.Link(ctx, *svh, blobcache.Action_ALL); err != nil {
 			return err
 		}
 		sec := gotorgop.Secret{}
@@ -141,7 +139,9 @@ func (c *Client) CreateAlias(ctx context.Context, nsh blobcache.Handle, name str
 		}
 		hos := [32]byte(sec.Ratchet(2))
 		if err := txn.AddVolume(ctx, VolumeEntry{
-			Volume:        svh.OID,
+			Target:        ltok.Target,
+			Rights:        ltok.Rights,
+			TokenSecret:   ltok.Secret,
 			HashOfSecrets: [][32]byte{hos},
 		}); err != nil {
 			return err
@@ -210,16 +210,17 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, 
 	if err != nil {
 		return nil, err
 	}
-	var volid blobcache.OID
+	var ltok *blobcache.LinkToken
 	var mkVol VolumeConstructor
 	if err := c.view(ctx, nsh, func(s stores.Reading, x State) error {
 		var err error
-		volid, mkVol, err = c.Machine.OpenAt(ctx, s, x, c.ActAs, name, false)
+		ltok, mkVol, err = c.Machine.OpenAt(ctx, s, x, c.ActAs, name, false)
 		return err
 	}); err != nil {
 		return nil, err
 	}
-	volh, err := c.Blobcache.OpenFrom(ctx, nsh, volid, blobcache.Action_ALL)
+	log.Println("opening token", *ltok)
+	volh, err := c.Blobcache.OpenFrom(ctx, nsh, *ltok, blobcache.Action_ALL)
 	if err != nil {
 		return nil, err
 	}
@@ -299,15 +300,17 @@ func (c *Client) view(ctx context.Context, volh blobcache.Handle, fn func(s stor
 	return fn(tx, *state)
 }
 
-func (c *Client) createSubVolume(ctx context.Context, tx *bcsdk.Tx) (*blobcache.Handle, error) {
+func (c *Client) createSubVolume(ctx context.Context, tx *bcsdk.Tx) (*blobcache.Handle, *blobcache.LinkToken, error) {
 	volh, err := c.Blobcache.CreateVolume(ctx, nil, BranchVolumeSpec())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err := tx.Link(ctx, *volh, blobcache.Action_ALL); err != nil {
-		return nil, err
+	ltok, err := tx.Link(ctx, *volh, blobcache.Action_ALL)
+	if err != nil {
+		return nil, nil, err
 	}
-	return volh, nil
+	log.Println("LinkToken", ltok)
+	return volh, ltok, nil
 }
 
 // IntroduceSelf creates a signed change set that adds a leaf to the state.

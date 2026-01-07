@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 
-	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
 	"blobcache.io/blobcache/src/schema/statetrace"
 )
 
 var (
 	_ schema.Schema = Schema{}
-	_ schema.Opener = Schema{}
 )
 
 var _ schema.Constructor = SchemaConstructor
@@ -43,9 +41,4 @@ func (s Schema) ValidateChange(ctx context.Context, change schema.Change) error 
 		return err
 	}
 	return mach.led.Validate(ctx, change.Prev.Store, prevRoot, nextRoot)
-}
-
-func (s Schema) OpenAs(ctx context.Context, src schema.RO, rootData []byte, peer blobcache.PeerID) (blobcache.ActionSet, error) {
-	// TODO: restrict permission based on read/write access.
-	return blobcache.Action_ALL, nil
 }

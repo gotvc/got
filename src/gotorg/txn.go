@@ -135,7 +135,7 @@ func (tx *Txn) AddVolume(ctx context.Context, vent gotorgop.VolumeEntry) error {
 		return err
 	}
 	tx.curState = *state
-	tx.addOp(&gotorgop.AddVolume{Volume: vent.Volume})
+	tx.addOp(&gotorgop.AddVolume{Volume: vent.Target})
 	return nil
 }
 
