@@ -4,8 +4,8 @@ package gotwc
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -20,9 +20,9 @@ import (
 	"github.com/gotvc/got/src/gotwc/internal/staging"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/slices2"
-	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
+	"go.brendoncarroll.net/tai64"
 )
 
 const (
@@ -252,13 +252,25 @@ func (wc *WC) Scan(ctx context.Context) error {
 		return err
 	}
 	defer wc.db.Put(conn)
-	it, err := wc.IterateTracked(ctx)
+	paramHash, err := wc.getParamHash(ctx)
 	if err != nil {
 		return err
 	}
-	return streams.ForEach(ctx, it, func(de porting.DirEnt) error {
-		log.Println(de.Name, de.ModifiedAt)
-		return nil
+	db := porting.NewDB(conn, *paramHash)
+	fsys, err := wc.getFilteredFS(ctx)
+	if err != nil {
+		return err
+	}
+	return posixfs.WalkLeaves(ctx, fsys, "", func(dir string, de posixfs.DirEnt) error {
+		p := path.Join(dir, de.Name)
+		finfo, err := fsys.Stat(p)
+		if err != nil {
+			return err
+		}
+		return db.PutInfo(ctx, p, porting.FileInfo{
+			ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
+			Mode:       de.Mode,
+		})
 	})
 }
 
@@ -291,8 +303,11 @@ func (wc *WC) Export(ctx context.Context) error {
 		return nil
 	}
 	defer wc.db.Put(conn)
+	fsys, err := wc.getFilteredFS(ctx)
+	if err != nil {
+		return err
+	}
 	return mark.ViewFS(ctx, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
-		fsys := wc.getFilteredFS(spans)
 		portDB := porting.NewDB(conn, *paramHash)
 		exp := porting.NewExporter(fsmach, portDB, fsys, wc.moveToTrash)
 		for _, span := range spans {
@@ -386,19 +401,30 @@ func (wc *WC) filter(spans []Span) func(p string) bool {
 	}
 }
 
-func (wc *WC) getFilteredFS(spans []Span) posixfs.FS {
-	return posixfs.NewFiltered(wc.fsys, wc.filter(spans))
-}
-
-// TODO: this is to be more similar to the repo, remove this.
-func (wc *WC) workingDir() posixfs.FS {
-	return wc.getFilteredFS([]Span{{}})
+func (wc *WC) getFilteredFS(ctx context.Context) (posixfs.FS, error) {
+	spans, err := wc.ListSpans(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return posixfs.NewFiltered(wc.fsys, wc.filter(spans)), nil
 }
 
 // moveToTrash moves a file at path to the trash.
 // TODO
 func (wc *WC) moveToTrash(p string) error {
 	return nil
+}
+
+func (wc *WC) getParamHash(ctx context.Context) (*[32]byte, error) {
+	name, err := wc.GetHead()
+	if err != nil {
+		return nil, err
+	}
+	m, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: name})
+	if err != nil {
+		return nil, err
+	}
+	return saltFromBranch(&m.Info), nil
 }
 
 type Span = porting.Span

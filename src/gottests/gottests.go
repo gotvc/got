@@ -43,11 +43,7 @@ func openSite(t testing.TB, root *os.Root) Site {
 	t.Cleanup(func() {
 		repo.Close()
 	})
-	wcCfg := gotwc.Config{
-		Head:  "master",
-		ActAs: gotrepo.DefaultIden,
-	}
-	require.NoError(t, gotwc.Init(repo, root, wcCfg))
+	require.NoError(t, gotwc.Init(repo, root, gotwc.DefaultConfig()))
 	wc, err := gotwc.New(repo, root)
 	require.NoError(t, err)
 	return Site{

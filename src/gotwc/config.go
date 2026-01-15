@@ -4,6 +4,7 @@ import (
 	"os"
 	"slices"
 
+	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/internal/gotcfg"
 )
 
@@ -13,6 +14,14 @@ type Config struct {
 	RepoDir string `json:"repo"`
 	// Tracking is a list of tracked prefixes
 	Tracking []string `json:"tracking"`
+}
+
+func DefaultConfig() Config {
+	return Config{
+		Head:     nameMaster,
+		ActAs:    gotrepo.DefaultIden,
+		Tracking: []string{""},
+	}
 }
 
 func SaveConfig(wcRoot *os.Root, cfg Config) error {

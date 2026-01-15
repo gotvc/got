@@ -7,7 +7,6 @@ import (
 
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
-	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/tai64"
 	"zombiezen.com/go/sqlite"
 )
@@ -32,6 +31,7 @@ func NewDB(conn *sqlutil.Conn, paramHash [32]byte) *DB {
 }
 
 func (db *DB) PutInfo(ctx context.Context, p string, ent FileInfo) error {
+	// replacing the info should also delete the root if it exists.
 	if err := sqlutil.Exec(db.conn, `DELETE FROM fsroots WHERE path = ? AND param_hash = ?`, p, db.paramHash[:]); err != nil {
 		return err
 	}
@@ -62,22 +62,6 @@ func (db *DB) GetFSRoot(ctx context.Context, p string, dst *gotfs.Root) (bool, e
 	return sqlutil.GetOne(db.conn, dst, scanFSRoot, `SELECT fsroot FROM fsroots
 		WHERE path = ? AND param_hash = ?
 	`, p, dst, db.paramHash[:])
-}
-
-func (ds *DB) Scan(ctx context.Context, fsys posixfs.FS) error {
-	return posixfs.WalkLeaves(ctx, fsys, "", func(p string, dent posixfs.DirEnt) error {
-		finfo, err := fsys.Stat(p)
-		if err != nil {
-			return err
-		}
-		if err := ds.PutInfo(ctx, p, FileInfo{
-			Mode:       dent.Mode,
-			ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
-		}); err != nil {
-			return err
-		}
-		return nil
-	})
 }
 
 // scanInfo expects:

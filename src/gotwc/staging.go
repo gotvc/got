@@ -43,6 +43,8 @@ type stagingCtx struct {
 	Importer *porting.Importer
 	Exporter *porting.Exporter
 
+	FS posixfs.FS
+
 	ActingAs gotorg.IdentityUnit
 }
 
@@ -73,6 +75,10 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		if err != nil {
 			return err
 		}
+		fsys, err := wc.getFilteredFS(ctx)
+		if err != nil {
+			return err
+		}
 		sa, err := newStagingArea(conn, &branch.Info)
 		if err != nil {
 			return err
@@ -83,9 +89,9 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		}
 		defer stagingStore.Abort(ctx)
 		storePair := [2]stores.RW{stagingStore, stagingStore}
-		dirState := porting.NewDB(sa.conn, gdat.Hash(sa.getParamHash()[:]))
+		dirState := porting.NewDB(sa.conn, *sa.getParamHash())
 		imp := porting.NewImporter(branch.GotFS(), dirState, storePair)
-		exp := porting.NewExporter(branch.GotFS(), dirState, wc.getFilteredFS(nil), wc.moveToTrash)
+		exp := porting.NewExporter(branch.GotFS(), dirState, fsys, wc.moveToTrash)
 
 		if err := fn(stagingCtx{
 			BranchName: branchName,
@@ -95,6 +101,9 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 			Store:    stagingStore,
 			Importer: imp,
 			Exporter: exp,
+
+			FS: fsys,
+
 			ActingAs: *actAs,
 		}); err != nil {
 			return err
@@ -118,8 +127,12 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 		if err != nil {
 			return err
 		}
+		filtFS, err := wc.getFilteredFS(ctx)
+		if err != nil {
+			return err
+		}
 		portdb := porting.NewDB(conn, gdat.Hash(sa.getParamHash()[:]))
-		exp := porting.NewExporter(branch.GotFS(), portdb, wc.workingDir(), wc.moveToTrash)
+		exp := porting.NewExporter(branch.GotFS(), portdb, filtFS, wc.moveToTrash)
 		stagingStore, err := wc.repo.BeginStagingTx(ctx, sa.getParamHash(), false)
 		if err != nil {
 			return err
@@ -145,13 +158,13 @@ func (wc *WC) Add(ctx context.Context, paths ...string) error {
 		stage := sctx.Stage
 		porter := sctx.Importer
 		for _, target := range paths {
-			if err := posixfs.WalkLeaves(ctx, wc.workingDir(), target, func(p string, _ posixfs.DirEnt) error {
+			if err := posixfs.WalkLeaves(ctx, sctx.FS, target, func(p string, _ posixfs.DirEnt) error {
 				if err := stage.CheckConflict(ctx, p); err != nil {
 					return err
 				}
 				ctx, cf := metrics.Child(ctx, p)
 				defer cf()
-				fileRoot, err := porter.ImportFile(ctx, wc.workingDir(), p)
+				fileRoot, err := porter.ImportFile(ctx, sctx.FS, p)
 				if err != nil {
 					return err
 				}
@@ -177,7 +190,7 @@ func (wc *WC) Put(ctx context.Context, paths ...string) error {
 			if err := stage.CheckConflict(ctx, p); err != nil {
 				return err
 			}
-			root, err := porter.ImportPath(ctx, wc.workingDir(), p)
+			root, err := porter.ImportPath(ctx, sctx.FS, p)
 			if err != nil && !posixfs.IsErrNotExist(err) {
 				return err
 			}
@@ -394,11 +407,10 @@ func (wc *WC) ForEachDirty(ctx context.Context, fn func(p string, modtime time.T
 		stage := sctx.Stage
 		fsMach := sctx.Branch.GotFS()
 		defer voltx.Abort(ctx)
-		spans, err := wc.ListSpans(ctx)
+		fsys, err := wc.getFilteredFS(ctx)
 		if err != nil {
 			return err
 		}
-		fsys := wc.getFilteredFS(spans)
 		return posixfs.WalkLeaves(ctx, fsys, "", func(p string, ent posixfs.DirEnt) error {
 			// filter staging
 			if op, err := stage.Get(ctx, p); err != nil {

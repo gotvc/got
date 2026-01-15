@@ -9,7 +9,7 @@ import (
 
 func TestStaging(t *testing.T) {
 	t.Parallel()
-	wc := newTestWC(t)
+	wc := newTestWC(t, false)
 	ops := listStaging(t, wc)
 	require.Len(t, ops, 0)
 }
