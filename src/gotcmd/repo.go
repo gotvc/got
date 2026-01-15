@@ -53,8 +53,9 @@ var initCmd = star.Command{
 		}
 		// setup a working copy in the same directory
 		if err := gotwc.Init(repo, root, gotwc.Config{
-			Head:  "master",
-			ActAs: gotrepo.DefaultIden,
+			Head:     "master",
+			ActAs:    gotrepo.DefaultIden,
+			Tracking: []string{""},
 		}); err != nil {
 			return err
 		}

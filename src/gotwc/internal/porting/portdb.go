@@ -32,6 +32,9 @@ func NewDB(conn *sqlutil.Conn, paramHash [32]byte) *DB {
 }
 
 func (db *DB) PutInfo(ctx context.Context, p string, ent FileInfo) error {
+	if err := sqlutil.Exec(db.conn, `DELETE FROM fsroots WHERE path = ? AND param_hash = ?`, p, db.paramHash[:]); err != nil {
+		return err
+	}
 	return sqlutil.Exec(db.conn, `INSERT OR REPLACE INTO dirstate (path, mode, modtime) VALUES (?, ?, ?)`, p, uint32(ent.Mode), ent.ModifiedAt.Marshal())
 }
 
@@ -39,7 +42,7 @@ func (db *DB) GetInfo(ctx context.Context, p string, dst *FileInfo) (bool, error
 	return sqlutil.GetOne(db.conn, dst, scanInfo, `SELECT modtime, mode FROM dirstate WHERE path = ?`, p)
 }
 
-func (db *DB) PutData(ctx context.Context, p string, modt tai64.TAI64N, fsroot gotfs.Root) error {
+func (db *DB) PutFSRoot(ctx context.Context, p string, modt tai64.TAI64N, fsroot gotfs.Root) error {
 	var info FileInfo
 	if ok, err := db.GetInfo(ctx, p, &info); err != nil {
 		return err
@@ -55,9 +58,8 @@ func (db *DB) PutData(ctx context.Context, p string, modt tai64.TAI64N, fsroot g
 	`, fsroot.Marshal(nil), p, db.paramHash[:])
 }
 
-func (db *DB) GetData(ctx context.Context, p string, dst *gotfs.Root) (bool, error) {
-	return sqlutil.GetOne(db.conn, dst, scanFSRoot, `SELECT fsroot
-		FROM fsroots
+func (db *DB) GetFSRoot(ctx context.Context, p string, dst *gotfs.Root) (bool, error) {
+	return sqlutil.GetOne(db.conn, dst, scanFSRoot, `SELECT fsroot FROM fsroots
 		WHERE path = ? AND param_hash = ?
 	`, p, dst, db.paramHash[:])
 }

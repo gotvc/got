@@ -47,7 +47,7 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 		return pr.importFile(ctx, fsx, p)
 	}
 	var changes []gotfs.Segment
-	emptyDir, err := createEmptyDir(ctx, pr.gotfs, pr.ms, pr.ds)
+	emptyDir, err := createEmptyDir(ctx, pr.gotfs, pr.ms)
 	if err != nil {
 		return nil, err
 	}
@@ -105,7 +105,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 	} else if ok && ent.ModifiedAt == tai64.FromGoTime(finfo.ModTime()) {
 		logctx.Infof(ctx, "using cache entry for path %q. skipped import", p)
 		var root gotfs.Root
-		if yes, err := pr.db.GetData(ctx, p, &root); err != nil {
+		if yes, err := pr.db.GetFSRoot(ctx, p, &root); err != nil {
 			return nil, err
 		} else if yes {
 			return &root, nil
@@ -142,7 +142,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 	}); err != nil {
 		return nil, err
 	}
-	if err := pr.db.PutData(ctx, p, modt, *root); err != nil {
+	if err := pr.db.PutFSRoot(ctx, p, modt, *root); err != nil {
 		return nil, err
 	}
 	return root, nil
@@ -184,7 +184,7 @@ func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
 	return start, end
 }
 
-func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms, ds stores.RW) (*gotfs.Root, error) {
+func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms stores.RW) (*gotfs.Root, error) {
 	return fsag.NewEmpty(ctx, ms)
 }
 
