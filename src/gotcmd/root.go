@@ -52,6 +52,7 @@ var rootCmd = star.NewGroupedDir(
 			"commit",
 			"head",
 			"fork",
+			"checkout",
 		}},
 		{Title: "MARKS", Commands: []string{
 			"mark",

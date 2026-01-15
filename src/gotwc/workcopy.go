@@ -4,21 +4,23 @@ package gotwc
 import (
 	"context"
 	"fmt"
-	"io/fs"
-	"iter"
+	"log"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/dbmig"
 	"github.com/gotvc/got/src/gotwc/internal/migrations"
+	"github.com/gotvc/got/src/gotwc/internal/porting"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/gotwc/internal/staging"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/slices2"
+	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 )
@@ -228,6 +230,88 @@ func (wc *WC) SetActAs(idenName string) error {
 	})
 }
 
+// StageIsEmpty returns (true, nil) IFF there are no changes staged.
+func (wc *WC) StageIsEmpty(ctx context.Context) (bool, error) {
+	var notEmpty bool
+	if err := wc.ForEachStaging(ctx, func(p string, op FileOperation) error {
+		notEmpty = true
+		return fmt.Errorf("stop iter")
+	}); err != nil {
+		if notEmpty {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// Scan iterates through all of the files, and indexes them in the database.
+func (wc *WC) Scan(ctx context.Context) error {
+	conn, err := wc.db.Take(ctx)
+	if err != nil {
+		return err
+	}
+	defer wc.db.Put(conn)
+	it, err := wc.IterateTracked(ctx)
+	if err != nil {
+		return err
+	}
+	return streams.ForEach(ctx, it, func(de porting.DirEnt) error {
+		log.Println(de.Name, de.ModifiedAt)
+		return nil
+	})
+}
+
+// Export overwrites data in the filesystem with data from the Snapshot at HEAD.
+// Only tracked paths are overwritten.
+func (wc *WC) Export(ctx context.Context) error {
+	emptyStage, err := wc.StageIsEmpty(ctx)
+	if err != nil {
+		return err
+	}
+	if !emptyStage {
+		// we may be able to remove this
+		return fmt.Errorf("cannot export to filesystem, staging area must be empty (it's not)")
+	}
+	mname, err := wc.GetHead()
+	if err != nil {
+		return nil
+	}
+	mark, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: mname})
+	if err != nil {
+		return nil
+	}
+	paramHash := saltFromBranch(&mark.Info)
+	spans, err := wc.ListSpans(ctx)
+	if err != nil {
+		return nil
+	}
+	conn, err := wc.db.Take(ctx)
+	if err != nil {
+		return nil
+	}
+	defer wc.db.Put(conn)
+	return mark.ViewFS(ctx, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
+		fsys := wc.getFilteredFS(spans)
+		portDB := porting.NewDB(conn, *paramHash)
+		exp := porting.NewExporter(fsmach, portDB, fsys, wc.moveToTrash)
+		for _, span := range spans {
+			if err := exp.ExportSpan(ctx, s, s, root, span); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// Checkout sets HEAD, and then performs an Export of all tracked spans.
+func (wc *WC) Checkout(ctx context.Context, name string) error {
+	if err := wc.SetHead(ctx, name); err != nil {
+		return err
+	}
+	return wc.Export(ctx)
+}
+
 // Fork calls CloneMark on the repo with the current head, creating a new
 // mark `next`.
 // Then the WC's head is set to next.
@@ -284,39 +368,26 @@ func (wc *WC) Cleanup(ctx context.Context) error {
 	return nil
 }
 
-// AllTracked iterates over all the files that are currently tracked.
-func (wc *WC) AllTracked(ctx context.Context) iter.Seq2[string, error] {
-	return func(yield func(string, error) bool) {
-		if err := func() error {
-			spans, err := wc.ListSpans(ctx)
-			if err != nil {
-				return err
-			}
-			return fs.WalkDir(wc.root.FS(), "", func(p string, d fs.DirEntry, err error) error {
-				if err != nil {
-					return err
-				}
-				p2 := path.Join(p, d.Name())
-				if spansContain(spans, p2) {
-					if !yield(p2, nil) {
-						return nil
-					}
-				}
-				return nil
-			})
-		}(); err != nil {
-			yield("", err)
-		}
+// IterateTracked iterates over all the paths that are currently tracked.
+func (wc *WC) IterateTracked(ctx context.Context) (*porting.DirEntIterator, error) {
+	spans, err := wc.ListSpans(ctx)
+	if err != nil {
+		return nil, err
 	}
+	return porting.NewDirEntIterator(wc.root, wc.filter(spans)), nil
 }
 
-func (wc *WC) getFilteredFS(spans []Span) posixfs.FS {
-	return posixfs.NewFiltered(wc.fsys, func(x string) bool {
+func (wc *WC) filter(spans []Span) func(p string) bool {
+	return func(x string) bool {
 		if strings.HasPrefix(x, ".got") {
 			return false
 		}
 		return spansContain(spans, x)
-	})
+	}
+}
+
+func (wc *WC) getFilteredFS(spans []Span) posixfs.FS {
+	return posixfs.NewFiltered(wc.fsys, wc.filter(spans))
 }
 
 // TODO: this is to be more similar to the repo, remove this.
@@ -324,38 +395,19 @@ func (wc *WC) workingDir() posixfs.FS {
 	return wc.getFilteredFS([]Span{{}})
 }
 
-// Span is a span of paths
-type Span struct {
-	Begin string
-	End   string
+// moveToTrash moves a file at path to the trash.
+// TODO
+func (wc *WC) moveToTrash(p string) error {
+	return nil
 }
 
-func (s Span) IsPrefix() bool {
-	return s.End == string(kvstreams.PrefixEnd([]byte(s.Begin)))
-}
-
-func (s Span) String() string {
-	if s.End == "" {
-		return fmt.Sprintf("<= %q", s.Begin)
-	}
-	return fmt.Sprintf("[%q %q)", s.Begin, s.End)
-}
+type Span = porting.Span
 
 func PrefixSpan(prefix string) Span {
 	return Span{
 		Begin: prefix,
 		End:   string(kvstreams.PrefixEnd([]byte(prefix))),
 	}
-}
-
-func (s Span) Contains(x string) bool {
-	if x < s.Begin {
-		return false
-	}
-	if s.End != "" && x >= s.End {
-		return false
-	}
-	return true
 }
 
 func spansContain(spans []Span, x string) bool {

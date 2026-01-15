@@ -5,18 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
-	"sync"
+	"time"
 
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/internal/marks"
-	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
 	"go.inet256.org/inet256/src/inet256"
-	"zombiezen.com/go/sqlite"
 	"zombiezen.com/go/sqlite/sqlitex"
 
 	"github.com/gotvc/got/src/gdat"
@@ -80,15 +77,15 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		if err != nil {
 			return err
 		}
-		stagingStore, err := wc.repo.BeginStagingTx(ctx, sa.getSalt(), true)
+		stagingStore, err := wc.repo.BeginStagingTx(ctx, sa.getParamHash(), true)
 		if err != nil {
 			return err
 		}
 		defer stagingStore.Abort(ctx)
 		storePair := [2]stores.RW{stagingStore, stagingStore}
-		dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
+		dirState := porting.NewDB(sa.conn, gdat.Hash(sa.getParamHash()[:]))
 		imp := porting.NewImporter(branch.GotFS(), dirState, storePair)
-		exp := porting.NewExporter(branch.GotFS(), dirState, wc.getFilteredFS(nil))
+		exp := porting.NewExporter(branch.GotFS(), dirState, wc.getFilteredFS(nil), wc.moveToTrash)
 
 		if err := fn(stagingCtx{
 			BranchName: branchName,
@@ -121,9 +118,9 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 		if err != nil {
 			return err
 		}
-		dirState := newDirState(conn, gdat.Hash(sa.getSalt()[:]))
-		exp := porting.NewExporter(branch.GotFS(), dirState, wc.workingDir())
-		stagingStore, err := wc.repo.BeginStagingTx(ctx, sa.getSalt(), false)
+		portdb := porting.NewDB(conn, gdat.Hash(sa.getParamHash()[:]))
+		exp := porting.NewExporter(branch.GotFS(), portdb, wc.workingDir(), wc.moveToTrash)
+		stagingStore, err := wc.repo.BeginStagingTx(ctx, sa.getParamHash(), false)
 		if err != nil {
 			return err
 		}
@@ -385,10 +382,10 @@ func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOpera
 	})
 }
 
-// ForEachNotStaged lists all the files which are not in either:
+// ForEachDirty lists all the files which are not in either:
 //  1. the staging area
 //  2. the active branch head
-func (wc *WC) ForEachNotStaged(ctx context.Context, fn func(p string) error) error {
+func (wc *WC) ForEachDirty(ctx context.Context, fn func(p string, modtime time.Time) error) error {
 	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
 		snap, voltx, err := sctx.Branch.GetTarget(ctx)
 		if err != nil {
@@ -397,7 +394,12 @@ func (wc *WC) ForEachNotStaged(ctx context.Context, fn func(p string) error) err
 		stage := sctx.Stage
 		fsMach := sctx.Branch.GotFS()
 		defer voltx.Abort(ctx)
-		return posixfs.WalkLeaves(ctx, wc.workingDir(), "", func(p string, ent posixfs.DirEnt) error {
+		spans, err := wc.ListSpans(ctx)
+		if err != nil {
+			return err
+		}
+		fsys := wc.getFilteredFS(spans)
+		return posixfs.WalkLeaves(ctx, fsys, "", func(p string, ent posixfs.DirEnt) error {
 			// filter staging
 			if op, err := stage.Get(ctx, p); err != nil {
 				return err
@@ -412,128 +414,14 @@ func (wc *WC) ForEachNotStaged(ctx context.Context, fn func(p string) error) err
 					return nil
 				}
 			}
-			return fn(p)
+			finfo, err := fsys.Stat(p)
+			if err != nil {
+				return err
+			}
+			return fn(p, finfo.ModTime())
 		})
 	})
 
-}
-
-// createStagingArea creates a new staging area and returns its id.
-func createStagingArea(conn *sqlutil.Conn, salt *[32]byte) (int64, error) {
-	var rowid int64
-	err := sqlutil.Get(conn, &rowid, `INSERT INTO staging_areas (salt) VALUES (?) RETURNING rowid`, salt[:])
-	if err != nil {
-		return 0, err
-	}
-	return rowid, err
-}
-
-// ensureStagingArea finds the staging area with the given salt, or creates a new one if it doesn't exist.
-func ensureStagingArea(conn *sqlutil.Conn, salt *[32]byte) (int64, error) {
-	var id int64
-	err := sqlutil.Get(conn, &id, `SELECT rowid FROM staging_areas WHERE salt = ?`, salt[:])
-	if err != nil {
-		if sqlutil.IsErrNoRows(err) {
-			return createStagingArea(conn, salt)
-		}
-		return id, err
-	}
-	return id, nil
-}
-
-var _ staging.Storage = (*stagingArea)(nil)
-
-type stagingArea struct {
-	conn  *sqlutil.Conn
-	rowid int64
-
-	info *marks.Info
-	mu   sync.Mutex
-}
-
-// newStagingArea returns a stagingArea for the given salt.
-// If the staging area does not exist, it will be created.
-func newStagingArea(conn *sqlutil.Conn, info *marks.Info) (*stagingArea, error) {
-	salt := saltFromBranch(info)
-	rowid, err := ensureStagingArea(conn, salt)
-	if err != nil {
-		return nil, err
-	}
-	return &stagingArea{conn: conn, rowid: rowid, info: info}, nil
-}
-
-func (sa *stagingArea) AreaID() int64 {
-	return sa.rowid
-}
-
-func (sa *stagingArea) getSalt() *[32]byte {
-	return saltFromBranch(sa.info)
-}
-
-func (sa *stagingArea) Put(ctx context.Context, p string, op staging.Operation) error {
-	sa.mu.Lock()
-	defer sa.mu.Unlock()
-	data, err := json.Marshal(op)
-	if err != nil {
-		return err
-	}
-	err = sqlutil.Exec(sa.conn, `INSERT INTO staging_ops (area_id, p, data) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`, sa.rowid, p, data)
-	return err
-}
-
-func (sa *stagingArea) Get(ctx context.Context, p string, dst *staging.Operation) error {
-	sa.mu.Lock()
-	defer sa.mu.Unlock()
-	var data []byte
-	if err := sqlutil.Get(sa.conn, &data, `SELECT data FROM staging_ops WHERE area_id = ? AND p = ?`, sa.rowid, p); err != nil {
-		if sqlutil.IsErrNoRows(err) {
-			return state.ErrNotFound[string]{Key: p}
-		}
-		return err
-	}
-	return json.Unmarshal(data, dst)
-}
-
-func (sa *stagingArea) List(ctx context.Context, span state.Span[string], buf []string) (int, error) {
-	sa.mu.Lock()
-	defer sa.mu.Unlock()
-	var n int
-	for p, err := range sqlutil.Select(sa.conn, sqlutil.ScanString, `SELECT p FROM staging_ops WHERE area_id = ? ORDER BY p`, sa.rowid) {
-		if err != nil {
-			return 0, err
-		}
-		// TODO: should apply this filtering in the query
-		if !span.Contains(p, strings.Compare) {
-			continue
-		}
-		if n >= len(buf) {
-			break
-		}
-		buf[n] = p
-		n++
-	}
-	return n, nil
-}
-
-func (sa *stagingArea) Exists(ctx context.Context, p string) (bool, error) {
-	sa.mu.Lock()
-	defer sa.mu.Unlock()
-	var exists bool
-	err := sqlutil.Get(sa.conn, &exists, `SELECT EXISTS (
-		SELECT 1 FROM staging_ops WHERE area_id = ? AND p = ?
-	)`, sa.rowid, p)
-	return exists, err
-}
-
-func (sa *stagingArea) Delete(ctx context.Context, p string) error {
-	sa.mu.Lock()
-	defer sa.mu.Unlock()
-	err := sqlutil.Exec(sa.conn, `DELETE FROM staging_ops WHERE area_id = ? AND p = ?`, sa.rowid, p)
-	return err
-}
-
-func (wc *WC) forEachStaging(ctx context.Context, fn func(p string, fsop FileOperation) error) error {
-	return nil
 }
 
 // cleanupStagingBlobs removes blobs from staging areas which do not have ops that reference them.
@@ -557,11 +445,6 @@ func (wc *WC) cleanupStagingBlobs(ctx context.Context, conn *sqlutil.Conn) error
 		// TODO: need GC transaction type in Blobcache.
 		metrics.AddInt(ctx, "staging_areas", 1, units.None)
 	}
-	return nil
-}
-
-func scan32Bytes(stmt *sqlite.Stmt, dst *[32]byte) error {
-	stmt.ColumnBytes(0, dst[:])
 	return nil
 }
 

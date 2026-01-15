@@ -3,6 +3,7 @@ package gotfs
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -15,7 +16,7 @@ import (
 )
 
 type Info struct {
-	Mode  uint32
+	Mode  fs.FileMode
 	Attrs map[string][]byte
 }
 
@@ -31,7 +32,7 @@ func (info *Info) marshal() []byte {
 	if err != nil {
 		panic(err)
 	}
-	infoc.SetMode(info.Mode)
+	infoc.SetMode(uint32(info.Mode))
 	al, err := infoc.NewAttrs(int32(len(info.Attrs)))
 	if err != nil {
 		panic(err)
@@ -76,7 +77,7 @@ func (info *Info) unmarshal(data []byte) error {
 		}
 		attrs[key] = value
 	}
-	info.Mode = infoc.Mode()
+	info.Mode = fs.FileMode(infoc.Mode())
 	info.Attrs = attrs
 	return nil
 }
