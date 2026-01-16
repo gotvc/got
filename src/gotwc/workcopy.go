@@ -30,6 +30,7 @@ const (
 	dbPath     = ".got/wc.db"
 
 	defaultFileMode = 0o644
+	defaultDirMode  = 0o755
 	nameMaster      = "master"
 )
 
@@ -37,7 +38,7 @@ const (
 // The working copy will be associated with the given repo.
 // cfg.RepoDir will be overriden with repo.Dir().
 func Init(repo *gotrepo.Repo, wcRoot *os.Root, cfg Config) error {
-	if err := wcRoot.MkdirAll(".got", 0o755); err != nil {
+	if err := wcRoot.MkdirAll(".got", defaultDirMode); err != nil {
 		return err
 	}
 	cfg.RepoDir = repo.Dir()
@@ -87,12 +88,17 @@ func New(repo *gotrepo.Repo, root *os.Root) (*WC, error) {
 	}); err != nil {
 		return nil, err
 	}
+	cfg, err := LoadConfig(root)
+	if err != nil {
+		return nil, err
+	}
 	return &WC{
 		root: root,
 		repo: repo,
-		fsys: posixfs.NewDirFS(p),
+		id:   cfg.ID,
 
-		db: db,
+		fsys: posixfs.NewDirFS(p),
+		db:   db,
 	}, nil
 }
 
@@ -103,6 +109,7 @@ type WC struct {
 	root             *os.Root
 	repo             *gotrepo.Repo
 	closeRepoOnClose bool
+	id               gotrepo.WorkingCopyID
 
 	// TODO: eventually we should move away from this interface, but
 	// the existing importers and exporters use it.
@@ -188,10 +195,7 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 		// there is no check to do.
 		// If they have different salts, then we need to check if the staging area is empty.
 		if desiredBranch.Info.Salt != activeBranch.Info.Salt {
-			sa, err := newStagingArea(conn, &activeBranch.Info)
-			if err != nil {
-				return err
-			}
+			sa := newStagingArea(conn, &activeBranch.Info)
 			stage := staging.New(sa)
 			isEmpty, err := stage.IsEmpty(ctx)
 			if err != nil {

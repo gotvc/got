@@ -31,7 +31,7 @@ type Operation struct {
 type DeleteOp struct{}
 
 // PutOp replaces a path with a filesystem.
-type PutOp gotfs.Root
+type PutOp = gotfs.Root
 
 type Stage struct {
 	storage Storage

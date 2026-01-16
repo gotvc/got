@@ -13,34 +13,10 @@ import (
 	"zombiezen.com/go/sqlite"
 )
 
-// createStagingArea creates a new staging area and returns its id.
-func createStagingArea(conn *sqlutil.Conn, parahHash *[32]byte) (int64, error) {
-	var rowid int64
-	err := sqlutil.Get(conn, &rowid, `INSERT INTO staging_areas (param_hash) VALUES (?) RETURNING rowid`, parahHash[:])
-	if err != nil {
-		return 0, err
-	}
-	return rowid, err
-}
-
-// ensureStagingArea finds the staging area with the given salt, or creates a new one if it doesn't exist.
-func ensureStagingArea(conn *sqlutil.Conn, parahHash *[32]byte) (int64, error) {
-	var id int64
-	err := sqlutil.Get(conn, &id, `SELECT rowid FROM staging_areas WHERE param_hash = ?`, parahHash[:])
-	if err != nil {
-		if sqlutil.IsErrNoRows(err) {
-			return createStagingArea(conn, parahHash)
-		}
-		return id, err
-	}
-	return id, nil
-}
-
 var _ staging.Storage = (*stagingArea)(nil)
 
 type stagingArea struct {
-	conn  *sqlutil.Conn
-	rowid int64
+	conn *sqlutil.Conn
 
 	info *marks.Info
 	mu   sync.Mutex
@@ -48,17 +24,8 @@ type stagingArea struct {
 
 // newStagingArea returns a stagingArea for the given salt.
 // If the staging area does not exist, it will be created.
-func newStagingArea(conn *sqlutil.Conn, info *marks.Info) (*stagingArea, error) {
-	salt := saltFromBranch(info)
-	rowid, err := ensureStagingArea(conn, salt)
-	if err != nil {
-		return nil, err
-	}
-	return &stagingArea{conn: conn, rowid: rowid, info: info}, nil
-}
-
-func (sa *stagingArea) AreaID() int64 {
-	return sa.rowid
+func newStagingArea(conn *sqlutil.Conn, info *marks.Info) *stagingArea {
+	return &stagingArea{conn: conn, info: info}
 }
 
 func (sa *stagingArea) getParamHash() *[32]byte {
@@ -72,7 +39,7 @@ func (sa *stagingArea) Put(ctx context.Context, p string, op staging.Operation) 
 	if err != nil {
 		return err
 	}
-	err = sqlutil.Exec(sa.conn, `INSERT INTO staging_ops (area_id, p, data) VALUES (?, ?, ?) ON CONFLICT DO NOTHING`, sa.rowid, p, data)
+	err = sqlutil.Exec(sa.conn, `INSERT INTO staging_ops (p, data) VALUES (?, ?) ON CONFLICT DO NOTHING`, p, data)
 	return err
 }
 
@@ -80,7 +47,7 @@ func (sa *stagingArea) Get(ctx context.Context, p string, dst *staging.Operation
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
 	var data []byte
-	if err := sqlutil.Get(sa.conn, &data, `SELECT data FROM staging_ops WHERE area_id = ? AND p = ?`, sa.rowid, p); err != nil {
+	if err := sqlutil.Get(sa.conn, &data, `SELECT data FROM staging_ops WHERE p = ?`, p); err != nil {
 		if sqlutil.IsErrNoRows(err) {
 			return state.ErrNotFound[string]{Key: p}
 		}
@@ -93,7 +60,7 @@ func (sa *stagingArea) List(ctx context.Context, span state.Span[string], buf []
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
 	var n int
-	for p, err := range sqlutil.Select(sa.conn, sqlutil.ScanString, `SELECT p FROM staging_ops WHERE area_id = ? ORDER BY p`, sa.rowid) {
+	for p, err := range sqlutil.Select(sa.conn, sqlutil.ScanString, `SELECT p FROM staging_ops ORDER BY p`) {
 		if err != nil {
 			return 0, err
 		}
@@ -116,14 +83,14 @@ func (sa *stagingArea) Exists(ctx context.Context, p string) (bool, error) {
 	var exists bool
 	err := sqlutil.Get(sa.conn, &exists, `SELECT EXISTS (
 		SELECT 1 FROM staging_ops WHERE area_id = ? AND p = ?
-	)`, sa.rowid, p)
+	)`, p)
 	return exists, err
 }
 
 func (sa *stagingArea) Delete(ctx context.Context, p string) error {
 	sa.mu.Lock()
 	defer sa.mu.Unlock()
-	err := sqlutil.Exec(sa.conn, `DELETE FROM staging_ops WHERE area_id = ? AND p = ?`, sa.rowid, p)
+	err := sqlutil.Exec(sa.conn, `DELETE FROM staging_ops WHERE p = ?`, p)
 	return err
 }
 

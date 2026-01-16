@@ -9,6 +9,7 @@ import (
 
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
+	"go.brendoncarroll.net/tai64"
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
@@ -88,7 +89,7 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 // StagingArea returns a handle to a staging area, creating it if it doesn't exist.
 // StagingAreas are volumes where data is initially imported when it is added to Got.
 // There are separate Volumes.
-func (c *Client) StagingArea(ctx context.Context, repoVol blobcache.OID, paramHash *[32]byte) (*blobcache.Handle, *gdat.DEK, error) {
+func (c *Client) StagingArea(ctx context.Context, repoVol blobcache.OID, wcid StageID) (*blobcache.Handle, *gdat.DEK, error) {
 	rootH, err := c.rootHandle(ctx, repoVol)
 	if err != nil {
 		return nil, nil, err
@@ -103,7 +104,7 @@ func (c *Client) StagingArea(ctx context.Context, repoVol blobcache.OID, paramHa
 	if err != nil {
 		return nil, nil, err
 	}
-	if sve, err := c.getStage(ctx, txn, *root, paramHash); err != nil {
+	if sve, err := c.getStage(ctx, txn, *root, wcid); err != nil {
 		return nil, nil, err
 	} else if sve != nil {
 		return c.openSubvolume(ctx, *rootH, *sve)
@@ -118,7 +119,7 @@ func (c *Client) StagingArea(ctx context.Context, repoVol blobcache.OID, paramHa
 		Token:  *svTok,
 		Secret: generateDEK(),
 	}
-	root, err = c.putStage(ctx, txn, *root, paramHash, sve)
+	root, err = c.putStage(ctx, txn, *root, wcid, sve)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -200,8 +201,8 @@ func (c *Client) getRoot(ctx context.Context, txn *bcsdk.Tx) (*gotkv.Root, error
 }
 
 // getState returns the volume OID for a stage.
-func (c *Client) getStage(ctx context.Context, s stores.Reading, root gotkv.Root, paramHash *[32]byte) (*subvolEntry, error) {
-	val, err := c.GotKV.Get(ctx, s, root, stageKey(paramHash))
+func (c *Client) getStage(ctx context.Context, s stores.Reading, root gotkv.Root, wcid StageID) (*subvolEntry, error) {
+	val, err := c.GotKV.Get(ctx, s, root, stageKey(wcid))
 	if err != nil {
 		if gotkv.IsErrKeyNotFound(err) {
 			return nil, nil
@@ -211,8 +212,8 @@ func (c *Client) getStage(ctx context.Context, s stores.Reading, root gotkv.Root
 	return parseSubvolEntry(val)
 }
 
-func (c *Client) putStage(ctx context.Context, s stores.RW, root gotkv.Root, paramHash *[32]byte, sve subvolEntry) (*gotkv.Root, error) {
-	return c.GotKV.Put(ctx, s, root, stageKey(paramHash), sve.Marshal(nil))
+func (c *Client) putStage(ctx context.Context, s stores.RW, root gotkv.Root, wcid StageID, sve subvolEntry) (*gotkv.Root, error) {
+	return c.GotKV.Put(ctx, s, root, stageKey(wcid), sve.Marshal(nil))
 }
 
 // getNS returns the Namespace Volume OID if it exists, or (nil, nil) if it doesn't.
@@ -240,8 +241,8 @@ func (c *Client) openSubvolume(ctx context.Context, rooth blobcache.Handle, sve 
 	return volh, &sve.Secret, nil
 }
 
-func stageKey(paramHash *[32]byte) []byte {
-	return []byte("stage/" + hex.EncodeToString(paramHash[:]))
+func stageKey(wcid StageID) []byte {
+	return []byte("stage/" + hex.EncodeToString(wcid[:]))
 }
 
 var nsKey = []byte("ns")
@@ -299,4 +300,26 @@ func (sve subvolEntry) Marshal(out []byte) []byte {
 	out = sve.Token.Marshal(out)
 	out = append(out, sve.Secret[:]...)
 	return out
+}
+
+type StageID [16]byte
+
+func NewStageID() (ret StageID) {
+	copy(ret[:8], tai64.Now().TAI64().Marshal())
+	rand.Read(ret[8:])
+	return ret
+}
+
+func (sid StageID) MarshalText() ([]byte, error) {
+	return []byte(hex.EncodeToString(sid[:])), nil
+}
+
+func (sid *StageID) UnmarshalText(data []byte) error {
+	_, err := hex.Decode(sid[:], data)
+	return err
+}
+
+func (sid StageID) String() string {
+	data, _ := sid.MarshalText()
+	return string(data)
 }

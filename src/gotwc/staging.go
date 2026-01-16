@@ -10,6 +10,9 @@ import (
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/internal/marks"
+	"go.brendoncarroll.net/state"
+	"go.brendoncarroll.net/state/cadata"
+	"go.brendoncarroll.net/state/kv"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
@@ -24,7 +27,6 @@ import (
 	"github.com/gotvc/got/src/gotwc/internal/staging"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/stores"
-	"github.com/gotvc/got/src/internal/units"
 )
 
 // DoWithStore runs fn with a store for the desired branch
@@ -79,11 +81,8 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		if err != nil {
 			return err
 		}
-		sa, err := newStagingArea(conn, &branch.Info)
-		if err != nil {
-			return err
-		}
-		stagingStore, err := wc.repo.BeginStagingTx(ctx, sa.getParamHash(), true)
+		sa := newStagingArea(conn, &branch.Info)
+		stagingStore, err := wc.repo.BeginStagingTx(ctx, wc.id, true)
 		if err != nil {
 			return err
 		}
@@ -123,17 +122,14 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 		if err != nil {
 			return err
 		}
-		sa, err := newStagingArea(conn, &branch.Info)
-		if err != nil {
-			return err
-		}
+		sa := newStagingArea(conn, &branch.Info)
 		filtFS, err := wc.getFilteredFS(ctx)
 		if err != nil {
 			return err
 		}
 		portdb := porting.NewDB(conn, gdat.Hash(sa.getParamHash()[:]))
 		exp := porting.NewExporter(branch.GotFS(), portdb, filtFS, wc.moveToTrash)
-		stagingStore, err := wc.repo.BeginStagingTx(ctx, sa.getParamHash(), false)
+		stagingStore, err := wc.repo.BeginStagingTx(ctx, wc.id, false)
 		if err != nil {
 			return err
 		}
@@ -433,31 +429,42 @@ func (wc *WC) ForEachDirty(ctx context.Context, fn func(p string, modtime time.T
 			return fn(p, finfo.ModTime())
 		})
 	})
-
 }
 
 // cleanupStagingBlobs removes blobs from staging areas which do not have ops that reference them.
 func (wc *WC) cleanupStagingBlobs(ctx context.Context, conn *sqlutil.Conn) error {
-	// get all of the ids for the empty staging areas
-	var areaIDs [][32]byte
-	for areaID, err := range sqlutil.Select(conn, scan32Bytes, `SELECT salt FROM staging_areas WHERE NOT EXISTS (SELECT 1 FROM staging_ops WHERE area_id = rowid)`) {
-		if err != nil {
+	tx, err := wc.repo.GCStage(ctx, wc.id)
+	if err != nil {
+		return err
+	}
+	defer tx.Abort(ctx)
+	name, err := wc.GetHead()
+	if err != nil {
+		return err
+	}
+	m, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: name})
+	if err != nil {
+		return err
+	}
+	sa := newStagingArea(conn, &m.Info)
+	fsmach := gotfs.NewMachine()
+	if err := kv.ForEach(ctx, sa, state.TotalSpan[string](), func(p string) error {
+		var fop staging.Operation
+		if err := sa.Get(ctx, p, &fop); err != nil {
 			return err
 		}
-		areaIDs = append(areaIDs, areaID)
-	}
-	metrics.SetDenom(ctx, "staging_areas", len(areaIDs), units.None)
-	// if the staging area has no ops, then it has no blobs either.
-	for _, areaID := range areaIDs {
-		store, err := wc.repo.BeginStagingTx(ctx, &areaID, true)
-		if err != nil {
-			return err
+		if putOp := fop.Put; putOp != nil {
+			// TODO: need to implement set for Tx
+			var set cadata.Set
+			if err := fsmach.Populate(ctx, tx, *putOp, set, set); err != nil {
+				return nil
+			}
 		}
-		defer store.Abort(ctx)
-		// TODO: need GC transaction type in Blobcache.
-		metrics.AddInt(ctx, "staging_areas", 1, units.None)
+		return nil
+	}); err != nil {
+		return err
 	}
-	return nil
+	return tx.Commit(ctx)
 }
 
 func saltFromBranch(b *marks.Info) *[32]byte {
