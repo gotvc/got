@@ -195,9 +195,12 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 		// there is no check to do.
 		// If they have different salts, then we need to check if the staging area is empty.
 		if desiredBranch.Info.Salt != activeBranch.Info.Salt {
-			sa := newStagingArea(conn, &activeBranch.Info)
-			stage := staging.New(sa)
-			isEmpty, err := stage.IsEmpty(ctx)
+			stagetx, err := wc.beginStageTx(ctx, nil, false)
+			if err != nil {
+				return err
+			}
+			defer stagetx.Abort(ctx)
+			isEmpty, err := stagetx.IsEmpty(ctx)
 			if err != nil {
 				return err
 			}
@@ -209,6 +212,7 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 	}); err != nil {
 		return err
 	}
+
 	return wc.setHead(name)
 }
 
@@ -232,6 +236,18 @@ func (wc *WC) SetActAs(idenName string) error {
 		x.ActAs = idenName
 		return x
 	})
+}
+
+func (wc *WC) beginStageTx(ctx context.Context, paramHash *[32]byte, modify bool) (*staging.Tx, error) {
+	tx, err := wc.repo.BeginStagingTx(ctx, wc.id, modify)
+	if err != nil {
+		return nil, err
+	}
+	if paramHash == nil && modify {
+		return nil, fmt.Errorf("paramHash must be provided for modifying transaction.")
+	}
+	kvmach := staging.DefaultGotKV()
+	return staging.New(&kvmach, tx, paramHash), nil
 }
 
 // StageIsEmpty returns (true, nil) IFF there are no changes staged.
@@ -364,7 +380,7 @@ func (wc *WC) Close() error {
 func (wc *WC) Cleanup(ctx context.Context) error {
 	if err := sqlutil.DoTx(ctx, wc.db, func(conn *sqlutil.Conn) error {
 		logctx.Infof(ctx, "removing blobs from staging areas")
-		if err := wc.cleanupStagingBlobs(ctx, conn); err != nil {
+		if err := wc.cleanupStagingBlobs(ctx); err != nil {
 			return err
 		}
 		return nil

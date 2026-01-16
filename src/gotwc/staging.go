@@ -10,16 +10,13 @@ import (
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/internal/marks"
-	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/cadata"
-	"go.brendoncarroll.net/state/kv"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
 	"go.inet256.org/inet256/src/inet256"
 	"zombiezen.com/go/sqlite/sqlitex"
 
-	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotvc"
@@ -41,7 +38,7 @@ type stagingCtx struct {
 	Branch     marks.Mark
 
 	Store    stores.RW
-	Stage    *staging.Stage
+	Stage    *staging.Tx
 	Importer *porting.Importer
 	Exporter *porting.Exporter
 
@@ -73,7 +70,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		if err != nil {
 			return err
 		}
-		branch, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: branchName})
+		mark, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: branchName})
 		if err != nil {
 			return err
 		}
@@ -81,22 +78,23 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		if err != nil {
 			return err
 		}
-		sa := newStagingArea(conn, &branch.Info)
-		stagingStore, err := wc.repo.BeginStagingTx(ctx, wc.id, true)
+		paramHash := saltFromBranch(&mark.Info)
+		stagetx, err := wc.beginStageTx(ctx, paramHash, true)
 		if err != nil {
 			return err
 		}
-		defer stagingStore.Abort(ctx)
+		defer stagetx.Abort(ctx)
+		stagingStore := stagetx.Store()
 		storePair := [2]stores.RW{stagingStore, stagingStore}
-		dirState := porting.NewDB(sa.conn, *sa.getParamHash())
-		imp := porting.NewImporter(branch.GotFS(), dirState, storePair)
-		exp := porting.NewExporter(branch.GotFS(), dirState, fsys, wc.moveToTrash)
+		dirState := porting.NewDB(conn, *paramHash)
+		imp := porting.NewImporter(mark.GotFS(), dirState, storePair)
+		exp := porting.NewExporter(mark.GotFS(), dirState, fsys, wc.moveToTrash)
 
 		if err := fn(stagingCtx{
 			BranchName: branchName,
-			Branch:     *branch,
+			Branch:     *mark,
 
-			Stage:    staging.New(sa),
+			Stage:    stagetx,
 			Store:    stagingStore,
 			Importer: imp,
 			Exporter: exp,
@@ -107,7 +105,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		}); err != nil {
 			return err
 		}
-		return stagingStore.Commit(ctx)
+		return stagetx.Commit(ctx)
 	}(); err != nil {
 		return err
 	}
@@ -122,12 +120,16 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 		if err != nil {
 			return err
 		}
-		sa := newStagingArea(conn, &branch.Info)
+		paramHash := saltFromBranch(&branch.Info)
+		stagetx, err := wc.beginStageTx(ctx, paramHash, false)
+		if err != nil {
+			return err
+		}
 		filtFS, err := wc.getFilteredFS(ctx)
 		if err != nil {
 			return err
 		}
-		portdb := porting.NewDB(conn, gdat.Hash(sa.getParamHash()[:]))
+		portdb := porting.NewDB(conn, *paramHash)
 		exp := porting.NewExporter(branch.GotFS(), portdb, filtFS, wc.moveToTrash)
 		stagingStore, err := wc.repo.BeginStagingTx(ctx, wc.id, false)
 		if err != nil {
@@ -138,7 +140,7 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 			BranchName: branchName,
 			Branch:     *branch,
 
-			Stage:    staging.New(sa),
+			Stage:    stagetx,
 			Store:    stagingStore,
 			Exporter: exp,
 		})
@@ -244,10 +246,7 @@ func (wc *WC) Discard(ctx context.Context, paths ...string) error {
 // Clear clears all entries from the staging area
 func (wc *WC) Clear(ctx context.Context) error {
 	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
-		if err := sctx.Stage.Reset(ctx); err != nil {
-			return err
-		}
-		return nil
+		return sctx.Stage.Clear(ctx)
 	})
 }
 
@@ -335,7 +334,7 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 		}); err != nil {
 			return err
 		}
-		if err := stage.Reset(ctx); err != nil {
+		if err := stage.Clear(ctx); err != nil {
 			return err
 		}
 		return nil
@@ -370,13 +369,14 @@ func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOpera
 			}
 			root = *rootPtr
 		}
-		return stage.ForEach(ctx, func(p string, sop staging.Operation) error {
+		return stage.ForEach(ctx, func(ent staging.Entry) error {
+			sop := ent.Op
 			var op FileOperation
 			switch {
 			case sop.Delete != nil:
 				op.Delete = sop.Delete
 			case sop.Put != nil:
-				md, err := sctx.Branch.GotFS().GetInfo(ctx, s, root, p)
+				md, err := sctx.Branch.GotFS().GetInfo(ctx, s, root, ent.Path)
 				if err != nil && !posixfs.IsErrNotExist(err) {
 					return err
 				}
@@ -386,7 +386,7 @@ func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOpera
 					op.Modify = sop.Put
 				}
 			}
-			return fn(p, op)
+			return fn(ent.Path, op)
 		})
 	})
 }
@@ -432,27 +432,17 @@ func (wc *WC) ForEachDirty(ctx context.Context, fn func(p string, modtime time.T
 }
 
 // cleanupStagingBlobs removes blobs from staging areas which do not have ops that reference them.
-func (wc *WC) cleanupStagingBlobs(ctx context.Context, conn *sqlutil.Conn) error {
+func (wc *WC) cleanupStagingBlobs(ctx context.Context) error {
 	tx, err := wc.repo.GCStage(ctx, wc.id)
 	if err != nil {
 		return err
 	}
 	defer tx.Abort(ctx)
-	name, err := wc.GetHead()
-	if err != nil {
-		return err
-	}
-	m, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: name})
-	if err != nil {
-		return err
-	}
-	sa := newStagingArea(conn, &m.Info)
+	kvmach := staging.DefaultGotKV()
+	stagetx := staging.New(&kvmach, tx, nil)
 	fsmach := gotfs.NewMachine()
-	if err := kv.ForEach(ctx, sa, state.TotalSpan[string](), func(p string) error {
-		var fop staging.Operation
-		if err := sa.Get(ctx, p, &fop); err != nil {
-			return err
-		}
+	if err := stagetx.ForEach(ctx, func(ent staging.Entry) error {
+		fop := ent.Op
 		if putOp := fop.Put; putOp != nil {
 			// TODO: need to implement set for Tx
 			var set cadata.Set

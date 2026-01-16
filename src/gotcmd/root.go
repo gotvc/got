@@ -39,6 +39,7 @@ var rootCmd = star.NewGroupedDir(
 		{Title: "REPO", Commands: []string{
 			"init",
 			"serve",
+			"scrub",
 			"iden",
 		}},
 		{Title: "WORKING COPY & STAGING", Commands: []string{
@@ -70,7 +71,6 @@ var rootCmd = star.NewGroupedDir(
 			"ftp",
 		}},
 		{Title: "MISCELLANEOUS", Commands: []string{
-			"scrub",
 			"bc",
 		}},
 	}, map[string]star.Command{
@@ -86,9 +86,10 @@ var rootCmd = star.NewGroupedDir(
 		"commit":  commitCmd,
 
 		// other working copy methods
-		"wc":   wcCmd,
-		"head": headCmd,
-		"fork": forkCmd,
+		"wc":       wcCmd,
+		"head":     headCmd,
+		"fork":     forkCmd,
+		"checkout": checkoutCmd,
 
 		"ls":   lsCmd,
 		"cat":  catCmd,

@@ -30,6 +30,7 @@ func TestCheckout(t *testing.T) {
 	}
 	site.WriteFSMap(m2)
 	site.DeleteFile("b.txt")
+	site.AssertNotExist("b.txt")
 	site.Put("")
 	site.Commit(gotwc.CommitParams{})
 	// now go back to the original branch
