@@ -3,6 +3,7 @@ package gotfs
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -35,7 +36,7 @@ func (a *Machine) Mkdir(ctx context.Context, s stores.RW, x Root, p string) (*Ro
 		return nil, err
 	}
 	md := &Info{
-		Mode: uint32(0o755 | os.ModeDir),
+		Mode: fs.FileMode(0o755 | os.ModeDir),
 	}
 	return a.PutInfo(ctx, s, x, p, md)
 }

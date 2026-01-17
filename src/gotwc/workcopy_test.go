@@ -18,25 +18,39 @@ import (
 )
 
 func TestSetup(t *testing.T) {
-	newTestWC(t)
+	newTestWC(t, true)
 }
 
-func SetGetHead(t *testing.T) {
+func TestSetGetHead(t *testing.T) {
 	ctx := testutil.Context(t)
-	wc := newTestWC(t)
+	wc := newTestWC(t, true)
 	name, err := wc.GetHead()
 	require.NoError(t, err)
-	require.Equal(t, "", name)
+	require.Equal(t, nameMaster, name)
 	require.NoError(t, wc.SetHead(ctx, nameMaster))
 	name, err = wc.GetHead()
 	require.NoError(t, err)
 	require.Equal(t, nameMaster, name)
 }
 
+func TestEditTracking(t *testing.T) {
+	ctx := testutil.Context(t)
+	wc := newTestWC(t, false)
+	spans, err := wc.ListSpans(ctx)
+	require.NoError(t, err)
+	require.Empty(t, spans)
+	require.NoError(t, wc.Track(ctx, PrefixSpan("a")))
+	require.NoError(t, wc.Track(ctx, PrefixSpan("b")))
+	require.NoError(t, wc.Track(ctx, PrefixSpan("c")))
+	spans, err = wc.ListSpans(ctx)
+	require.NoError(t, err)
+	require.Len(t, spans, 3)
+}
+
 func TestCommit(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	wc := newTestWC(t)
+	wc := newTestWC(t, true)
 	fs := posixfs.NewDirFS(wc.Dir())
 	p := "test.txt"
 	p2 := "test2.txt"
@@ -70,7 +84,7 @@ func TestCommitLargeFile(t *testing.T) {
 	t.Skip() // TODO
 	t.Parallel()
 	ctx := testutil.Context(t)
-	wc := newTestWC(t)
+	wc := newTestWC(t, true)
 	fs := posixfs.NewDirFS(wc.Dir())
 
 	p := "largefile"
@@ -85,7 +99,7 @@ func TestCommitLargeFile(t *testing.T) {
 func TestCommitDir(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	wc := newTestWC(t)
+	wc := newTestWC(t, true)
 	fs := posixfs.NewDirFS(wc.Dir())
 
 	dirpath := "path/to/dir"
@@ -115,7 +129,7 @@ func TestCommitDir(t *testing.T) {
 func TestFork(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	wc := newTestWC(t)
+	wc := newTestWC(t, true)
 	repo := wc.Repo()
 	fs := posixfs.NewDirFS(wc.Dir())
 
@@ -135,15 +149,15 @@ func TestFork(t *testing.T) {
 	require.Equal(t, N, commitCount)
 }
 
-func newTestWC(t testing.TB) *WC {
+func newTestWC(t testing.TB, trackAll bool) *WC {
 	r := gotrepo.NewTestRepo(t)
 	_, err := r.CreateMark(context.TODO(), gotrepo.FQM{Name: nameMaster}, marks.Metadata{})
 	require.NoError(t, err)
 	wcdir := t.TempDir()
 	root := testutil.OpenRoot(t, wcdir)
-	cfg := Config{
-		Head:  nameMaster,
-		ActAs: gotrepo.DefaultIden,
+	cfg := DefaultConfig()
+	if !trackAll {
+		cfg.Tracking = nil
 	}
 	require.NoError(t, Init(r, root, cfg))
 	wc, err := New(r, root)

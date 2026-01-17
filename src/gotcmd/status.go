@@ -3,6 +3,7 @@ package gotcmd
 import (
 	"bufio"
 	"fmt"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/gotvc/got/src/gotfs"
@@ -51,7 +52,7 @@ var statusCmd = star.Command{
 		if _, err := fmt.Fprintf(bufw, "NOT STAGED:\n"); err != nil {
 			return err
 		}
-		if err := wc.ForEachNotStaged(ctx, func(p string) error {
+		if err := wc.ForEachDirty(ctx, func(p string, modtime time.Time) error {
 			_, err := fmt.Fprintf(bufw, "\t%s\n", p)
 			return err
 		}); err != nil {

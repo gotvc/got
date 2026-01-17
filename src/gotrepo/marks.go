@@ -44,6 +44,14 @@ func (r *Repo) CreateMark(ctx context.Context, fqname FQM, params marks.Metadata
 	return space.Create(ctx, fqname.Name, params)
 }
 
+func (r *Repo) InspectMark(ctx context.Context, fqname FQM) (*marks.Info, error) {
+	space, err := r.GetSpace(ctx, fqname.Space)
+	if err != nil {
+		return nil, err
+	}
+	return space.Inspect(ctx, fqname.Name)
+}
+
 // GetBranch returns a specific branch, or an error if it does not exist
 func (r *Repo) GetMark(ctx context.Context, fqname FQM) (*marks.Mark, error) {
 	space, err := r.GetSpace(ctx, fqname.Space)

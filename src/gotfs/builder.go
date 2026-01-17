@@ -48,7 +48,7 @@ func (b *Builder) BeginFile(p string, mode os.FileMode) error {
 	if !mode.IsRegular() {
 		return fmt.Errorf("mode must be for regular file")
 	}
-	if err := b.writeInfo(p, &Info{Mode: uint32(mode)}); err != nil {
+	if err := b.writeInfo(p, &Info{Mode: mode}); err != nil {
 		return err
 	}
 	return b.b.SetPrefix(makeExtentPrefix(p))
@@ -60,7 +60,7 @@ func (b *Builder) Mkdir(p string, mode os.FileMode) error {
 	if b.IsFinished() {
 		return errBuilderIsFinished()
 	}
-	return b.writeInfo(p, &Info{Mode: uint32(mode)})
+	return b.writeInfo(p, &Info{Mode: mode})
 }
 
 func (b *Builder) writeInfo(p string, info *Info) error {

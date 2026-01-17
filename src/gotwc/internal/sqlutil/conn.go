@@ -52,16 +52,16 @@ func Borrow(ctx context.Context, pool *Pool, fn func(conn *Conn) error) error {
 }
 
 // Exec executes a query without returning rows
-func Exec(conn *Conn, query string, args ...interface{}) error {
-	stmt, err := conn.Prepare(query)
+func Exec(conn *Conn, query string, args ...any) error {
+	stmt, _, err := conn.PrepareTransient(query)
 	if err != nil {
 		return err
 	}
 	defer stmt.Finalize()
 
 	// Bind parameters
-	for i, arg := range args {
-		BindAny(stmt, i+1, arg)
+	if err := bindAll(stmt, query, args); err != nil {
+		return err
 	}
 
 	if ok, err := stmt.Step(); err != nil {
@@ -79,16 +79,15 @@ func IsErrNoRows(err error) bool {
 }
 
 // Get retrieves a single value from a query result
-func Get(conn *Conn, dest interface{}, query string, args ...interface{}) error {
-	stmt, err := conn.Prepare(query)
+func Get[T any](conn *Conn, dest *T, query string, args ...any) error {
+	stmt, _, err := conn.PrepareTransient(query)
 	if err != nil {
 		return err
 	}
 	defer stmt.Finalize()
 
-	// Bind parameters
-	for i, arg := range args {
-		BindAny(stmt, i+1, arg)
+	if err := bindAll(stmt, query, args); err != nil {
+		return err
 	}
 
 	hasRow, err := stmt.Step()
@@ -98,22 +97,49 @@ func Get(conn *Conn, dest interface{}, query string, args ...interface{}) error 
 	if !hasRow {
 		return ErrNoRows
 	}
-
 	return scanValue(stmt, 0, dest)
+}
+
+type ScanFunc[T any] = func(stmt *sqlite.Stmt, dst *T) error
+
+// GetOne runs a query that expects a single row in the result.
+// (false, nil) is returned to indicate that the query was successful but there was no value.
+func GetOne[T any](conn *Conn, dst *T, scan ScanFunc[T], query string, args ...any) (bool, error) {
+	var n int
+	for ret, err := range Select(conn, scan, query, args...) {
+		if n > 0 {
+			return false, fmt.Errorf("too many rows")
+		}
+		if err != nil {
+			return false, err
+		}
+		*dst = ret
+		n++
+	}
+	if n > 0 {
+		return true, nil
+	} else {
+		return false, nil
+	}
 }
 
 // Select returns an iterator over the results of the query.
 // scan is called for each row.
-func Select[T any](conn *Conn, scan func(stmt *sqlite.Stmt, dst *T) error, query string, args ...interface{}) iter.Seq2[T, error] {
-	stmt, err := conn.Prepare(query)
-	if err != nil {
+func Select[T any](conn *Conn, scan func(stmt *sqlite.Stmt, dst *T) error, query string, args ...any) iter.Seq2[T, error] {
+	newErrIter := func(err error) iter.Seq2[T, error] {
 		return func(yield func(T, error) bool) {
 			var zero T
 			yield(zero, err)
 		}
 	}
-	for i, arg := range args {
-		BindAny(stmt, i+1, arg)
+
+	stmt, _, err := conn.PrepareTransient(query)
+	if err != nil {
+		return newErrIter(err)
+	}
+	if err := bindAll(stmt, query, args); err != nil {
+		defer stmt.Finalize()
+		return newErrIter(err)
 	}
 	return func(yield func(T, error) bool) {
 		defer stmt.Finalize()
@@ -183,8 +209,19 @@ func DoTxRO(ctx context.Context, pool *Pool, fn func(conn *Conn) error) error {
 	})
 }
 
+func bindAll(stmt *sqlite.Stmt, q string, args []any) error {
+	// Bind parameters
+	if pcount := stmt.BindParamCount(); pcount != len(args) {
+		return fmt.Errorf("query %q has %d params, but %d were provided", q, pcount, len(args))
+	}
+	for i, arg := range args {
+		BindAny(stmt, i+1, arg)
+	}
+	return nil
+}
+
 // BindAny binds an argument to a statement.
-func BindAny(stmt *sqlite.Stmt, i int, arg interface{}) {
+func BindAny(stmt *sqlite.Stmt, i int, arg any) {
 	switch x := arg.(type) {
 	case nil:
 		stmt.BindNull(i)
@@ -194,6 +231,10 @@ func BindAny(stmt *sqlite.Stmt, i int, arg interface{}) {
 		stmt.BindBool(i, x)
 	case int64:
 		stmt.BindInt64(i, x)
+	case uint32:
+		stmt.BindInt64(i, int64(x))
+	case int32:
+		stmt.BindInt64(i, int64(x))
 	case []byte:
 		if len(x) == 0 {
 			x = []byte{}
@@ -207,8 +248,9 @@ func BindAny(stmt *sqlite.Stmt, i int, arg interface{}) {
 }
 
 // scanValue scans a single value from a statement into dest
-func scanValue(stmt *sqlite.Stmt, col int, dest interface{}) error {
-	switch d := dest.(type) {
+func scanValue[T any](stmt *sqlite.Stmt, col int, dest *T) error {
+	var dest2 any = dest
+	switch d := dest2.(type) {
 	case *string:
 		*d = stmt.ColumnText(col)
 		return nil
@@ -233,8 +275,9 @@ func scanValue(stmt *sqlite.Stmt, col int, dest interface{}) error {
 	}
 }
 
-func scanAny(stmt *sqlite.Stmt, dest interface{}) error {
-	switch x := dest.(type) {
+func scanAny[T any](stmt *sqlite.Stmt, dest *T) error {
+	var dest2 any = dest
+	switch x := dest2.(type) {
 	case *string:
 		return scanValue(stmt, 0, x)
 	case *int:

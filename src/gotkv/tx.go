@@ -93,13 +93,13 @@ func (tx *Tx) Delete(ctx context.Context, key []byte) error {
 
 // Iterate returns an iterator for the current state of the transaction.
 // - Flush must be called before Iterate, or it panics.
-func (tx *Tx) Iterate(ctx context.Context, span Span) streams.Iterator[Entry] {
+func (tx *Tx) Iterate(ctx context.Context, span Span) *TxIterator {
 	if len(tx.edits) > 0 {
 		// TODO: lift this restriction
 		panic("Iterate cannot be called with pending edits")
 	}
 	base := tx.m.NewIterator(tx.s, tx.prev, span)
-	return streams.NewMerger([]streams.Peekable[Entry]{
+	mit := streams.NewMerger([]streams.Peekable[Entry]{
 		streams.NewPeeker(streams.NewMutator(base, func(ent *Entry) bool {
 			if editsDelete(tx.edits, ent.Key) {
 				return false
@@ -111,6 +111,15 @@ func (tx *Tx) Iterate(ctx context.Context, span Span) streams.Iterator[Entry] {
 		}), kvstreams.CopyEntry),
 		&localTxIterator{tx: tx, span: span},
 	}, compareEntries)
+	return &TxIterator{m: *mit}
+}
+
+type TxIterator struct {
+	m streams.Merger[Entry]
+}
+
+func (it *TxIterator) Next(ctx context.Context, dst *Entry) error {
+	return it.m.Next(ctx, dst)
 }
 
 type localTxIterator struct {
