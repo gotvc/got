@@ -2,7 +2,9 @@ package gotcmd
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"runtime/debug"
 
 	"go.brendoncarroll.net/star"
 	"go.brendoncarroll.net/stdctx/logctx"
@@ -72,6 +74,7 @@ var rootCmd = star.NewGroupedDir(
 		}},
 		{Title: "MISCELLANEOUS", Commands: []string{
 			"bc",
+			"version",
 		}},
 	}, map[string]star.Command{
 		"init":   initCmd,
@@ -106,13 +109,14 @@ var rootCmd = star.NewGroupedDir(
 		"push":  pushCmd,
 
 		// misc
-		"iden":  idenCmd,
-		"org":   orgCmd,
-		"serve": serveCmd,
-		"slurp": slurpCmd,
-		"debug": debugCmd, // intentionally left out of the groups above.
-		"scrub": scrubCmd,
-		"bc":    blobcacheCmd,
+		"iden":    idenCmd,
+		"org":     orgCmd,
+		"serve":   serveCmd,
+		"slurp":   slurpCmd,
+		"debug":   debugCmd, // intentionally left out of the groups above.
+		"scrub":   scrubCmd,
+		"bc":      blobcacheCmd,
+		"version": versionCmd,
 	},
 )
 
@@ -130,4 +134,19 @@ func openWC() (*gotwc.WC, error) {
 		return nil, err
 	}
 	return gotwc.Open(r)
+}
+
+var versionCmd = star.Command{
+	Metadata: star.Metadata{Short: "prints version information"},
+	F: func(c star.Context) error {
+		binfo, ok := debug.ReadBuildInfo()
+		if !ok {
+			return fmt.Errorf("no build info")
+		}
+		c.Printf("GO VERSION: %s\n", binfo.GoVersion)
+		for _, bs := range binfo.Settings {
+			c.Printf("%s: %s\n", bs.Key, bs.Value)
+		}
+		return nil
+	},
 }

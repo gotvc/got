@@ -339,6 +339,32 @@ func (wc *WC) Export(ctx context.Context) error {
 	})
 }
 
+func (wc *WC) Clobber(ctx context.Context, p string) error {
+	mname, err := wc.GetHead()
+	if err != nil {
+		return nil
+	}
+	mark, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: mname})
+	if err != nil {
+		return nil
+	}
+	paramHash := saltFromBranch(&mark.Info)
+	conn, err := wc.db.Take(ctx)
+	if err != nil {
+		return nil
+	}
+	defer wc.db.Put(conn)
+	fsys, err := wc.getFilteredFS(ctx)
+	if err != nil {
+		return err
+	}
+	return mark.ViewFS(ctx, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
+		portDB := porting.NewDB(conn, *paramHash)
+		exp := porting.NewExporter(fsmach, portDB, fsys, wc.moveToTrash)
+		return exp.Clobber(ctx, s, s, root, p)
+	})
+}
+
 // Checkout sets HEAD, and then performs an Export of all tracked spans.
 func (wc *WC) Checkout(ctx context.Context, name string) error {
 	if err := wc.SetHead(ctx, name); err != nil {

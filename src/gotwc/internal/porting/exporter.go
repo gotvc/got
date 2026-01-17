@@ -68,6 +68,21 @@ func (pr *Exporter) ExportFile(ctx context.Context, ms, ds stores.Reading, root 
 	return pr.exportFile(ctx, ms, ds, root, p)
 }
 
+func (pr *Exporter) Clobber(ctx context.Context, ms, ds stores.Reading, root gotfs.Root, p string) error {
+	md, err := pr.gotfs.GetInfo(ctx, ms, root, p)
+	if err != nil {
+		return err
+	}
+	if !md.Mode.IsRegular() {
+		return fmt.Errorf("clobber can only be called on a single regular file")
+	}
+	r, err := pr.gotfs.NewReader(ctx, [2]stores.Reading{ds, ms}, root, p)
+	if err != nil {
+		return err
+	}
+	return posixfs.PutFile(ctx, pr.fsx, p, md.Mode, r)
+}
+
 // exportDir exports a known dir in root
 func (pr *Exporter) exportDir(ctx context.Context, ms, ds stores.Reading, root gotfs.Root, p string) error {
 	return nil

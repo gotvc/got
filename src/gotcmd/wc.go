@@ -18,6 +18,7 @@ var wcCmd = star.NewDir(star.Metadata{
 		"clear":    clearCmd,
 		"head":     headCmd,
 		"export":   exportCmd,
+		"clobber":  clobberCmd,
 		"scan":     scanCmd,
 		"checkout": checkoutCmd,
 	},
@@ -94,6 +95,23 @@ var exportCmd = star.Command{
 		}
 		defer wc.Close()
 		return wc.Export(c.Context)
+	},
+}
+
+var clobberCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "overwrites files without any checks",
+	},
+	Pos: []star.Positional{pathParam},
+	F: func(c star.Context) error {
+		// Active modifies the working copy not the repo
+		wc, err := openWC()
+		if err != nil {
+			return err
+		}
+		defer wc.Close()
+		p, _ := pathParam.LoadOpt(c)
+		return wc.Clobber(c.Context, p)
 	},
 }
 
