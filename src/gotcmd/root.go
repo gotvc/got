@@ -143,9 +143,13 @@ var versionCmd = star.Command{
 		if !ok {
 			return fmt.Errorf("no build info")
 		}
-		c.Printf("GO VERSION: %s\n", binfo.GoVersion)
+		c.Printf("GO VERSION:  %s\n", binfo.GoVersion)
+		c.Printf("GOT VERSION: %s\n", binfo.Main.Version)
 		for _, bs := range binfo.Settings {
-			c.Printf("%s: %s\n", bs.Key, bs.Value)
+			switch bs.Key {
+			case "vcs.revision", "vcs.time", "vcs.modified":
+				c.Printf("%s: %s\n", bs.Key, bs.Value)
+			}
 		}
 		return nil
 	},
