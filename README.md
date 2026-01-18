@@ -24,7 +24,7 @@ Got uses an improved data structure that better handles large files and director
 - [x] Copy one branch state to another with `sync`.
 - [x] Share repositories using the [Blobcache protocol](https://github.com/blobcache/blobcache) with `serve` command.
 - [x] Efficiently pack many small files into fewer blobs.
-- [ ] Checkout the head of a branch to the working directory.
+- [x] Checkout the head of a branch to the working directory.
 - [ ] Merge 2 branches.
 
 ## Getting Started

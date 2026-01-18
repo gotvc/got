@@ -429,15 +429,6 @@ func (wc *WC) Cleanup(ctx context.Context) error {
 	return nil
 }
 
-// IterateTracked iterates over all the paths that are currently tracked.
-func (wc *WC) IterateTracked(ctx context.Context) (*porting.DirEntIterator, error) {
-	spans, err := wc.ListSpans(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return porting.NewDirEntIterator(wc.root, wc.filter(spans)), nil
-}
-
 func (wc *WC) filter(spans []Span) func(p string) bool {
 	return func(x string) bool {
 		if strings.HasPrefix(x, ".got") {
