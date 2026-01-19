@@ -269,6 +269,9 @@ func (r *Repo) NSVolumeSpec(ctx context.Context) (*VolumeSpec, error) {
 // BeginStagingTx begins a new transaction for the staging area for the given WorkingCopy
 // It is up to the caller to commit or abort the transaction.
 func (r *Repo) BeginStagingTx(ctx context.Context, wcid WorkingCopyID, modify bool) (volumes.Tx, error) {
+	if wcid == (WorkingCopyID{}) {
+		return nil, fmt.Errorf("working copy id cannot be 0")
+	}
 	h, dek, err := r.repoc.StagingArea(ctx, r.config.RepoVolume, wcid)
 	if err != nil {
 		return nil, err
