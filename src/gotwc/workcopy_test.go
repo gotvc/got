@@ -151,7 +151,7 @@ func TestFork(t *testing.T) {
 
 func newTestWC(t testing.TB, trackAll bool) *WC {
 	r := gotrepo.NewTestRepo(t)
-	_, err := r.CreateMark(context.TODO(), gotrepo.FQM{Name: nameMaster}, marks.Metadata{})
+	_, err := r.CreateMark(context.TODO(), gotrepo.FQM{Name: nameMaster}, marks.DSConfig{}, nil)
 	require.NoError(t, err)
 	wcdir := t.TempDir()
 	root := testutil.OpenRoot(t, wcdir)

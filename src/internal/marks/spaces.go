@@ -155,7 +155,7 @@ func SyncSpaces(ctx context.Context, task SyncSpacesTask) error {
 		if err != nil {
 			return err
 		}
-		if _, err := dst.Create(ctx, dstName, srcMark.AsParams()); err != nil && !IsExists(err) {
+		if _, err := dst.Create(ctx, dstName, srcMark.AsMetadata()); err != nil && !IsExists(err) {
 			return err
 		}
 		dstMark, err := dst.Open(ctx, dstName)
