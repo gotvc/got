@@ -22,12 +22,12 @@ func NewLiteral(xs []Entry) *Literal {
 	return &Literal{ents: xs}
 }
 
-func (s *Literal) Next(ctx context.Context, ent *Entry) error {
-	if err := s.Peek(ctx, ent); err != nil {
-		return err
+func (s *Literal) Next(ctx context.Context, ents []Entry) (int, error) {
+	if err := s.Peek(ctx, &ents[0]); err != nil {
+		return 0, err
 	}
 	s.pos++
-	return nil
+	return 1, nil
 }
 
 func (s *Literal) Peek(ctx context.Context, ent *Entry) error {

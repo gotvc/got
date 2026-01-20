@@ -118,7 +118,7 @@ type TxIterator struct {
 	m streams.Merger[Entry]
 }
 
-func (it *TxIterator) Next(ctx context.Context, dst *Entry) error {
+func (it *TxIterator) Next(ctx context.Context, dst []Entry) (int, error) {
 	return it.m.Next(ctx, dst)
 }
 
@@ -127,9 +127,9 @@ type localTxIterator struct {
 	span Span
 }
 
-func (lti *localTxIterator) Next(ctx context.Context, dst *Entry) error {
+func (lti *localTxIterator) Next(ctx context.Context, dst []Entry) (int, error) {
 	// TODO: this will allow us to iterate over unflushed Edits
-	return streams.EOS()
+	return 0, streams.EOS()
 }
 
 func (lti *localTxIterator) Peek(ctx context.Context, dst *Entry) error {

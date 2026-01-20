@@ -34,7 +34,7 @@ type Iterator struct {
 	it ptree.Iterator[Entry, Ref]
 }
 
-func (it *Iterator) Next(ctx context.Context, dst *Entry) error {
+func (it *Iterator) Next(ctx context.Context, dst []Entry) (int, error) {
 	return it.it.Next(ctx, dst)
 }
 
@@ -108,7 +108,7 @@ func (a *Machine) MaxSize() int {
 func (a *Machine) GetF(ctx context.Context, s stores.Reading, x Root, key []byte, fn func([]byte) error) error {
 	it := a.NewIterator(s, x, kvstreams.SingleItemSpan(key))
 	var ent Entry
-	err := it.Next(ctx, &ent)
+	err := streams.NextUnit(ctx, it, &ent)
 	if err != nil {
 		if streams.IsEOS(err) {
 			err = ErrKeyNotFound
@@ -254,7 +254,7 @@ func (a *Machine) ForEach(ctx context.Context, s Getter, root Root, span Span, f
 	it := a.NewIterator(s, root, span)
 	var ent Entry
 	for {
-		if err := it.Next(ctx, &ent); err != nil {
+		if err := streams.NextUnit(ctx, it, &ent); err != nil {
 			if streams.IsEOS(err) {
 				return nil
 			}

@@ -48,12 +48,12 @@ func TestBuildIterate(t *testing.T) {
 
 	var ent Entry
 	for i := 0; i < N; i++ {
-		err := it.Next(ctx, &ent)
+		err := streams.NextUnit(ctx, it, &ent)
 		require.NoError(t, err, "at %d", i)
 		require.Contains(t, string(ent.Key), strconv.Itoa(i))
 	}
 	for i := 0; i < 3; i++ {
-		require.ErrorIs(t, it.Next(ctx, &ent), streams.EOS())
+		require.ErrorIs(t, streams.NextUnit(ctx, it, &ent), streams.EOS())
 	}
 }
 
@@ -79,7 +79,7 @@ func TestIterateEmptySpan(t *testing.T) {
 
 	var ent Entry
 	for i := 0; i < 3; i++ {
-		require.ErrorIs(t, it.Next(ctx, &ent), streams.EOS())
+		require.ErrorIs(t, streams.NextUnit(ctx, it, &ent), streams.EOS())
 	}
 }
 
@@ -112,10 +112,10 @@ func TestCopy(t *testing.T) {
 	it2 := newIterator(t, s, *root2, state.Span[Entry]{})
 	var ent Entry
 	for i := 0; i < N; i++ {
-		require.NoError(t, it2.Next(ctx, &ent))
+		require.NoError(t, streams.NextUnit(ctx, it2, &ent))
 		require.Equal(t, keyFromInt(i), ent.Key)
 	}
-	require.ErrorIs(t, it2.Next(ctx, &ent), streams.EOS())
+	require.ErrorIs(t, streams.NextUnit(ctx, it2, &ent), streams.EOS())
 	require.Equal(t, root, root2)
 }
 
@@ -151,10 +151,10 @@ func TestCopySpan(t *testing.T) {
 
 	var ent Entry
 	for i := begin; i < end; i++ {
-		require.NoError(t, it2.Next(ctx, &ent))
+		require.NoError(t, streams.NextUnit(ctx, it2, &ent))
 		require.Equal(t, keyFromInt(i), ent.Key)
 	}
-	require.ErrorIs(t, it2.Next(ctx, &ent), streams.EOS())
+	require.ErrorIs(t, streams.NextUnit(ctx, it2, &ent), streams.EOS())
 }
 
 func TestCopyMultiple(t *testing.T) {
@@ -184,14 +184,14 @@ func TestCopyMultiple(t *testing.T) {
 	itFinal := newIterator(t, s, *root2, state.TotalSpan[Entry]())
 	var ent Entry
 	for i := 0; i < int(N)*1/3; i++ {
-		require.NoError(t, itFinal.Next(ctx, &ent))
+		require.NoError(t, streams.NextUnit(ctx, itFinal, &ent))
 		require.Equal(t, keyFromInt(i), ent.Key)
 	}
 	for i := int(N) * 2 / 3; i < N; i++ {
-		require.NoError(t, itFinal.Next(ctx, &ent))
+		require.NoError(t, streams.NextUnit(ctx, itFinal, &ent))
 		require.Equal(t, keyFromInt(i), ent.Key)
 	}
-	require.ErrorIs(t, itFinal.Next(ctx, &ent), streams.EOS())
+	require.ErrorIs(t, streams.NextUnit(ctx, itFinal, &ent), streams.EOS())
 }
 
 // TestSeek checks that the iterator can Seek to entries which exist in the tree.
@@ -216,7 +216,7 @@ func TestSeek(t *testing.T) {
 		require.NoError(t, it.Seek(ctx, Entry{Key: keyFromInt(n)}))
 
 		var ent Entry
-		require.NoError(t, it.Next(ctx, &ent))
+		require.NoError(t, streams.NextUnit(ctx, it, &ent))
 		require.Equal(t, string(keyFromInt(n)), string(ent.Key))
 		require.Equal(t, string(valueFromInt(n)), string(ent.Value))
 	}
@@ -246,7 +246,7 @@ func TestSeekNonExist(t *testing.T) {
 		require.NoError(t, it.Seek(ctx, Entry{Key: keyFromInt(n)}))
 
 		var ent Entry
-		require.NoError(t, it.Next(ctx, &ent))
+		require.NoError(t, streams.NextUnit(ctx, it, &ent))
 		k := append(keyFromInt(n), []byte("---")...)
 		require.Equal(t, string(k), string(ent.Key))
 		require.Equal(t, string(valueFromInt(n)), string(ent.Value))
@@ -266,7 +266,7 @@ func TestEmpty(t *testing.T) {
 
 	it := newIterator(t, s, *root, state.TotalSpan[Entry]())
 	for i := 0; i < 10; i++ {
-		require.ErrorIs(t, it.Next(ctx, &Entry{}), streams.EOS())
+		require.ErrorIs(t, streams.NextUnit(ctx, it, &Entry{}), streams.EOS())
 	}
 }
 

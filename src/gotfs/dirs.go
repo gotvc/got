@@ -139,7 +139,7 @@ func (a *Machine) newDirIterator(ctx context.Context, s stores.Reading, x Root, 
 	span := dirSpan(p)
 	iter := a.gotkv.NewIterator(s, *x.toGotKV(), span)
 	ent := &gotkv.Entry{}
-	if err := iter.Next(ctx, ent); err != nil {
+	if err := streams.NextUnit(ctx, iter, ent); err != nil {
 		return nil, err
 	}
 	if _, err = parseInfoKey(ent.Key); err != nil {
@@ -159,7 +159,7 @@ func (a *Machine) newDirIterator(ctx context.Context, s stores.Reading, x Root, 
 
 func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
 	var ent gotkv.Entry
-	if err := di.iter.Next(ctx, &ent); err != nil {
+	if err := streams.NextUnit(ctx, di.iter, &ent); err != nil {
 		return nil, err
 	}
 	if isExtentKey(ent.Key) {

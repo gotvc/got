@@ -96,7 +96,7 @@ func (r *Reader) ReadAt(buf []byte, offset int64) (int, error) {
 func (r *Reader) readFromIterator(ctx context.Context, it *gotkv.Iterator, ds stores.Reading, start uint64, buf []byte) (int, error) {
 	var ent gotkv.Entry
 	for {
-		if err := it.Next(ctx, &ent); err != nil {
+		if err := streams.NextUnit(ctx, it, &ent); err != nil {
 			return 0, err
 		}
 		if r.a.keyFilter(ent.Key) {

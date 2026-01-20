@@ -9,6 +9,7 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
+	"go.brendoncarroll.net/exp/streams"
 )
 
 func TestAddPrefix(t *testing.T) {
@@ -35,7 +36,7 @@ func TestAddPrefix(t *testing.T) {
 	it := ag.NewIterator(s, root2, TotalSpan())
 	var ent Entry
 	for i := 0; i < N; i++ {
-		err := it.Next(ctx, &ent)
+		err := streams.NextUnit(ctx, it, &ent)
 		require.NoError(t, err, "at %d", i)
 		require.True(t, bytes.HasPrefix(ent.Key, prefix), "at %d: %q does not have prefix %q", i, ent.Key, prefix)
 	}

@@ -153,7 +153,7 @@ func (ag *Machine) MinExtent(ctx context.Context, ms stores.Reading, root Root, 
 	it := ag.gotkv.NewIterator(ms, root, span)
 	var ent gotkv.Entry
 	for {
-		if err := it.Next(ctx, &ent); err != nil {
+		if err := streams.NextUnit(ctx, it, &ent); err != nil {
 			if streams.IsEOS(err) {
 				return nil, nil, nil
 			}
