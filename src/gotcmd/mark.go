@@ -58,15 +58,15 @@ var markListCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		fmt.Fprintf(c.StdOut, "%-16s %-20s %-10s\n", "NAME", "CREATED_AT", "ANNOTATIONS")
+		fmt.Fprintf(c.StdOut, "%-20s %-20s %-10s\n", "NAME", "CREATED_AT", "ANNOTATIONS")
 		return repo.ForEachMark(ctx, "", func(k string) error {
-			mark, err := repo.GetMark(ctx, gotrepo.FQM{Name: k})
+			info, err := repo.InspectMark(ctx, gotrepo.FQM{Name: k})
 			if err != nil {
 				return err
 			}
-			createdAt := mark.Info.CreatedAt.GoTime().Local().Format(time.DateTime)
-			annots := len(mark.Info.Annotations)
-			fmt.Fprintf(c.StdOut, "%-16s %-20s %-10d\n", k, createdAt, annots)
+			createdAt := info.CreatedAt.GoTime().Local().Format(time.DateTime)
+			annots := len(info.Annotations)
+			fmt.Fprintf(c.StdOut, "%-20s %-20s %-10d\n", k, createdAt, annots)
 			return nil
 		})
 	},
@@ -221,6 +221,7 @@ var historyCmd = star.Command{
 				fmt.Fprintf(pw, "Created At: %v\n", snap.CreatedAt.GoTime().Local().String())
 				fmt.Fprintf(pw, "Created By: %v\n", snap.Creator)
 				pw.Write([]byte(prettifyJSON(snap.Payload.Aux)))
+				fmt.Fprintln(pw)
 				fmt.Fprintln(pw)
 				return nil
 			})

@@ -87,7 +87,7 @@ type MarkState struct {
 }
 
 func (b MarkState) Marshal(out []byte) []byte {
-	infoJSON, err := json.Marshal(b)
+	infoJSON, err := json.Marshal(b.Info)
 	if err != nil {
 		panic(err)
 	}

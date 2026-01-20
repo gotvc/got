@@ -14,7 +14,6 @@ import (
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/units"
-	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
@@ -22,16 +21,15 @@ import (
 )
 
 type Importer struct {
-	gotfs *gotfs.Machine
-	cache DirState
-
+	gotfs  *gotfs.Machine
+	db     *DB
 	ms, ds stores.RW
 }
 
-func NewImporter(fsag *gotfs.Machine, cache DirState, ss [2]stores.RW) *Importer {
+func NewImporter(fsmach *gotfs.Machine, db *DB, ss [2]stores.RW) *Importer {
 	return &Importer{
-		gotfs: fsag,
-		cache: cache,
+		gotfs: fsmach,
+		db:    db,
 
 		ms: ss[1],
 		ds: ss[0],
@@ -49,7 +47,7 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 		return pr.importFile(ctx, fsx, p)
 	}
 	var changes []gotfs.Segment
-	emptyDir, err := createEmptyDir(ctx, pr.gotfs, pr.ms, pr.ds)
+	emptyDir, err := createEmptyDir(ctx, pr.gotfs, pr.ms)
 	if err != nil {
 		return nil, err
 	}
@@ -101,10 +99,17 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 	if !finfo.Mode().IsRegular() {
 		return nil, fmt.Errorf("ImportFile called for non-regular file at path %q", p)
 	}
-	var ent Entry
-	if err := pr.cache.Get(ctx, p, &ent); err == nil && ent.ModifiedAt == tai64.FromGoTime(finfo.ModTime()) {
+	var ent FileInfo
+	if ok, err := pr.db.GetInfo(ctx, p, &ent); err != nil {
+		return nil, err
+	} else if ok && ent.ModifiedAt == tai64.FromGoTime(finfo.ModTime()) {
 		logctx.Infof(ctx, "using cache entry for path %q. skipped import", p)
-		return &ent.Root, nil
+		var root gotfs.Root
+		if yes, err := pr.db.GetFSRoot(ctx, p, &root); err != nil {
+			return nil, err
+		} else if yes {
+			return &root, nil
+		}
 	}
 	fileSize := finfo.Size()
 	metrics.SetDenom(ctx, "data_in", int(fileSize), units.Bytes)
@@ -129,10 +134,15 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 			return nil, err
 		}
 	}
-	if err := pr.cache.Put(ctx, p, Entry{
-		ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
-		Root:       *root,
+	// need update
+	modt := tai64.FromGoTime(finfo.ModTime())
+	if err := pr.db.PutInfo(ctx, p, FileInfo{
+		ModifiedAt: modt,
+		Mode:       finfo.Mode(),
 	}); err != nil {
+		return nil, err
+	}
+	if err := pr.db.PutFSRoot(ctx, p, modt, *root); err != nil {
 		return nil, err
 	}
 	return root, nil
@@ -174,18 +184,18 @@ func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
 	return start, end
 }
 
-func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms, ds stores.RW) (*gotfs.Root, error) {
+func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms stores.RW) (*gotfs.Root, error) {
 	return fsag.NewEmpty(ctx, ms)
 }
 
-func needsUpdate(ctx context.Context, cache DirState, p string, finfo posixfs.FileInfo) (bool, error) {
-	var ent Entry
-	err := cache.Get(ctx, p, &ent)
-	if state.IsErrNotFound[string](err) {
-		return true, nil
-	}
+func needsUpdate(ctx context.Context, db *DB, p string, finfo posixfs.FileInfo) (bool, error) {
+	var ent FileInfo
+	ok, err := db.GetInfo(ctx, p, &ent)
 	if err != nil {
 		return false, err
+	}
+	if !ok {
+		return true, nil
 	}
 	return ent.ModifiedAt != tai64.FromGoTime(finfo.ModTime()), nil
 }

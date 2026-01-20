@@ -52,10 +52,7 @@ var initCmd = star.Command{
 			return err
 		}
 		// setup a working copy in the same directory
-		if err := gotwc.Init(repo, root, gotwc.Config{
-			Head:  "master",
-			ActAs: gotrepo.DefaultIden,
-		}); err != nil {
+		if err := gotwc.Init(repo, root, gotwc.DefaultConfig()); err != nil {
 			return err
 		}
 		c.Printf("successfully initialized got repo in current directory\n")

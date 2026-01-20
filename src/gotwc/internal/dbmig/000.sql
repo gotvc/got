@@ -1,12 +1,18 @@
 
-CREATE TABLE staging_areas (
-    rowid INTEGER PRIMARY KEY AUTOINCREMENT,
-    salt BLOB NOT NULL UNIQUE
-), STRICT;
+CREATE TABLE dirstate (
+    path TEXT NOT NULL,
 
-CREATE TABLE staging_ops (
-    area_id INTEGER NOT NULL REFERENCES staging_areas(rowid),
-    p TEXT NOT NULL,
-    data BLOB NOT NULL,
-    PRIMARY KEY (area_id, p)
+    mode INTEGER NOT NULL,
+    modtime BLOB NOT NULL,
+
+    PRIMARY KEY(path)
+), WITHOUT ROWID, STRICT;
+
+CREATE TABLE fsroots (
+    param_hash BLOB NOT NULL,
+    path TEXT NOT NULL REFERENCES dirstate(path),
+
+    fsroot BLOB NOT NULL,
+
+    PRIMARY KEY(param_hash, path)
 ), WITHOUT ROWID, STRICT;

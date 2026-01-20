@@ -43,11 +43,7 @@ func openSite(t testing.TB, root *os.Root) Site {
 	t.Cleanup(func() {
 		repo.Close()
 	})
-	wcCfg := gotwc.Config{
-		Head:  "master",
-		ActAs: gotrepo.DefaultIden,
-	}
-	require.NoError(t, gotwc.Init(repo, root, wcCfg))
+	require.NoError(t, gotwc.Init(repo, root, gotwc.DefaultConfig()))
 	wc, err := gotwc.New(repo, root)
 	require.NoError(t, err)
 	return Site{
@@ -120,9 +116,30 @@ func (s *Site) Sync(src, dst gotrepo.FQM) {
 	require.NoError(s.t, err)
 }
 
+func (s *Site) Fork(newName string) {
+	ctx := testutil.Context(s.t)
+	err := s.WC.Fork(ctx, newName)
+	require.NoError(s.t, err)
+}
+
+func (s *Site) Checkout(name string) {
+	ctx := testutil.Context(s.t)
+	err := s.WC.Checkout(ctx, name)
+	require.NoError(s.t, err)
+}
+
 func (s *Site) Add(ps ...string) {
+	ctx := testutil.Context(s.t)
 	for _, p := range ps {
-		err := s.WC.Add(testutil.Context(s.t), p)
+		err := s.WC.Add(ctx, p)
+		require.NoError(s.t, err)
+	}
+}
+
+func (s *Site) Put(ps ...string) {
+	ctx := testutil.Context(s.t)
+	for _, p := range ps {
+		err := s.WC.Put(ctx, p)
 		require.NoError(s.t, err)
 	}
 }
@@ -158,6 +175,18 @@ func (s *Site) OrgClient() gotorg.Client {
 func (s *Site) IntroduceSelf() gotorg.ChangeSet {
 	oc := s.OrgClient()
 	return oc.IntroduceSelf()
+}
+
+func (s *Site) WriteFSMap(x map[string]string) {
+	for k, v := range x {
+		require.NoError(s.t, s.Root.WriteFile(k, []byte(v), 0o644))
+	}
+}
+
+func (s *Site) DeleteFile(ps ...string) {
+	for _, p := range ps {
+		require.NoError(s.t, s.Root.Remove(p))
+	}
 }
 
 func ConfigAddTouch(peer blobcache.PeerID) func(cfg gotrepo.Config) gotrepo.Config {

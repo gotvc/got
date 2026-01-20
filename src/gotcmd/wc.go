@@ -11,12 +11,16 @@ var wcCmd = star.NewDir(star.Metadata{
 	Short: "commands for managing working copies",
 },
 	map[string]star.Command{
-		"cleanup": cleanupCmd,
-		"add":     addCmd,
-		"rm":      rmCmd,
-		"discard": discardCmd,
-		"clear":   clearCmd,
-		"head":    headCmd,
+		"cleanup":  cleanupCmd,
+		"add":      addCmd,
+		"rm":       rmCmd,
+		"discard":  discardCmd,
+		"clear":    clearCmd,
+		"head":     headCmd,
+		"export":   exportCmd,
+		"clobber":  clobberCmd,
+		"scan":     scanCmd,
+		"checkout": checkoutCmd,
 	},
 )
 
@@ -59,6 +63,71 @@ var headCmd = star.Command{
 			return nil
 		}
 		return wc.SetHead(c, name)
+	},
+}
+
+var scanCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "scans the working copy and updates the index",
+	},
+	Pos: []star.Positional{},
+	F: func(c star.Context) error {
+		// Active modifies the working copy not the repo
+		wc, err := openWC()
+		if err != nil {
+			return err
+		}
+		defer wc.Close()
+		return wc.Scan(c.Context)
+	},
+}
+
+var exportCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "exports files from the repo to the working copy",
+	},
+	Pos: []star.Positional{},
+	F: func(c star.Context) error {
+		// Active modifies the working copy not the repo
+		wc, err := openWC()
+		if err != nil {
+			return err
+		}
+		defer wc.Close()
+		return wc.Export(c.Context)
+	},
+}
+
+var clobberCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "overwrites files without any checks",
+	},
+	Pos: []star.Positional{pathParam},
+	F: func(c star.Context) error {
+		// Active modifies the working copy not the repo
+		wc, err := openWC()
+		if err != nil {
+			return err
+		}
+		defer wc.Close()
+		p, _ := pathParam.LoadOpt(c)
+		return wc.Clobber(c.Context, p)
+	},
+}
+
+var checkoutCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "switches HEAD to the specified mark and then performs an export",
+	},
+	Pos: []star.Positional{markNameParam},
+	F: func(c star.Context) error {
+		// Active modifies the working copy not the repo
+		wc, err := openWC()
+		if err != nil {
+			return err
+		}
+		defer wc.Close()
+		return wc.Checkout(c.Context, markNameParam.Load(c))
 	},
 }
 

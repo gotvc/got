@@ -9,14 +9,14 @@ import (
 
 func TestStaging(t *testing.T) {
 	t.Parallel()
-	wc := newTestWC(t)
+	wc := newTestWC(t, false)
 	ops := listStaging(t, wc)
 	require.Len(t, ops, 0)
 }
 
 func listStaging(t testing.TB, x *WC) (ret []FileOperation) {
 	ctx := testutil.Context(t)
-	err := x.forEachStaging(ctx, func(p string, op FileOperation) error {
+	err := x.ForEachStaging(ctx, func(p string, op FileOperation) error {
 		ret = append(ret, op)
 		return nil
 	})

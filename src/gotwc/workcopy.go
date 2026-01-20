@@ -4,22 +4,25 @@ package gotwc
 import (
 	"context"
 	"fmt"
-	"io/fs"
-	"iter"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/dbmig"
 	"github.com/gotvc/got/src/gotwc/internal/migrations"
+	"github.com/gotvc/got/src/gotwc/internal/porting"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/gotwc/internal/staging"
+	"github.com/gotvc/got/src/internal/stores"
+	"go.brendoncarroll.net/exp/slices2"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
+	"go.brendoncarroll.net/tai64"
 )
 
 const (
@@ -27,6 +30,7 @@ const (
 	dbPath     = ".got/wc.db"
 
 	defaultFileMode = 0o644
+	defaultDirMode  = 0o755
 	nameMaster      = "master"
 )
 
@@ -34,7 +38,7 @@ const (
 // The working copy will be associated with the given repo.
 // cfg.RepoDir will be overriden with repo.Dir().
 func Init(repo *gotrepo.Repo, wcRoot *os.Root, cfg Config) error {
-	if err := wcRoot.MkdirAll(".got", 0o755); err != nil {
+	if err := wcRoot.MkdirAll(".got", defaultDirMode); err != nil {
 		return err
 	}
 	cfg.RepoDir = repo.Dir()
@@ -84,12 +88,17 @@ func New(repo *gotrepo.Repo, root *os.Root) (*WC, error) {
 	}); err != nil {
 		return nil, err
 	}
+	cfg, err := LoadConfig(root)
+	if err != nil {
+		return nil, err
+	}
 	return &WC{
 		root: root,
 		repo: repo,
-		fsys: posixfs.NewDirFS(p),
+		id:   cfg.ID,
 
-		db: db,
+		fsys: posixfs.NewDirFS(p),
+		db:   db,
 	}, nil
 }
 
@@ -100,6 +109,7 @@ type WC struct {
 	root             *os.Root
 	repo             *gotrepo.Repo
 	closeRepoOnClose bool
+	id               gotrepo.WorkingCopyID
 
 	// TODO: eventually we should move away from this interface, but
 	// the existing importers and exporters use it.
@@ -117,34 +127,39 @@ func (wc *WC) Dir() string {
 
 // ListSpans returns the tracked spans
 func (wc *WC) ListSpans(ctx context.Context) ([]Span, error) {
-	return nil, nil
+	cfg, err := LoadConfig(wc.root)
+	if err != nil {
+		return nil, err
+	}
+	return slices2.Map(cfg.Tracking, func(p string) Span {
+		return PrefixSpan(p)
+	}), nil
 }
 
 // Track causes the working copy to include another range of files.
 func (wc *WC) Track(ctx context.Context, span Span) error {
-	return sqlutil.DoTx(ctx, wc.db, func(conn *sqlutil.Conn) error {
-		spans, err := getSpans(conn)
-		if err != nil {
-			return err
-		}
-		spans = append(spans, span)
-		spans = compactSpans(spans)
-		return setSpans(conn, spans)
+	if !span.IsPrefix() {
+		return fmt.Errorf("only prefix spans are supported")
+	}
+	newPrefix := span.Begin
+	return EditConfig(wc.root, func(x Config) Config {
+		x.Tracking = append(x.Tracking, newPrefix)
+		x.Tracking = compactPrefixes(x.Tracking)
+		return x
 	})
 }
 
 // Untrack causes the working copy to exclude a range of files.
 func (wc *WC) Untrack(ctx context.Context, span Span) error {
-	return sqlutil.DoTx(ctx, wc.db, func(conn *sqlutil.Conn) error {
-		spans, err := getSpans(conn)
-		if err != nil {
-			return err
-		}
-		spans = slices.DeleteFunc(spans, func(x Span) bool {
-			return x == span
+	if !span.IsPrefix() {
+		return fmt.Errorf("only prefix spans are supported")
+	}
+	delPrefix := span.Begin
+	return EditConfig(wc.root, func(x Config) Config {
+		x.Tracking = slices.DeleteFunc(x.Tracking, func(p string) bool {
+			return p == delPrefix
 		})
-		spans = compactSpans(spans)
-		return setSpans(conn, spans)
+		return x
 	})
 }
 
@@ -180,12 +195,12 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 		// there is no check to do.
 		// If they have different salts, then we need to check if the staging area is empty.
 		if desiredBranch.Info.Salt != activeBranch.Info.Salt {
-			sa, err := newStagingArea(conn, &activeBranch.Info)
+			stagetx, err := wc.beginStageTx(ctx, nil, false)
 			if err != nil {
 				return err
 			}
-			stage := staging.New(sa)
-			isEmpty, err := stage.IsEmpty(ctx)
+			defer stagetx.Abort(ctx)
+			isEmpty, err := stagetx.IsEmpty(ctx)
 			if err != nil {
 				return err
 			}
@@ -197,6 +212,7 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 	}); err != nil {
 		return err
 	}
+
 	return wc.setHead(name)
 }
 
@@ -220,6 +236,141 @@ func (wc *WC) SetActAs(idenName string) error {
 		x.ActAs = idenName
 		return x
 	})
+}
+
+func (wc *WC) beginStageTx(ctx context.Context, paramHash *[32]byte, modify bool) (*staging.Tx, error) {
+	tx, err := wc.repo.BeginStagingTx(ctx, wc.id, modify)
+	if err != nil {
+		return nil, err
+	}
+	if paramHash == nil && modify {
+		return nil, fmt.Errorf("paramHash must be provided for modifying transaction.")
+	}
+	kvmach := staging.DefaultGotKV()
+	return staging.New(&kvmach, tx, paramHash), nil
+}
+
+// StageIsEmpty returns (true, nil) IFF there are no changes staged.
+func (wc *WC) StageIsEmpty(ctx context.Context) (bool, error) {
+	var notEmpty bool
+	if err := wc.ForEachStaging(ctx, func(p string, op FileOperation) error {
+		notEmpty = true
+		return fmt.Errorf("stop iter")
+	}); err != nil {
+		if notEmpty {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+// Scan iterates through all of the files, and indexes them in the database.
+func (wc *WC) Scan(ctx context.Context) error {
+	conn, err := wc.db.Take(ctx)
+	if err != nil {
+		return err
+	}
+	defer wc.db.Put(conn)
+	paramHash, err := wc.getParamHash(ctx)
+	if err != nil {
+		return err
+	}
+	db := porting.NewDB(conn, *paramHash)
+	fsys, err := wc.getFilteredFS(ctx)
+	if err != nil {
+		return err
+	}
+	return posixfs.WalkLeaves(ctx, fsys, "", func(dir string, de posixfs.DirEnt) error {
+		p := path.Join(dir, de.Name)
+		finfo, err := fsys.Stat(p)
+		if err != nil {
+			return err
+		}
+		return db.PutInfo(ctx, p, porting.FileInfo{
+			ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
+			Mode:       de.Mode,
+		})
+	})
+}
+
+// Export overwrites data in the filesystem with data from the Snapshot at HEAD.
+// Only tracked paths are overwritten.
+func (wc *WC) Export(ctx context.Context) error {
+	emptyStage, err := wc.StageIsEmpty(ctx)
+	if err != nil {
+		return err
+	}
+	if !emptyStage {
+		// we may be able to remove this
+		return fmt.Errorf("cannot export to filesystem, staging area must be empty (it's not)")
+	}
+	mname, err := wc.GetHead()
+	if err != nil {
+		return nil
+	}
+	mark, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: mname})
+	if err != nil {
+		return nil
+	}
+	paramHash := saltFromBranch(&mark.Info)
+	spans, err := wc.ListSpans(ctx)
+	if err != nil {
+		return nil
+	}
+	conn, err := wc.db.Take(ctx)
+	if err != nil {
+		return nil
+	}
+	defer wc.db.Put(conn)
+	fsys, err := wc.getFilteredFS(ctx)
+	if err != nil {
+		return err
+	}
+	return mark.ViewFS(ctx, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
+		portDB := porting.NewDB(conn, *paramHash)
+		exp := porting.NewExporter(fsmach, portDB, fsys, wc.moveToTrash)
+		for _, span := range spans {
+			if err := exp.ExportSpan(ctx, s, s, root, span); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func (wc *WC) Clobber(ctx context.Context, p string) error {
+	mname, err := wc.GetHead()
+	if err != nil {
+		return nil
+	}
+	mark, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: mname})
+	if err != nil {
+		return nil
+	}
+	paramHash := saltFromBranch(&mark.Info)
+	conn, err := wc.db.Take(ctx)
+	if err != nil {
+		return nil
+	}
+	defer wc.db.Put(conn)
+	fsys, err := wc.getFilteredFS(ctx)
+	if err != nil {
+		return err
+	}
+	return mark.ViewFS(ctx, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
+		portDB := porting.NewDB(conn, *paramHash)
+		exp := porting.NewExporter(fsmach, portDB, fsys, wc.moveToTrash)
+		return exp.Clobber(ctx, s, s, root, p)
+	})
+}
+
+// Checkout sets HEAD, and then performs an Export of all tracked spans.
+func (wc *WC) Checkout(ctx context.Context, name string) error {
+	if err := wc.SetHead(ctx, name); err != nil {
+		return err
+	}
+	return wc.Export(ctx)
 }
 
 // Fork calls CloneMark on the repo with the current head, creating a new
@@ -255,7 +406,7 @@ func (wc *WC) Close() error {
 func (wc *WC) Cleanup(ctx context.Context) error {
 	if err := sqlutil.DoTx(ctx, wc.db, func(conn *sqlutil.Conn) error {
 		logctx.Infof(ctx, "removing blobs from staging areas")
-		if err := wc.cleanupStagingBlobs(ctx, conn); err != nil {
+		if err := wc.cleanupStagingBlobs(ctx); err != nil {
 			return err
 		}
 		return nil
@@ -278,74 +429,48 @@ func (wc *WC) Cleanup(ctx context.Context) error {
 	return nil
 }
 
-// AllTracked iterates over all the files that are currently tracked.
-func (wc *WC) AllTracked(ctx context.Context) iter.Seq2[string, error] {
-	return func(yield func(string, error) bool) {
-		if err := func() error {
-			spans, err := wc.ListSpans(ctx)
-			if err != nil {
-				return err
-			}
-			return fs.WalkDir(wc.root.FS(), "", func(p string, d fs.DirEntry, err error) error {
-				if err != nil {
-					return err
-				}
-				p2 := path.Join(p, d.Name())
-				if spansContain(spans, p2) {
-					if !yield(p2, nil) {
-						return nil
-					}
-				}
-				return nil
-			})
-		}(); err != nil {
-			yield("", err)
-		}
-	}
-}
-
-func (wc *WC) getFilteredFS(spans []Span) posixfs.FS {
-	return posixfs.NewFiltered(wc.fsys, func(x string) bool {
+func (wc *WC) filter(spans []Span) func(p string) bool {
+	return func(x string) bool {
 		if strings.HasPrefix(x, ".got") {
 			return false
 		}
 		return spansContain(spans, x)
-	})
-}
-
-// TODO: this is to be more similar to the repo, remove this.
-func (wc *WC) workingDir() posixfs.FS {
-	return wc.getFilteredFS([]Span{{}})
-}
-
-// Span is a span of paths
-type Span struct {
-	Begin string
-	End   string
-}
-
-func (s Span) String() string {
-	if s.End == "" {
-		return fmt.Sprintf("<= %q", s.Begin)
 	}
-	return fmt.Sprintf("[%q %q)", s.Begin, s.End)
 }
+
+func (wc *WC) getFilteredFS(ctx context.Context) (posixfs.FS, error) {
+	spans, err := wc.ListSpans(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return posixfs.NewFiltered(wc.fsys, wc.filter(spans)), nil
+}
+
+// moveToTrash moves a file at path to the trash.
+// TODO
+func (wc *WC) moveToTrash(p string) error {
+	return nil
+}
+
+func (wc *WC) getParamHash(ctx context.Context) (*[32]byte, error) {
+	name, err := wc.GetHead()
+	if err != nil {
+		return nil, err
+	}
+	m, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: name})
+	if err != nil {
+		return nil, err
+	}
+	return saltFromBranch(&m.Info), nil
+}
+
+type Span = porting.Span
 
 func PrefixSpan(prefix string) Span {
 	return Span{
 		Begin: prefix,
 		End:   string(kvstreams.PrefixEnd([]byte(prefix))),
 	}
-}
-
-func (s Span) Contains(x string) bool {
-	if x < s.Begin {
-		return false
-	}
-	if s.End != "" && x >= s.End {
-		return false
-	}
-	return true
 }
 
 func spansContain(spans []Span, x string) bool {
@@ -357,14 +482,7 @@ func spansContain(spans []Span, x string) bool {
 	return false
 }
 
-func getSpans(conn *sqlutil.Conn) ([]Span, error) {
-	return nil, nil
-}
-
-func setSpans(conn *sqlutil.Conn, spans []Span) error {
-	return nil
-}
-
-func compactSpans(spans []Span) []Span {
-	return spans
+func compactPrefixes(xs []string) []string {
+	slices.Sort(xs)
+	return slices.Compact(xs)
 }
