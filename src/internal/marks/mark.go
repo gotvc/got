@@ -3,7 +3,6 @@ package marks
 import (
 	"context"
 	"crypto/rand"
-	"encoding/hex"
 	"fmt"
 	"strings"
 
@@ -23,8 +22,8 @@ type (
 
 // Info is the metadata associated with a Mark.
 type Info struct {
-	// Salt is a 32-byte salt used to derive the cryptographic keys for the mark.
-	Salt Salt `json:"salt"`
+	// Config holds the all the datastructure parameters
+	Config DSConfig `json:"config"`
 	// Annotations are arbitrary metadata associated with the mark.
 	Annotations []Annotation `json:"annotations"`
 
@@ -38,50 +37,44 @@ func (i Info) Clone() Info {
 	return i2
 }
 
-func (i Info) AsConfig() Metadata {
-	return Metadata{Salt: i.Salt, Annotations: i.Annotations}
-}
-
-// Salt is a 32-byte salt
-type Salt [32]byte
-
-func (s Salt) MarshalText() ([]byte, error) {
-	return []byte(hex.EncodeToString(s[:])), nil
-}
-
-func (s *Salt) UnmarshalText(data []byte) error {
-	_, err := hex.Decode(s[:], data)
-	return err
-}
-
-func (s *Salt) String() string {
-	return hex.EncodeToString(s[:])
+func (i Info) AsMetadata() Metadata {
+	return Metadata{Config: i.Config, Annotations: i.Annotations}
 }
 
 // Metadata is non-volume, user-modifiable information associated with a mark.
 type Metadata struct {
-	Salt        Salt         `json:"salt"`
+	Config      DSConfig     `json:"config"`
 	Annotations []Annotation `json:"annotations"`
 }
 
 func (c Metadata) AsInfo() Info {
-	return Info{Salt: c.Salt, Annotations: c.Annotations}
+	return Info{Config: c.Config, Annotations: c.Annotations}
 }
 
-func NewConfig(public bool) Metadata {
+func DefaultConfig(public bool) DSConfig {
 	var salt Salt
 	if !public {
 		readRandom(salt[:])
 	}
-	return Metadata{
+	return DSConfig{
 		Salt: salt,
+		GotFS: FSConfig{
+			Data: ChunkingConfig{CD: &Chunking_CDConfig{
+				MeanSize: gotfs.DefaultMeanBlobSizeData,
+				MaxSize:  gotfs.DefaultMaxBlobSize,
+			}},
+			Metadata: Chunking_CDConfig{
+				MeanSize: gotfs.DefaultMeanBlobSizeMetadata,
+				MaxSize:  gotfs.DefaultMaxBlobSize,
+			},
+		},
 	}
 }
 
 // Clone returns a deep copy of md
 func (c Metadata) Clone() Metadata {
 	return Metadata{
-		Salt:        c.Salt,
+		Config:      c.Config,
 		Annotations: slices.Clone(c.Annotations),
 	}
 }
@@ -122,10 +115,10 @@ type Mark struct {
 
 func (b *Mark) init() {
 	if b.gotvc == nil {
-		b.gotvc = newGotVC(&b.Info)
+		b.gotvc = newGotVC(&b.Info.Config)
 	}
 	if b.gotfs == nil {
-		b.gotfs = newGotFS(&b.Info)
+		b.gotfs = newGotFS(&b.Info.Config)
 	}
 }
 
@@ -139,9 +132,13 @@ func (b *Mark) GotVC() *VCMach {
 	return b.gotvc
 }
 
-func (b *Mark) AsParams() Metadata {
+func (m *Mark) Config() DSConfig {
+	return m.Info.Config
+}
+
+func (b *Mark) AsMetadata() Metadata {
 	return Metadata{
-		Salt:        b.Info.Salt,
+		Config:      b.Config(),
 		Annotations: b.Info.Annotations,
 	}
 }
@@ -231,25 +228,25 @@ func (b *Mark) ViewFS(ctx context.Context, fn func(mach *gotfs.Machine, stores s
 }
 
 // NewGotFS creates a new gotfs.Machine suitable for writing to the mark
-func newGotFS(b *Info, opts ...gotfs.Option) *gotfs.Machine {
+func newGotFS(b *DSConfig, opts ...gotfs.Option) *gotfs.Machine {
 	opts = append(opts, gotfs.WithSalt(deriveFSSalt(b)))
 	fsag := gotfs.NewMachine(opts...)
 	return fsag
 }
 
 // NewGotVC creates a new gotvc.Machine suitable for writing to the mark
-func newGotVC(b *Info, opts ...gotvc.Option[Payload]) *VCMach {
+func newGotVC(b *DSConfig, opts ...gotvc.Option[Payload]) *VCMach {
 	opts = append(opts, gotvc.WithSalt[Payload](deriveVCSalt(b)))
 	return gotvc.NewMachine(ParsePayload, opts...)
 }
 
-func deriveFSSalt(b *Info) *[32]byte {
+func deriveFSSalt(b *DSConfig) *[32]byte {
 	var out [32]byte
 	gdat.DeriveKey(out[:], (*[32]byte)(&b.Salt), []byte("gotfs"))
 	return &out
 }
 
-func deriveVCSalt(b *Info) *[32]byte {
+func deriveVCSalt(b *DSConfig) *[32]byte {
 	var out [32]byte
 	gdat.DeriveKey(out[:], (*[32]byte)(&b.Salt), []byte("gotvc"))
 	return &out

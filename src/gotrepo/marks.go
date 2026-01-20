@@ -33,7 +33,7 @@ func ParseFQName(s string) FQM {
 }
 
 // CreateBranch creates a new mark in the repo's local space.
-func (r *Repo) CreateMark(ctx context.Context, fqname FQM, params marks.Metadata) (*MarkInfo, error) {
+func (r *Repo) CreateMark(ctx context.Context, fqname FQM, mcfg marks.DSConfig, anns []marks.Annotation) (*MarkInfo, error) {
 	if err := marks.CheckName(fqname.Name); err != nil {
 		return nil, err
 	}
@@ -41,7 +41,7 @@ func (r *Repo) CreateMark(ctx context.Context, fqname FQM, params marks.Metadata
 	if err != nil {
 		return nil, err
 	}
-	return space.Create(ctx, fqname.Name, params)
+	return space.Create(ctx, fqname.Name, marks.Metadata{Config: mcfg, Annotations: anns})
 }
 
 func (r *Repo) InspectMark(ctx context.Context, fqname FQM) (*marks.Info, error) {
@@ -112,9 +112,7 @@ func (r *Repo) CloneMark(ctx context.Context, base, next FQM) error {
 	if err != nil {
 		return err
 	}
-	_, err = r.CreateMark(ctx, next, marks.Metadata{
-		Salt: baseBranch.Info.Salt,
-	})
+	_, err = r.CreateMark(ctx, next, baseBranch.Config(), baseBranch.Info.Annotations)
 	if err != nil {
 		return err
 	}

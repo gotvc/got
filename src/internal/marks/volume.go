@@ -123,7 +123,7 @@ func CleanupVolume(ctx context.Context, vol Volume, info Info) error {
 	}
 	defer tx.Abort(ctx)
 	keep := &stores.MemSet{}
-	vcmach := newGotVC(&info)
+	vcmach := newGotVC(&info.Config)
 	if start != nil {
 		if err := vcmach.Populate(ctx, tx, *start, keep, func(payload Payload) error {
 			fsag := gotfs.NewMachine()

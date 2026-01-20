@@ -132,7 +132,7 @@ type txSpace struct {
 }
 
 // Create implements marks.Space.
-func (s *txSpace) Create(ctx context.Context, name string, cfg marks.Metadata) (*marks.Info, error) {
+func (s *txSpace) Create(ctx context.Context, name string, md marks.Metadata) (*marks.Info, error) {
 	prevb, err := s.tx.Get(ctx, name)
 	if err != nil {
 		return nil, err
@@ -146,8 +146,8 @@ func (s *txSpace) Create(ctx context.Context, name string, cfg marks.Metadata) (
 	}
 	b := MarkState{
 		Info: marks.Info{
-			Salt:        cfg.Salt,
-			Annotations: cfg.Annotations,
+			Config:      md.Config,
+			Annotations: md.Annotations,
 			CreatedAt:   tai64.Now().TAI64(),
 		},
 		Target: *emptyRef,

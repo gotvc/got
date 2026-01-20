@@ -91,7 +91,7 @@ func (s *Site) CreateFile(p string, data []byte) {
 
 func (s *Site) CreateMark(fqname gotrepo.FQM) {
 	ctx := testutil.Context(s.t)
-	_, err := s.Repo.CreateMark(ctx, fqname, marks.Metadata{})
+	_, err := s.Repo.CreateMark(ctx, fqname, marks.DefaultConfig(true), nil)
 	require.NoError(s.t, err)
 }
 

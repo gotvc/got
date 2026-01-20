@@ -42,7 +42,7 @@ var markCreateCmd = star.Command{
 		}
 		defer repo.Close()
 		branchName := markNameParam.Load(c)
-		_, err = repo.CreateMark(ctx, gotrepo.FQM{Name: branchName}, marks.NewConfig(false))
+		_, err = repo.CreateMark(ctx, gotrepo.FQM{Name: branchName}, marks.DefaultConfig(false), nil)
 		return err
 	},
 }
@@ -146,17 +146,20 @@ var markCpSaltCmd = star.Command{
 		defer repo.Close()
 		src := srcMarkParam.Load(c)
 		dst := dstMarkParam.Load(c)
-		srcInfo, err := repo.GetMark(ctx, src)
+		srcInfo, err := repo.InspectMark(ctx, src)
 		if err != nil {
 			return err
 		}
-		dstInfo, err := repo.GetMark(ctx, dst)
+		dstInfo, err := repo.InspectMark(ctx, dst)
 		if err != nil {
 			return err
 		}
-		cfg := dstInfo.AsParams()
-		cfg.Salt = srcInfo.Info.Salt
-		return repo.ConfigureMark(ctx, dst, cfg)
+		cfg := dstInfo.Config
+		cfg.Salt = srcInfo.Config.Salt
+		return repo.ConfigureMark(ctx, dst, marks.Metadata{
+			Config:      cfg,
+			Annotations: dstInfo.Annotations,
+		})
 	},
 }
 

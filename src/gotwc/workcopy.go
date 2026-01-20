@@ -193,8 +193,8 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 		}
 		// if active branch has the same salt as the desired branch, then
 		// there is no check to do.
-		// If they have different salts, then we need to check if the staging area is empty.
-		if desiredBranch.Info.Salt != activeBranch.Info.Salt {
+		// If they have different parameters, then we need to check if the staging area is empty.
+		if desiredBranch.Info.Config.Hash() != activeBranch.Info.Config.Hash() {
 			stagetx, err := wc.beginStageTx(ctx, nil, false)
 			if err != nil {
 				return err
@@ -313,7 +313,7 @@ func (wc *WC) Export(ctx context.Context) error {
 	if err != nil {
 		return nil
 	}
-	paramHash := saltFromBranch(&mark.Info)
+	paramHash := mark.Info.Config.Hash()
 	spans, err := wc.ListSpans(ctx)
 	if err != nil {
 		return nil
@@ -328,7 +328,7 @@ func (wc *WC) Export(ctx context.Context) error {
 		return err
 	}
 	return mark.ViewFS(ctx, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
-		portDB := porting.NewDB(conn, *paramHash)
+		portDB := porting.NewDB(conn, paramHash)
 		exp := porting.NewExporter(fsmach, portDB, fsys, wc.moveToTrash)
 		for _, span := range spans {
 			if err := exp.ExportSpan(ctx, s, s, root, span); err != nil {
@@ -348,7 +348,7 @@ func (wc *WC) Clobber(ctx context.Context, p string) error {
 	if err != nil {
 		return nil
 	}
-	paramHash := saltFromBranch(&mark.Info)
+	paramHash := mark.Info.Config.Hash()
 	conn, err := wc.db.Take(ctx)
 	if err != nil {
 		return nil
@@ -359,7 +359,7 @@ func (wc *WC) Clobber(ctx context.Context, p string) error {
 		return err
 	}
 	return mark.ViewFS(ctx, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
-		portDB := porting.NewDB(conn, *paramHash)
+		portDB := porting.NewDB(conn, paramHash)
 		exp := porting.NewExporter(fsmach, portDB, fsys, wc.moveToTrash)
 		return exp.Clobber(ctx, s, s, root, p)
 	})
@@ -461,7 +461,8 @@ func (wc *WC) getParamHash(ctx context.Context) (*[32]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return saltFromBranch(&m.Info), nil
+	ph := m.Info.Config.Hash()
+	return &ph, nil
 }
 
 type Span = porting.Span
