@@ -23,7 +23,7 @@ type DirEnt struct {
 // NewEmpty creates a new filesystem with an empty root directory
 func (a *Machine) NewEmpty(ctx context.Context, s stores.RW) (*Root, error) {
 	b := a.NewBuilder(ctx, s, stores.NewMem())
-	if err := b.Mkdir("/", 0o755); err != nil {
+	if err := b.Mkdir("", 0o755); err != nil {
 		return nil, err
 	}
 	return b.Finish()
@@ -106,22 +106,19 @@ func (a *Machine) RemoveAll(ctx context.Context, s Store, x Root, p string) (*Ro
 	if err != nil {
 		return nil, err
 	}
-	k := makeInfoKey(p)
+	k := appendPrefix(nil, p)
 	span := gotkv.PrefixSpan(k)
 	root, err := a.gotkv.DeleteSpan(ctx, s, *x.toGotKV(), span)
 	return newRoot(root), err
 }
 
 func dirSpan(p string) gotkv.Span {
-	p = cleanPath(p)
-	k := makeInfoKey(p)
+	k := appendPrefix(nil, p)
 	return gotkv.PrefixSpan(k)
 }
 
 func SpanForPath(p string) gotkv.Span {
-	p = cleanPath(p)
-	k := makeInfoKey(p)
-	return gotkv.PrefixSpan(k)
+	return dirSpan(p)
 }
 
 type dirIterator struct {

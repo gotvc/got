@@ -2,6 +2,7 @@ package gotfs
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io/fs"
 	"os"
@@ -90,30 +91,20 @@ func parseInfo(data []byte) (*Info, error) {
 	return &ret, nil
 }
 
-func makeInfoKey(p string) []byte {
-	p = cleanPath(p)
-	if p == "" {
-		return []byte("/")
-	}
-	return []byte("/" + p + "/")
+// markInfoKey creates a key to store the Info object for a path p
+func makeInfoKey(p string) (out []byte) {
+	out = appendPrefix(out, p)
+	out = binary.BigEndian.AppendUint64(out, 0) // 0 offset
+	return out
 }
 
 func parseInfoKey(k []byte) (string, error) {
-	switch len(k) {
-	case 0:
-		return "", fmt.Errorf("not a valid metadata key: %q", k)
-	case 1:
-		p := string(k)
-		if p[0] == Sep {
-			return p, nil
-		}
-		return "", fmt.Errorf("not a valid metadata key: %q", k)
-	default:
-		if k[0] != Sep || k[len(k)-1] != Sep {
-			return "", fmt.Errorf("not a valid metadata key: %q", k)
-		}
-		return string(k[1 : len(k)-1]), nil
+	if !isInfoKey(k) {
+		return "", fmt.Errorf("not a valid metdata key: %q", k)
 	}
+	// at this point we know the key is >= 9 bytes long.
+	p := string(k[:len(k)-9])
+	return cleanPath(p), nil
 }
 
 // PutInfo assigns metadata to p

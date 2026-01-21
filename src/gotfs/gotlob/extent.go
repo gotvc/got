@@ -9,8 +9,11 @@ import (
 
 // Extent is a reference to data using the gdat.Ref type.
 type Extent struct {
-	Ref    gdat.Ref
+	// Ref points to the blob that contains the Extent data
+	Ref gdat.Ref
+	// Offset is where the extent starts within a Blob
 	Offset uint32
+	// Length is the length of the Extent, starting at the offset.
 	Length uint32
 }
 

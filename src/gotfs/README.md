@@ -33,23 +33,23 @@ File data is stored in a content-addressed store, and references to the data are
 For example: The file "test.txt" with 10B of data in it would produce the following key value pairs.
 ```
 /                                -> Info (dir)
-/test.txt/                       -> Info (file)
+/test.txt/<NULL>< 64 bit: 0  >   -> Info (file)
 /test.txt/<NULL>< 64 bit: 10 >   -> Extent
 ```
 
 A directory is stored as a metadata object.
 ```
 /                                         -> Info (dir)
-/mydir/                                   -> Info (dir)
-/mydir/myfile.txt/                        -> Info (file)
-/mydir/myfile.txt/<NULL><64 bit offset>   -> Part
+/mydir/<NULL>< 64 bit: 0 >                -> Info (dir)
+/mydir/myfile.txt<NULL>< 64 bit: 0     >  -> Info (file)
+/mydir/myfile.txt<NULL>< 64 bit offset >  -> Part
 ```
 
 It is possible for a file to be at the root
 ```
-/                            -> Info (file)
-/<NULL><64 bits      >       -> Extent
-/<NULL>< next offset >       -> Extent
+/<NULL>< 64 bit: 0      >       -> Info (file)
+/<NULL>< 64 bits extent >       -> Extent
+/<NULL>< next offset    >       -> Extent
 ```
 
 All Info keys end in a trailing `/`, including regular files.
@@ -64,4 +64,3 @@ If there is not an entry at the path or the entry is not for a regular file, the
 Then convert the offset to read from to a key.
 Seek to the first entry after that key.
 The extent referenced by that entry will end at the offset in the key, and will contain data overlapping the target range.
-
