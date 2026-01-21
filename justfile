@@ -8,19 +8,29 @@ testv: capnp
 bench:
 	go test -v -bench=. ./... -run Benchmark
 
-install: capnp
-	go install ./cmd/got
+install: build
+    sudo cp ./build/out/got /usr/bin/got
 
 capnp:
 	cd ./src/gotfs/gotfscnp && ./build_cnp.sh
 
 build: capnp
-	- rm -r ./build/out/*
-	GOOS=darwin GOARCH=arm64 ./etc/build_go_binary.sh ./build/out/got_darwin-arm64 ./cmd/got
-	GOOS=linux GOARCH=amd64 ./etc/build_go_binary.sh ./build/out/got_linux-amd64 ./cmd/got
+	rm ./build/out/*
+	./build/go_exec.sh ./build/out/got ./cmd/got
 
-docker:
-	docker build -t got:local .
+build-amd64-linux: capnp
+	mkdir -p ./build/out
+	GOARCH=amd64 GOOS=linux ./build/go_exec.sh ./build/out/got_amd64-linux ./cmd/got
+
+build-arm64-linux: capnp
+    mkdir -p ./build/out
+    GOARCH=arm64 GOOS=linux ./build/go_exec.sh ./build/out/got_arm64-linux ./cmd/got
+
+build-arm64-darwin: capnp
+	mkdir -p ./build/out
+	GOARCH=arm64 GOOS=darwin ./build/go_exec.sh ./build/out/got_arm64-darwin ./cmd/got
+
+build-exec: build-amd64-linux build-arm64-linux build-arm64-darwin
 
 precommit: test
 	go mod tidy

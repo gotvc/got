@@ -5,8 +5,6 @@
 ### `got init`
 Initializes a Got repo in the current working directory.
 
-### `got clone <dst> <url>`
-Initializes a new Got repo in the directory dst with branches under `origin/` mapping to the space at the URL.
 
 ## General
 
@@ -56,27 +54,27 @@ Untracks everything.
 
 ## Branches
 
-### `got active [name]`
-If `name` is provided, switches to the branch with that name.  If no name is provided, prints the active branch.
+### `got head [name]`
+If `name` is provided, changes HEAD to the provided name.  If no name is provided, it prints HEAD.
 
-### `got branch list`
-Lists the branches in the root branch space.
+### `got mark list`
+Lists the branches in the local mark namespace. 
 
-### `got branch create <name>`
-Creates a new branch.
+### `got mark as <name>`
+Creates a new mark at name, pointing to the same Snapshot as the mark at HEAD.
 
-### `got branch delete <name>`
+### `got mark delete <name>`
 Deletes the branch with name if it exists.
 Does not error if the branch does not exist.
 
-### `got branch set-head <name>`
-Sets the head of the branch at name to a Snapshot parsed from standard input.
+### `got branch set-root <name>`
+Sets the root of the mark at name to a Snapshot parsed from standard input.
 
-### `got branch get-head <name>`
-Prints the head of the branch at name to standard output.
+### `got mark get-root <name>`
+Prints the Snapshot marked at name to standard output.
 
 ### `got sync <src> <dst>`
-Sync the contents of branch `<src>` to branch `<dst>`.
+Sync the contents of mark `<src>` to a mark `<dst>`.
 
 ## IAM
 

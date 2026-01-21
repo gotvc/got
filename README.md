@@ -9,8 +9,8 @@ Got uses an improved data structure that better handles large files and director
 - [ARCHITECTURE.md](./ARCHITECTURE.md)
 - [CLI Docs](./doc/CLI.md)
 - [Cryptography Overview](./doc/Cryptography.md)
-- [GotFS](./pkg/gotfs/README.md)
-- [GotKV](./pkg/gotkv/README.md)
+- [GotFS](./src/gotfs/README.md)
+- [GotKV](./src/gotkv/README.md)
 
 ## Features/Roadmap
 - [x] Content-Defined chunking of large files into blobs with a maximum size.
@@ -32,12 +32,11 @@ Got uses an improved data structure that better handles large files and director
 ### Installation
 Either download a prebuilt binary or build one from source.
 
-Installs to `$GOPATH/bin` with just.
-If that isn't on your path, just copy the executable from there to wherever you want.
-
+Installs to `/usr/bin/got` with just.
 ```shell
 $ just install
 ```
+This will build Got for the current architecture, leaving the binary in `build/out/got`.
 
 ### Create a New Repo
 Then initialize a repository in the current working directory.
@@ -70,10 +69,9 @@ $ just test
 
 To build release binaries
 ```shell
-TAG=v0.0.x just build
+just build-exec
 ```
-Where `TAG` is an environment variable which should be set to the release version, or the Git hash of the source used for the build.
-The release binaries will be under the `out` directory.
+The release binaries for all architectures will be under the `build/out` directory.
 
 ## Got in Action
 Got importing a 3GB file.
@@ -92,7 +90,7 @@ $ got add large_file.dat
 ```
 
 ## More
-Read more about the configuration objects in [doc/Config.md](./doc/Config.md).
+Read more about configuration in [doc/Config.md](./doc/Config.md).
 
 Support and development discussion happen in the INET256 discord.
 [<img src="https://discord.com/assets/cb48d2a8d4991281d7a6a95d2f58195e.svg" width="80">](https://discord.gg/TWy6aVWJ7f)
