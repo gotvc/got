@@ -51,7 +51,7 @@ func (di *DeltaIterator) Next(ctx context.Context, dsts []DeltaEntry) (int, erro
 	for {
 		if err := di.iter.Peek(ctx, &di.ent); err != nil {
 			if streams.IsEOS(err) && dst.PutContent != nil {
-				return 0, nil
+				return 1, nil
 			}
 			return 0, err
 		}
