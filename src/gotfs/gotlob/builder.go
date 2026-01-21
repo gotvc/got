@@ -205,6 +205,18 @@ func (b *Builder) handleChunk(data []byte) error {
 
 // flushInline flushes the inline entries from the queue and clears the queue.
 func (b *Builder) flushInline(ctx context.Context) error {
+	// Drop empty non-inline ops (empty files) that would otherwise block inline flushes.
+	for len(b.queue) > 0 {
+		op := b.queue[0]
+		if op.isInline {
+			break
+		}
+		if op.bytesSent == 0 && op.lastOffset == 0 {
+			b.queue = b.queue[1:]
+			continue
+		}
+		break
+	}
 	var remove int
 	for _, op := range b.queue {
 		if op.isInline {
