@@ -262,6 +262,11 @@ func (a *Machine) maxInfo(ctx context.Context, ms stores.Reading, root gotkv.Roo
 	}
 }
 
+var firstKey = []byte{
+	'/', 0,
+	0, 0, 0, 0, 0, 0, 0, 0,
+}
+
 func (a *Machine) Check(ctx context.Context, s stores.Reading, root Root, checkData func(ref gdat.Ref) error) error {
 	var lastPath *string
 	var lastOffset *uint64
@@ -269,7 +274,7 @@ func (a *Machine) Check(ctx context.Context, s stores.Reading, root Root, checkD
 		switch {
 		case lastPath == nil:
 			logctx.Infof(ctx, "checking root")
-			if !bytes.Equal(ent.Key, []byte{Sep}) {
+			if !bytes.Equal(ent.Key, firstKey) {
 				logctx.Infof(ctx, "first key: %q", ent.Key)
 				return fmt.Errorf("filesystem is missing root")
 			}

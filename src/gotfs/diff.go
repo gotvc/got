@@ -79,7 +79,8 @@ func (d *Differ) Next(ctx context.Context, dsts []DeltaEntry) (int, error) {
 }
 
 func (d *Differ) seekPast(ctx context.Context, p string) {
-	if err := d.diff.Seek(ctx, gotkv.PrefixEnd(makeInfoKey(p))); err != nil && !streams.IsEOS(err) {
+	prefix := appendPrefix(nil, p)
+	if err := d.diff.Seek(ctx, gotkv.PrefixEnd(prefix)); err != nil && !streams.IsEOS(err) {
 		logctx.Error(ctx, "seeking", zap.Error(err))
 	}
 }

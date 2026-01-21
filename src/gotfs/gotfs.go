@@ -87,25 +87,6 @@ func (r *Root) toGotKV() *gotkv.Root {
 
 const MaxPathLen = gotkv.MaxKeySize - 2 - 8
 
-// Segment is a span of a GotFS instance.
-type Segment struct {
-	// Span is the span in the final Splice operation
-	Span gotkv.Span
-	// Contents is what will go in the Span.
-	Contents Expr
-}
-
-func (s Segment) String() string {
-	return fmt.Sprintf("{ %v : %v}", s.Span, s.Contents)
-}
-
-type Expr struct {
-	// Root is the filesystem to copy from
-	Root Root
-	// AddPrefix is applied to Root before copying
-	AddPrefix string
-}
-
 // appendPrefix appends the prefix that all information for an object
 // will be contained in to out and returns the result.
 func appendPrefix(out []byte, p string) []byte {
@@ -115,8 +96,15 @@ func appendPrefix(out []byte, p string) []byte {
 	if len(p) != 0 {
 		out = append(out, Sep)
 	}
-	out = append(out, 0)
 	return out
+}
+
+// isValidKey returs true if the key is valid.
+// This means checking for no NULL bytes until the end.
+// And ensuring that the key is at least 9 bytes long.
+func isValidKey(k []byte) bool {
+	i := bytes.Index(k, []byte{0x00})
+	return i > 0 && i == len(k)-9
 }
 
 // isInfoKey returns true if k can be interpretted as an info key.
@@ -132,8 +120,7 @@ func isInfoKey(k []byte) bool {
 // isExtentKey returns true if k can be interpretted as an extent key.
 // extent keys have the first null byte 9'th from the end and a non-zero 8 byte suffix.
 func isExtentKey(k []byte) bool {
-	i := bytes.Index(k, []byte{0x00})
-	return i > 0 && i == len(k)-9 && !isInfoKey(k)
+	return isValidKey(k) && !isInfoKey(k)
 }
 
 func splitExtentKey(k []byte) (string, uint64, error) {
@@ -154,7 +141,9 @@ func parseExtent(v []byte) (*Extent, error) {
 }
 
 func makeExtentPrefix(p string) []byte {
-	return appendPrefix(nil, p)
+	out := appendPrefix(nil, p)
+	out = append(out, 0)
+	return out
 }
 
 func SplitPath(p string) []string {

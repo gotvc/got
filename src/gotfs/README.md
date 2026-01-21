@@ -30,21 +30,24 @@ prefixed with the metadata key.
 
 File data is stored in a content-addressed store, and references to the data are stored in GotKV.
 
+### Example: 1 File
 For example: The file "test.txt" with 10B of data in it would produce the following key value pairs.
 ```
-/                                -> Info (dir)
+/<NULL>< 64 bit: 0  >            -> Info (dir)
 /test.txt/<NULL>< 64 bit: 0  >   -> Info (file)
 /test.txt/<NULL>< 64 bit: 10 >   -> Extent
 ```
 
+### Example: 2 File + 1 Directory
 A directory is stored as a metadata object.
 ```
-/                                         -> Info (dir)
+/<NULL>< 64 bit: 0  >                     -> Info (dir)
 /mydir/<NULL>< 64 bit: 0 >                -> Info (dir)
 /mydir/myfile.txt<NULL>< 64 bit: 0     >  -> Info (file)
 /mydir/myfile.txt<NULL>< 64 bit offset >  -> Part
 ```
 
+### Example 3: File at the Root
 It is possible for a file to be at the root
 ```
 /<NULL>< 64 bit: 0      >       -> Info (file)

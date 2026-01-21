@@ -162,13 +162,9 @@ func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
 	if isExtentKey(ent.Key) {
 		return nil, fmt.Errorf("got extent key while iterating directory entries %q", ent.Key)
 	}
+
 	md, err := parseInfo(ent.Value)
 	if err != nil {
-		return nil, err
-	}
-	// now we have to advance through the file or directory to fully consume it.
-	end := gotkv.PrefixEnd(ent.Key)
-	if err := di.iter.Seek(ctx, end); err != nil {
 		return nil, err
 	}
 	p, err := parseInfoKey(ent.Key)
@@ -179,6 +175,13 @@ func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
 	dirEnt := DirEnt{
 		Name: name,
 		Mode: os.FileMode(md.Mode),
+	}
+
+	// now we have to advance through the file or directory to fully consume it.
+	prefix := appendPrefix(nil, p)
+	end := gotkv.PrefixEnd(prefix)
+	if err := di.iter.Seek(ctx, end); err != nil {
+		return nil, err
 	}
 	return &dirEnt, nil
 }

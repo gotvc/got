@@ -12,6 +12,25 @@ import (
 	"go.brendoncarroll.net/exp/streams"
 )
 
+// Segment is a span of a GotFS instance.
+type Segment struct {
+	// Span is the span in the final Splice operation
+	Span gotkv.Span
+	// Contents is what will go in the Span.
+	Contents Expr
+}
+
+func (s Segment) String() string {
+	return fmt.Sprintf("{ %v : %v}", s.Span, s.Contents)
+}
+
+type Expr struct {
+	// Root is the filesystem to copy from
+	Root Root
+	// AddPrefix is applied to Root before copying
+	AddPrefix string
+}
+
 // ChangesOnBase inserts segments from base between each Segment in changes.
 func ChangesOnBase(base Root, changes []Segment) []Segment {
 	var segs []Segment

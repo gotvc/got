@@ -92,8 +92,10 @@ func parseInfo(data []byte) (*Info, error) {
 }
 
 // markInfoKey creates a key to store the Info object for a path p
+// It consists of the path prefix, and the
 func makeInfoKey(p string) (out []byte) {
 	out = appendPrefix(out, p)
+	out = append(out, 0)                        // NULL
 	out = binary.BigEndian.AppendUint64(out, 0) // 0 offset
 	return out
 }
