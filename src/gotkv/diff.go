@@ -30,44 +30,44 @@ type Differ struct {
 	le, re              Entry
 }
 
-func (d *Differ) Next(ctx context.Context, dst *DEntry) error {
+func (d *Differ) Next(ctx context.Context, dst []DEntry) (int, error) {
 	emitted := false
 	for !emitted {
 		if !d.haveLeft {
-			if err := d.left.Next(ctx, &d.le); err != nil && !streams.IsEOS(err) {
-				return err
+			if err := streams.NextUnit(ctx, d.left, &d.le); err != nil && !streams.IsEOS(err) {
+				return 0, err
 			} else if err == nil {
 				d.haveLeft = true
 			}
 		}
 		if !d.haveRight {
-			if err := d.right.Next(ctx, &d.re); err != nil && !streams.IsEOS(err) {
-				return err
+			if err := streams.NextUnit(ctx, d.right, &d.re); err != nil && !streams.IsEOS(err) {
+				return 0, err
 			} else if err == nil {
 				d.haveRight = true
 			}
 		}
 		switch {
 		case d.haveLeft && !d.haveRight:
-			emitted = d.emitLeft(dst)
+			emitted = d.emitLeft(&dst[0])
 		case !d.haveLeft && d.haveRight:
-			emitted = d.emitRight(dst)
+			emitted = d.emitRight(&dst[0])
 		case d.haveLeft && d.haveRight:
 			switch bytes.Compare(d.le.Key, d.re.Key) {
 			case -1:
-				emitted = d.emitLeft(dst)
+				emitted = d.emitLeft(&dst[0])
 			case 0:
-				emitted = d.emitBoth(dst)
+				emitted = d.emitBoth(&dst[0])
 			case 1:
-				emitted = d.emitRight(dst)
+				emitted = d.emitRight(&dst[0])
 			default:
 				panic("bytes.Compare returned value out of range [-1, 0, 1]")
 			}
 		default:
-			return streams.EOS()
+			return 0, streams.EOS()
 		}
 	}
-	return nil
+	return 1, nil
 }
 
 func (d *Differ) Seek(ctx context.Context, gteq []byte) error {

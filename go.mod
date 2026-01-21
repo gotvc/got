@@ -5,14 +5,14 @@ go 1.24.0
 toolchain go1.24.1
 
 require (
-	blobcache.io/blobcache v0.0.3-0.20260106172421-6e1f35d97756
+	blobcache.io/blobcache v0.0.4-0.20260119183202-6429a0ddfceb
 	capnproto.org/go/capnp/v3 v3.1.0-alpha.2
 	github.com/cloudflare/circl v1.6.1
 	github.com/dchest/siphash v1.2.3
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/golang-lru v1.0.2
 	github.com/stretchr/testify v1.11.1
-	go.brendoncarroll.net/exp v0.0.0-20251214173953-6263a5ff1b6d
+	go.brendoncarroll.net/exp v0.0.0-20260120154909-50dadeafc54f
 	go.brendoncarroll.net/star v0.0.0-20251226172902-a1111c13c6b3
 	go.brendoncarroll.net/state v0.0.0-20241118200920-627c9c196901
 	go.brendoncarroll.net/stdctx v0.0.0-20241118190518-40d09f4d11e7

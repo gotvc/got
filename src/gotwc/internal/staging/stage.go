@@ -255,7 +255,7 @@ func (tx *Tx) IsEmpty(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	if err := it.Next(ctx, &Entry{}); err == nil {
+	if err := streams.NextUnit(ctx, it, &Entry{}); err == nil {
 		return false, nil
 	} else if streams.IsEOS(err) {
 		return true, nil
@@ -337,14 +337,15 @@ type Iterator struct {
 	it streams.Iterator[gotkv.Entry]
 }
 
-func (it *Iterator) Next(ctx context.Context, dst *Entry) error {
+func (it *Iterator) Next(ctx context.Context, dsts []Entry) (int, error) {
+	dst := &dsts[0]
 	var kvent gotkv.Entry
-	if err := it.it.Next(ctx, &kvent); err != nil {
-		return err
+	if err := streams.NextUnit(ctx, it.it, &kvent); err != nil {
+		return 0, err
 	}
 	if err := json.Unmarshal(kvent.Value, &dst.Op); err != nil {
-		return err
+		return 0, err
 	}
 	dst.Path = string(kvent.Key)
-	return nil
+	return 1, nil
 }

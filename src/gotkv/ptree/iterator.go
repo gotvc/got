@@ -8,6 +8,8 @@ import (
 	"go.brendoncarroll.net/state"
 )
 
+var _ streams.Iterator[int] = &Iterator[int, int]{}
+
 type Iterator[T, Ref any] struct {
 	p IteratorParams[T, Ref]
 
@@ -67,8 +69,11 @@ func NewIterator[T, Ref any](params IteratorParams[T, Ref]) *Iterator[T, Ref] {
 	}
 }
 
-func (it *Iterator[T, Ref]) Next(ctx context.Context, dst *T) error {
-	return it.next(ctx, 0, dual[T, Ref]{Entry: dst})
+func (it *Iterator[T, Ref]) Next(ctx context.Context, dst []T) (int, error) {
+	if err := it.next(ctx, 0, dual[T, Ref]{Entry: &dst[0]}); err != nil {
+		return 0, err
+	}
+	return 1, nil
 }
 
 func (it *Iterator[T, Ref]) Peek(ctx context.Context, dst *T) error {

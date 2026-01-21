@@ -23,18 +23,19 @@ func (ag *Machine) NewDiffer(ms stores.Reading, left, right Root) *Differ {
 	}
 }
 
-func (d *Differ) Next(ctx context.Context, dst *DeltaEntry) error {
+func (d *Differ) Next(ctx context.Context, dsts []DeltaEntry) (int, error) {
+	dst := &dsts[0]
 	*dst = DeltaEntry{}
 	for {
-		if err := d.diff.Next(ctx, &d.dent); err != nil {
-			return err
+		if err := streams.NextUnit(ctx, d.diff, &d.dent); err != nil {
+			return 0, err
 		}
 		switch {
 		// delete info
 		case isInfoKey(d.dent.Key):
 			p, err := parseInfoKey(d.dent.Key)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			dst.Path = p
 			if !d.dent.Right.Ok {
@@ -42,29 +43,29 @@ func (d *Differ) Next(ctx context.Context, dst *DeltaEntry) error {
 			} else {
 				info, err := parseInfo(d.dent.Right.X)
 				if err != nil {
-					return err
+					return 0, err
 				}
 				dst.PutInfo = info
 			}
 			d.seekPast(ctx, p)
-			return nil
+			return 1, nil
 
 		case isExtentKey(d.dent.Key):
 			p, offset, err := splitExtentKey(d.dent.Key)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			if dst.Path == "" {
 				dst.Path = p
 				dst.PutContent = &PutContent{Begin: offset}
 			} else if dst.Path != p {
-				return nil
+				return 1, nil
 			}
 			dst.PutContent.End = offset
 			if d.dent.Right.Ok {
 				ext, err := parseExtent(d.dent.Right.X)
 				if err != nil {
-					return err
+					return 0, err
 				}
 				dst.PutContent.Begin = min(dst.PutContent.Begin, offset-uint64(ext.Length))
 				dst.PutContent.Extents = append(dst.PutContent.Extents, *ext)
@@ -72,7 +73,7 @@ func (d *Differ) Next(ctx context.Context, dst *DeltaEntry) error {
 				offset = 0
 			}
 		default:
-			return errors.New("unrecognized key")
+			return 0, errors.New("unrecognized key")
 		}
 	}
 }

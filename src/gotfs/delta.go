@@ -45,20 +45,21 @@ func (ag *Machine) NewDeltaIterator(ms, ds stores.Reading, delta Delta) *DeltaIt
 	}
 }
 
-func (di *DeltaIterator) Next(ctx context.Context, dst *DeltaEntry) error {
+func (di *DeltaIterator) Next(ctx context.Context, dsts []DeltaEntry) (int, error) {
+	dst := &dsts[0]
 	*dst = DeltaEntry{}
 	for {
 		if err := di.iter.Peek(ctx, &di.ent); err != nil {
 			if streams.IsEOS(err) && dst.PutContent != nil {
-				return nil
+				return 1, nil
 			}
-			return err
+			return 0, err
 		}
 		switch {
 		case isInfoKey(di.ent.Key):
 			p, err := parseInfoKey(di.ent.Key)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			dst.Path = p
 			if len(di.ent.Value) == 0 {
@@ -66,15 +67,18 @@ func (di *DeltaIterator) Next(ctx context.Context, dst *DeltaEntry) error {
 			} else {
 				info, err := parseInfo(di.ent.Value)
 				if err != nil {
-					return err
+					return 0, err
 				}
 				dst.PutInfo = info
 			}
-			return di.iter.Next(ctx, &di.ent)
+			if err := streams.NextUnit(ctx, di.iter, &di.ent); err != nil {
+				return 0, err
+			}
+			return 1, nil
 		case isExtentKey(di.ent.Key):
 			p, offset, err := splitExtentKey(di.ent.Key)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			if dst.Path == "" {
 				dst.Path = p
@@ -83,19 +87,22 @@ func (di *DeltaIterator) Next(ctx context.Context, dst *DeltaEntry) error {
 					End:   offset,
 				}
 			} else if dst.Path != p {
-				return nil
+				return 0, nil
 			}
 			dst.PutContent.End = offset
 			if len(di.ent.Value) > 0 {
 				ext, err := parseExtent(di.ent.Value)
 				if err != nil {
-					return err
+					return 0, err
 				}
 				dst.PutContent.Extents = append(dst.PutContent.Extents, *ext)
 			}
-			return di.iter.Next(ctx, &di.ent)
+			if err := streams.NextUnit(ctx, di.iter, &di.ent); err != nil {
+				return 0, err
+			}
+			return 1, nil
 		default:
-			return errors.New("unrecognized key")
+			return 0, errors.New("unrecognized key")
 		}
 	}
 }

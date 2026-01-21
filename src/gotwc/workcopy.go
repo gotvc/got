@@ -47,9 +47,6 @@ func Init(repo *gotrepo.Repo, wcRoot *os.Root, cfg Config) error {
 
 // Open opens a directory as a WorkingCopy
 // `wcdir` is a directory containing a .got/wc-config file
-//
-// TODO: maybe this should take a Repo? and Repo should just manage setting up blobcache
-// and creating and deleting stages.
 func Open(root *os.Root) (*WC, error) {
 	cfg, err := LoadConfig(root)
 	if err != nil {

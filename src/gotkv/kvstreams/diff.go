@@ -24,13 +24,13 @@ func Diff(ctx context.Context, s cadata.Store, leftIt, rightIt Iterator, span Sp
 	}
 	for {
 		if !leftExists {
-			if err := leftIt.Next(ctx, &leftEnt); err != nil && !streams.IsEOS(err) {
+			if err := streams.NextUnit(ctx, leftIt, &leftEnt); err != nil && !streams.IsEOS(err) {
 				return err
 			}
 			leftExists = true
 		}
 		if !rightExists {
-			if err := rightIt.Next(ctx, &rightEnt); err != nil && !streams.IsEOS(err) {
+			if err := streams.NextUnit(ctx, rightIt, &rightEnt); err != nil && !streams.IsEOS(err) {
 				return err
 			}
 			rightExists = true

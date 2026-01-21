@@ -48,6 +48,6 @@ func TestDiff(t *testing.T) {
 
 	// only return EOS for subsequent calls
 	for i := 0; i < 10; i++ {
-		require.True(t, streams.IsEOS(d.Next(ctx, nil)))
+		require.True(t, streams.IsEOS(streams.NextUnit(ctx, d, nil)))
 	}
 }

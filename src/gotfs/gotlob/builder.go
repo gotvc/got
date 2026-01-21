@@ -257,7 +257,7 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 	// copy one by one until we can fast copy
 	var ent kvstreams.Entry
 	for b.chunker.Buffered() > 0 {
-		if err := it.Next(ctx, &ent); err != nil {
+		if err := streams.NextUnit(ctx, it, &ent); err != nil {
 			if streams.IsEOS(err) {
 				break
 			}

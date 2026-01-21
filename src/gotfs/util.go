@@ -44,7 +44,7 @@ func Dump(ctx context.Context, s stores.Reading, root Root, w io.Writer) error {
 	ag := NewMachine()
 	it := ag.gotkv.NewIterator(s, *root.toGotKV(), gotkv.TotalSpan())
 	var ent gotkv.Entry
-	for err := it.Next(ctx, &ent); !streams.IsEOS(err); err = it.Next(ctx, &ent) {
+	for err := streams.NextUnit(ctx, it, &ent); !streams.IsEOS(err); err = streams.NextUnit(ctx, it, &ent) {
 		if err != nil {
 			return err
 		}
