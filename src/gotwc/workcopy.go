@@ -294,11 +294,9 @@ func (wc *WC) Scan(ctx context.Context) error {
 // Export overwrites data in the filesystem with data from the Snapshot at HEAD.
 // Only tracked paths are overwritten.
 func (wc *WC) Export(ctx context.Context) error {
-	emptyStage, err := wc.StageIsEmpty(ctx)
-	if err != nil {
+	if emptyStage, err := wc.StageIsEmpty(ctx); err != nil {
 		return err
-	}
-	if !emptyStage {
+	} else if !emptyStage {
 		// we may be able to remove this
 		return fmt.Errorf("cannot export to filesystem, staging area must be empty (it's not)")
 	}

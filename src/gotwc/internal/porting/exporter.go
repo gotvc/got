@@ -85,7 +85,7 @@ func (pr *Exporter) Clobber(ctx context.Context, ms, ds stores.Reading, root got
 
 // exportDir exports a known dir in root
 func (pr *Exporter) exportDir(ctx context.Context, ms, ds stores.Reading, root gotfs.Root, p string) error {
-	return nil
+	return fmt.Errorf("exportDir is not implemented")
 }
 
 // exportFile exports a known file in root
