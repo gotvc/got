@@ -97,7 +97,9 @@ func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.Reading, root 
 		if yes, err := needsUpdate(ctx, pr.db, p, finfo); err != nil {
 			return err
 		} else if yes {
-			return fmt.Errorf("refusing to overwrite unknown file at path %q.  current=%v", p, finfo.ModTime())
+			return ErrWouldClobber{
+				Path: p,
+			}
 		}
 	}
 	gfinfo, err := pr.gotfs.GetFileInfo(ctx, ms, root, p)
@@ -139,4 +141,12 @@ func (s Span) Contains(x string) bool {
 		return false
 	}
 	return true
+}
+
+type ErrWouldClobber struct {
+	Path string
+}
+
+func (e ErrWouldClobber) Error() string {
+	return fmt.Sprintf("export would clobber path %s", e.Path)
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -263,6 +262,8 @@ func (wc *WC) StageIsEmpty(ctx context.Context) (bool, error) {
 }
 
 // Scan iterates through all of the files, and indexes them in the database.
+// It does not import any files, if the modtime has changed
+// then the result of a previous import is invalidated.
 func (wc *WC) Scan(ctx context.Context) error {
 	conn, err := wc.db.Take(ctx)
 	if err != nil {
@@ -278,17 +279,22 @@ func (wc *WC) Scan(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return posixfs.WalkLeaves(ctx, fsys, "", func(dir string, de posixfs.DirEnt) error {
-		p := path.Join(dir, de.Name)
+	return posixfs.WalkLeaves(ctx, fsys, "", func(p string, de posixfs.DirEnt) error {
 		finfo, err := fsys.Stat(p)
 		if err != nil {
 			return err
 		}
-		return db.PutInfo(ctx, p, porting.FileInfo{
+		return db.PutInfo(ctx, porting.FileInfo{
+			Path:       p,
 			ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
 			Mode:       de.Mode,
 		})
 	})
+}
+
+// preSwitch runs before HEAD is changed.
+func (wc *WC) preSwitch(ctx context.Context, s stores.Reading, root gotfs.Root) error {
+	return nil
 }
 
 // Export overwrites data in the filesystem with data from the Snapshot at HEAD.
@@ -318,12 +324,14 @@ func (wc *WC) Export(ctx context.Context) error {
 		return nil
 	}
 	defer wc.db.Put(conn)
+	portDB := porting.NewDB(conn, paramHash)
+	unimpIter := porting.NewUnimportedIter(conn, &paramHash)
+	defer unimpIter.Drop()
 	fsys, err := wc.getFilteredFS(ctx)
 	if err != nil {
 		return err
 	}
 	return mark.ViewFS(ctx, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
-		portDB := porting.NewDB(conn, paramHash)
 		exp := porting.NewExporter(fsmach, portDB, fsys, wc.moveToTrash)
 		for _, span := range spans {
 			if err := exp.ExportSpan(ctx, s, s, root, span); err != nil {
@@ -482,3 +490,5 @@ func compactPrefixes(xs []string) []string {
 	slices.Sort(xs)
 	return slices.Compact(xs)
 }
+
+type ErrWouldClobber = porting.ErrWouldClobber

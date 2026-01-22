@@ -4,12 +4,11 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gottests"
 	"github.com/gotvc/got/src/gotwc"
 	"github.com/gotvc/got/src/internal/testutil"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestCheckout(t *testing.T) {
@@ -51,10 +50,10 @@ func TestExport(t *testing.T) {
 		InSnap map[string]string
 		// InFS is the data which will be in the filesystem at the time Export is called.
 		InFS map[string]string
-		// Yes is true if the export should be allowed.
+		// Yes is nil if the export should be allowed.
 		// If the export is not allowed, then an error is expected, and InFS
 		// should match the filesystem after the Export call fails.
-		Yes bool
+		Err error
 	}
 	tcs := []testCase{
 		{
@@ -64,7 +63,6 @@ func TestExport(t *testing.T) {
 				"b.txt": "also snapshotted",
 			},
 			InFS: map[string]string{}, // clear all
-			Yes:  true,
 		},
 		{
 			InSnap: map[string]string{
@@ -75,7 +73,6 @@ func TestExport(t *testing.T) {
 				"a.txt": "snapshotted",
 				// remove b
 			},
-			Yes: true,
 		},
 		{
 			InSnap: map[string]string{
@@ -84,6 +81,7 @@ func TestExport(t *testing.T) {
 			InFS: map[string]string{
 				"a.txt": "dirty",
 			},
+			Err: gotwc.ErrWouldClobber{Path: "a.txt"},
 		},
 	}
 	for i, tc := range tcs {
@@ -108,11 +106,11 @@ func TestExport(t *testing.T) {
 
 			ctx := testutil.Context(t)
 			err := site.WC.Export(ctx)
-			if tc.Yes {
-				require.NoError(t, err)
+			if tc.Err == nil {
+				assert.NoError(t, err)
 				site.AssertFSEquals(tc.InSnap)
 			} else {
-				require.Error(t, err)
+				assert.ErrorIs(t, err, tc.Err)
 				site.AssertFSEquals(tc.InFS)
 			}
 		})
