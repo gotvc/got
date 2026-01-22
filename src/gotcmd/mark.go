@@ -291,7 +291,7 @@ var markSyncCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
+		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdIn, c.StdOut)
 		defer r.Close()
 		src := srcMarkParam.Load(c)
 		dst := dstMarkParam.Load(c)

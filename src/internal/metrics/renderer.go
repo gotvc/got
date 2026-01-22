@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -26,7 +25,7 @@ type Renderer struct {
 	stopOnce sync.Once
 }
 
-func NewTTYRenderer(s *Collector, out io.Writer) *Renderer {
+func NewTTYRenderer(s *Collector, in io.Reader, out io.Writer) *Renderer {
 	r := &Renderer{
 		out:  out,
 		s:    s,
@@ -38,7 +37,7 @@ func NewTTYRenderer(s *Collector, out io.Writer) *Renderer {
 	r.p = tea.NewProgram(
 		m,
 		tea.WithOutput(out),
-		tea.WithInput(os.Stdin),
+		tea.WithInput(in),
 	)
 
 	go func() {

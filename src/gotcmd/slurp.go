@@ -23,7 +23,7 @@ var slurpCmd = star.Command{
 		}
 		defer wc.Close()
 		p := targetParam.Load(c)
-		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
+		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdIn, c.StdOut)
 		defer r.Close()
 		f, err := os.Open(p)
 		if err != nil {

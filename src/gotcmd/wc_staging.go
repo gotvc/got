@@ -28,7 +28,7 @@ var addCmd = star.Command{
 		if len(paths) < 1 {
 			return fmt.Errorf("path argument required")
 		}
-		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
+		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdIn, c.StdOut)
 		defer r.Close()
 		return wc.Add(ctx, paths...)
 	},
@@ -50,7 +50,7 @@ var rmCmd = star.Command{
 		if len(paths) < 1 {
 			return fmt.Errorf("path argument required")
 		}
-		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
+		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdIn, c.StdOut)
 		defer r.Close()
 		return wc.Rm(ctx, paths...)
 	},
@@ -72,7 +72,7 @@ var putCmd = star.Command{
 		if len(paths) < 1 {
 			return fmt.Errorf("path argument required")
 		}
-		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
+		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdIn, c.StdOut)
 		defer r.Close()
 		return wc.Put(ctx, paths...)
 	},
@@ -125,7 +125,7 @@ var commitCmd = star.Command{
 		}
 		defer wc.Close()
 		// TODO get message from -m flag
-		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdOut)
+		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdIn, c.StdOut)
 		defer r.Close()
 		now := tai64.Now().TAI64()
 		return wc.Commit(ctx, gotwc.CommitParams{
