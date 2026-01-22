@@ -192,7 +192,8 @@ func BenchmarkWrite(b *testing.B) {
 }
 
 func makeExtentKey(p string, endAt int) (out []byte) {
-	out = makeExtentPrefix(p)
+	out = appendPrefix(out, p)
+	out = append(out, 0)
 	out = binary.BigEndian.AppendUint64(out, uint64(endAt))
 	return out
 }

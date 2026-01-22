@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"slices"
 
 	"errors"
 
@@ -229,8 +230,7 @@ func (b *Builder) flushInline(ctx context.Context) error {
 		remove++
 	}
 	if remove > 0 {
-		copy(b.queue, b.queue[remove:])
-		b.queue = b.queue[:len(b.queue)-remove]
+		b.queue = slices.Delete(b.queue, 0, remove)
 	}
 	return nil
 }

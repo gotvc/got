@@ -158,7 +158,3 @@ func errIncompletePathToRoot(p string) error {
 func errBuilderIsFinished() error {
 	return fmt.Errorf("builder is finished")
 }
-
-func makeExtentPrefix(p string) []byte {
-	return append(makeInfoKey(p), 0x00)
-}

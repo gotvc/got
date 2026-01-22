@@ -125,7 +125,7 @@ func (a *Machine) Select(ctx context.Context, s stores.RW, root Root, p string) 
 		return nil, err
 	}
 	x := root.toGotKV()
-	k := makeInfoKey(p)
+	k := appendPrefix(nil, p)
 	if x, err = a.deleteOutside(ctx, s, *x, gotkv.PrefixSpan(k)); err != nil {
 		return nil, err
 	}
@@ -168,7 +168,7 @@ func (a *Machine) ForEach(ctx context.Context, s stores.Reading, root Root, p st
 		}
 		return nil
 	}
-	k := makeInfoKey(p)
+	k := appendPrefix(nil, p)
 	return a.gotkv.ForEach(ctx, s, *root.toGotKV(), gotkv.PrefixSpan(k), fn2)
 }
 
@@ -193,7 +193,7 @@ func (a *Machine) Graft(ctx context.Context, ss [2]stores.RW, root Root, p strin
 	if err != nil {
 		return nil, err
 	}
-	k := makeInfoKey(p)
+	k := appendPrefix(nil, p)
 	return a.Splice(ctx, ss, []Segment{
 		{
 			Span: gotkv.Span{Begin: nil, End: k},
@@ -219,7 +219,7 @@ func (a *Machine) Graft(ctx context.Context, ss [2]stores.RW, root Root, p strin
 
 func (a *Machine) addPrefix(root Root, p string) gotkv.Root {
 	p = cleanPath(p)
-	k := makeInfoKey(p)
+	k := appendPrefix(nil, p)
 	root2 := a.gotkv.AddPrefix(*root.toGotKV(), k[:len(k)-1])
 	return root2
 }
@@ -262,6 +262,11 @@ func (a *Machine) maxInfo(ctx context.Context, ms stores.Reading, root gotkv.Roo
 	}
 }
 
+var firstKey = []byte{
+	'/', 0,
+	0, 0, 0, 0, 0, 0, 0, 0,
+}
+
 func (a *Machine) Check(ctx context.Context, s stores.Reading, root Root, checkData func(ref gdat.Ref) error) error {
 	var lastPath *string
 	var lastOffset *uint64
@@ -269,7 +274,7 @@ func (a *Machine) Check(ctx context.Context, s stores.Reading, root Root, checkD
 		switch {
 		case lastPath == nil:
 			logctx.Infof(ctx, "checking root")
-			if !bytes.Equal(ent.Key, []byte{Sep}) {
+			if !bytes.Equal(ent.Key, firstKey) {
 				logctx.Infof(ctx, "first key: %q", ent.Key)
 				return fmt.Errorf("filesystem is missing root")
 			}
