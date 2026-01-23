@@ -12,34 +12,103 @@ import (
 )
 
 func TestCheckout(t *testing.T) {
-	site := gottests.NewSite(t)
-	site.CreateMark(gotrepo.FQM{Name: "master"})
+	t.Parallel()
+	type testCase struct {
+		// PrevSnap is committed to a mark called "prev"
+		PrevSnap map[string]string
+		// NextSnap is committed to a mark called "next"
+		NextSnap map[string]string
+		// InFS (if not-nil) is what will be in the filesystem
+		// When checkout is called to go from prev -> next
+		// If InFS is nil, then PrevSnap is left unchanged before the call to checkout.
+		InFS map[string]string
+		// Err is the expected err returned from checking out NextSnap
+		// when PrevSnap is checkout out currently
+		Err error
+	}
+	tcs := []testCase{
+		{
+			PrevSnap: map[string]string{
+				"a.txt": "file data a",
+			},
+			NextSnap: map[string]string{
+				"a.txt": "file data a 2",
+				"b.txt": "file data a 2",
+			},
+		},
+		{
+			PrevSnap: map[string]string{
+				"a.txt": "file data a",
+				"b.txt": "file data b",
+				"c.txt": "file data c",
+			},
+			NextSnap: map[string]string{
+				"a.txt": "file data a 2",
+				"c.txt": "file data c 2",
+			},
+		},
+		{
+			PrevSnap: map[string]string{
+				"a.txt": "file data a",
+				"b.txt": "file data b",
+				"c.txt": "file data c",
+			},
+			NextSnap: map[string]string{
+				"a.txt": "file data a 2",
+				"c.txt": "file data c 2",
+			},
+			InFS: map[string]string{
+				"b.txt": "i made some changes, don't delete them",
+			},
+			Err: gotwc.ErrWouldClobber{
+				Op:   "delete",
+				Path: "b.txt",
+			},
+		},
+	}
+	for i, tc := range tcs {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			site := gottests.NewSite(t)
+			// Commit some files to next
+			site.CreateMark(gotrepo.FQM{Name: "next"})
+			site.SetHead("next")
+			site.WriteFSMap(tc.NextSnap)
+			site.Put("")
+			site.Commit(gotwc.CommitParams{})
+			// clean them up
+			for p := range tc.NextSnap {
+				site.DeleteFile(p)
+			}
 
-	// commit some files
-	m1 := map[string]string{
-		"a.txt": "file data a",
-		"b.txt": "file data b",
-		"c.txt": "file data c",
-	}
-	site.WriteFSMap(m1)
-	site.Put("")
-	site.Commit(gotwc.CommitParams{})
-	// fork
-	site.Fork("fork")
-	// change a and c, delete b
-	m2 := map[string]string{
-		"a.txt": "file data a 2",
-		"c.txt": "file data c 2",
-	}
-	site.WriteFSMap(m2)
-	site.DeleteFile("b.txt")
-	site.AssertNotExist("b.txt")
-	site.Put("")
-	site.Commit(gotwc.CommitParams{})
-	// now go back to the original branch
-	site.Checkout("master")
-	for k, v := range m1 {
-		site.AssertFileString(k, v)
+			// Commit some different files to prev
+			site.CreateMark(gotrepo.FQM{Name: "prev"})
+			site.SetHead("prev")
+			site.WriteFSMap(tc.PrevSnap)
+			site.Put("")
+			site.Commit(gotwc.CommitParams{})
+
+			if tc.InFS != nil {
+				for p := range tc.PrevSnap {
+					if _, exists := tc.InFS[p]; !exists {
+						site.DeleteFile(p)
+					}
+				}
+				site.WriteFSMap(tc.InFS)
+			}
+
+			// Perform a checkout
+			ctx := testutil.Context(t)
+			err := site.WC.Checkout(ctx, "next")
+			if tc.Err == nil {
+				assert.NoError(t, err)
+				// Check that the checkout was successful
+				site.AssertFSEquals(tc.NextSnap)
+			} else {
+				assert.ErrorIs(t, err, tc.Err)
+				// Check that the checkout did not happen.
+				site.AssertFSEquals(tc.InFS)
+			}
+		})
 	}
 }
 
@@ -81,7 +150,7 @@ func TestExport(t *testing.T) {
 			InFS: map[string]string{
 				"a.txt": "dirty",
 			},
-			Err: gotwc.ErrWouldClobber{Path: "a.txt"},
+			Err: gotwc.ErrWouldClobber{Op: "write", Path: "a.txt"},
 		},
 	}
 	for i, tc := range tcs {

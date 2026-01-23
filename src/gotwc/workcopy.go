@@ -17,11 +17,11 @@ import (
 	"github.com/gotvc/got/src/gotwc/internal/porting"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/gotwc/internal/staging"
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/slices2"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
-	"go.brendoncarroll.net/tai64"
 )
 
 const (
@@ -184,8 +184,11 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 			return err
 		}
 		activeBranch, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: activeName})
-		if err != nil {
+		if err != nil && !marks.IsNotExist(err) {
 			return err
+		}
+		if activeBranch == nil {
+			return nil
 		}
 		// if active branch has the same salt as the desired branch, then
 		// there is no check to do.
@@ -261,42 +264,6 @@ func (wc *WC) StageIsEmpty(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// Scan iterates through all of the files, and indexes them in the database.
-// It does not import any files, if the modtime has changed
-// then the result of a previous import is invalidated.
-func (wc *WC) Scan(ctx context.Context) error {
-	conn, err := wc.db.Take(ctx)
-	if err != nil {
-		return err
-	}
-	defer wc.db.Put(conn)
-	paramHash, err := wc.getParamHash(ctx)
-	if err != nil {
-		return err
-	}
-	db := porting.NewDB(conn, *paramHash)
-	fsys, err := wc.getFilteredFS(ctx)
-	if err != nil {
-		return err
-	}
-	return posixfs.WalkLeaves(ctx, fsys, "", func(p string, de posixfs.DirEnt) error {
-		finfo, err := fsys.Stat(p)
-		if err != nil {
-			return err
-		}
-		return db.PutInfo(ctx, porting.FileInfo{
-			Path:       p,
-			ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
-			Mode:       de.Mode,
-		})
-	})
-}
-
-// preSwitch runs before HEAD is changed.
-func (wc *WC) preSwitch(ctx context.Context, s stores.Reading, root gotfs.Root) error {
-	return nil
-}
-
 // Export overwrites data in the filesystem with data from the Snapshot at HEAD.
 // Only tracked paths are overwritten.
 func (wc *WC) Export(ctx context.Context) error {
@@ -315,10 +282,6 @@ func (wc *WC) Export(ctx context.Context) error {
 		return nil
 	}
 	paramHash := mark.Info.Config.Hash()
-	spans, err := wc.ListSpans(ctx)
-	if err != nil {
-		return nil
-	}
 	conn, err := wc.db.Take(ctx)
 	if err != nil {
 		return nil
@@ -327,18 +290,13 @@ func (wc *WC) Export(ctx context.Context) error {
 	portDB := porting.NewDB(conn, paramHash)
 	unimpIter := porting.NewUnimportedIter(conn, &paramHash)
 	defer unimpIter.Drop()
-	fsys, err := wc.getFilteredFS(ctx)
+	fsys, filter, err := wc.getFilteredFS(ctx)
 	if err != nil {
 		return err
 	}
 	return mark.ViewFS(ctx, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
-		exp := porting.NewExporter(fsmach, portDB, fsys, wc.moveToTrash)
-		for _, span := range spans {
-			if err := exp.ExportSpan(ctx, s, s, root, span); err != nil {
-				return err
-			}
-		}
-		return nil
+		exp := porting.NewExporter(fsmach, portDB, fsys, filter)
+		return exp.ExportPath(ctx, s, s, root, "")
 	})
 }
 
@@ -357,13 +315,13 @@ func (wc *WC) Clobber(ctx context.Context, p string) error {
 		return nil
 	}
 	defer wc.db.Put(conn)
-	fsys, err := wc.getFilteredFS(ctx)
+	fsys, filter, err := wc.getFilteredFS(ctx)
 	if err != nil {
 		return err
 	}
 	return mark.ViewFS(ctx, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
 		portDB := porting.NewDB(conn, paramHash)
-		exp := porting.NewExporter(fsmach, portDB, fsys, wc.moveToTrash)
+		exp := porting.NewExporter(fsmach, portDB, fsys, filter)
 		return exp.Clobber(ctx, s, s, root, p)
 	})
 }
@@ -441,18 +399,13 @@ func (wc *WC) filter(spans []Span) func(p string) bool {
 	}
 }
 
-func (wc *WC) getFilteredFS(ctx context.Context) (posixfs.FS, error) {
+func (wc *WC) getFilteredFS(ctx context.Context) (posixfs.FS, func(string) bool, error) {
 	spans, err := wc.ListSpans(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return posixfs.NewFiltered(wc.fsys, wc.filter(spans)), nil
-}
-
-// moveToTrash moves a file at path to the trash.
-// TODO
-func (wc *WC) moveToTrash(p string) error {
-	return nil
+	filter := wc.filter(spans)
+	return posixfs.NewFiltered(wc.fsys, filter), filter, nil
 }
 
 func (wc *WC) getParamHash(ctx context.Context) (*[32]byte, error) {

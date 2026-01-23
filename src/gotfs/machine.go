@@ -348,3 +348,14 @@ func (a *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (
 	}
 	return b.Finish()
 }
+
+func (m *Machine) Exists(ctx context.Context, ms stores.Reading, root Root, p string) (bool, error) {
+	_, err := m.GetInfo(ctx, ms, root, p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}

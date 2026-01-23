@@ -163,6 +163,17 @@ func (s *Site) Cat(b gotrepo.FQM, p string) []byte {
 	return buf.Bytes()
 }
 
+func (s *Site) GetHead() string {
+	head, err := s.WC.GetHead()
+	require.NoError(s.t, err)
+	return head
+}
+
+func (s *Site) SetHead(name string) {
+	ctx := testutil.Context(s.t)
+	require.NoError(s.t, s.WC.SetHead(ctx, name))
+}
+
 func (s *Site) GetIdentity(name string) gotorg.IdentityUnit {
 	idu, err := s.Repo.GetIdentity(testutil.Context(s.t), name)
 	require.NoError(s.t, err)

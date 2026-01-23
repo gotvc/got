@@ -44,6 +44,17 @@ func (db *DB) GetInfo(ctx context.Context, p string, dst *FileInfo) (bool, error
 	return sqlutil.GetOne(db.conn, dst, scanInfo, `SELECT path, modtime, mode FROM dirstate WHERE path = ?`, p)
 }
 
+// Delete removes all information associated with a path.
+func (db *DB) Delete(ctx context.Context, p string) error {
+	if err := sqlutil.Exec(db.conn, `DELETE FROM dirstate WHERE path = ?`, p); err != nil {
+		return err
+	}
+	if err := sqlutil.Exec(db.conn, `DELETE FROM fsroots WHERE path = ?`, p); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (db *DB) PutFSRoot(ctx context.Context, p string, modt tai64.TAI64N, fsroot gotfs.Root) error {
 	var info FileInfo
 	if ok, err := db.GetInfo(ctx, p, &info); err != nil {
