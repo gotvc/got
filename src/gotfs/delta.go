@@ -3,7 +3,6 @@ package gotfs
 import (
 	"context"
 	"encoding/binary"
-	"errors"
 	"fmt"
 
 	"github.com/gotvc/got/src/gotfs/gotlob"
@@ -39,9 +38,9 @@ type DeltaIterator struct {
 	ent gotkv.Entry
 }
 
-func (ag *Machine) NewDeltaIterator(ms, ds stores.Reading, delta Delta) *DeltaIterator {
+func (mach *Machine) NewDeltaIterator(ms, ds stores.Reading, delta Delta) *DeltaIterator {
 	return &DeltaIterator{
-		iter: ag.gotkv.NewIterator(ms, gotkv.Root(delta), gotkv.TotalSpan()),
+		iter: mach.gotkv.NewIterator(ms, gotkv.Root(delta), gotkv.TotalSpan()),
 	}
 }
 
@@ -55,13 +54,12 @@ func (di *DeltaIterator) Next(ctx context.Context, dsts []DeltaEntry) (int, erro
 			}
 			return 0, err
 		}
-		switch {
-		case isInfoKey(di.ent.Key):
-			p, err := parseInfoKey(di.ent.Key)
-			if err != nil {
-				return 0, err
-			}
-			dst.Path = p
+		var key Key
+		if err := key.Unmarshal(di.ent.Key); err != nil {
+			return 0, err
+		}
+		if key.IsInfo() {
+			dst.Path = key.Path()
 			if len(di.ent.Value) == 0 {
 				dst.Delete = &struct{}{}
 			} else {
@@ -75,11 +73,12 @@ func (di *DeltaIterator) Next(ctx context.Context, dsts []DeltaEntry) (int, erro
 				return 0, err
 			}
 			return 1, nil
-		case isExtentKey(di.ent.Key):
-			p, offset, err := splitExtentKey(di.ent.Key)
-			if err != nil {
+		} else {
+			if err := unmarshalExtentKey(di.ent.Key, &key); err != nil {
 				return 0, err
 			}
+			p := key.Path()
+			offset := key.EndAt()
 			if dst.Path == "" {
 				dst.Path = p
 				dst.PutContent = &PutContent{
@@ -101,15 +100,13 @@ func (di *DeltaIterator) Next(ctx context.Context, dsts []DeltaEntry) (int, erro
 				return 0, err
 			}
 			return 1, nil
-		default:
-			return 0, errors.New("unrecognized key")
 		}
 	}
 }
 
-func (ag *Machine) NewDeltaBuilder(ms, ds stores.RW) *DeltaBuilder {
+func (mach *Machine) NewDeltaBuilder(ms, ds stores.RW) *DeltaBuilder {
 	return &DeltaBuilder{
-		b: ag.gotkv.NewBuilder(ms),
+		b: mach.gotkv.NewBuilder(ms),
 	}
 }
 
@@ -142,11 +139,11 @@ func (db *DeltaBuilder) Finish(ctx context.Context) (*Delta, error) {
 func (db *DeltaBuilder) write(ctx context.Context, x DeltaEntry) error {
 	switch {
 	case x.Delete != nil:
-		return db.b.Put(ctx, makeInfoKey(x.Path), nil)
+		return db.b.Put(ctx, newInfoKey(x.Path).Marshal(nil), nil)
 	case x.PutInfo != nil:
-		return db.b.Put(ctx, makeInfoKey(x.Path), x.PutInfo.marshal())
+		return db.b.Put(ctx, newInfoKey(x.Path).Marshal(nil), x.PutInfo.marshal())
 	case x.PutContent != nil:
-		k := makeExtentPrefix(x.Path)
+		k := newInfoKey(x.Path).Prefix(nil)
 		k = binary.BigEndian.AppendUint64(k, x.PutContent.End)
 		if len(x.PutContent.Extents) == 0 {
 			return db.b.Put(ctx, k, nil)

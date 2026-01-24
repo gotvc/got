@@ -55,20 +55,19 @@ func (k *Key) EndAt() uint64 {
 // Prefix returns a prefix which all keys for this path, including Infos and Extents will have.
 // The prefix will also include any children of the object.
 func (k Key) Prefix(out []byte) []byte {
+	if len(k.path) > 0 {
+		// if the path isn't empty then we need to prefix it with a NULL
+		out = append(out, 0)
+	}
 	out = append(out, k.path...)
 	out = append(out, 0)
 	return out
 }
 
-// ChildrenSpan returns a prefix that contains all children or the path
+// ChildrenSpan returns a span that contains all children or the path
 // if it was a directory
 func (k Key) ChildrenSpan() gotkv.Span {
-	beg := k.Prefix(nil)
-	beg[len(beg)-1] = 1
-	return gotkv.Span{
-		Begin: beg,
-		End:   gotkv.PrefixEnd(k.Prefix(nil)),
-	}
+	return gotkv.PrefixSpan(k.Prefix(nil))
 }
 
 func (k Key) Marshal(out []byte) []byte {

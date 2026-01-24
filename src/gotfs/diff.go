@@ -2,7 +2,6 @@ package gotfs
 
 import (
 	"context"
-	"errors"
 
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
@@ -17,9 +16,9 @@ type Differ struct {
 	dent gotkv.DEntry
 }
 
-func (ag *Machine) NewDiffer(ms stores.Reading, left, right Root) *Differ {
+func (mach *Machine) NewDiffer(ms stores.Reading, left, right Root) *Differ {
 	return &Differ{
-		diff: ag.gotkv.NewDiffer(ms, left.ToGotKV(), right.ToGotKV(), gotkv.TotalSpan()),
+		diff: mach.gotkv.NewDiffer(ms, left.ToGotKV(), right.ToGotKV(), gotkv.TotalSpan()),
 	}
 }
 
@@ -30,14 +29,13 @@ func (d *Differ) Next(ctx context.Context, dsts []DeltaEntry) (int, error) {
 		if err := streams.NextUnit(ctx, d.diff, &d.dent); err != nil {
 			return 0, err
 		}
-		switch {
+		var key Key
+		if err := key.Unmarshal(d.dent.Key); err != nil {
+			return 0, err
+		}
 		// delete info
-		case isInfoKey(d.dent.Key):
-			p, err := parseInfoKey(d.dent.Key)
-			if err != nil {
-				return 0, err
-			}
-			dst.Path = p
+		if key.IsInfo() {
+			dst.Path = key.Path()
 			if !d.dent.Right.Ok {
 				dst.Delete = &struct{}{}
 			} else {
@@ -47,47 +45,38 @@ func (d *Differ) Next(ctx context.Context, dsts []DeltaEntry) (int, error) {
 				}
 				dst.PutInfo = info
 			}
-			d.seekPast(ctx, p)
+			d.seekPast(ctx, key.Path())
 			return 1, nil
-
-		case isExtentKey(d.dent.Key):
-			p, offset, err := splitExtentKey(d.dent.Key)
-			if err != nil {
+		} else {
+			if err := unmarshalExtentKey(d.dent.Key, &key); err != nil {
 				return 0, err
 			}
+			p := key.Path()
+			endAt := key.EndAt()
 			if dst.Path == "" {
 				dst.Path = p
-				dst.PutContent = &PutContent{Begin: offset}
+				dst.PutContent = &PutContent{Begin: endAt}
 			} else if dst.Path != p {
 				return 1, nil
 			}
-			dst.PutContent.End = offset
+			dst.PutContent.End = endAt
 			if d.dent.Right.Ok {
 				ext, err := parseExtent(d.dent.Right.X)
 				if err != nil {
 					return 0, err
 				}
-				dst.PutContent.Begin = min(dst.PutContent.Begin, offset-uint64(ext.Length))
+				dst.PutContent.Begin = min(dst.PutContent.Begin, endAt-uint64(ext.Length))
 				dst.PutContent.Extents = append(dst.PutContent.Extents, *ext)
-			} else if offset == dst.PutContent.Begin {
-				offset = 0
+			} else if endAt == dst.PutContent.Begin {
+				endAt = 0
 			}
-		default:
-			return 0, errors.New("unrecognized key")
 		}
 	}
 }
 
 func (d *Differ) seekPast(ctx context.Context, p string) {
-	prefix := appendPrefix(nil, p)
+	prefix := newInfoKey(p).Prefix(nil)
 	if err := d.diff.Seek(ctx, gotkv.PrefixEnd(prefix)); err != nil && !streams.IsEOS(err) {
 		logctx.Error(ctx, "seeking", zap.Error(err))
 	}
-}
-
-func min(a, b uint64) uint64 {
-	if a < b {
-		return a
-	}
-	return b
 }
