@@ -93,14 +93,3 @@ func scanFSRoot(stmt *sqlite.Stmt, dst *gotfs.Root) error {
 	stmt.ColumnBytes(0, buf[:])
 	return dst.Unmarshal(buf[:])
 }
-
-// NewUnimportedIter returns an streams.Iterator over all the paths
-func NewUnimportedIter(conn *sqlutil.Conn, paramHash *[32]byte) sqlutil.Iterator[FileInfo] {
-	pushiter := sqlutil.Select(conn, scanInfo,
-		`SELECT path, modtime, mode FROM dirstate
-		WHERE NOT EXISTS (
-			SELECT 1 FROM fsroots WHERE fsroots.path = dirstate.path
-		)
-		`, paramHash)
-	return sqlutil.NewIterator(pushiter)
-}

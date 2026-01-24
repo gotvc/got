@@ -288,8 +288,6 @@ func (wc *WC) Export(ctx context.Context) error {
 	}
 	defer wc.db.Put(conn)
 	portDB := porting.NewDB(conn, paramHash)
-	unimpIter := porting.NewUnimportedIter(conn, &paramHash)
-	defer unimpIter.Drop()
 	fsys, filter, err := wc.getFilteredFS(ctx)
 	if err != nil {
 		return err
