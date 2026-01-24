@@ -195,8 +195,8 @@ func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms stores.RW) (*go
 }
 
 func changed(a, b *FileInfo) bool {
-	return a.ModifiedAt != b.ModifiedAt &&
-		a.Mode != b.Mode &&
+	return a.ModifiedAt != b.ModifiedAt ||
+		a.Mode != b.Mode ||
 		a.Size != b.Size
 }
 

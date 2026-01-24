@@ -278,7 +278,7 @@ var forkCmd = star.Command{
 
 var markSyncCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "syncs the contents of one branch to another",
+		Short: "syncs the contents of one mark to another",
 	},
 	Pos: []star.Positional{srcMarkParam, dstMarkParam},
 	Flags: map[string]star.Flag{

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 
 	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/gotfs"
 )
 
 // DSConfig holds all data structure parameters
@@ -57,4 +58,24 @@ type ChunkingConfig struct {
 type Chunking_CDConfig struct {
 	MeanSize int `json:"mean_size"`
 	MaxSize  int `json:"max_size"`
+}
+
+func DefaultConfig(public bool) DSConfig {
+	var salt Salt
+	if !public {
+		readRandom(salt[:])
+	}
+	return DSConfig{
+		Salt: salt,
+		GotFS: FSConfig{
+			Data: ChunkingConfig{CD: &Chunking_CDConfig{
+				MeanSize: gotfs.DefaultMeanBlobSizeData,
+				MaxSize:  gotfs.DefaultMaxBlobSize,
+			}},
+			Metadata: Chunking_CDConfig{
+				MeanSize: gotfs.DefaultMeanBlobSizeMetadata,
+				MaxSize:  gotfs.DefaultMaxBlobSize,
+			},
+		},
+	}
 }

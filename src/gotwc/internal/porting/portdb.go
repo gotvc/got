@@ -75,12 +75,14 @@ func (db *DB) PutFSRoot(ctx context.Context, p string, modt tai64.TAI64N, fsroot
 func (db *DB) GetFSRoot(ctx context.Context, p string, dst *gotfs.Root) (bool, error) {
 	return sqlutil.GetOne(db.conn, dst, scanFSRoot, `SELECT fsroot FROM fsroots
 		WHERE path = ? AND param_hash = ?
-	`, p, dst, db.paramHash[:])
+	`, p, db.paramHash[:])
 }
 
 // scanInfo expects:
-// 0: modtime
-// 1: mode
+// 0: path
+// 1: modtime
+// 2: mode
+// 3: size
 func scanInfo(stmt *sqlite.Stmt, dst *FileInfo) error {
 	dst.Path = stmt.ColumnText(0)
 	var modtime [8 + 4]byte
