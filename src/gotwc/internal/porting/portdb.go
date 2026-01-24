@@ -15,6 +15,7 @@ type FileInfo struct {
 	Path       string
 	ModifiedAt tai64.TAI64N
 	Mode       fs.FileMode
+	Size       int64
 }
 
 // DB stores metadata about the state of the directory and
@@ -37,11 +38,11 @@ func (db *DB) PutInfo(ctx context.Context, ent FileInfo) error {
 	if err := sqlutil.Exec(db.conn, `DELETE FROM fsroots WHERE path = ? AND param_hash = ?`, p, db.paramHash[:]); err != nil {
 		return err
 	}
-	return sqlutil.Exec(db.conn, `INSERT OR REPLACE INTO dirstate (path, mode, modtime) VALUES (?, ?, ?)`, p, uint32(ent.Mode), ent.ModifiedAt.Marshal())
+	return sqlutil.Exec(db.conn, `INSERT OR REPLACE INTO dirstate (path, mode, modtime, size) VALUES (?, ?, ?, ?)`, p, uint32(ent.Mode), ent.ModifiedAt.Marshal(), ent.Size)
 }
 
 func (db *DB) GetInfo(ctx context.Context, p string, dst *FileInfo) (bool, error) {
-	return sqlutil.GetOne(db.conn, dst, scanInfo, `SELECT path, modtime, mode FROM dirstate WHERE path = ?`, p)
+	return sqlutil.GetOne(db.conn, dst, scanInfo, `SELECT path, modtime, mode, size FROM dirstate WHERE path = ?`, p)
 }
 
 // Delete removes all information associated with a path.
@@ -74,18 +75,24 @@ func (db *DB) PutFSRoot(ctx context.Context, p string, modt tai64.TAI64N, fsroot
 func (db *DB) GetFSRoot(ctx context.Context, p string, dst *gotfs.Root) (bool, error) {
 	return sqlutil.GetOne(db.conn, dst, scanFSRoot, `SELECT fsroot FROM fsroots
 		WHERE path = ? AND param_hash = ?
-	`, p, dst, db.paramHash[:])
+	`, p, db.paramHash[:])
 }
 
 // scanInfo expects:
-// 0: modtime
-// 1: mode
+// 0: path
+// 1: modtime
+// 2: mode
+// 3: size
 func scanInfo(stmt *sqlite.Stmt, dst *FileInfo) error {
 	dst.Path = stmt.ColumnText(0)
-	dst.Mode = fs.FileMode(stmt.ColumnInt64(2))
 	var modtime [8 + 4]byte
 	stmt.ColumnBytes(1, modtime[:])
-	return dst.ModifiedAt.UnmarshalBinary(modtime[:])
+	if err := dst.ModifiedAt.UnmarshalBinary(modtime[:]); err != nil {
+		return err
+	}
+	dst.Mode = fs.FileMode(stmt.ColumnInt64(2))
+	dst.Size = stmt.ColumnInt64(3)
+	return nil
 }
 
 func scanFSRoot(stmt *sqlite.Stmt, dst *gotfs.Root) error {

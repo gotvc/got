@@ -11,7 +11,6 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 
 	"go.brendoncarroll.net/state/posixfs"
-	"go.brendoncarroll.net/tai64"
 )
 
 type Exporter struct {
@@ -67,7 +66,14 @@ func (pr *Exporter) Clobber(ctx context.Context, ms, ds stores.Reading, root got
 	if err != nil {
 		return err
 	}
-	return posixfs.PutFile(ctx, pr.fsx, p, md.Mode, r)
+	if err := posixfs.PutFile(ctx, pr.fsx, p, md.Mode, r); err != nil {
+		return err
+	}
+	finfo, err := stat(pr.fsx, p)
+	if err != nil {
+		return err
+	}
+	return pr.db.PutInfo(ctx, *finfo)
 }
 
 // exportDir exports a known dir in root
@@ -124,20 +130,21 @@ func (pr *Exporter) exportDir(ctx context.Context, ms, ds stores.Reading, root g
 // exportFile exports a known file in root
 func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.Reading, root gotfs.Root, p string, ginfo *gotfs.Info) error {
 	// check if a file exists
-	finfo, err := pr.fsx.Stat(p)
+	finfo, err := stat(pr.fsx, p)
 	if err != nil && !posixfs.IsErrNotExist(err) {
 		return err
 	} else if err == nil {
-		if yes, err := needsUpdate(ctx, pr.db, p, finfo); err != nil {
+		var dbinfo FileInfo
+		if found, err := pr.db.GetInfo(ctx, p, &dbinfo); err != nil {
 			return err
-		} else if yes {
+		} else if found && changed(&dbinfo, finfo) {
 			return ErrWouldClobber{
 				Op:   "write",
 				Path: p,
 			}
 		}
 	}
-	if finfo != nil && finfo.IsDir() {
+	if finfo != nil && finfo.Mode.IsDir() {
 		if err := pr.deleteDir(ctx, p); err != nil {
 			return err
 		}
@@ -153,15 +160,11 @@ func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.Reading, root 
 	if err := posixfs.PutFile(ctx, pr.fsx, p, gfinfo.Mode, r); err != nil {
 		return err
 	}
-	finfo, err = pr.fsx.Stat(p)
+	finfo, err = stat(pr.fsx, p)
 	if err != nil {
 		return err
 	}
-	return pr.db.PutInfo(ctx, FileInfo{
-		Path:       p,
-		ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
-		Mode:       finfo.Mode(),
-	})
+	return pr.db.PutInfo(ctx, *finfo)
 }
 
 func (pr *Exporter) deleteFile(ctx context.Context, p string) error {
@@ -173,11 +176,11 @@ func (pr *Exporter) deleteFile(ctx context.Context, p string) error {
 	} else if found {
 		// We know about this file, we can only delete it if
 		// it hasn't been changed since we last checked.
-		finfo, err := pr.fsx.Stat(p)
+		finfo, err := stat(pr.fsx, p)
 		if err != nil {
 			return err
 		}
-		if tai64.FromGoTime(finfo.ModTime()) != dbinfo.ModifiedAt {
+		if changed(finfo, &dbinfo) {
 			return ErrWouldClobber{Op: "delete", Path: p}
 		}
 	}

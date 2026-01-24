@@ -48,7 +48,7 @@ var initCmd = star.Command{
 		}
 		defer repo.Close()
 		// create the first branch
-		if _, err := repo.CreateMark(c, gotrepo.FQM{Name: "master"}, marks.DSConfig{}, nil); err != nil {
+		if _, err := repo.CreateMark(c, gotrepo.FQM{Name: "master"}, marks.DefaultConfig(false), nil); err != nil {
 			return err
 		}
 		// setup a working copy in the same directory

@@ -14,13 +14,13 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-var mark = star.NewDir(
+var markCmd = star.NewDir(
 	star.Metadata{
 		Short: "manage the marks in a space and what they point at",
 	}, map[string]star.Command{
 		"create":  markCreateCmd,
 		"list":    markListCmd,
-		"delete":  markDeleteCmd,
+		"del":     markDeleteCmd,
 		"load":    markLoadCmd,
 		"inspect": markInspectCmd,
 		"cp-salt": markCpSaltCmd,
@@ -31,7 +31,7 @@ var mark = star.NewDir(
 
 var markCreateCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "creates a new mark",
+		Short: "creates a new bookmark",
 	},
 	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
@@ -49,24 +49,35 @@ var markCreateCmd = star.Command{
 
 var markListCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "lists the marks",
+		Short: "lists the bookmarks",
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		wc, err := openWC()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
-		fmt.Fprintf(c.StdOut, "%-20s %-20s %-10s\n", "NAME", "CREATED_AT", "ANNOTATIONS")
+		defer wc.Close()
+		repo := wc.Repo()
+		head, err := wc.GetHead()
+		if err != nil {
+			return err
+		}
+		hdrs := []any{"NAME", "CREATED_AT", "SALT", "ANNOTATIONS"}
+		fmt.Fprintf(c.StdOut, " %-20s %-20s %-8s %-10s\n", hdrs...)
 		return repo.ForEachMark(ctx, "", func(k string) error {
+			isHead := " "
+			if k == head {
+				isHead = "*"
+			}
 			info, err := repo.InspectMark(ctx, gotrepo.FQM{Name: k})
 			if err != nil {
 				return err
 			}
 			createdAt := info.CreatedAt.GoTime().Local().Format(time.DateTime)
+			salt := info.Config.Salt[:4]
 			annots := len(info.Annotations)
-			fmt.Fprintf(c.StdOut, "%-20s %-20s %-10d\n", k, createdAt, annots)
+			fmt.Fprintf(c.StdOut, "%s%-20s %-20s %-8x %-10d\n", isHead, k, createdAt, salt, annots)
 			return nil
 		})
 	},
@@ -74,7 +85,7 @@ var markListCmd = star.Command{
 
 var markDeleteCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "deletes a mark",
+		Short: "deletes a bookmark",
 	},
 	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
@@ -91,7 +102,7 @@ var markDeleteCmd = star.Command{
 
 var markLoadCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "prints the snapshot that is the target of the mark",
+		Short: "prints the point that is the target of the mark",
 	},
 	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
@@ -106,14 +117,16 @@ var markLoadCmd = star.Command{
 		if err != nil {
 			return err
 		}
-		c.Printf("%x\n", snap.Marshal(nil))
+		if snap != nil {
+			c.Printf("%x\n", snap.Marshal(nil))
+		}
 		return nil
 	},
 }
 
 var markInspectCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "prints any metadata for a mark",
+		Short: "prints any metadata for a bookmark",
 	},
 	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
@@ -134,7 +147,7 @@ var markInspectCmd = star.Command{
 
 var markCpSaltCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "copies the salt from one mark to another",
+		Short: "copies the salt from one bookmark to another",
 	},
 	Pos: []star.Positional{srcMarkParam, dstMarkParam},
 	F: func(c star.Context) error {
@@ -165,7 +178,7 @@ var markCpSaltCmd = star.Command{
 
 var markAsCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "creates a new mark pointed at the target of the current mark",
+		Short: "creates a new bookmark pointed at the target of the current mark",
 	},
 	Pos: []star.Positional{newMarkNameParam},
 	F: func(c star.Context) error {
@@ -242,18 +255,21 @@ var historyCmd = star.Command{
 }
 
 var markNameParam = star.Required[string]{
-	ID:    "mark_name",
-	Parse: star.ParseString,
+	ID:       "mark_name",
+	Parse:    star.ParseString,
+	ShortDoc: "the name of a mark",
 }
 
 var srcMarkParam = star.Required[gotrepo.FQM]{
-	ID:    "src",
-	Parse: parseFQName,
+	ID:       "src",
+	Parse:    parseFQName,
+	ShortDoc: "the source bookmark",
 }
 
 var dstMarkParam = star.Required[gotrepo.FQM]{
-	ID:    "dst",
-	Parse: parseFQName,
+	ID:       "dst",
+	Parse:    parseFQName,
+	ShortDoc: "the destination bookmark",
 }
 
 func parseFQName(s string) (gotrepo.FQM, error) {
@@ -278,7 +294,7 @@ var forkCmd = star.Command{
 
 var markSyncCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "syncs the contents of one branch to another",
+		Short: "syncs the contents of one bookmark to another",
 	},
 	Pos: []star.Positional{srcMarkParam, dstMarkParam},
 	Flags: map[string]star.Flag{
@@ -301,8 +317,9 @@ var markSyncCmd = star.Command{
 }
 
 var newMarkNameParam = star.Required[string]{
-	ID:    "new_name",
-	Parse: star.ParseString,
+	ID:       "new_name",
+	Parse:    star.ParseString,
+	ShortDoc: "the name of the new bookmark",
 }
 
 var forceParam = star.Optional[bool]{

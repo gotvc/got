@@ -51,26 +51,6 @@ func (c Metadata) AsInfo() Info {
 	return Info{Config: c.Config, Annotations: c.Annotations}
 }
 
-func DefaultConfig(public bool) DSConfig {
-	var salt Salt
-	if !public {
-		readRandom(salt[:])
-	}
-	return DSConfig{
-		Salt: salt,
-		GotFS: FSConfig{
-			Data: ChunkingConfig{CD: &Chunking_CDConfig{
-				MeanSize: gotfs.DefaultMeanBlobSizeData,
-				MaxSize:  gotfs.DefaultMaxBlobSize,
-			}},
-			Metadata: Chunking_CDConfig{
-				MeanSize: gotfs.DefaultMeanBlobSizeMetadata,
-				MaxSize:  gotfs.DefaultMaxBlobSize,
-			},
-		},
-	}
-}
-
 // Clone returns a deep copy of md
 func (c Metadata) Clone() Metadata {
 	return Metadata{
