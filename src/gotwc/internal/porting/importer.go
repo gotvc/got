@@ -136,7 +136,8 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 	}
 	// need update
 	modt := tai64.FromGoTime(finfo.ModTime())
-	if err := pr.db.PutInfo(ctx, p, FileInfo{
+	if err := pr.db.PutInfo(ctx, FileInfo{
+		Path:       p,
 		ModifiedAt: modt,
 		Mode:       finfo.Mode(),
 	}); err != nil {

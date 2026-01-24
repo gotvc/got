@@ -14,6 +14,7 @@ import (
 // Renderer renders metrics updates to a TTY.
 // This implementation uses Bubble Tea so it can react to window resizes cleanly.
 type Renderer struct {
+	in  io.Reader
 	out io.Writer
 	s   *Collector
 
@@ -27,6 +28,7 @@ type Renderer struct {
 
 func NewTTYRenderer(s *Collector, in io.Reader, out io.Writer) *Renderer {
 	r := &Renderer{
+		in:   in,
 		out:  out,
 		s:    s,
 		done: make(chan struct{}),

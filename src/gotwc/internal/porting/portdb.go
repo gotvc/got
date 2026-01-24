@@ -12,6 +12,7 @@ import (
 )
 
 type FileInfo struct {
+	Path       string
 	ModifiedAt tai64.TAI64N
 	Mode       fs.FileMode
 }
@@ -30,7 +31,8 @@ func NewDB(conn *sqlutil.Conn, paramHash [32]byte) *DB {
 	}
 }
 
-func (db *DB) PutInfo(ctx context.Context, p string, ent FileInfo) error {
+func (db *DB) PutInfo(ctx context.Context, ent FileInfo) error {
+	p := ent.Path
 	// replacing the info should also delete the root if it exists.
 	if err := sqlutil.Exec(db.conn, `DELETE FROM fsroots WHERE path = ? AND param_hash = ?`, p, db.paramHash[:]); err != nil {
 		return err
@@ -39,7 +41,18 @@ func (db *DB) PutInfo(ctx context.Context, p string, ent FileInfo) error {
 }
 
 func (db *DB) GetInfo(ctx context.Context, p string, dst *FileInfo) (bool, error) {
-	return sqlutil.GetOne(db.conn, dst, scanInfo, `SELECT modtime, mode FROM dirstate WHERE path = ?`, p)
+	return sqlutil.GetOne(db.conn, dst, scanInfo, `SELECT path, modtime, mode FROM dirstate WHERE path = ?`, p)
+}
+
+// Delete removes all information associated with a path.
+func (db *DB) Delete(ctx context.Context, p string) error {
+	if err := sqlutil.Exec(db.conn, `DELETE FROM dirstate WHERE path = ?`, p); err != nil {
+		return err
+	}
+	if err := sqlutil.Exec(db.conn, `DELETE FROM fsroots WHERE path = ?`, p); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (db *DB) PutFSRoot(ctx context.Context, p string, modt tai64.TAI64N, fsroot gotfs.Root) error {
@@ -68,9 +81,10 @@ func (db *DB) GetFSRoot(ctx context.Context, p string, dst *gotfs.Root) (bool, e
 // 0: modtime
 // 1: mode
 func scanInfo(stmt *sqlite.Stmt, dst *FileInfo) error {
-	dst.Mode = fs.FileMode(stmt.ColumnInt64(1))
+	dst.Path = stmt.ColumnText(0)
+	dst.Mode = fs.FileMode(stmt.ColumnInt64(2))
 	var modtime [8 + 4]byte
-	stmt.ColumnBytes(0, modtime[:])
+	stmt.ColumnBytes(1, modtime[:])
 	return dst.ModifiedAt.UnmarshalBinary(modtime[:])
 }
 

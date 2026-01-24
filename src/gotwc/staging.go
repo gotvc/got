@@ -60,7 +60,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		if err != nil {
 			return err
 		}
-		fsys, err := wc.getFilteredFS(ctx)
+		fsys, filter, err := wc.getFilteredFS(ctx)
 		if err != nil {
 			return err
 		}
@@ -74,7 +74,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		storePair := [2]stores.RW{stagingStore, stagingStore}
 		dirState := porting.NewDB(conn, paramHash)
 		imp := porting.NewImporter(mark.GotFS(), dirState, storePair)
-		exp := porting.NewExporter(mark.GotFS(), dirState, fsys, wc.moveToTrash)
+		exp := porting.NewExporter(mark.GotFS(), dirState, fsys, filter)
 
 		if err := fn(stagingCtx{
 			Stage:    stagetx,
@@ -105,12 +105,12 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 		if err != nil {
 			return err
 		}
-		filtFS, err := wc.getFilteredFS(ctx)
+		filtFS, filter, err := wc.getFilteredFS(ctx)
 		if err != nil {
 			return err
 		}
 		portdb := porting.NewDB(conn, paramHash)
-		exp := porting.NewExporter(branch.GotFS(), portdb, filtFS, wc.moveToTrash)
+		exp := porting.NewExporter(branch.GotFS(), portdb, filtFS, filter)
 		stagingStore, err := wc.repo.BeginStagingTx(ctx, wc.id, false)
 		if err != nil {
 			return err
@@ -415,7 +415,7 @@ func (wc *WC) ForEachDirty(ctx context.Context, fn func(p string, modtime time.T
 		defer voltx.Abort(ctx)
 		stage := sctx.Stage
 		fsMach := sctx.GotFS
-		fsys, err := wc.getFilteredFS(ctx)
+		fsys, _, err := wc.getFilteredFS(ctx)
 		if err != nil {
 			return err
 		}

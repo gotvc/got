@@ -1,5 +1,5 @@
 # GotKV
-GotKV is a copy-on-write, encrypted, deterministic, key value store built on top of content-addressed storage.
+GotKV is a copy-on-write, encrypted, convergent, key-value store built on top of content-addressed storage.
 
 ## Example: Put/Get
 ```go

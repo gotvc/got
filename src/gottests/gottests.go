@@ -3,8 +3,11 @@ package gottests
 import (
 	"bytes"
 	"context"
+	"io/fs"
+	"iter"
 	"os"
 	"regexp"
+	"strings"
 	"testing"
 
 	"blobcache.io/blobcache/src/blobcache"
@@ -160,6 +163,17 @@ func (s *Site) Cat(b gotrepo.FQM, p string) []byte {
 	return buf.Bytes()
 }
 
+func (s *Site) GetHead() string {
+	head, err := s.WC.GetHead()
+	require.NoError(s.t, err)
+	return head
+}
+
+func (s *Site) SetHead(name string) {
+	ctx := testutil.Context(s.t)
+	require.NoError(s.t, s.WC.SetHead(ctx, name))
+}
+
 func (s *Site) GetIdentity(name string) gotorg.IdentityUnit {
 	idu, err := s.Repo.GetIdentity(testutil.Context(s.t), name)
 	require.NoError(s.t, err)
@@ -179,13 +193,44 @@ func (s *Site) IntroduceSelf() gotorg.ChangeSet {
 
 func (s *Site) WriteFSMap(x map[string]string) {
 	for k, v := range x {
-		require.NoError(s.t, s.Root.WriteFile(k, []byte(v), 0o644))
+		s.WriteString(k, v)
 	}
+}
+
+func (s *Site) WriteString(p string, val string) {
+	data, err := s.Root.ReadFile(p)
+	if !os.IsNotExist(err) {
+		require.NoError(s.t, err)
+	}
+	if err == nil && string(data) == val {
+		return
+	}
+	require.NoError(s.t, s.Root.WriteFile(p, []byte(val), 0o644))
 }
 
 func (s *Site) DeleteFile(ps ...string) {
 	for _, p := range ps {
 		require.NoError(s.t, s.Root.Remove(p))
+	}
+}
+
+func (s *Site) AllPaths() iter.Seq[string] {
+	return func(yield func(p string) bool) {
+		require.NoError(s.t, fs.WalkDir(s.Root.FS(), ".", func(p string, de fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if p == "." {
+				return nil
+			}
+			if strings.HasPrefix(p, ".got") {
+				return nil
+			}
+			if !yield(p) {
+				return nil
+			}
+			return nil
+		}))
 	}
 }
 

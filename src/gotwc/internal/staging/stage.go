@@ -31,8 +31,8 @@ type DeleteOp struct{}
 type PutOp = gotfs.Root
 
 type Entry struct {
-	Path string
-	Op   Operation
+	Path string    `json:"p"`
+	Op   Operation `json:"op"`
 }
 
 // Tx is a transaction on a stage

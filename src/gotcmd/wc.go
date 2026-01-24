@@ -19,7 +19,6 @@ var wcCmd = star.NewDir(star.Metadata{
 		"head":     headCmd,
 		"export":   exportCmd,
 		"clobber":  clobberCmd,
-		"scan":     scanCmd,
 		"checkout": checkoutCmd,
 	},
 )
@@ -63,22 +62,6 @@ var headCmd = star.Command{
 			return nil
 		}
 		return wc.SetHead(c, name)
-	},
-}
-
-var scanCmd = star.Command{
-	Metadata: star.Metadata{
-		Short: "scans the working copy and updates the index",
-	},
-	Pos: []star.Positional{},
-	F: func(c star.Context) error {
-		// Active modifies the working copy not the repo
-		wc, err := openWC()
-		if err != nil {
-			return err
-		}
-		defer wc.Close()
-		return wc.Scan(c.Context)
 	},
 }
 
