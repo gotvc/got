@@ -51,8 +51,13 @@ func (s *Salt) String() string {
 }
 
 type ChunkingConfig struct {
-	CD  *Chunking_CDConfig `json:"cd"`
-	Max *int32             `json:"max"`
+	CD  *Chunking_CDConfig `json:"cd,omitempty"`
+	Max *Chunking_Fixed    `json:"fixed,omitempty"`
+}
+
+type Chunking_Fixed struct {
+	Max uint32 `json:"max"`
+	Min uint32 `json:"min"`
 }
 
 type Chunking_CDConfig struct {

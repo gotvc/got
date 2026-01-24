@@ -100,7 +100,7 @@ var rootCmd = star.NewGroupedDir(
 		"ftp":  ftpCmd,
 
 		// marks
-		"mark":    mark,
+		"mark":    markCmd,
 		"history": historyCmd,
 		"log":     historyCmd,
 
