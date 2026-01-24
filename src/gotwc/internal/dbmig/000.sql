@@ -4,6 +4,7 @@ CREATE TABLE dirstate (
 
     mode INTEGER NOT NULL,
     modtime BLOB NOT NULL,
+    size INTEGER NOT NULL,
 
     PRIMARY KEY(path)
 ), WITHOUT ROWID, STRICT;

@@ -92,17 +92,14 @@ func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) (*
 
 // ImportFile returns a gotfs.Root with the content from the file in fsx at p.
 func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
-	finfo, err := fsx.Stat(p)
-	if err != nil {
-		return nil, err
-	}
-	if !finfo.Mode().IsRegular() {
+	finfo, err := stat(fsx, p)
+	if !finfo.Mode.IsRegular() {
 		return nil, fmt.Errorf("ImportFile called for non-regular file at path %q", p)
 	}
 	var ent FileInfo
 	if ok, err := pr.db.GetInfo(ctx, p, &ent); err != nil {
 		return nil, err
-	} else if ok && ent.ModifiedAt == tai64.FromGoTime(finfo.ModTime()) {
+	} else if ok && changed(&ent, finfo) {
 		logctx.Infof(ctx, "using cache entry for path %q. skipped import", p)
 		var root gotfs.Root
 		if yes, err := pr.db.GetFSRoot(ctx, p, &root); err != nil {
@@ -111,7 +108,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 			return &root, nil
 		}
 	}
-	fileSize := finfo.Size()
+	fileSize := finfo.Size
 	metrics.SetDenom(ctx, "data_in", int(fileSize), units.Bytes)
 	numWorkers := runtime.GOMAXPROCS(0)
 	sizeCutoff := 20 * pr.gotfs.MeanBlobSizeData() * numWorkers
@@ -123,7 +120,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 			return nil, err
 		}
 		defer f.Close()
-		root, err = pr.gotfs.FileFromReader(ctx, [2]stores.RW{pr.ds, pr.ms}, finfo.Mode(), f)
+		root, err = pr.gotfs.FileFromReader(ctx, [2]stores.RW{pr.ds, pr.ms}, finfo.Mode, f)
 		if err != nil {
 			return nil, err
 		}
@@ -135,18 +132,26 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 		}
 	}
 	// need update
-	modt := tai64.FromGoTime(finfo.ModTime())
-	if err := pr.db.PutInfo(ctx, FileInfo{
-		Path:       p,
-		ModifiedAt: modt,
-		Mode:       finfo.Mode(),
-	}); err != nil {
+	if err := pr.db.PutInfo(ctx, *finfo); err != nil {
 		return nil, err
 	}
-	if err := pr.db.PutFSRoot(ctx, p, modt, *root); err != nil {
+	if err := pr.db.PutFSRoot(ctx, p, finfo.ModifiedAt, *root); err != nil {
 		return nil, err
 	}
 	return root, nil
+}
+
+func stat(fsys posixfs.FS, p string) (*FileInfo, error) {
+	finfo, err := fsys.Stat(p)
+	if err != nil {
+		return nil, err
+	}
+	return &FileInfo{
+		Path:       p,
+		ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
+		Mode:       finfo.Mode(),
+		Size:       finfo.Size(),
+	}, nil
 }
 
 func importFileConcurrent(ctx context.Context, fsag *gotfs.Machine, ms, ds stores.RW, fsx posixfs.FS, p string, numWorkers int) (*gotfs.Root, error) {
@@ -187,6 +192,12 @@ func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
 
 func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms stores.RW) (*gotfs.Root, error) {
 	return fsag.NewEmpty(ctx, ms)
+}
+
+func changed(a, b *FileInfo) bool {
+	return a.ModifiedAt != b.ModifiedAt &&
+		a.Mode != b.Mode &&
+		a.Size != b.Size
 }
 
 func needsUpdate(ctx context.Context, db *DB, p string, finfo posixfs.FileInfo) (bool, error) {

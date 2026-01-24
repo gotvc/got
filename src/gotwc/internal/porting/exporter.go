@@ -67,7 +67,14 @@ func (pr *Exporter) Clobber(ctx context.Context, ms, ds stores.Reading, root got
 	if err != nil {
 		return err
 	}
-	return posixfs.PutFile(ctx, pr.fsx, p, md.Mode, r)
+	if err := posixfs.PutFile(ctx, pr.fsx, p, md.Mode, r); err != nil {
+		return err
+	}
+	finfo, err := stat(pr.fsx, p)
+	if err != nil {
+		return err
+	}
+	return pr.db.PutInfo(ctx, *finfo)
 }
 
 // exportDir exports a known dir in root
