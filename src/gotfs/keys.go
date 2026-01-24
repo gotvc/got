@@ -52,30 +52,23 @@ func (k *Key) EndAt() uint64 {
 	return k.endAt
 }
 
-func pathPrefixWithoutTerminator(out []byte, p []byte) []byte {
-	if len(p) > 0 {
-		out = append(out, 0)
-		out = append(out, p...)
-	}
-	return out
-}
-
-// PathPrefix returns the null-separated prefix for a path without the trailing terminator.
-func PathPrefix(out []byte, p string) []byte {
+// pathPrefixNoTrail returns the null-separated prefix for a path without the trailing terminator.
+func pathPrefixNoTrail(out []byte, p string) []byte {
 	k := newInfoKey(p)
-	return pathPrefixWithoutTerminator(out, k.path)
-}
-
-func pathPrefixWithTerminator(out []byte, p []byte) []byte {
-	out = pathPrefixWithoutTerminator(out, p)
-	out = append(out, 0)
+	out = k.Prefix(out)
+	out = out[:len(out)-1]
 	return out
 }
 
 // Prefix returns a prefix which all keys for this path, including Infos and Extents will have.
 // The prefix will also include any children of the object.
 func (k Key) Prefix(out []byte) []byte {
-	return pathPrefixWithTerminator(out, k.path)
+	if len(k.path) > 0 {
+		out = append(out, 0)
+		out = append(out, k.path...)
+	}
+	out = append(out, 0)
+	return out
 }
 
 // ChildrenSpan returns a span that contains all children or the path

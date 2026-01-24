@@ -132,7 +132,7 @@ func (mach *Machine) Select(ctx context.Context, s stores.RW, root Root, p strin
 	if p == "" {
 		return newRoot(x), nil
 	}
-	prefix := PathPrefix(nil, p)
+	prefix := pathPrefixNoTrail(nil, p)
 	y, err := mach.gotkv.RemovePrefix(ctx, s, *x, prefix)
 	if err != nil {
 		return nil, err
@@ -218,7 +218,7 @@ func (mach *Machine) Graft(ctx context.Context, ss [2]stores.RW, root Root, p st
 }
 
 func (mach *Machine) addPrefix(root Root, p string) gotkv.Root {
-	prefix := PathPrefix(nil, p)
+	prefix := pathPrefixNoTrail(nil, p)
 	if len(prefix) == 0 {
 		return root.ToGotKV()
 	}
