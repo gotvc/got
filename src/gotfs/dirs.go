@@ -21,8 +21,8 @@ type DirEnt struct {
 }
 
 // NewEmpty creates a new filesystem with an empty root directory
-func (a *Machine) NewEmpty(ctx context.Context, s stores.RW) (*Root, error) {
-	b := a.NewBuilder(ctx, s, stores.NewMem())
+func (mach *Machine) NewEmpty(ctx context.Context, s stores.RW) (*Root, error) {
+	b := mach.NewBuilder(ctx, s, stores.NewMem())
 	if err := b.Mkdir("", 0o755); err != nil {
 		return nil, err
 	}
@@ -30,30 +30,30 @@ func (a *Machine) NewEmpty(ctx context.Context, s stores.RW) (*Root, error) {
 }
 
 // Mkdir creates a directory at path p
-func (a *Machine) Mkdir(ctx context.Context, s stores.RW, x Root, p string) (*Root, error) {
+func (mach *Machine) Mkdir(ctx context.Context, s stores.RW, x Root, p string) (*Root, error) {
 	p = cleanPath(p)
-	if err := a.checkNoEntry(ctx, s, x, p); err != nil {
+	if err := mach.checkNoEntry(ctx, s, x, p); err != nil {
 		return nil, err
 	}
 	md := &Info{
 		Mode: fs.FileMode(0o755 | os.ModeDir),
 	}
-	return a.PutInfo(ctx, s, x, p, md)
+	return mach.PutInfo(ctx, s, x, p, md)
 }
 
 // MkdirAll creates the directory p and any of p's ancestors if necessary.
-func (a *Machine) MkdirAll(ctx context.Context, s stores.RW, x Root, p string) (*Root, error) {
+func (mach *Machine) MkdirAll(ctx context.Context, s stores.RW, x Root, p string) (*Root, error) {
 	p = cleanPath(p)
 	parts := strings.Split(p, string(Sep))
 	y := &x
 	var err error
-	y, err = a.ensureDir(ctx, s, x, "")
+	y, err = mach.ensureDir(ctx, s, x, "")
 	if err != nil {
 		return nil, err
 	}
 	for i := range parts {
 		p2 := strings.Join(parts[:i+1], string(Sep))
-		y, err = a.ensureDir(ctx, s, *y, p2)
+		y, err = mach.ensureDir(ctx, s, *y, p2)
 		if err != nil {
 			return nil, err
 		}
@@ -61,11 +61,11 @@ func (a *Machine) MkdirAll(ctx context.Context, s stores.RW, x Root, p string) (
 	return y, nil
 }
 
-func (a *Machine) ensureDir(ctx context.Context, s stores.RW, x Root, p string) (*Root, error) {
+func (mach *Machine) ensureDir(ctx context.Context, s stores.RW, x Root, p string) (*Root, error) {
 	y := &x
-	_, err := a.GetDirInfo(ctx, s, x, p)
+	_, err := mach.GetDirInfo(ctx, s, x, p)
 	if posixfs.IsErrNotExist(err) {
-		y, err = a.Mkdir(ctx, s, x, p)
+		y, err = mach.Mkdir(ctx, s, x, p)
 		if err != nil {
 			return nil, err
 		}
@@ -76,9 +76,9 @@ func (a *Machine) ensureDir(ctx context.Context, s stores.RW, x Root, p string) 
 }
 
 // ReadDir calls fn for every child of the directory at p.
-func (a *Machine) ReadDir(ctx context.Context, s stores.Reading, x Root, p string, fn func(e DirEnt) error) error {
+func (mach *Machine) ReadDir(ctx context.Context, s stores.Reading, x Root, p string, fn func(e DirEnt) error) error {
 	p = cleanPath(p)
-	di, err := a.newDirIterator(ctx, s, x, p)
+	di, err := mach.newDirIterator(ctx, s, x, p)
 	if err != nil {
 		return err
 	}
@@ -97,28 +97,23 @@ func (a *Machine) ReadDir(ctx context.Context, s stores.Reading, x Root, p strin
 	return nil
 }
 
-func (a *Machine) RemoveAll(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+func (mach *Machine) RemoveAll(ctx context.Context, s Store, x Root, p string) (*Root, error) {
 	p = cleanPath(p)
-	_, err := a.GetInfo(ctx, s, x, p)
+	_, err := mach.GetInfo(ctx, s, x, p)
 	if os.IsNotExist(err) {
 		return &x, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	k := appendPrefix(nil, p)
-	span := gotkv.PrefixSpan(k)
-	root, err := a.gotkv.DeleteSpan(ctx, s, *x.toGotKV(), span)
+	span := SpanForPath(p)
+	root, err := mach.gotkv.DeleteSpan(ctx, s, *x.toGotKV(), span)
 	return newRoot(root), err
 }
 
-func dirSpan(p string) gotkv.Span {
-	k := appendPrefix(nil, p)
-	return gotkv.PrefixSpan(k)
-}
-
 func SpanForPath(p string) gotkv.Span {
-	return dirSpan(p)
+	k := newInfoKey(p)
+	return k.ChildrenSpan()
 }
 
 type dirIterator struct {
@@ -128,18 +123,19 @@ type dirIterator struct {
 	iter *gotkv.Iterator
 }
 
-func (a *Machine) newDirIterator(ctx context.Context, s stores.Reading, x Root, p string) (*dirIterator, error) {
-	_, err := a.GetDirInfo(ctx, s, x, p)
+func (mach *Machine) newDirIterator(ctx context.Context, s stores.Reading, x Root, p string) (*dirIterator, error) {
+	_, err := mach.GetDirInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err
 	}
-	span := dirSpan(p)
-	iter := a.gotkv.NewIterator(s, *x.toGotKV(), span)
+	span := SpanForPath(p)
+	iter := mach.gotkv.NewIterator(s, *x.toGotKV(), span)
 	ent := &gotkv.Entry{}
 	if err := streams.NextUnit(ctx, iter, ent); err != nil {
 		return nil, err
 	}
-	if _, err = parseInfoKey(ent.Key); err != nil {
+	var key Key
+	if err := unmarshalInfoKey(ent.Key, &key); err != nil {
 		return nil, err
 	}
 	if _, err := parseInfo(ent.Value); err != nil {
@@ -167,10 +163,11 @@ func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
 	if err != nil {
 		return nil, err
 	}
-	p, err := parseInfoKey(ent.Key)
-	if err != nil {
+	var key Key
+	if err := unmarshalInfoKey(ent.Key, &key); err != nil {
 		return nil, err
 	}
+	p := key.Path()
 	name := cleanName(p[len(di.p):])
 	dirEnt := DirEnt{
 		Name: name,
@@ -178,7 +175,7 @@ func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
 	}
 
 	// now we have to advance through the file or directory to fully consume it.
-	prefix := appendPrefix(nil, p)
+	prefix := newInfoKey(p).Prefix(nil)
 	end := gotkv.PrefixEnd(prefix)
 	if err := di.iter.Seek(ctx, end); err != nil {
 		return nil, err

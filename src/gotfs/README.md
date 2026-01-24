@@ -30,35 +30,32 @@ prefixed with the metadata key.
 
 File data is stored in a content-addressed store, and references to the data are stored in GotKV.
 
+In the following examples `<0>` will be used to represent a single 0 (NULL) byte.
+
 ### Example: 1 File
 For example: The file "test.txt" with 10B of data in it would produce the following key value pairs.
 ```
-/<NULL>< 64 bit: 0  >            -> Info (dir)
-/test.txt/<NULL>< 64 bit: 0  >   -> Info (file)
-/test.txt/<NULL>< 64 bit: 10 >   -> Extent
+<0>< 64 bit: 0  >            -> Info (dir)
+<0>test.txt<0>< 64 bit: 0  >   -> Info (file)
+<0>test.txt<0>< 64 bit: 10 >   -> Extent
 ```
 
 ### Example: 2 File + 1 Directory
 A directory is stored as a metadata object.
 ```
-/<NULL>< 64 bit: 0  >                     -> Info (dir)
-/mydir/<NULL>< 64 bit: 0 >                -> Info (dir)
-/mydir/myfile.txt<NULL>< 64 bit: 0     >  -> Info (file)
-/mydir/myfile.txt<NULL>< 64 bit offset >  -> Part
+<0>< 64 bit: 0  >                     -> Info (dir)
+<0>mydir<0>< 64 bit: 0 >                -> Info (dir)
+<0>mydir<0>myfile.txt<0>< 64 bit: 0     >  -> Info (file)
+<0>mydir<0>myfile.txt<0>< 64 bit offset >  -> Part
 ```
 
 ### Example 3: File at the Root
 It is possible for a file to be at the root
 ```
-/<NULL>< 64 bit: 0      >       -> Info (file)
-/<NULL>< 64 bits extent >       -> Extent
-/<NULL>< next offset    >       -> Extent
+<0>< 64 bit: 0      >       -> Info (file)
+<0>< 64 bits extent >       -> Extent
+<0>< next offset    >       -> Extent
 ```
-
-All Info keys end in a trailing `/`, including regular files.
-Keys for Info objects contain no NULL characters.
-Keys for extents contain exactly 1 NULL character 9 bytes from the end of key, separating the path from the offset.
-Extent keys are always prefixed by the Info key for the file they are part of.
 
 ## Reading A File
 To read from a file in GotFS you first lookup the Info entry for the path of the file.

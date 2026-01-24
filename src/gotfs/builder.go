@@ -27,12 +27,12 @@ type Builder struct {
 	b        *gotlob.Builder
 }
 
-func (a *Machine) NewBuilder(ctx context.Context, ms, ds stores.RW) *Builder {
+func (mach *Machine) NewBuilder(ctx context.Context, ms, ds stores.RW) *Builder {
 	b := &Builder{
-		a:   a,
+		a:   mach,
 		ctx: ctx,
 		ms:  ms,
-		b:   a.lob.NewBuilder(ctx, ms, ds),
+		b:   mach.lob.NewBuilder(ctx, ms, ds),
 	}
 	return b
 }
@@ -51,7 +51,7 @@ func (b *Builder) BeginFile(p string, mode os.FileMode) error {
 	if err := b.writeInfo(p, &Info{Mode: mode}); err != nil {
 		return err
 	}
-	return b.b.SetPrefix(makeExtentPrefix(p))
+	return b.b.SetPrefix(newInfoKey(p).Prefix(nil))
 }
 
 // Mkdir creates a directory for p.
@@ -71,7 +71,8 @@ func (b *Builder) writeInfo(p string, info *Info) error {
 	if !parentInStack(p, b.dirStack) {
 		return errIncompletePathToRoot(p)
 	}
-	if err := b.b.Put(b.ctx, makeInfoKey(p), info.marshal()); err != nil {
+	k := newInfoKey(p)
+	if err := b.b.Put(b.ctx, k.Marshal(nil), info.marshal()); err != nil {
 		return err
 	}
 	if os.FileMode(info.Mode).IsDir() {

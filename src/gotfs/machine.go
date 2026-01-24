@@ -109,58 +109,58 @@ func NewMachine(opts ...Option) *Machine {
 	return o
 }
 
-func (a *Machine) MeanBlobSizeData() int {
-	return a.meanSizeData
+func (mach *Machine) MeanBlobSizeData() int {
+	return mach.meanSizeData
 }
 
-func (a *Machine) MeanBlobSizeMetadata() int {
-	return a.meanSizeMetadata
+func (mach *Machine) MeanBlobSizeMetadata() int {
+	return mach.meanSizeMetadata
 }
 
 // Select returns a new root containing everything under p, shifted to the root.
-func (a *Machine) Select(ctx context.Context, s stores.RW, root Root, p string) (*Root, error) {
+func (mach *Machine) Select(ctx context.Context, s stores.RW, root Root, p string) (*Root, error) {
 	p = cleanPath(p)
-	_, err := a.GetInfo(ctx, s, root, p)
+	_, err := mach.GetInfo(ctx, s, root, p)
 	if err != nil {
 		return nil, err
 	}
 	x := root.toGotKV()
-	k := appendPrefix(nil, p)
-	if x, err = a.deleteOutside(ctx, s, *x, gotkv.PrefixSpan(k)); err != nil {
+	span := SpanForPath(p)
+	if x, err = mach.deleteOutside(ctx, s, *x, span); err != nil {
 		return nil, err
 	}
-	var prefix []byte
-	if len(k) > 1 {
-		prefix = k[:len(k)-1]
+	if p == "" {
+		return newRoot(x), nil
 	}
-	y, err := a.gotkv.RemovePrefix(ctx, s, *x, prefix)
+	prefix := pathPrefixNoTrail(nil, p)
+	y, err := mach.gotkv.RemovePrefix(ctx, s, *x, prefix)
 	if err != nil {
 		return nil, err
 	}
 	return newRoot(y), err
 }
 
-func (a *Machine) deleteOutside(ctx context.Context, s stores.RW, root gotkv.Root, span gotkv.Span) (*gotkv.Root, error) {
+func (mach *Machine) deleteOutside(ctx context.Context, s stores.RW, root gotkv.Root, span gotkv.Span) (*gotkv.Root, error) {
 	x := &root
 	var err error
-	if x, err = a.gotkv.DeleteSpan(ctx, s, *x, gotkv.Span{Begin: nil, End: span.Begin}); err != nil {
+	if x, err = mach.gotkv.DeleteSpan(ctx, s, *x, gotkv.Span{Begin: nil, End: span.Begin}); err != nil {
 		return nil, err
 	}
-	if x, err = a.gotkv.DeleteSpan(ctx, s, *x, gotkv.Span{Begin: span.End, End: nil}); err != nil {
+	if x, err = mach.gotkv.DeleteSpan(ctx, s, *x, gotkv.Span{Begin: span.End, End: nil}); err != nil {
 		return nil, err
 	}
 	return x, err
 }
 
-func (a *Machine) ForEach(ctx context.Context, s stores.Reading, root Root, p string, fn func(p string, md *Info) error) error {
+func (mach *Machine) ForEach(ctx context.Context, s stores.Reading, root Root, p string, fn func(p string, md *Info) error) error {
 	p = cleanPath(p)
 	fn2 := func(ent gotkv.Entry) error {
-		if !isExtentKey(ent.Key) {
+		var key Key
+		if err := key.Unmarshal(ent.Key); err != nil {
+			return err
+		}
+		if key.IsInfo() {
 			md, err := parseInfo(ent.Value)
-			if err != nil {
-				return err
-			}
-			p, err := parseInfoKey(ent.Key)
 			if err != nil {
 				return err
 			}
@@ -168,13 +168,13 @@ func (a *Machine) ForEach(ctx context.Context, s stores.Reading, root Root, p st
 		}
 		return nil
 	}
-	k := appendPrefix(nil, p)
-	return a.gotkv.ForEach(ctx, s, *root.toGotKV(), gotkv.PrefixSpan(k), fn2)
+	span := SpanForPath(p)
+	return mach.gotkv.ForEach(ctx, s, *root.toGotKV(), span, fn2)
 }
 
 // ForEachLeaf calls fn with each regular file in root, beneath p.
-func (a *Machine) ForEachLeaf(ctx context.Context, s stores.Reading, root Root, p string, fn func(p string, md *Info) error) error {
-	return a.ForEach(ctx, s, root, p, func(p string, md *Info) error {
+func (mach *Machine) ForEachLeaf(ctx context.Context, s stores.Reading, root Root, p string, fn func(p string, md *Info) error) error {
+	return mach.ForEach(ctx, s, root, p, func(p string, md *Info) error {
 		if os.FileMode(md.Mode).IsDir() {
 			return nil
 		}
@@ -184,19 +184,19 @@ func (a *Machine) ForEachLeaf(ctx context.Context, s stores.Reading, root Root, 
 
 // Graft places branch at p in root.
 // If p == "" then branch is returned unaltered.
-func (a *Machine) Graft(ctx context.Context, ss [2]stores.RW, root Root, p string, branch Root) (*Root, error) {
+func (mach *Machine) Graft(ctx context.Context, ss [2]stores.RW, root Root, p string, branch Root) (*Root, error) {
 	p = cleanPath(p)
 	if p == "" {
 		return &branch, nil
 	}
-	root2, err := a.MkdirAll(ctx, ss[1], root, parentPath(p))
+	root2, err := mach.MkdirAll(ctx, ss[1], root, parentPath(p))
 	if err != nil {
 		return nil, err
 	}
-	k := appendPrefix(nil, p)
-	return a.Splice(ctx, ss, []Segment{
+	k := newInfoKey(p)
+	return mach.Splice(ctx, ss, []Segment{
 		{
-			Span: gotkv.Span{Begin: nil, End: k},
+			Span: gotkv.Span{Begin: nil, End: k.Marshal(nil)},
 			Contents: Expr{
 				Root: *root2,
 			},
@@ -209,7 +209,7 @@ func (a *Machine) Graft(ctx context.Context, ss [2]stores.RW, root Root, p strin
 			},
 		},
 		{
-			Span: gotkv.Span{Begin: gotkv.PrefixEnd(k), End: nil},
+			Span: gotkv.Span{Begin: gotkv.PrefixEnd(k.Prefix(nil)), End: nil},
 			Contents: Expr{
 				Root: *root2,
 			},
@@ -217,33 +217,37 @@ func (a *Machine) Graft(ctx context.Context, ss [2]stores.RW, root Root, p strin
 	})
 }
 
-func (a *Machine) addPrefix(root Root, p string) gotkv.Root {
-	p = cleanPath(p)
-	k := appendPrefix(nil, p)
-	root2 := a.gotkv.AddPrefix(*root.toGotKV(), k[:len(k)-1])
+func (mach *Machine) addPrefix(root Root, p string) gotkv.Root {
+	prefix := pathPrefixNoTrail(nil, p)
+	if len(prefix) == 0 {
+		return root.ToGotKV()
+	}
+	root2 := mach.gotkv.AddPrefix(*root.toGotKV(), prefix)
 	return root2
 }
 
 // MaxInfo returns the maximum path and the corresponding Info for the path.
 // If no Info entry can be found MaxInfo returns ("", nil, nil)
-func (a *Machine) MaxInfo(ctx context.Context, ms stores.Reading, root Root, span Span) (string, *Info, error) {
-	return a.maxInfo(ctx, ms, root.ToGotKV(), span)
+func (mach *Machine) MaxInfo(ctx context.Context, ms stores.Reading, root Root, span Span) (string, *Info, error) {
+	return mach.maxInfo(ctx, ms, root.ToGotKV(), span)
 }
 
-func (a *Machine) maxInfo(ctx context.Context, ms stores.Reading, root gotkv.Root, span Span) (string, *Info, error) {
-	ent, err := a.gotkv.MaxEntry(ctx, ms, root, span)
+func (mach *Machine) maxInfo(ctx context.Context, ms stores.Reading, root gotkv.Root, span Span) (string, *Info, error) {
+	ent, err := mach.gotkv.MaxEntry(ctx, ms, root, span)
 	if err != nil {
 		return "", nil, err
 	}
-	switch {
-	case ent == nil:
+	if ent == nil {
 		return "", nil, nil
-	case isInfoKey(ent.Key):
+	}
+	var key Key
+	if err := key.Unmarshal(ent.Key); err != nil {
+		return "", nil, err
+	}
+	switch {
+	case key.IsInfo():
 		// found an info entry, parse it and return.
-		p, err := parseInfoKey(ent.Key)
-		if err != nil {
-			return "", nil, err
-		}
+		p := key.Path()
 		info, err := parseInfo(ent.Value)
 		if err != nil {
 			return "", nil, err
@@ -251,26 +255,24 @@ func (a *Machine) maxInfo(ctx context.Context, ms stores.Reading, root gotkv.Roo
 		return p, info, nil
 	case isExtentKey(ent.Key):
 		// found an extent key, use it's path to short cut to the info key.
-		p, _, err := splitExtentKey(ent.Key)
-		if err != nil {
-			return "", nil, err
-		}
-		info, err := a.getInfo(ctx, ms, root, p)
+		p := key.Path()
+		info, err := mach.getInfo(ctx, ms, root, p)
 		return p, info, err
 	default:
 		return "", nil, fmt.Errorf("gotfs: found invalid entry %v", ent)
 	}
 }
 
-var firstKey = []byte{
-	'/', 0,
-	0, 0, 0, 0, 0, 0, 0, 0,
-}
+var firstKey = newInfoKey("").Marshal(nil)
 
-func (a *Machine) Check(ctx context.Context, s stores.Reading, root Root, checkData func(ref gdat.Ref) error) error {
+func (mach *Machine) Check(ctx context.Context, s stores.Reading, root Root, checkData func(ref gdat.Ref) error) error {
 	var lastPath *string
 	var lastOffset *uint64
-	return a.gotkv.ForEach(ctx, s, *root.toGotKV(), gotkv.Span{}, func(ent gotkv.Entry) error {
+	return mach.gotkv.ForEach(ctx, s, *root.toGotKV(), gotkv.Span{}, func(ent gotkv.Entry) error {
+		var key Key
+		if err := key.Unmarshal(ent.Key); err != nil {
+			return err
+		}
 		switch {
 		case lastPath == nil:
 			logctx.Infof(ctx, "checking root")
@@ -280,13 +282,9 @@ func (a *Machine) Check(ctx context.Context, s stores.Reading, root Root, checkD
 			}
 			p := ""
 			lastPath = &p
-		case !isExtentKey(ent.Key):
-			p, err := parseInfoKey(ent.Key)
-			if err != nil {
-				return err
-			}
-			_, err = parseInfo(ent.Value)
-			if err != nil {
+		case key.IsInfo():
+			p := key.Path()
+			if _, err := parseInfo(ent.Value); err != nil {
 				return err
 			}
 			logctx.Infof(ctx, "checking %q", p)
@@ -296,33 +294,31 @@ func (a *Machine) Check(ctx context.Context, s stores.Reading, root Root, checkD
 			lastPath = &p
 			lastOffset = nil
 		default:
-			p, off, err := splitExtentKey(ent.Key)
-			if err != nil {
-				return err
-			}
+			p := key.Path()
+			endAt := key.EndAt()
 			ext, err := parseExtent(ent.Value)
 			if err != nil {
 				return err
 			}
 			if *lastPath != p {
-				logctx.Errorf(ctx, "path=%v offset=%v ext=%v", p, off, ext)
+				logctx.Errorf(ctx, "path=%v endAt=%v ext=%v", p, endAt, ext)
 				return fmt.Errorf("part not proceeded by metadata")
 			}
-			if lastOffset != nil && off <= *lastOffset {
+			if lastOffset != nil && endAt <= *lastOffset {
 				return fmt.Errorf("part offsets not monotonic")
 			}
 			if err := checkData(ext.Ref); err != nil {
 				return err
 			}
 			lastPath = &p
-			lastOffset = &off
+			lastOffset = &endAt
 		}
 		return nil
 	})
 }
 
-func (a *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (*Root, error) {
-	b := a.NewBuilder(ctx, ss[1], ss[0])
+func (mach *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (*Root, error) {
+	b := mach.NewBuilder(ctx, ss[1], ss[0])
 	for i, seg := range segs {
 		if i > 0 && bytes.Compare(segs[i-1].Span.End, segs[i].Span.Begin) > 0 {
 			return nil, fmt.Errorf("segs out of order, %d end=%q %d begin=%q", i-1, segs[i-1].Span.End, i, segs[i].Span.Begin)
@@ -330,14 +326,14 @@ func (a *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (
 
 		var root gotkv.Root
 		if seg.Contents.Root.Ref.IsZero() {
-			r, err := a.gotkv.NewEmpty(ctx, ss[1])
+			r, err := mach.gotkv.NewEmpty(ctx, ss[1])
 			if err != nil {
 				return nil, err
 			}
 			root = *r
 		} else {
 			if seg.Contents.AddPrefix != "" {
-				root = a.addPrefix(seg.Contents.Root, seg.Contents.AddPrefix)
+				root = mach.addPrefix(seg.Contents.Root, seg.Contents.AddPrefix)
 			} else {
 				root = seg.Contents.Root.ToGotKV()
 			}
@@ -349,8 +345,8 @@ func (a *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (
 	return b.Finish()
 }
 
-func (m *Machine) Exists(ctx context.Context, ms stores.Reading, root Root, p string) (bool, error) {
-	_, err := m.GetInfo(ctx, ms, root, p)
+func (mach *Machine) Exists(ctx context.Context, ms stores.Reading, root Root, p string) (bool, error) {
+	_, err := mach.GetInfo(ctx, ms, root, p)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil

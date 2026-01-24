@@ -191,9 +191,10 @@ func BenchmarkWrite(b *testing.B) {
 	})
 }
 
+func makeInfoKey(p string) []byte {
+	return newInfoKey(p).Marshal(nil)
+}
+
 func makeExtentKey(p string, endAt int) (out []byte) {
-	out = appendPrefix(out, p)
-	out = append(out, 0)
-	out = binary.BigEndian.AppendUint64(out, uint64(endAt))
-	return out
+	return newExtentKey(p, uint64(endAt)).Marshal(nil)
 }

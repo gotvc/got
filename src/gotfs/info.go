@@ -2,11 +2,9 @@ package gotfs
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"io/fs"
 	"os"
-	"strings"
 
 	"errors"
 
@@ -91,44 +89,26 @@ func parseInfo(data []byte) (*Info, error) {
 	return &ret, nil
 }
 
-// markInfoKey creates a key to store the Info object for a path p
-// It consists of the path prefix, and the
-func makeInfoKey(p string) (out []byte) {
-	out = appendPrefix(out, p)
-	out = append(out, 0)                        // NULL
-	out = binary.BigEndian.AppendUint64(out, 0) // 0 offset
-	return out
-}
-
-func parseInfoKey(k []byte) (string, error) {
-	if !isInfoKey(k) {
-		return "", fmt.Errorf("not a valid metdata key: %q", k)
-	}
-	// at this point we know the key is >= 9 bytes long.
-	p := string(k[:len(k)-9])
-	return cleanPath(p), nil
-}
-
 // PutInfo assigns metadata to p
-func (a *Machine) PutInfo(ctx context.Context, s stores.RW, x Root, p string, md *Info) (*Root, error) {
+func (mach *Machine) PutInfo(ctx context.Context, s stores.RW, x Root, p string, md *Info) (*Root, error) {
 	p = cleanPath(p)
 	if err := checkPath(p); err != nil {
 		return nil, err
 	}
-	k := makeInfoKey(p)
-	root, err := a.gotkv.Put(ctx, s, *x.toGotKV(), k, md.marshal())
+	k := newInfoKey(p)
+	root, err := mach.gotkv.Put(ctx, s, *x.toGotKV(), k.Marshal(nil), md.marshal())
 	return newRoot(root), err
 }
 
 // GetInfo retrieves the metadata at p if it exists and errors otherwise
-func (a *Machine) GetInfo(ctx context.Context, s stores.Reading, x Root, p string) (*Info, error) {
-	return a.getInfo(ctx, s, x.ToGotKV(), p)
+func (mach *Machine) GetInfo(ctx context.Context, s stores.Reading, x Root, p string) (*Info, error) {
+	return mach.getInfo(ctx, s, x.ToGotKV(), p)
 }
 
-func (a *Machine) getInfo(ctx context.Context, s stores.Reading, x gotkv.Root, p string) (*Info, error) {
+func (mach *Machine) getInfo(ctx context.Context, s stores.Reading, x gotkv.Root, p string) (*Info, error) {
 	p = cleanPath(p)
 	var md *Info
-	err := a.gotkv.GetF(ctx, s, x, makeInfoKey(p), func(data []byte) error {
+	err := mach.gotkv.GetF(ctx, s, x, newInfoKey(p).Marshal(nil), func(data []byte) error {
 		var err error
 		md, err = parseInfo(data)
 		return err
@@ -143,8 +123,8 @@ func (a *Machine) getInfo(ctx context.Context, s stores.Reading, x gotkv.Root, p
 }
 
 // GetDirInfo returns directory metadata at p if it exists, and errors otherwise
-func (a *Machine) GetDirInfo(ctx context.Context, s stores.Reading, x Root, p string) (*Info, error) {
-	md, err := a.GetInfo(ctx, s, x, p)
+func (mach *Machine) GetDirInfo(ctx context.Context, s stores.Reading, x Root, p string) (*Info, error) {
+	md, err := mach.GetInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err
 	}
@@ -155,8 +135,8 @@ func (a *Machine) GetDirInfo(ctx context.Context, s stores.Reading, x Root, p st
 }
 
 // GetFileInfo returns the file metadata at p if it exists, and errors otherwise
-func (a *Machine) GetFileInfo(ctx context.Context, s stores.Reading, x Root, p string) (*Info, error) {
-	md, err := a.GetInfo(ctx, s, x, p)
+func (mach *Machine) GetFileInfo(ctx context.Context, s stores.Reading, x Root, p string) (*Info, error) {
+	md, err := mach.GetInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err
 	}
@@ -166,8 +146,8 @@ func (a *Machine) GetFileInfo(ctx context.Context, s stores.Reading, x Root, p s
 	return md, nil
 }
 
-func (a *Machine) checkNoEntry(ctx context.Context, s stores.Reading, x Root, p string) error {
-	_, err := a.GetInfo(ctx, s, x, p)
+func (mach *Machine) checkNoEntry(ctx context.Context, s stores.Reading, x Root, p string) error {
+	_, err := mach.GetInfo(ctx, s, x, p)
 	switch {
 	case err == os.ErrNotExist:
 		return nil
@@ -176,26 +156,4 @@ func (a *Machine) checkNoEntry(ctx context.Context, s stores.Reading, x Root, p 
 	default:
 		return err
 	}
-}
-
-func checkPath(p string) error {
-	if len(p) > MaxPathLen {
-		return fmt.Errorf("path too long: %q", p)
-	}
-	if strings.ContainsAny(p, "\x00") {
-		return fmt.Errorf("path cannot contain null")
-	}
-	return nil
-}
-
-func parentPath(x string) string {
-	x = cleanPath(x)
-	parts := strings.Split(x, string(Sep))
-	if len(parts) == 0 {
-		panic("no parent of empty path")
-	}
-	if len(parts) == 1 {
-		return ""
-	}
-	return strings.Join(parts[:len(parts)-1], string(Sep))
 }

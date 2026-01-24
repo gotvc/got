@@ -25,8 +25,8 @@ func TestBuilderMkdir(t *testing.T) {
 }
 
 func TestBuilderSmallFiles(t *testing.T) {
-	ctx, ag, s := setup(t)
-	b := ag.NewBuilder(ctx, s, s)
+	ctx, mach, s := setup(t)
+	b := mach.NewBuilder(ctx, s, s)
 	require.NoError(t, b.Mkdir("", 0o755))
 	const N = 1e5
 	for i := 0; i < N; i++ {
@@ -39,12 +39,12 @@ func TestBuilderSmallFiles(t *testing.T) {
 	root, err := b.Finish()
 	require.NoError(t, err)
 	var count int
-	err = ag.ForEachLeaf(ctx, s, *root, "", func(p string, md *Info) error {
+	err = mach.ForEachLeaf(ctx, s, *root, "", func(p string, md *Info) error {
 		count++
 		return nil
 	})
 	require.NoError(t, err)
-	require.Equal(t, count, int(N))
+	require.Equal(t, int(N), count)
 	t.Logf("%d files produced %d chunks", int(N), s.Len())
 	require.LessOrEqual(t, s.Len(), int(N))
 }
