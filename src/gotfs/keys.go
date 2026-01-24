@@ -52,27 +52,44 @@ func (k *Key) EndAt() uint64 {
 	return k.endAt
 }
 
+func pathPrefixWithoutTerminator(out []byte, p []byte) []byte {
+	if len(p) > 0 {
+		out = append(out, 0)
+		out = append(out, p...)
+	}
+	return out
+}
+
+// PathPrefix returns the null-separated prefix for a path without the trailing terminator.
+func PathPrefix(out []byte, p string) []byte {
+	k := newInfoKey(p)
+	return pathPrefixWithoutTerminator(out, k.path)
+}
+
+func pathPrefixWithTerminator(out []byte, p []byte) []byte {
+	out = pathPrefixWithoutTerminator(out, p)
+	out = append(out, 0)
+	return out
+}
+
 // Prefix returns a prefix which all keys for this path, including Infos and Extents will have.
 // The prefix will also include any children of the object.
 func (k Key) Prefix(out []byte) []byte {
-	if len(k.path) > 0 {
-		// if the path isn't empty then we need to prefix it with a NULL
-		out = append(out, 0)
-	}
-	out = append(out, k.path...)
-	out = append(out, 0)
-	return out
+	return pathPrefixWithTerminator(out, k.path)
 }
 
 // ChildrenSpan returns a span that contains all children or the path
 // if it was a directory
 func (k Key) ChildrenSpan() gotkv.Span {
-	return gotkv.PrefixSpan(k.Prefix(nil))
+	beg := k.Marshal(nil)
+	return gotkv.Span{
+		Begin: beg,
+		End:   gotkv.PrefixEnd(k.Prefix(nil)),
+	}
 }
 
 func (k Key) Marshal(out []byte) []byte {
-	out = append(out, k.path...)
-	out = append(out, 0)
+	out = k.Prefix(out)
 	out = binary.BigEndian.AppendUint64(out, k.endAt)
 	return out
 }
@@ -81,7 +98,11 @@ func (k *Key) Unmarshal(data []byte) error {
 	if !isValidKey(data) {
 		return fmt.Errorf("not a valid key")
 	}
-	k.path = append(k.path[:0], data[:len(data)-9]...)
+	path := data[:len(data)-9]
+	if len(path) > 0 && path[0] == 0 {
+		path = path[1:]
+	}
+	k.path = append(k.path[:0], path...)
 	k.endAt = binary.BigEndian.Uint64(data[len(data)-8:])
 	return nil
 }

@@ -125,12 +125,14 @@ func (mach *Machine) Select(ctx context.Context, s stores.RW, root Root, p strin
 		return nil, err
 	}
 	x := root.toGotKV()
-	prefix := newInfoKey(p).Prefix(nil)
-	if x, err = mach.deleteOutside(ctx, s, *x, gotkv.PrefixSpan(prefix)); err != nil {
+	span := SpanForPath(p)
+	if x, err = mach.deleteOutside(ctx, s, *x, span); err != nil {
 		return nil, err
 	}
-	// remove trailing null
-	prefix = prefix[:len(prefix)-1]
+	if p == "" {
+		return newRoot(x), nil
+	}
+	prefix := PathPrefix(nil, p)
 	y, err := mach.gotkv.RemovePrefix(ctx, s, *x, prefix)
 	if err != nil {
 		return nil, err
@@ -166,7 +168,7 @@ func (mach *Machine) ForEach(ctx context.Context, s stores.Reading, root Root, p
 		}
 		return nil
 	}
-	span := gotkv.PrefixSpan(newInfoKey(p).Prefix(nil))
+	span := SpanForPath(p)
 	return mach.gotkv.ForEach(ctx, s, *root.toGotKV(), span, fn2)
 }
 
@@ -216,11 +218,10 @@ func (mach *Machine) Graft(ctx context.Context, ss [2]stores.RW, root Root, p st
 }
 
 func (mach *Machine) addPrefix(root Root, p string) gotkv.Root {
-	prefix := newInfoKey(p).Prefix(nil)
-	if len(prefix) == 1 {
+	prefix := PathPrefix(nil, p)
+	if len(prefix) == 0 {
 		return root.ToGotKV()
 	}
-	// This will include a trailing null, so it can be
 	root2 := mach.gotkv.AddPrefix(*root.toGotKV(), prefix)
 	return root2
 }
@@ -236,13 +237,14 @@ func (mach *Machine) maxInfo(ctx context.Context, ms stores.Reading, root gotkv.
 	if err != nil {
 		return "", nil, err
 	}
+	if ent == nil {
+		return "", nil, nil
+	}
 	var key Key
 	if err := key.Unmarshal(ent.Key); err != nil {
 		return "", nil, err
 	}
 	switch {
-	case ent == nil:
-		return "", nil, nil
 	case key.IsInfo():
 		// found an info entry, parse it and return.
 		p := key.Path()

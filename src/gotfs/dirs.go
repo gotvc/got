@@ -106,8 +106,7 @@ func (mach *Machine) RemoveAll(ctx context.Context, s Store, x Root, p string) (
 	if err != nil {
 		return nil, err
 	}
-	k := newInfoKey(p)
-	span := gotkv.PrefixSpan(k.Prefix(nil))
+	span := SpanForPath(p)
 	root, err := mach.gotkv.DeleteSpan(ctx, s, *x.toGotKV(), span)
 	return newRoot(root), err
 }
@@ -129,8 +128,7 @@ func (mach *Machine) newDirIterator(ctx context.Context, s stores.Reading, x Roo
 	if err != nil {
 		return nil, err
 	}
-	infoKey := newInfoKey(p)
-	span := gotkv.PrefixSpan(infoKey.Prefix(nil))
+	span := SpanForPath(p)
 	iter := mach.gotkv.NewIterator(s, *x.toGotKV(), span)
 	ent := &gotkv.Entry{}
 	if err := streams.NextUnit(ctx, iter, ent); err != nil {
@@ -178,9 +176,6 @@ func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
 
 	// now we have to advance through the file or directory to fully consume it.
 	prefix := newInfoKey(p).Prefix(nil)
-	if len(prefix) > 0 {
-		prefix = prefix[:len(prefix)-1]
-	}
 	end := gotkv.PrefixEnd(prefix)
 	if err := di.iter.Seek(ctx, end); err != nil {
 		return nil, err
