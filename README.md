@@ -40,8 +40,6 @@ $ got init --blobcache-client <http endpoint> --volume <volume-oid>
 
 > For large repositories, it is recommended to use an out of process blobcache
 
-The HTTP endpoint should *just work*, the BCP endpoint requires granting access to Got.
-
 ## Contributing
 We use `just` as a command runner.
 All of the common development tasks have `just` commands.
