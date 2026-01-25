@@ -97,7 +97,7 @@ func (mach *Machine) ReadDir(ctx context.Context, s stores.Reading, x Root, p st
 	return nil
 }
 
-func (mach *Machine) RemoveAll(ctx context.Context, s Store, x Root, p string) (*Root, error) {
+func (mach *Machine) RemoveAll(ctx context.Context, s stores.RW, x Root, p string) (*Root, error) {
 	p = cleanPath(p)
 	_, err := mach.GetInfo(ctx, s, x, p)
 	if os.IsNotExist(err) {
