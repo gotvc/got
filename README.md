@@ -6,26 +6,10 @@ A solution to the problems that come from using Git to store all of your data.
 Got uses an improved data structure that better handles large files and directories, and encrypts all the data that you give it.
 
 ## Quick Links
-- [ARCHITECTURE.md](./ARCHITECTURE.md)
-- [CLI Docs](./doc/CLI.md)
-- [Cryptography Overview](./doc/Cryptography.md)
+- [Docs](./doc/0_Got.md)
+- [CLI Reference](./doc/3.0_CLI.md)
 - [GotFS](./src/gotfs/README.md)
 - [GotKV](./src/gotkv/README.md)
-
-## Features/Roadmap
-- [x] Content-Defined chunking of large files into blobs with a maximum size.
-- [x] E2E encryption. Branch names, directory names, file names, and file sizes can all be hidden from remote repositories.
-- [x] Efficiently add/remove large files and directories to/from existing filesystems.
-- [x] Stage changes with `add`, `rm`, `put`, and `discard` commands.
-- [x] Inspect branch state with `cat` and `ls`.
-- [x] Print and change the active branch with `active` command.
-- [x] Commit changes, with `commit`.
-- [x] Create, delete, and list branches with `branch` commands.
-- [x] Copy one branch state to another with `sync`.
-- [x] Share repositories using the [Blobcache protocol](https://github.com/blobcache/blobcache) with `serve` command.
-- [x] Efficiently pack many small files into fewer blobs.
-- [x] Checkout the head of a branch to the working directory.
-- [ ] Merge 2 branches.
 
 ## Getting Started
 
