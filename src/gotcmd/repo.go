@@ -1,14 +1,15 @@
 package gotcmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 
 	bcclient "blobcache.io/blobcache/client/go"
 	"blobcache.io/blobcache/src/blobcache"
+	_ "blobcache.io/blobcache/src/blobcachecmd"
 	"blobcache.io/blobcache/src/schema/bcns"
-	"blobcache.io/blobcache/src/schema/jsonns"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc"
 	"github.com/gotvc/got/src/internal/marks"
@@ -20,8 +21,9 @@ var initCmd = star.Command{
 		Short: "initializes a repository in the current directory",
 	},
 	Flags: map[string]star.Flag{
-		"blobcache-client": blobcacheClientParam,
-		"volume":           volumeParam,
+		"blobcache": blobcacheParam,
+		"mkvol":     mkvolParam,
+		"volume":    volumeParam,
 	},
 	F: func(c star.Context) error {
 		config := gotrepo.DefaultConfig()
@@ -60,34 +62,51 @@ var initCmd = star.Command{
 	},
 }
 
-func configureBlobcache(c star.Context, cfg *gotrepo.Config) error {
-	blobcacheAPI, clientOK := blobcacheClientParam.LoadOpt(c)
-	var bcspec gotrepo.BlobcacheSpec
-	switch {
-	case clientOK:
-		if _, hasVol := volumeParam.LoadOpt(c); !hasVol {
-			return fmt.Errorf("must provide volume when using --blobcache-client")
-		}
-		c.Printf("using blobcache client at %v\n", blobcacheAPI)
-		bcspec.Client = &gotrepo.ExternalBlobcache{
-			URL: blobcacheAPI,
-		}
-	default:
-		c.Printf("using in-process blobcache\n")
-		bcspec.InProcess = &gotrepo.InProcessBlobcache{
-			ActAs: gotrepo.DefaultIden,
-		}
-	}
-	cfg.Blobcache = bcspec
-	return nil
+var mkvolParam = star.Optional[string]{
+	ID:       "mkvol",
+	Parse:    star.ParseString,
+	ShortDoc: "the name to use when creating new a volume in a namespace",
 }
 
-var blobcacheClientParam = star.Optional[string]{
-	ID: "blobcache-client",
-	Parse: func(s string) (string, error) {
-		return s, nil
-	},
-	ShortDoc: "the URL of the system Blobcache service (this is usually a unix socket)",
+var blobcacheParam = star.Optional[string]{
+	ID:    "blobcache",
+	Parse: star.ParseString,
+}
+
+func configureBlobcache(c star.Context, cfg *gotrepo.Config) error {
+	configStr, _ := blobcacheParam.LoadOpt(c)
+	switch configStr {
+	case "env-client":
+		volOID, volOk := volumeParam.LoadOpt(c)
+		newVolName, mkvolOk := mkvolParam.LoadOpt(c)
+		if mkvolOk == volOk {
+			return fmt.Errorf("must provide one of --volume <oid> or --mkvol <name>")
+		}
+		if mkvolOk {
+			bc := bcclient.NewClientFromEnv()
+			volh, err := createRepoVol(c, bc, newVolName)
+			if err != nil {
+				return err
+			}
+			c.Printf("created new Blobcache Volume at %v\n", newVolName)
+			volOID = volh.OID
+		}
+		apiVal := os.Getenv(bcclient.EnvBlobcacheAPI)
+		c.Printf("using blobcache client at %v\n", apiVal)
+		cfg.Blobcache = gotrepo.BlobcacheSpec{
+			EnvClient: &gotrepo.EnvClientBlobcache{},
+		}
+		cfg.RepoVolume = volOID
+		return nil
+	case "", "in-process":
+		cfg.Blobcache = gotrepo.BlobcacheSpec{
+			InProcess: &gotrepo.InProcessBlobcache{},
+		}
+		cfg.RepoVolume = blobcache.OID{} // in-process puts repo at root OID
+		return nil
+	default:
+		return fmt.Errorf("unrecognized blobcache option %v", configStr)
+	}
 }
 
 var volumeParam = star.Optional[blobcache.OID]{
@@ -126,25 +145,18 @@ var blobcacheCmd = star.NewDir(
 
 var mkrepoCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "create a new Volume suitable for use as repo root",
+		Short: "create a new Volume suitable for use as Repo root",
 	},
 	Pos: []star.Positional{volNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
 		svc := bcclient.NewClientFromEnv()
-		bcAPIStr := os.Getenv(bcclient.EnvBlobcacheAPI)
 		volName := volNameParam.Load(c)
-		nsc := bcns.Client{
-			Service: svc,
-			Schema:  jsonns.Schema{},
-		}
-		nsh := blobcache.Handle{} // assume the root
-
-		spec := gotrepo.RepoVolumeSpec(false)
-		volh, err := nsc.CreateAt(ctx, nsh, volName, spec)
+		volh, err := createRepoVol(ctx, svc, volName)
 		if err != nil {
 			return err
 		}
+		spec := gotrepo.RepoVolumeSpec(false)
 		specJSON, err := json.Marshal(spec)
 		if err != nil {
 			return err
@@ -156,7 +168,7 @@ var mkrepoCmd = star.Command{
 		c.Printf("\nNEXT:\n")
 		c.Printf("  |> If you are accessing blobcache over the local socket, then you should have access already.\n")
 		c.Printf("  |> Provide this volume in a call to got init like this:\n")
-		c.Printf("  |> got init --blobcache-client %s --volume %v\n", bcAPIStr, volh.OID)
+		c.Printf("  |> got init --blobcache from-env --volume %v\n", volh.OID)
 
 		return nil
 	},
@@ -166,4 +178,14 @@ var volNameParam = star.Required[string]{
 	ID:       "vol-name",
 	Parse:    star.ParseString,
 	ShortDoc: "the name in the namespace to use for the new volume",
+}
+
+func createRepoVol(ctx context.Context, svc blobcache.Service, volName string) (*blobcache.Handle, error) {
+	nsc, err := bcns.ClientForVolume(ctx, svc, bcns.Objectish{})
+	if err != nil {
+		return nil, err
+	}
+	nsh := blobcache.Handle{} // assume the root
+	spec := gotrepo.RepoVolumeSpec(false)
+	return nsc.CreateAt(ctx, nsh, volName, spec)
 }

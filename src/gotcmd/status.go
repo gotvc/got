@@ -49,7 +49,7 @@ var statusCmd = star.Command{
 		}); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(bufw, "NOT STAGED:\n"); err != nil {
+		if _, err := fmt.Fprintf(bufw, "UNKNOWN:\n"); err != nil {
 			return err
 		}
 		if err := wc.ForEachDirty(ctx, func(p string, modtime time.Time) error {

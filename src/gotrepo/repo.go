@@ -304,8 +304,8 @@ func NewWorkingCopyID() WorkingCopyID {
 func (r *Repo) useSchema() bool {
 	bccfg := r.config.Blobcache
 	switch {
-	case bccfg.Client != nil:
-		return bccfg.Client.UseSchema
+	case bccfg.EnvClient != nil:
+		return bccfg.EnvClient.UseSchema
 	default:
 		return true
 	}

@@ -31,7 +31,7 @@ type BlobcacheSpec struct {
 	// The state can get quite large for large datasets, so it is recommended to use the system's Blobcache.
 	InProcess *InProcessBlobcache `json:"in_process,omitempty"`
 	// Client uses the Client Blobcache service, as configured through BLOBCACHE_API
-	Client *ExternalBlobcache `json:"client,omitempty"`
+	EnvClient *EnvClientBlobcache `json:"env_client,omitempty"`
 }
 
 type InProcessBlobcache struct {
@@ -40,9 +40,9 @@ type InProcessBlobcache struct {
 	CanTouch []inet256.ID `json:"can_touch"`
 }
 
-type ExternalBlobcache struct {
-	URL       string `json:"url"`
-	UseSchema bool   `json:"schema"`
+// EnvBlobcache configures blobcache to create a client using the environment variable
+type EnvClientBlobcache struct {
+	UseSchema bool `json:"use_schema,omitempty"`
 }
 
 func makeBlobcache(repo *os.Root, config Config, spec BlobcacheSpec, bgCtx context.Context) (blobcache.Service, error) {
@@ -75,12 +75,8 @@ func makeBlobcache(repo *os.Root, config Config, spec BlobcacheSpec, bgCtx conte
 			return nil, err
 		}
 		return bc, nil
-	case spec.Client != nil:
-		bc, err := openHTTPBlobcache(spec.Client.URL)
-		if err != nil {
-			return nil, err
-		}
-		return bc, nil
+	case spec.EnvClient != nil:
+		return bcclient.NewClientFromEnv(), nil
 	default:
 		return nil, fmt.Errorf("empty blobcache spec: %v", spec)
 	}

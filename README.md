@@ -33,9 +33,10 @@ That will create a new repo using an in-process blobcache.
 All content will be stored in the `.got/blobcache` directory.
 > This is the recommended way to try out blobcache.
 
-A repo can also be initially configured to use the system (or any) blobcache instance.
+A repo can also be initially configured to use an external Blobcache based on an environment variable.
+This command will initialize a Repo that looks at `BLOBCACHE_API` to find a Blobcache service.
 ```shell
-$ got init --blobcache-client <http endpoint> --volume <volume-oid>
+$ got init --blobcache env-client --mkvol my_new_got_repo_volume 
 ```
 
 > For large repositories, it is recommended to use an out of process blobcache
