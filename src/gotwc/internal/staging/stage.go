@@ -198,6 +198,7 @@ func (tx *Tx) Iterate(ctx context.Context, span gotkv.Span) (*Iterator, error) {
 	if err := tx.setup(ctx); err != nil {
 		return nil, err
 	}
+	tx.kvtx.Flush(ctx)
 	it := tx.kvtx.Iterate(ctx, span)
 	return &Iterator{it: it}, nil
 }
