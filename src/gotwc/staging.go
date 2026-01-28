@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"log"
 
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
@@ -174,6 +175,18 @@ func (wc *WC) Add(ctx context.Context, paths ...string) error {
 				return stage.Put(ctx, p, *fileRoot)
 			}); err != nil {
 				return err
+			}
+			if finfo, err := sctx.FS.Stat(target); err != nil && !posixfs.IsErrNotExist(err) {
+				return err
+			} else if err == nil && finfo.IsDir() {
+				if err := sctx.DB.PutInfo(ctx, FileInfo{
+					Path:       target,
+					Mode:       finfo.Mode(),
+					ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
+					Size:       finfo.Size(),
+				}); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -378,7 +391,7 @@ func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOpera
 		if snap != nil {
 			root = snap.Payload.Root
 		} else {
-			rootPtr, err := sctx.GotFS.NewEmpty(ctx, s)
+			rootPtr, err := sctx.GotFS.NewEmpty(ctx, s, 0o755)
 			if err != nil {
 				return err
 			}
@@ -454,6 +467,7 @@ func (wc *WC) ForEachDirty(ctx context.Context, fn func(fi DirtyFile) error) err
 				// If it is a Put operation, then it is definitely different,
 				// otherwise it would be in the database, and would have been filtered by the matching join.
 			}
+			log.Println(ukp.Current.X.Path, porting.HasChanged(&ukp.Current.X, &ukp.Known.X))
 			return fn(DirtyFile{
 				Path:       p,
 				Exists:     ukp.Current.Ok,

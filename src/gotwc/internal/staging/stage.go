@@ -170,7 +170,16 @@ func (tx *Tx) Discard(ctx context.Context, p string) error {
 		return err
 	}
 	p = cleanPath(p)
-	return tx.kvtx.Delete(ctx, []byte(p))
+	if err := tx.kvtx.Delete(ctx, []byte(p)); err != nil {
+		return err
+	}
+	// Also discard any changes to subpaths
+	return tx.ForEach(ctx, func(e Entry) error {
+		if strings.HasPrefix(e.Path, p+"/") {
+			return tx.kvtx.Delete(ctx, []byte(e.Path))
+		}
+		return nil
+	})
 }
 
 // Get returns the operation, if any, staged for the path p
@@ -268,7 +277,7 @@ func (tx *Tx) IsEmpty(ctx context.Context) (bool, error) {
 func (tx *Tx) Apply(ctx context.Context, fsag *gotfs.Machine, ss [2]stores.RW, base *gotfs.Root) (*gotfs.Root, error) {
 	if base == nil {
 		var err error
-		base, err = fsag.NewEmpty(ctx, ss[1])
+		base, err = fsag.NewEmpty(ctx, ss[1], 0o755)
 		if err != nil {
 			return nil, err
 		}

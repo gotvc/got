@@ -17,7 +17,7 @@ import (
 
 func TestCreateFileFrom(t *testing.T) {
 	ctx, ag, s := setup(t)
-	x, err := ag.NewEmpty(ctx, s)
+	x, err := ag.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
 	require.NotNil(t, x)
 	fileData := "file contents\n"
@@ -32,7 +32,7 @@ func TestCreateFileFrom(t *testing.T) {
 
 func TestFileInfo(t *testing.T) {
 	ctx, ag, s := setup(t)
-	x, err := ag.NewEmpty(ctx, s)
+	x, err := ag.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
 	require.NotNil(t, x)
 	x, err = ag.CreateFile(ctx, [2]stores.RW{s, s}, *x, "file.txt", bytes.NewReader(nil))
@@ -64,7 +64,7 @@ func TestLargeFiles(t *testing.T) {
 	}
 	require.NoError(t, eg.Wait())
 
-	root, err := ag.NewEmpty(ctx, s)
+	root, err := ag.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
 	for i := range fileRoots {
 		root, err = ag.Graft(ctx, ss, *root, strconv.Itoa(i), fileRoots[i])

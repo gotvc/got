@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"io/fs"
 	"path"
 	"runtime"
 	"strings"
@@ -39,15 +40,15 @@ func NewImporter(fsmach *gotfs.Machine, db *DB, ss [2]stores.RW) *Importer {
 // ImportPath returns gotfs instance containing the content in fsx at p.
 // The content will be at the root of the filesystem.
 func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
-	stat, err := fsx.Stat(p)
+	finfo, err := fsx.Stat(p)
 	if err != nil {
 		return nil, err
 	}
-	if !stat.Mode().IsDir() {
+	if !finfo.Mode().IsDir() {
 		return pr.importFile(ctx, fsx, p)
 	}
 	var changes []gotfs.Segment
-	emptyDir, err := createEmptyDir(ctx, pr.gotfs, pr.ms)
+	emptyDir, err := createEmptyDir(ctx, pr.gotfs, pr.ms, finfo.Mode())
 	if err != nil {
 		return nil, err
 	}
@@ -83,7 +84,19 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 			},
 		})
 	}
-	return pr.gotfs.Splice(ctx, [2]stores.RW{pr.ds, pr.ms}, changes)
+	root, err := pr.gotfs.Splice(ctx, [2]stores.RW{pr.ds, pr.ms}, changes)
+	if err != nil {
+		return nil, err
+	}
+	// for directories we don't add the root, just the mode and modified at.
+	if err := pr.db.PutInfo(ctx, FileInfo{
+		Path:       p,
+		Mode:       finfo.Mode(),
+		ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
+	}); err != nil {
+		return nil, err
+	}
+	return root, nil
 }
 
 func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
@@ -190,8 +203,8 @@ func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
 	return start, end
 }
 
-func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms stores.RW) (*gotfs.Root, error) {
-	return fsag.NewEmpty(ctx, ms)
+func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms stores.RW, mode fs.FileMode) (*gotfs.Root, error) {
+	return fsag.NewEmpty(ctx, ms, mode)
 }
 
 func HasChanged(a, b *FileInfo) bool {
