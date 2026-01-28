@@ -137,7 +137,7 @@ func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.Reading, root 
 		var dbinfo FileInfo
 		if found, err := pr.db.GetInfo(ctx, p, &dbinfo); err != nil {
 			return err
-		} else if found && changed(&dbinfo, finfo) {
+		} else if found && HasChanged(&dbinfo, finfo) {
 			return ErrWouldClobber{
 				Op:   "write",
 				Path: p,
@@ -180,7 +180,7 @@ func (pr *Exporter) deleteFile(ctx context.Context, p string) error {
 		if err != nil {
 			return err
 		}
-		if changed(finfo, &dbinfo) {
+		if HasChanged(finfo, &dbinfo) {
 			return ErrWouldClobber{Op: "delete", Path: p}
 		}
 	}

@@ -176,8 +176,8 @@ github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e h1:JVG44RsyaB9T2KIHavM
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e/go.mod h1:RbqR21r5mrJuqunuUZ/Dhy/avygyECGrLceyNeo4LiM=
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
-go.brendoncarroll.net/exp v0.0.0-20260120154909-50dadeafc54f h1:31vROwpxEGFTnZWVrw99gspB/q9t74BHtOw3ixo3sv4=
-go.brendoncarroll.net/exp v0.0.0-20260120154909-50dadeafc54f/go.mod h1:7C3uhanAQUJFF9w9m4Zeif5gDoh1eJlgQ3/aJfuJo9A=
+go.brendoncarroll.net/exp v0.0.0-20260128162803-7de289922cb8 h1:a7zTrvz06KgLuAlj1cWSzn96XxpckvbOPMrH6qN3MTw=
+go.brendoncarroll.net/exp v0.0.0-20260128162803-7de289922cb8/go.mod h1:vb9wjeVzZb45i2sZHcyHszGzgOV2ogtKQOZzRKmhF4I=
 go.brendoncarroll.net/p2p v0.0.0-20241118201502-2abd1a6f58e7 h1:OdTUjSViUQ1Q0XmoT2OSaQr1vqnhoSqLulvTaTZrPVY=
 go.brendoncarroll.net/p2p v0.0.0-20241118201502-2abd1a6f58e7/go.mod h1:b0MYiwcKuEAUbvV5z3e843rTFnsaX5IthIiyxeMUtUg=
 go.brendoncarroll.net/star v0.0.0-20251226172902-a1111c13c6b3 h1:pJBRAqXQixDoandRN5Z+MMvylF6HI7MbjwkrEVicD24=

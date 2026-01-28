@@ -12,6 +12,7 @@ import (
 	"github.com/gotvc/got/src/gotfs/gotfscnp"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
+	"go.brendoncarroll.net/exp/streams"
 )
 
 type Info struct {
@@ -156,4 +157,26 @@ func (mach *Machine) checkNoEntry(ctx context.Context, s stores.Reading, x Root,
 	default:
 		return err
 	}
+}
+
+// InfoEntry is the Path and the info it points to.
+type InfoEntry struct {
+	Path string
+	Info Info
+}
+
+var _ streams.Iterator[InfoEntry] = &InfoIterator{}
+
+type InfoIterator struct {
+	m    *Machine
+	s    stores.Reading
+	root Root
+}
+
+func (m *Machine) NewInfoIterator(ms stores.Reading, root Root, p string) *InfoIterator {
+	return &InfoIterator{m: m, s: ms, root: root}
+}
+
+func (m *InfoIterator) Next(ctx context.Context, dst []InfoEntry) (int, error) {
+	return 0, streams.EOS()
 }

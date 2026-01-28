@@ -99,7 +99,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 	var ent FileInfo
 	if ok, err := pr.db.GetInfo(ctx, p, &ent); err != nil {
 		return nil, err
-	} else if ok && changed(&ent, finfo) {
+	} else if ok && HasChanged(&ent, finfo) {
 		logctx.Infof(ctx, "using cache entry for path %q. skipped import", p)
 		var root gotfs.Root
 		if yes, err := pr.db.GetFSRoot(ctx, p, &root); err != nil {
@@ -194,7 +194,7 @@ func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms stores.RW) (*go
 	return fsag.NewEmpty(ctx, ms)
 }
 
-func changed(a, b *FileInfo) bool {
+func HasChanged(a, b *FileInfo) bool {
 	return a.ModifiedAt != b.ModifiedAt ||
 		a.Mode != b.Mode ||
 		a.Size != b.Size
