@@ -4,10 +4,8 @@ import (
 	"context"
 	"strings"
 
-	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotwc/internal/porting"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
-	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/maybe"
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/posixfs"
@@ -67,12 +65,4 @@ func (wc *WC) newUnknownIterator(db *porting.DB, fsys posixfs.FS) streams.Iterat
 			Current: src.Right,
 		}
 	})
-}
-
-func newGotFSInfoIter(fsmach *gotfs.Machine, s stores.RW, root gotfs.Root, spans []Span) streams.Iterator[gotfs.InfoEntry] {
-	it := fsmach.NewInfoIterator(s, root, "")
-	it2 := streams.NewFilter(it, func(x gotfs.InfoEntry) bool {
-		return spansContain(spans, x.Path)
-	})
-	return it2
 }
