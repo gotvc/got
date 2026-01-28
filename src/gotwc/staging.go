@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"log"
 
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
@@ -467,7 +466,6 @@ func (wc *WC) ForEachDirty(ctx context.Context, fn func(fi DirtyFile) error) err
 				// If it is a Put operation, then it is definitely different,
 				// otherwise it would be in the database, and would have been filtered by the matching join.
 			}
-			log.Println(ukp.Current.X.Path, porting.HasChanged(&ukp.Current.X, &ukp.Known.X))
 			return fn(DirtyFile{
 				Path:       p,
 				Exists:     ukp.Current.Ok,
