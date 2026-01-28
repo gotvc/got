@@ -119,3 +119,11 @@ func PrefixEnd(prefix []byte) []byte {
 	}
 	return end
 }
+
+// Literal is a stream literal, satisfying the Iterator interface.
+// It can be constructed with a slice using NewLiteral
+type Literal = streams.Slice[Entry]
+
+func NewLiteral(xs []Entry) *Literal {
+	return streams.NewSlice(xs, CopyEntry)
+}

@@ -5,7 +5,6 @@ import (
 	"context"
 	"slices"
 
-	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
 )
@@ -91,6 +90,10 @@ func (tx *Tx) Delete(ctx context.Context, key []byte) error {
 	return nil
 }
 
+func (tx *Tx) IterateFlushed(ctx context.Context, span Span) *Iterator {
+	return tx.m.NewIterator(tx.s, tx.prev, span)
+}
+
 // Iterate returns an iterator for the current state of the transaction.
 // - Flush must be called before Iterate, or it panics.
 func (tx *Tx) Iterate(ctx context.Context, span Span) *TxIterator {
@@ -98,8 +101,8 @@ func (tx *Tx) Iterate(ctx context.Context, span Span) *TxIterator {
 		// TODO: lift this restriction
 		panic("Iterate cannot be called with pending edits")
 	}
-	base := tx.m.NewIterator(tx.s, tx.prev, span)
-	mit := streams.NewMerger([]streams.Peekable[Entry]{
+	base := tx.IterateFlushed(ctx, span)
+	oj := streams.NewOJoiner(
 		streams.NewPeeker(streams.NewMutator(base, func(ent *Entry) bool {
 			if editsDelete(tx.edits, ent.Key) {
 				return false
@@ -108,18 +111,42 @@ func (tx *Tx) Iterate(ctx context.Context, span Span) *TxIterator {
 				ent.Value = append(ent.Value[:0], val...)
 			}
 			return true
-		}), kvstreams.CopyEntry),
+		}), copyEntry),
 		&localTxIterator{tx: tx, span: span},
-	}, compareEntries)
-	return &TxIterator{m: *mit}
+		compareEntries,
+	)
+	return &TxIterator{oj: oj}
 }
 
 type TxIterator struct {
-	m streams.Merger[Entry]
+	oj *streams.OJoiner[Entry, Entry]
 }
 
 func (it *TxIterator) Next(ctx context.Context, dst []Entry) (int, error) {
-	return it.m.Next(ctx, dst)
+	var n int
+	var x streams.OJoined[Entry, Entry]
+	for i := range dst {
+		if err := streams.NextUnit(ctx, it.oj, &x); err != nil {
+			if streams.IsEOS(err) {
+				if i == 0 {
+					return 0, streams.EOS()
+				} else {
+					break
+				}
+			}
+			return 0, err
+		}
+		// right takes precedent over left
+		if x.Right.Ok {
+			copyEntry(&dst[i], x.Right.X)
+		} else if x.Left.Ok {
+			copyEntry(&dst[i], x.Left.X)
+		} else {
+			panic("unreachable")
+		}
+		n++
+	}
+	return n, nil
 }
 
 type localTxIterator struct {
