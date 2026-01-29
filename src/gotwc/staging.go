@@ -445,12 +445,6 @@ func (wc *WC) ForEachDirty(ctx context.Context, fn func(fi DirtyFile) error) err
 		if err != nil {
 			return err
 		}
-		// fsMach := sctx.GotFS
-		// spans, err := wc.ListSpans(ctx)
-		// if err != nil {
-		// 	return err
-		// }
-		// _ = newGotFSInfoIter(fsMach, voltx, snap.Payload.Root, spans)
 		uk := wc.newUnknownIterator(sctx.DB, fsys)
 		return streams.ForEach(ctx, uk, func(ukp unknownFile) error {
 			p := ukp.Path()
