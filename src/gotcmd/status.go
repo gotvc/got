@@ -3,7 +3,6 @@ package gotcmd
 import (
 	"bufio"
 	"fmt"
-	"time"
 
 	"github.com/fatih/color"
 	"github.com/gotvc/got/src/gotfs"
@@ -44,16 +43,20 @@ var statusCmd = star.Command{
 			case op.Modify != nil:
 				desc = color.GreenString("MODIFY")
 			}
-			_, err := fmt.Fprintf(bufw, "\t%7s %s\n", desc, p)
+			_, err := fmt.Fprintf(bufw, "  %7s %s\n", desc, p)
 			return err
 		}); err != nil {
 			return err
 		}
-		if _, err := fmt.Fprintf(bufw, "UNKNOWN:\n"); err != nil {
+		if _, err := fmt.Fprintf(bufw, "DIRTY:\n"); err != nil {
 			return err
 		}
-		if err := wc.ForEachDirty(ctx, func(p string, modtime time.Time) error {
-			_, err := fmt.Fprintf(bufw, "\t%s\n", p)
+		if err := wc.ForEachDirty(ctx, func(fi gotwc.DirtyFile) error {
+			if fi.Exists {
+				fmt.Fprintf(bufw, "  + %v %s\n", fi.Mode, fi.Path)
+			} else {
+				fmt.Fprintf(bufw, "  - %s\n", fi.Path)
+			}
 			return err
 		}); err != nil {
 			return err

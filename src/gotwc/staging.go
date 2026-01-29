@@ -4,12 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
-	"time"
+	"io/fs"
 
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/internal/marks"
+	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
@@ -37,6 +37,7 @@ type stagingCtx struct {
 	GotFS    *gotfs.Machine
 	Store    stores.RW
 	FS       posixfs.FS
+	DB       *porting.DB
 	Importer *porting.Importer
 	Exporter *porting.Exporter
 }
@@ -79,9 +80,10 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		if err := fn(stagingCtx{
 			Stage:    stagetx,
 			Store:    stagingStore,
+			FS:       fsys,
+			DB:       porting.NewDB(conn, paramHash),
 			Importer: imp,
 			Exporter: exp,
-			FS:       fsys,
 		}); err != nil {
 			return err
 		}
@@ -121,6 +123,7 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 			Stage:    stagetx,
 			Store:    stagingStore,
 			Exporter: exp,
+			DB:       portdb,
 		})
 	})
 }
@@ -171,6 +174,18 @@ func (wc *WC) Add(ctx context.Context, paths ...string) error {
 				return stage.Put(ctx, p, *fileRoot)
 			}); err != nil {
 				return err
+			}
+			if finfo, err := sctx.FS.Stat(target); err != nil && !posixfs.IsErrNotExist(err) {
+				return err
+			} else if err == nil && finfo.IsDir() {
+				if err := sctx.DB.PutInfo(ctx, FileInfo{
+					Path:       target,
+					Mode:       finfo.Mode(),
+					ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
+					Size:       finfo.Size(),
+				}); err != nil {
+					return err
+				}
 			}
 		}
 		return nil
@@ -375,7 +390,7 @@ func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOpera
 		if snap != nil {
 			root = snap.Payload.Root
 		} else {
-			rootPtr, err := sctx.GotFS.NewEmpty(ctx, s)
+			rootPtr, err := sctx.GotFS.NewEmpty(ctx, s, 0o755)
 			if err != nil {
 				return err
 			}
@@ -403,42 +418,54 @@ func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOpera
 	})
 }
 
+// DirtyFile is a file that has changed in the working copy.
+type DirtyFile struct {
+	Path string
+
+	// If true than the file exists in the working copy.
+	Exists     bool
+	Mode       fs.FileMode
+	ModifiedAt tai64.TAI64N
+}
+
+type FileInfo = porting.FileInfo
+
 // ForEachDirty lists all the files which are not in either:
 //  1. the staging area
 //  2. the active branch head
-func (wc *WC) ForEachDirty(ctx context.Context, fn func(p string, modtime time.Time) error) error {
+func (wc *WC) ForEachDirty(ctx context.Context, fn func(fi DirtyFile) error) error {
 	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
-		snap, voltx, err := wc.viewMark(ctx)
+		_, voltx, err := wc.viewMark(ctx)
 		if err != nil {
 			return err
 		}
 		defer voltx.Abort(ctx)
 		stage := sctx.Stage
-		fsMach := sctx.GotFS
 		fsys, _, err := wc.getFilteredFS(ctx)
 		if err != nil {
 			return err
 		}
-		return posixfs.WalkLeaves(ctx, fsys, "", func(p string, ent posixfs.DirEnt) error {
+		uk := wc.newUnknownIterator(sctx.DB, fsys)
+		return streams.ForEach(ctx, uk, func(ukp unknownFile) error {
+			p := ukp.Path()
 			// filter staging
-			if op, err := stage.Get(ctx, p); err != nil {
+			var op staging.Operation
+			if found, err := stage.Get(ctx, p, &op); err != nil {
 				return err
-			} else if op != nil {
-				return nil
-			}
-			// filter branch head
-			if snap != nil {
-				if _, err := fsMach.GetInfo(ctx, voltx, snap.Payload.Root, p); err != nil && !os.IsNotExist(err) {
-					return err
-				} else if err == nil {
+			} else if found {
+				if op.Delete != nil && !ukp.Current.Ok {
+					// File is gone, and staging deleted it, skip.
 					return nil
 				}
+				// If it is a Put operation, then it is definitely different,
+				// otherwise it would be in the database, and would have been filtered by the matching join.
 			}
-			finfo, err := fsys.Stat(p)
-			if err != nil {
-				return err
-			}
-			return fn(p, finfo.ModTime())
+			return fn(DirtyFile{
+				Path:       p,
+				Exists:     ukp.Current.Ok,
+				Mode:       ukp.Current.X.Mode,
+				ModifiedAt: ukp.Current.X.ModifiedAt,
+			})
 		})
 	})
 }

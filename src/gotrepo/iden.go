@@ -3,7 +3,6 @@ package gotrepo
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 
 	"github.com/gotvc/got/src/gotorg"
@@ -53,7 +52,6 @@ func (r *Repo) CreateIdentity(ctx context.Context, name string) (*inet256.ID, er
 		return nil, err
 	}
 	idu := idp.Public()
-	log.Println("created", name, idu.ID)
 	return &idu.ID, r.reloadConfig()
 }
 

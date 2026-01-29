@@ -148,10 +148,10 @@ func (mach *Machine) GetFileInfo(ctx context.Context, s stores.Reading, x Root, 
 
 func (mach *Machine) checkNoEntry(ctx context.Context, s stores.Reading, x Root, p string) error {
 	_, err := mach.GetInfo(ctx, s, x, p)
-	switch {
-	case err == os.ErrNotExist:
+	switch err {
+	case os.ErrNotExist:
 		return nil
-	case err == nil:
+	case nil:
 		return os.ErrExist
 	default:
 		return err
