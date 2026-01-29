@@ -7,6 +7,7 @@ import (
 
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
+	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/tai64"
 	"zombiezen.com/go/sqlite"
 )
@@ -43,6 +44,10 @@ func (db *DB) PutInfo(ctx context.Context, ent FileInfo) error {
 
 func (db *DB) GetInfo(ctx context.Context, p string, dst *FileInfo) (bool, error) {
 	return sqlutil.GetOne(db.conn, dst, scanInfo, `SELECT path, modtime, mode, size FROM dirstate WHERE path = ?`, p)
+}
+
+func (db *DB) NewInfoIterator() *DBInfoIterator {
+	return NewDBInfoIterator(db.conn)
 }
 
 // Delete removes all information associated with a path.
@@ -99,4 +104,11 @@ func scanFSRoot(stmt *sqlite.Stmt, dst *gotfs.Root) error {
 	var buf [gotfs.RootSize]byte
 	stmt.ColumnBytes(0, buf[:])
 	return dst.Unmarshal(buf[:])
+}
+
+type DBInfoIterator = streams.SeqErr[FileInfo]
+
+func NewDBInfoIterator(conn *sqlutil.Conn) *DBInfoIterator {
+	seq := sqlutil.Select(conn, scanInfo, `SELECT path, modtime, mode, size FROM dirstate ORDER BY path`)
+	return streams.NewSeqErr(seq)
 }

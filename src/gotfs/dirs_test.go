@@ -13,7 +13,7 @@ import (
 func TestReadDir(t *testing.T) {
 	ctx, ag, s := setup(t)
 	ss := [2]stores.RW{s, s}
-	x, err := ag.NewEmpty(ctx, s)
+	x, err := ag.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
 	x, err = ag.Mkdir(ctx, s, *x, "dir0")
 	require.NoError(t, err)
@@ -46,7 +46,7 @@ func TestReadDir(t *testing.T) {
 
 func TestMkdirAll(t *testing.T) {
 	ctx, ag, s := setup(t)
-	x, err := ag.NewEmpty(ctx, s)
+	x, err := ag.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
 	x, err = ag.MkdirAll(ctx, s, *x, "path/to/the/dir")
 	require.NoError(t, err)

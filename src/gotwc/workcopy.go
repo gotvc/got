@@ -406,19 +406,6 @@ func (wc *WC) getFilteredFS(ctx context.Context) (posixfs.FS, func(string) bool,
 	return posixfs.NewFiltered(wc.fsys, filter), filter, nil
 }
 
-func (wc *WC) getParamHash(ctx context.Context) (*[32]byte, error) {
-	name, err := wc.GetHead()
-	if err != nil {
-		return nil, err
-	}
-	m, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: name})
-	if err != nil {
-		return nil, err
-	}
-	ph := m.Info.Config.Hash()
-	return &ph, nil
-}
-
 type Span = porting.Span
 
 func PrefixSpan(prefix string) Span {

@@ -21,9 +21,9 @@ type DirEnt struct {
 }
 
 // NewEmpty creates a new filesystem with an empty root directory
-func (mach *Machine) NewEmpty(ctx context.Context, s stores.RW) (*Root, error) {
+func (mach *Machine) NewEmpty(ctx context.Context, s stores.RW, mode fs.FileMode) (*Root, error) {
 	b := mach.NewBuilder(ctx, s, stores.NewMem())
-	if err := b.Mkdir("", 0o755); err != nil {
+	if err := b.Mkdir("", mode|fs.ModeDir); err != nil {
 		return nil, err
 	}
 	return b.Finish()

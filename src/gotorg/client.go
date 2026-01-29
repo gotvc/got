@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/rand"
 	"errors"
-	"log"
 	"slices"
 
 	"blobcache.io/blobcache/src/bcsdk"
@@ -219,7 +218,6 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, 
 	}); err != nil {
 		return nil, err
 	}
-	log.Println("opening token", *ltok)
 	volh, err := c.Blobcache.OpenFrom(ctx, nsh, *ltok, blobcache.Action_ALL)
 	if err != nil {
 		return nil, err
@@ -309,7 +307,6 @@ func (c *Client) createSubVolume(ctx context.Context, tx *bcsdk.Tx) (*blobcache.
 	if err != nil {
 		return nil, nil, err
 	}
-	log.Println("LinkToken", ltok)
 	return volh, ltok, nil
 }
 

@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/state"
 	"go.brendoncarroll.net/stdctx/logctx"
 
 	"github.com/gotvc/got/src/gotfs"
@@ -171,27 +170,36 @@ func (tx *Tx) Discard(ctx context.Context, p string) error {
 		return err
 	}
 	p = cleanPath(p)
-	return tx.kvtx.Delete(ctx, []byte(p))
+	if err := tx.kvtx.Delete(ctx, []byte(p)); err != nil {
+		return err
+	}
+	// Also discard any changes to subpaths
+	return tx.ForEach(ctx, func(e Entry) error {
+		if strings.HasPrefix(e.Path, p+"/") {
+			return tx.kvtx.Delete(ctx, []byte(e.Path))
+		}
+		return nil
+	})
 }
 
 // Get returns the operation, if any, staged for the path p
 // If there is no operation staged Get returns (nil, nil)
-func (tx *Tx) Get(ctx context.Context, p string) (*Operation, error) {
+func (tx *Tx) Get(ctx context.Context, p string, dst *Operation) (bool, error) {
 	if err := tx.setup(ctx); err != nil {
-		return nil, err
+		return false, err
 	}
 	p = cleanPath(p)
 	var val []byte
 	if found, err := tx.kvtx.Get(ctx, []byte(p), &val); err != nil {
-		return nil, err
+		return false, err
 	} else if !found {
-		return nil, nil
+		return false, nil
 	}
 	var op Operation
 	if err := json.Unmarshal(val, &op); err != nil {
-		return nil, err
+		return false, err
 	}
-	return &op, nil
+	return true, nil
 }
 
 func (tx *Tx) Iterate(ctx context.Context, span gotkv.Span) (*Iterator, error) {
@@ -221,11 +229,12 @@ func (tx *Tx) CheckConflict(ctx context.Context, p string) error {
 	for i := len(parts) - 1; i > 0; i-- {
 		conflictPath := strings.Join(parts[:i], "/")
 		k := cleanPath(conflictPath)
-		op, err := tx.Get(ctx, k)
-		if err != nil && !state.IsErrNotFound[string](err) {
+		var op Operation
+		found, err := tx.Get(ctx, k, &op)
+		if err != nil {
 			return err
 		}
-		if op != nil {
+		if found {
 			return newError(p, conflictPath)
 		}
 	}
@@ -268,7 +277,7 @@ func (tx *Tx) IsEmpty(ctx context.Context) (bool, error) {
 func (tx *Tx) Apply(ctx context.Context, fsag *gotfs.Machine, ss [2]stores.RW, base *gotfs.Root) (*gotfs.Root, error) {
 	if base == nil {
 		var err error
-		base, err = fsag.NewEmpty(ctx, ss[1])
+		base, err = fsag.NewEmpty(ctx, ss[1], 0o755)
 		if err != nil {
 			return nil, err
 		}

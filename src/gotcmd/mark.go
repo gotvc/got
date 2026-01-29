@@ -1,6 +1,7 @@
 package gotcmd
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -223,35 +224,45 @@ var historyCmd = star.Command{
 		pr, pw := io.Pipe()
 		eg := errgroup.Group{}
 		eg.Go(func() error {
+			bufw := bufio.NewWriter(pw)
 			err := repo.History(ctx, gotrepo.FQM{Name: bname}, func(ref gdat.Ref, snap gotrepo.Snap) error {
-				fmt.Fprintf(pw, "#%04d\t%v\n", snap.N, ref.CID)
-				fmt.Fprintf(pw, "FS: %v\n", snap.Payload.Root.Ref.CID)
-				if len(snap.Parents) == 0 {
-					fmt.Fprintf(pw, "Parents: (none)\n")
-				} else {
-					fmt.Fprintf(pw, "Parents:\n")
-					for _, parent := range snap.Parents {
-						fmt.Fprintf(pw, "  %v\n", parent.CID)
-					}
+				if err := printSnap(bufw, ref, snap); err != nil {
+					return err
 				}
-				fmt.Fprintf(pw, "Created At: %v\n", snap.CreatedAt.GoTime().Local().String())
-				fmt.Fprintf(pw, "Created By: %v\n", snap.Creator)
-				pw.Write([]byte(prettifyJSON(snap.Payload.Aux)))
-				fmt.Fprintln(pw)
-				fmt.Fprintln(pw)
-				return nil
+				if err := bufw.WriteByte('\n'); err != nil {
+					return err
+				}
+				return bufw.Flush()
 			})
 			pw.CloseWithError(err)
 			return err
 		})
 		eg.Go(func() error {
 			err := pipeToLess(pr)
-			//_, err := io.Copy(c.Stdout, pr)
+			// _, err := io.Copy(c.StdOut, pr)
 			pr.CloseWithError(err)
 			return err
 		})
 		return eg.Wait()
 	},
+}
+
+func printSnap(bufw *bufio.Writer, ref gdat.Ref, snap marks.Snap) error {
+	fmt.Fprintf(bufw, "#%04d\t%v\n", snap.N, ref.CID)
+	fmt.Fprintf(bufw, "FS: %v\n", snap.Payload.Root.Ref.CID)
+	if len(snap.Parents) == 0 {
+		fmt.Fprintf(bufw, "Parents: (none)\n")
+	} else {
+		fmt.Fprintf(bufw, "Parents:\n")
+		for _, parent := range snap.Parents {
+			fmt.Fprintf(bufw, "  %v\n", parent.CID)
+		}
+	}
+	fmt.Fprintf(bufw, "Created At: %v\n", snap.CreatedAt.GoTime().Local().String())
+	fmt.Fprintf(bufw, "Created By: %v\n", snap.Creator)
+	bufw.Write([]byte(prettifyJSON(snap.Payload.Aux)))
+	fmt.Fprintln(bufw)
+	return nil
 }
 
 var markNameParam = star.Required[string]{
