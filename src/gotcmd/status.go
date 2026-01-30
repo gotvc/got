@@ -3,6 +3,7 @@ package gotcmd
 import (
 	"bufio"
 	"fmt"
+	"strings"
 
 	"github.com/fatih/color"
 	"github.com/gotvc/got/src/gotfs"
@@ -69,6 +70,9 @@ var lsCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "lists the children of path in the current volume",
 	},
+	Flags: map[string]star.Flag{
+		"mark": markFQNParam,
+	},
 	Pos: []star.Positional{pathParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
@@ -77,13 +81,17 @@ var lsCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		b, err := wc.GetHead()
-		if err != nil {
-			return err
+		fqm, ok := markFQNParam.LoadOpt(c)
+		if !ok {
+			mname, err := wc.GetHead()
+			if err != nil {
+				return err
+			}
+			fqm.Space = ""
+			fqm.Name = mname
 		}
 		p, _ := pathParam.LoadOpt(c)
-		m := gotrepo.FQM{Name: b}
-		return wc.Repo().Ls(ctx, m, p, func(ent gotfs.DirEnt) error {
+		return wc.Repo().Ls(ctx, fqm, p, func(ent gotfs.DirEnt) error {
 			_, err := fmt.Fprintf(c.StdOut, "%v %s\n", ent.Mode, ent.Name)
 			return err
 		})
@@ -94,6 +102,9 @@ var catCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "writes the contents of path in the current volume to stdout",
 	},
+	Flags: map[string]star.Flag{
+		"mark": markFQNParam,
+	},
 	Pos: []star.Positional{pathParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
@@ -102,12 +113,28 @@ var catCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		b, err := wc.GetHead()
-		if err != nil {
-			return err
+		fqm, ok := markFQNParam.LoadOpt(c)
+		if !ok {
+			mname, err := wc.GetHead()
+			if err != nil {
+				return err
+			}
+			fqm.Space = ""
+			fqm.Name = mname
 		}
 		p, _ := pathParam.LoadOpt(c)
-		return wc.Repo().Cat(ctx, gotrepo.FQM{Name: b}, p, c.StdOut)
+		return wc.Repo().Cat(ctx, fqm, p, c.StdOut)
+	},
+}
+
+var markFQNParam = star.Optional[gotrepo.FQM]{
+	ID: "mark-fq",
+	Parse: func(s string) (gotrepo.FQM, error) {
+		parts := strings.SplitN(s, ":", 2)
+		if len(parts) == 1 {
+			return gotrepo.FQM{Name: parts[0]}, nil
+		}
+		return gotrepo.FQM{Space: parts[0], Name: parts[1]}, nil
 	},
 }
 
