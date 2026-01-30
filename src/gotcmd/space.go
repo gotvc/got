@@ -2,7 +2,6 @@ package gotcmd
 
 import (
 	"crypto/rand"
-	"encoding/json"
 
 	bcclient "blobcache.io/blobcache/client/go"
 	"blobcache.io/blobcache/src/blobcache"
@@ -31,9 +30,17 @@ var spaceListCmd = star.Command{
 		if err != nil {
 			return err
 		}
+		c.Printf("%-30s %-19s %-19s\n", "NAME", "NODE", "OID")
 		for name, scfg := range spaces {
-			data, _ := json.Marshal(scfg)
-			c.Printf("%s %s\n", name, data)
+			var oid blobcache.OID
+			switch {
+			case scfg.Blobcache != nil:
+				oid = scfg.Blobcache.URL.Base
+			case scfg.Org != nil:
+				oid = scfg.Org.Base
+			}
+			peerID := scfg.Blobcache.URL.Node
+			c.Printf("%-30s %16s... %16s...\n", name, peerID.Base64String()[:16], oid.String()[:16])
 		}
 		if len(spaces) == 0 {
 			c.Printf("  (no spaces other than the default space)\n")
