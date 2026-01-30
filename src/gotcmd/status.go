@@ -3,7 +3,6 @@ package gotcmd
 import (
 	"bufio"
 	"fmt"
-	"strings"
 
 	"github.com/fatih/color"
 	"github.com/gotvc/got/src/gotfs"
@@ -71,7 +70,7 @@ var lsCmd = star.Command{
 		Short: "lists the children of path in the current volume",
 	},
 	Flags: map[string]star.Flag{
-		"mark": markFQNParam,
+		"mark": fqmnOptParam,
 	},
 	Pos: []star.Positional{pathParam},
 	F: func(c star.Context) error {
@@ -81,7 +80,7 @@ var lsCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		fqm, ok := markFQNParam.LoadOpt(c)
+		fqm, ok := fqmnOptParam.LoadOpt(c)
 		if !ok {
 			mname, err := wc.GetHead()
 			if err != nil {
@@ -103,7 +102,7 @@ var catCmd = star.Command{
 		Short: "writes the contents of path in the current volume to stdout",
 	},
 	Flags: map[string]star.Flag{
-		"mark": markFQNParam,
+		"mark": fqmnOptParam,
 	},
 	Pos: []star.Positional{pathParam},
 	F: func(c star.Context) error {
@@ -113,7 +112,7 @@ var catCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		fqm, ok := markFQNParam.LoadOpt(c)
+		fqm, ok := fqmnOptParam.LoadOpt(c)
 		if !ok {
 			mname, err := wc.GetHead()
 			if err != nil {
@@ -127,15 +126,10 @@ var catCmd = star.Command{
 	},
 }
 
-var markFQNParam = star.Optional[gotrepo.FQM]{
-	ID: "mark-fq",
-	Parse: func(s string) (gotrepo.FQM, error) {
-		parts := strings.SplitN(s, ":", 2)
-		if len(parts) == 1 {
-			return gotrepo.FQM{Name: parts[0]}, nil
-		}
-		return gotrepo.FQM{Space: parts[0], Name: parts[1]}, nil
-	},
+var fqmnOptParam = star.Optional[gotrepo.FQM]{
+	ID:       "mark-fq",
+	Parse:    parseFQName,
+	ShortDoc: "a fully qualified mark name",
 }
 
 var pathParam = star.Optional[string]{

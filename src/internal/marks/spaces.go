@@ -21,7 +21,7 @@ func IsNotExist(err error) bool {
 }
 
 func IsExists(err error) bool {
-	return errors.Is(err, ErrNotExist)
+	return errors.Is(err, ErrExists)
 }
 
 var nameRegExp = regexp.MustCompile(`^[\w-/=_.]+$`)

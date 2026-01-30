@@ -22,7 +22,9 @@ type (
 
 // SyncVolumes syncs the contents of src to dst.
 func Sync(ctx context.Context, src, dst *Mark, force bool) error {
-	return applySnapshot(ctx, dst.GotVC(), src.GotFS(), dst.Volume, func(dststore stores.RW, x *Snap) (*Snap, error) {
+	vcmach := dst.GotVC()
+	fsmach := dst.GotFS()
+	return applySnapshot(ctx, vcmach, fsmach, dst.Volume, func(dststore stores.RW, x *Snap) (*Snap, error) {
 		goal, tx, err := getSnapshot(ctx, src.Volume)
 		if err != nil {
 			return nil, err
@@ -36,7 +38,7 @@ func Sync(ctx context.Context, src, dst *Mark, force bool) error {
 		case x == nil:
 		case goal.Equals(*x):
 		default:
-			hasAncestor, err := gotvc.IsDescendentOf(ctx, tx, *goal, *x)
+			hasAncestor, err := vcmach.IsDescendentOf(ctx, tx, *goal, *x)
 			if err != nil {
 				return nil, err
 			}
