@@ -53,6 +53,9 @@ var spaceSyncCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "copies marks from one space to another",
 	},
+	Flags: map[string]star.Flag{
+		"add-prefix": addPrefixParam,
+	},
 	Pos: []star.Positional{srcSpaceParam, dstSpaceParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
@@ -61,12 +64,25 @@ var spaceSyncCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
+		var m func(string) string
+		if prefix, ok := addPrefixParam.LoadOpt(c); ok {
+			m = func(s string) string {
+				return prefix + s
+			}
+		}
 		task := gotrepo.SyncSpacesTask{
-			Src: srcSpaceParam.Load(c),
-			Dst: dstSpaceParam.Load(c),
+			Src:     srcSpaceParam.Load(c),
+			Dst:     dstSpaceParam.Load(c),
+			MapName: m,
 		}
 		return repo.SyncSpaces(ctx, task)
 	},
+}
+
+var addPrefixParam = star.Optional[string]{
+	ID:       "add-prefix",
+	ShortDoc: "add a prefix to the destination names",
+	Parse:    star.ParseString,
 }
 
 var spaceCreateBcCmd = star.Command{
