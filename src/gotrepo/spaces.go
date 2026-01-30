@@ -9,6 +9,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotns"
+	"github.com/gotvc/got/src/internal/gotcfg"
 	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/volumes"
 )
@@ -33,6 +34,26 @@ func (r *Repo) GetSpace(ctx context.Context, name string) (marks.Space, error) {
 	return r.makeSpace(ctx, spec)
 }
 
+func (r *Repo) CreateSpace(ctx context.Context, name string, spec SpaceSpec) error {
+	if err := spec.Validate(); err != nil {
+		return err
+	}
+	cfg, err := gotcfg.LoadFile[Config](r.root, configPath)
+	if err != nil {
+		return err
+	}
+	if _, exists := cfg.Spaces[name]; exists {
+		return fmt.Errorf("a space with that name already exists")
+	}
+	return gotcfg.EditFile(r.root, configPath, func(x Config) Config {
+		if _, exists := x.Spaces[name]; exists {
+			return x
+		}
+		x.Spaces[name] = spec
+		return x
+	})
+}
+
 type VolumeSpec struct {
 	URL    blobcache.URL `json:"url"`
 	Secret gdat.DEK      `json:"secret"`
@@ -45,6 +66,20 @@ type SpaceSpec struct {
 	// Org is an arbitrary Blobcache Volume
 	// The contents of the Volume are expected to be in the GotOrg format
 	Org *blobcache.URL `json:"org,omitempty"`
+}
+
+func (ss SpaceSpec) Validate() error {
+	var count int
+	if ss.Blobcache != nil {
+		count++
+	}
+	if ss.Org != nil {
+		count++
+	}
+	if count != 1 {
+		return fmt.Errorf("spec must contain exactly 1 variant")
+	}
+	return nil
 }
 
 func (r *Repo) makeLocalSpace(ctx context.Context) (Space, error) {

@@ -1,17 +1,22 @@
 package gotcmd
 
 import (
-	"encoding/json"
+	"crypto/rand"
 
+	bcclient "blobcache.io/blobcache/client/go"
+	"blobcache.io/blobcache/src/blobcache"
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/internal/marks"
 	"go.brendoncarroll.net/star"
 )
 
 var spaceCmd = star.NewDir(star.Metadata{
 	Short: "manage namespaces",
 }, map[string]star.Command{
-	"ls":   spaceListCmd,
-	"sync": spaceSyncCmd,
+	"list":      spaceListCmd,
+	"create-bc": spaceCreateBcCmd,
+	"sync":      spaceSyncCmd,
 })
 
 var spaceListCmd = star.Command{
@@ -25,9 +30,17 @@ var spaceListCmd = star.Command{
 		if err != nil {
 			return err
 		}
+		c.Printf("%-30s %-19s %-19s\n", "NAME", "NODE", "OID")
 		for name, scfg := range spaces {
-			data, _ := json.Marshal(scfg)
-			c.Printf("%s %s\n", name, data)
+			var oid blobcache.OID
+			switch {
+			case scfg.Blobcache != nil:
+				oid = scfg.Blobcache.URL.Base
+			case scfg.Org != nil:
+				oid = scfg.Org.Base
+			}
+			peerID := scfg.Blobcache.URL.Node
+			c.Printf("%-30s %16s... %16s...\n", name, peerID.Base64String()[:16], oid.String()[:16])
 		}
 		if len(spaces) == 0 {
 			c.Printf("  (no spaces other than the default space)\n")
@@ -40,6 +53,9 @@ var spaceSyncCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "copies marks from one space to another",
 	},
+	Flags: map[string]star.Flag{
+		"add-prefix": addPrefixParam,
+	},
 	Pos: []star.Positional{srcSpaceParam, dstSpaceParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
@@ -48,11 +64,74 @@ var spaceSyncCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
+		var m func(string) string
+		if prefix, ok := addPrefixParam.LoadOpt(c); ok {
+			m = func(s string) string {
+				return prefix + s
+			}
+		}
 		task := gotrepo.SyncSpacesTask{
-			Src: srcSpaceParam.Load(c),
-			Dst: dstSpaceParam.Load(c),
+			Src:     srcSpaceParam.Load(c),
+			Dst:     dstSpaceParam.Load(c),
+			MapName: m,
 		}
 		return repo.SyncSpaces(ctx, task)
+	},
+}
+
+var addPrefixParam = star.Optional[string]{
+	ID:       "add-prefix",
+	ShortDoc: "add a prefix to the destination names",
+	Parse:    star.ParseString,
+}
+
+var spaceCreateBcCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "create a new space backed by a Blobcache Volume",
+	},
+	Pos: []star.Positional{spaceNameParam},
+	Flags: map[string]star.Flag{
+		"mkvol": volNameParam,
+	},
+	F: func(c star.Context) error {
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		bcsvc := bcclient.NewClientFromEnv()
+		ep, err := bcsvc.Endpoint(c)
+		if err != nil {
+			return err
+		}
+		volname := volNameParam.Load(c)
+		h, err := createNSVol(c, bcsvc, volname)
+		if err != nil {
+			return err
+		}
+		return repo.CreateSpace(c, spaceNameParam.Load(c), gotrepo.SpaceSpec{
+			Blobcache: &gotrepo.VolumeSpec{
+				URL: blobcache.URL{
+					Node: ep.Peer,
+					Base: h.OID,
+				},
+				Secret: randomSecret(),
+			},
+		})
+	},
+}
+
+func randomSecret() (ret gdat.DEK) {
+	rand.Read(ret[:])
+	return ret
+}
+
+var spaceNameParam = star.Required[string]{
+	ID: "space-name",
+	Parse: func(x string) (string, error) {
+		if err := marks.CheckName(x); err != nil {
+			return "", err
+		}
+		return x, nil
 	},
 }
 

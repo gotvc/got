@@ -17,7 +17,7 @@ var httpCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "serve files over HTTP",
 	},
-	Pos: []star.Positional{markNameParam},
+	Pos: []star.Positional{fqmnParam},
 	Flags: map[string]star.Flag{
 		"addr": addrParam,
 	},
@@ -53,7 +53,7 @@ var ftpCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "serve files over FTP",
 	},
-	Pos: []star.Positional{markNameParam},
+	Pos: []star.Positional{fqmnParam},
 	Flags: map[string]star.Flag{
 		"addr": addrParam,
 	},
@@ -64,8 +64,8 @@ var ftpCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		branchName := markNameParam.Load(c)
-		b, err := repo.GetMark(ctx, gotrepo.FQM{Name: branchName})
+		fqm := fqmnParam.Load(c)
+		b, err := repo.GetMark(ctx, fqm)
 		if err != nil {
 			return err
 		}
@@ -89,6 +89,12 @@ var ftpCmd = star.Command{
 		logctx.Infof(ctx, "serving on ftp://%v", l.Addr())
 		return s.Serve(l)
 	},
+}
+
+var fqmnParam = star.Required[gotrepo.FQM]{
+	ID:       "fqmn",
+	Parse:    parseFQName,
+	ShortDoc: "a fully qualified mark name",
 }
 
 var addrParam = star.Optional[string]{

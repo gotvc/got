@@ -13,10 +13,8 @@ type (
 )
 
 // IsDescendentOf returns true if any of x's parents are equal to a.
-func IsDescendentOf[T Snapshotable](ctx context.Context, s stores.Reading, x, a Snapshot[T]) (bool, error) {
+func (mach *Machine[T]) IsDescendentOf(ctx context.Context, s stores.Reading, x, a Snapshot[T]) (bool, error) {
 	m := map[Ref]struct{}{}
-	var mach Machine[T]
-	mach.readOnly = true
 	return mach.isDescendentOf(ctx, m, s, x, a)
 }
 

@@ -69,6 +69,9 @@ var lsCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "lists the children of path in the current volume",
 	},
+	Flags: map[string]star.Flag{
+		"mark": fqmnOptParam,
+	},
 	Pos: []star.Positional{pathParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
@@ -77,13 +80,17 @@ var lsCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		b, err := wc.GetHead()
-		if err != nil {
-			return err
+		fqm, ok := fqmnOptParam.LoadOpt(c)
+		if !ok {
+			mname, err := wc.GetHead()
+			if err != nil {
+				return err
+			}
+			fqm.Space = ""
+			fqm.Name = mname
 		}
 		p, _ := pathParam.LoadOpt(c)
-		m := gotrepo.FQM{Name: b}
-		return wc.Repo().Ls(ctx, m, p, func(ent gotfs.DirEnt) error {
+		return wc.Repo().Ls(ctx, fqm, p, func(ent gotfs.DirEnt) error {
 			_, err := fmt.Fprintf(c.StdOut, "%v %s\n", ent.Mode, ent.Name)
 			return err
 		})
@@ -94,6 +101,9 @@ var catCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "writes the contents of path in the current volume to stdout",
 	},
+	Flags: map[string]star.Flag{
+		"mark": fqmnOptParam,
+	},
 	Pos: []star.Positional{pathParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
@@ -102,13 +112,24 @@ var catCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		b, err := wc.GetHead()
-		if err != nil {
-			return err
+		fqm, ok := fqmnOptParam.LoadOpt(c)
+		if !ok {
+			mname, err := wc.GetHead()
+			if err != nil {
+				return err
+			}
+			fqm.Space = ""
+			fqm.Name = mname
 		}
 		p, _ := pathParam.LoadOpt(c)
-		return wc.Repo().Cat(ctx, gotrepo.FQM{Name: b}, p, c.StdOut)
+		return wc.Repo().Cat(ctx, fqm, p, c.StdOut)
 	},
+}
+
+var fqmnOptParam = star.Optional[gotrepo.FQM]{
+	ID:       "mark-fq",
+	Parse:    parseFQName,
+	ShortDoc: "a fully qualified mark name",
 }
 
 var pathParam = star.Optional[string]{

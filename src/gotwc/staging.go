@@ -80,6 +80,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		if err := fn(stagingCtx{
 			Stage:    stagetx,
 			Store:    stagingStore,
+			GotFS:    mark.GotFS(),
 			FS:       fsys,
 			DB:       porting.NewDB(conn, paramHash),
 			Importer: imp,
