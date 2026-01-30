@@ -34,6 +34,9 @@ var markCreateCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "creates a new bookmark",
 	},
+	Flags: map[string]star.Flag{
+		"space": spaceNameOptParam,
+	},
 	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
@@ -43,7 +46,8 @@ var markCreateCmd = star.Command{
 		}
 		defer repo.Close()
 		branchName := markNameParam.Load(c)
-		_, err = repo.CreateMark(ctx, gotrepo.FQM{Name: branchName}, marks.DefaultConfig(false), nil)
+		spaceName, _ := spaceNameOptParam.LoadOpt(c)
+		_, err = repo.CreateMark(ctx, gotrepo.FQM{Space: spaceName, Name: branchName}, marks.DefaultConfig(false), nil)
 		return err
 	},
 }
@@ -51,6 +55,9 @@ var markCreateCmd = star.Command{
 var markListCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "lists the bookmarks",
+	},
+	Flags: map[string]star.Flag{
+		"space": spaceNameOptParam,
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
@@ -64,14 +71,15 @@ var markListCmd = star.Command{
 		if err != nil {
 			return err
 		}
+		spaceName, _ := spaceNameOptParam.LoadOpt(c)
 		hdrs := []any{"NAME", "CREATED_AT", "SALT", "ANNOTATIONS"}
 		fmt.Fprintf(c.StdOut, " %-20s %-20s %-8s %-10s\n", hdrs...)
-		return repo.ForEachMark(ctx, "", func(k string) error {
+		return repo.ForEachMark(ctx, spaceName, func(k string) error {
 			isHead := " "
-			if k == head {
+			if spaceName == "" && k == head {
 				isHead = "*"
 			}
-			info, err := repo.InspectMark(ctx, gotrepo.FQM{Name: k})
+			info, err := repo.InspectMark(ctx, gotrepo.FQM{Space: spaceName, Name: k})
 			if err != nil {
 				return err
 			}
@@ -84,9 +92,18 @@ var markListCmd = star.Command{
 	},
 }
 
+var spaceNameOptParam = star.Optional[string]{
+	ID:       "space",
+	ShortDoc: "the name of the space to access (local space is the default)",
+	Parse:    star.ParseString,
+}
+
 var markDeleteCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "deletes a bookmark",
+	},
+	Flags: map[string]star.Flag{
+		"space": spaceNameOptParam,
 	},
 	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
@@ -97,7 +114,8 @@ var markDeleteCmd = star.Command{
 		}
 		defer repo.Close()
 		name := markNameParam.Load(c)
-		return repo.DeleteMark(ctx, gotrepo.FQM{Name: name})
+		spaceName, _ := spaceNameOptParam.LoadOpt(c)
+		return repo.DeleteMark(ctx, gotrepo.FQM{Space: spaceName, Name: name})
 	},
 }
 
@@ -105,6 +123,9 @@ var markLoadCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "prints the point that is the target of the mark",
 	},
+	Flags: map[string]star.Flag{
+		"space": spaceNameOptParam,
+	},
 	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
@@ -113,8 +134,9 @@ var markLoadCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
+		space, _ := spaceNameOptParam.LoadOpt(c)
 		name := markNameParam.Load(c)
-		snap, err := repo.MarkLoad(ctx, gotrepo.FQM{Name: name})
+		snap, err := repo.MarkLoad(ctx, gotrepo.FQM{Space: space, Name: name})
 		if err != nil {
 			return err
 		}
@@ -129,6 +151,9 @@ var markInspectCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "prints any metadata for a bookmark",
 	},
+	Flags: map[string]star.Flag{
+		"space": spaceNameOptParam,
+	},
 	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
@@ -138,7 +163,8 @@ var markInspectCmd = star.Command{
 		}
 		defer repo.Close()
 		name := markNameParam.Load(c)
-		branch, err := repo.GetMark(ctx, gotrepo.FQM{Name: name})
+		space, _ := spaceNameOptParam.LoadOpt(c)
+		branch, err := repo.GetMark(ctx, gotrepo.FQM{Space: space, Name: name})
 		if err != nil {
 			return err
 		}

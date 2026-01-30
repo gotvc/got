@@ -1,17 +1,23 @@
 package gotcmd
 
 import (
+	"crypto/rand"
 	"encoding/json"
 
+	bcclient "blobcache.io/blobcache/client/go"
+	"blobcache.io/blobcache/src/blobcache"
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/internal/marks"
 	"go.brendoncarroll.net/star"
 )
 
 var spaceCmd = star.NewDir(star.Metadata{
 	Short: "manage namespaces",
 }, map[string]star.Command{
-	"ls":   spaceListCmd,
-	"sync": spaceSyncCmd,
+	"list":      spaceListCmd,
+	"create-bc": spaceCreateBcCmd,
+	"sync":      spaceSyncCmd,
 })
 
 var spaceListCmd = star.Command{
@@ -53,6 +59,56 @@ var spaceSyncCmd = star.Command{
 			Dst: dstSpaceParam.Load(c),
 		}
 		return repo.SyncSpaces(ctx, task)
+	},
+}
+
+var spaceCreateBcCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "create a new space backed by a Blobcache Volume",
+	},
+	Pos: []star.Positional{spaceNameParam},
+	Flags: map[string]star.Flag{
+		"mkvol": volNameParam,
+	},
+	F: func(c star.Context) error {
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		bcsvc := bcclient.NewClientFromEnv()
+		ep, err := bcsvc.Endpoint(c)
+		if err != nil {
+			return err
+		}
+		volname := volNameParam.Load(c)
+		h, err := createNSVol(c, bcsvc, volname)
+		if err != nil {
+			return err
+		}
+		return repo.CreateSpace(c, spaceNameParam.Load(c), gotrepo.SpaceSpec{
+			Blobcache: &gotrepo.VolumeSpec{
+				URL: blobcache.URL{
+					Node: ep.Peer,
+					Base: h.OID,
+				},
+				Secret: randomSecret(),
+			},
+		})
+	},
+}
+
+func randomSecret() (ret gdat.DEK) {
+	rand.Read(ret[:])
+	return ret
+}
+
+var spaceNameParam = star.Required[string]{
+	ID: "space-name",
+	Parse: func(x string) (string, error) {
+		if err := marks.CheckName(x); err != nil {
+			return "", err
+		}
+		return x, nil
 	},
 }
 

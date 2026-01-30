@@ -10,6 +10,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	_ "blobcache.io/blobcache/src/blobcachecmd"
 	"blobcache.io/blobcache/src/schema/bcns"
+	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc"
 	"github.com/gotvc/got/src/internal/marks"
@@ -187,5 +188,15 @@ func createRepoVol(ctx context.Context, svc blobcache.Service, volName string) (
 	}
 	nsh := blobcache.Handle{} // assume the root
 	spec := gotrepo.RepoVolumeSpec(false)
+	return nsc.CreateAt(ctx, nsh, volName, spec)
+}
+
+func createNSVol(ctx context.Context, svc blobcache.Service, volName string) (*blobcache.Handle, error) {
+	nsc, err := bcns.ClientForVolume(ctx, svc, bcns.Objectish{})
+	if err != nil {
+		return nil, err
+	}
+	nsh := blobcache.Handle{} // assume the root
+	spec := gotns.DefaultVolumeSpec()
 	return nsc.CreateAt(ctx, nsh, volName, spec)
 }
