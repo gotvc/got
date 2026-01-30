@@ -20,17 +20,21 @@ func (r *Repo) SyncUnit(ctx context.Context, src, dst FQM, force bool) error {
 	if err != nil {
 		return err
 	}
-	srcBranch, err := srcSpace.Open(ctx, src.Name)
-	if err != nil {
-		return err
-	}
-	dstBranch, err := dstSpace.Open(ctx, dst.Name)
-	if err != nil {
-		return err
-	}
-	ctx, cf := metrics.Child(ctx, "syncing volumes")
-	defer cf()
-	return marks.Sync(ctx, srcBranch, dstBranch, force)
+	return dstSpace.Do(ctx, true, func(dstTx marks.SpaceTx) error {
+		return srcSpace.Do(ctx, false, func(srcTx marks.SpaceTx) error {
+			dstBranch, err := dstTx.Open(ctx, dst.Name)
+			if err != nil {
+				return err
+			}
+			ctx, cf := metrics.Child(ctx, "syncing volumes")
+			defer cf()
+			srcBranch, err := srcTx.Open(ctx, src.Name)
+			if err != nil {
+				return err
+			}
+			return marks.Sync(ctx, srcBranch, dstBranch, force)
+		})
+	})
 }
 
 // SyncSpacesTask contains parameters needed to

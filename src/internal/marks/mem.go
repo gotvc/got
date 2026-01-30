@@ -2,6 +2,7 @@ package marks
 
 import (
 	"context"
+	"errors"
 	"sync"
 
 	"github.com/gotvc/got/src/internal/volumes"
@@ -9,6 +10,16 @@ import (
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
+
+var _ Space = (*MemSpace)(nil)
+var _ SpaceTx = (*memSpaceTx)(nil)
+
+var errReadOnly = errors.New("marks: read-only transaction")
+
+type memSpaceTx struct {
+	space  *MemSpace
+	modify bool
+}
 
 type MemSpace struct {
 	newVolume func() volumes.Volume
@@ -26,9 +37,18 @@ func NewMem(newVolume func() volumes.Volume) Space {
 	}
 }
 
-func (r *MemSpace) Inspect(ctx context.Context, name string) (*Info, error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+func (r *MemSpace) Do(ctx context.Context, modify bool, fn func(SpaceTx) error) error {
+	if modify {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+	} else {
+		r.mu.RLock()
+		defer r.mu.RUnlock()
+	}
+	return fn(&memSpaceTx{space: r, modify: modify})
+}
+
+func (r *MemSpace) inspectLocked(ctx context.Context, name string) (*Info, error) {
 	info, exists := r.infos[name]
 	if !exists {
 		return nil, ErrNotExist
@@ -37,12 +57,10 @@ func (r *MemSpace) Inspect(ctx context.Context, name string) (*Info, error) {
 	return &info, nil
 }
 
-func (r *MemSpace) Create(ctx context.Context, name string, cfg Metadata) (*Info, error) {
+func (r *MemSpace) createLocked(ctx context.Context, name string, cfg Metadata) (*Info, error) {
 	if err := CheckName(name); err != nil {
 		return nil, err
 	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
 	if _, exists := r.infos[name]; exists {
 		return nil, ErrExists
 	}
@@ -55,9 +73,7 @@ func (r *MemSpace) Create(ctx context.Context, name string, cfg Metadata) (*Info
 	return &info, nil
 }
 
-func (r *MemSpace) Set(ctx context.Context, name string, cfg Metadata) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (r *MemSpace) setLocked(ctx context.Context, name string, cfg Metadata) error {
 	if _, exists := r.infos[name]; !exists {
 		return ErrNotExist
 	}
@@ -67,17 +83,13 @@ func (r *MemSpace) Set(ctx context.Context, name string, cfg Metadata) error {
 	return nil
 }
 
-func (r *MemSpace) Delete(ctx context.Context, name string) error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (r *MemSpace) deleteLocked(ctx context.Context, name string) error {
 	delete(r.infos, name)
 	delete(r.volumes, name)
 	return nil
 }
 
-func (r *MemSpace) List(ctx context.Context, span Span, limit int) (ret []string, _ error) {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+func (r *MemSpace) listLocked(ctx context.Context, span Span, limit int) (ret []string, _ error) {
 	keys := maps.Keys(r.infos)
 	slices.Sort(keys)
 	for _, name := range keys {
@@ -91,9 +103,7 @@ func (r *MemSpace) List(ctx context.Context, span Span, limit int) (ret []string
 	return ret, nil
 }
 
-func (r *MemSpace) Open(ctx context.Context, name string) (*Mark, error) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func (r *MemSpace) openLocked(ctx context.Context, name string) (*Mark, error) {
 	if _, exists := r.volumes[name]; !exists {
 		return nil, ErrNotExist
 	}
@@ -105,4 +115,34 @@ func (r *MemSpace) Open(ctx context.Context, name string) (*Mark, error) {
 		Volume: r.volumes[name],
 		Info:   info,
 	}, nil
+}
+
+func (tx *memSpaceTx) Create(ctx context.Context, name string, md Metadata) (*Info, error) {
+	return tx.space.createLocked(ctx, name, md)
+}
+
+func (tx *memSpaceTx) List(ctx context.Context, span Span, limit int) ([]string, error) {
+	return tx.space.listLocked(ctx, span, limit)
+}
+
+func (tx *memSpaceTx) Open(ctx context.Context, name string) (*Mark, error) {
+	return tx.space.openLocked(ctx, name)
+}
+
+func (tx *memSpaceTx) Inspect(ctx context.Context, name string) (*Info, error) {
+	return tx.space.inspectLocked(ctx, name)
+}
+
+func (tx *memSpaceTx) Delete(ctx context.Context, name string) error {
+	if !tx.modify {
+		return errReadOnly
+	}
+	return tx.space.deleteLocked(ctx, name)
+}
+
+func (tx *memSpaceTx) Set(ctx context.Context, name string, cfg Metadata) error {
+	if !tx.modify {
+		return errReadOnly
+	}
+	return tx.space.setLocked(ctx, name, cfg)
 }

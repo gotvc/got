@@ -134,10 +134,7 @@ func (r *Repo) Modify(ctx context.Context, fqm FQM, fn func(mc marks.ModifyCtx) 
 	if err != nil {
 		return err
 	}
-	m, err := space.Open(ctx, fqm.Name)
-	if err != nil {
-		return err
-	}
+	return space.Do(ctx, func() error {})
 	return m.Modify(ctx, fn)
 }
 

@@ -25,7 +25,6 @@ func TestSpace(t *testing.T) {
 		// which is what the test expects.
 		space, err := r.GetSpace(ctx, "")
 		require.NoError(t, err)
-		require.NoError(t, space.Delete(ctx, nameMaster))
 		return space
 	})
 }
