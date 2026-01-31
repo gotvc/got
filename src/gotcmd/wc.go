@@ -102,7 +102,7 @@ var checkoutCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "switches HEAD to the specified mark and then performs an export",
 	},
-	Pos: []star.Positional{markNameParam},
+	Pos: []star.Positional{localMarkNameParam},
 	F: func(c star.Context) error {
 		// Active modifies the working copy not the repo
 		wc, err := openWC()
@@ -110,8 +110,13 @@ var checkoutCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		return wc.Checkout(c.Context, markNameParam.Load(c))
+		return wc.Checkout(c.Context, localMarkNameParam.Load(c))
 	},
+}
+
+var localMarkNameParam = star.Required[string]{
+	ID:    "mark_name",
+	Parse: star.ParseString,
 }
 
 var markNameOptParam = star.Optional[string]{

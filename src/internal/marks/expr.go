@@ -2,19 +2,34 @@ package marks
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/gotvc/got/src/gdat"
 )
 
+// SnapExpr is a sum type representing the different ways
+// to refer to a Snapshot in Got
+// So far, there are 2 primitive ways
+// - Exactly by Ref
+// - By Mark
+// And 1 higher-order way
+// - By an offset from the result of a previous expression
 type SnapExpr interface {
 	GetSpace() string
+	// Resolve returns a valid Ref, which points to a Snapshot.
 	Resolve(ctx context.Context, stx SpaceTx) (*gdat.Ref, error)
 	isSnapExpr()
 }
 
 func ParseSnapExpr(x string) (SnapExpr, error) {
-	return ParseSnap_Exact(x)
+	if se, err := ParseSnap_Mark(x); err == nil {
+		return se, nil
+	}
+	if se, err := ParseSnap_Exact(x); err == nil {
+		return se, nil
+	}
+	return nil, fmt.Errorf("could not parse Snapshot expression from %q", x)
 }
 
 type SnapExpr_Exact struct {
@@ -51,6 +66,15 @@ func (se *SnapExpr_Exact) Resolve(ctx context.Context, tx SpaceTx) (*gdat.Ref, e
 type SnapExpr_Mark struct {
 	Space string
 	Name  string
+}
+
+func ParseSnap_Mark(x string) (*SnapExpr_Mark, error) {
+	var space string
+	if i := strings.Index(x, ":"); i >= 0 {
+		space = x[:i]
+		x = x[i+1:]
+	}
+	return &SnapExpr_Mark{Space: space, Name: x}, nil
 }
 
 func (se SnapExpr_Mark) isSnapExpr() {}

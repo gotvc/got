@@ -42,6 +42,10 @@ func (b *MarkTx) init() {
 	}
 }
 
+func (b *MarkTx) Info() Info {
+	return b.info
+}
+
 func (b *MarkTx) GotFS() *gotfs.Machine {
 	b.init()
 	return b.gotfs
@@ -149,7 +153,7 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Snap, err
 	if ok, err := m.stx.GetTarget(ctx, m.name, &target); err != nil {
 		return err
 	} else if ok {
-		snap, err = GetSnapshot(ctx, ss[2], target)
+		snap, err = m.GotVC().GetSnapshot(ctx, ss[2], target)
 		if err != nil {
 			return err
 		}
@@ -251,13 +255,13 @@ func ViewSnapshot(ctx context.Context, stx SpaceTx, se SnapExpr, fn func(vctx *V
 		return err
 	}
 	ss := stx.Stores()
-	snap, err := GetSnapshot(ctx, ss[2], *ref)
-	if err != nil {
-		return err
-	}
 	cfg := DefaultConfig(false)
 	fsmach := newGotFS(&cfg)
 	vcmach := newGotVC(&cfg)
+	snap, err := vcmach.GetSnapshot(ctx, ss[2], *ref)
+	if err != nil {
+		return err
+	}
 	vctx := ViewCtx{
 		VC:     vcmach,
 		FS:     fsmach,

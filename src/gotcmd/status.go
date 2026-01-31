@@ -8,6 +8,7 @@ import (
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc"
+	"github.com/gotvc/got/src/internal/marks"
 	"go.brendoncarroll.net/star"
 )
 
@@ -70,7 +71,7 @@ var lsCmd = star.Command{
 		Short: "lists the children of path in the current volume",
 	},
 	Flags: map[string]star.Flag{
-		"mark": fqmnOptParam,
+		"snap": snapExprOptParam,
 	},
 	Pos: []star.Positional{pathParam},
 	F: func(c star.Context) error {
@@ -80,17 +81,16 @@ var lsCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		fqm, ok := fqmnOptParam.LoadOpt(c)
+		se, ok := snapExprOptParam.LoadOpt(c)
 		if !ok {
 			mname, err := wc.GetHead()
 			if err != nil {
 				return err
 			}
-			fqm.Space = ""
-			fqm.Name = mname
+			se = &marks.SnapExpr_Mark{Name: mname}
 		}
 		p, _ := pathParam.LoadOpt(c)
-		return wc.Repo().Ls(ctx, fqm, p, func(ent gotfs.DirEnt) error {
+		return wc.Repo().Ls(ctx, se, p, func(ent gotfs.DirEnt) error {
 			_, err := fmt.Fprintf(c.StdOut, "%v %s\n", ent.Mode, ent.Name)
 			return err
 		})
@@ -102,7 +102,7 @@ var catCmd = star.Command{
 		Short: "writes the contents of path in the current volume to stdout",
 	},
 	Flags: map[string]star.Flag{
-		"mark": fqmnOptParam,
+		"snap": snapExprOptParam,
 	},
 	Pos: []star.Positional{pathParam},
 	F: func(c star.Context) error {
@@ -112,23 +112,30 @@ var catCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		fqm, ok := fqmnOptParam.LoadOpt(c)
+		se, ok := snapExprOptParam.LoadOpt(c)
 		if !ok {
 			mname, err := wc.GetHead()
 			if err != nil {
 				return err
 			}
-			fqm.Space = ""
-			fqm.Name = mname
+			se = &marks.SnapExpr_Mark{Name: mname}
 		}
 		p, _ := pathParam.LoadOpt(c)
-		return wc.Repo().Cat(ctx, fqm, p, c.StdOut)
+		return wc.Repo().Cat(ctx, se, p, c.StdOut)
 	},
 }
 
+var snapExprOptParam = star.Optional[gotrepo.SnapExpr]{
+	ID:       "snap",
+	Parse:    marks.ParseSnapExpr,
+	ShortDoc: "a snapshot expression",
+}
+
 var fqmnOptParam = star.Optional[gotrepo.FQM]{
-	ID:       "mark-fq",
-	Parse:    parseFQName,
+	ID: "mark-fq",
+	Parse: func(s string) (gotrepo.FQM, error) {
+		return gotrepo.ParseFQName(s), nil
+	},
 	ShortDoc: "a fully qualified mark name",
 }
 

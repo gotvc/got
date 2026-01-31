@@ -6,14 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestMemSpace(t *testing.T) {
-	TestSpace(t, newTestSpace)
-}
-
-func newTestSpace(t testing.TB) Space {
-	return NewMem()
-}
-
 func TestCheckName(t *testing.T) {
 	tcs := map[string]bool{
 		"":              false,

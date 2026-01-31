@@ -21,11 +21,10 @@ var _ iofs.FS = &FS{}
 // FS implements io/fs.FS
 type FS struct {
 	ctx  context.Context
-	vctx marks.ViewCtx
-	name string
+	vctx *marks.ViewCtx
 }
 
-func New(ctx context.Context, vctx marks.ViewCtx) *FS {
+func New(ctx context.Context, vctx *marks.ViewCtx) *FS {
 	return &FS{
 		ctx:  ctx,
 		vctx: vctx,

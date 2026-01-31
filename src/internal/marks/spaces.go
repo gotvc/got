@@ -10,6 +10,7 @@ import (
 	"errors"
 
 	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/stores"
 	"golang.org/x/sync/errgroup"
 )
@@ -104,7 +105,8 @@ type SpaceTx interface {
 
 // GetSnapshot reads a snapshot from the store.
 func GetSnapshot(ctx context.Context, s stores.Reading, ref gdat.Ref) (*Snap, error) {
-	return nil, nil
+	vcmach := gotvc.NewMachine(ParsePayload)
+	return vcmach.GetSnapshot(ctx, s, ref)
 }
 
 func CreateIfNotExists(ctx context.Context, stx SpaceTx, k string, cfg Metadata) (*Info, error) {

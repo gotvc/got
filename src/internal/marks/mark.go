@@ -2,6 +2,7 @@ package marks
 
 import (
 	"crypto/rand"
+	"errors"
 	"strings"
 
 	"github.com/gotvc/got/src/gotfs"
@@ -94,3 +95,5 @@ func readRandom(out []byte) {
 		panic(err)
 	}
 }
+
+var errReadOnly = errors.New("marks: read-only transaction")
