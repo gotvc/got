@@ -80,17 +80,13 @@ func (s *SpaceTx) Create(ctx context.Context, name string, md marks.Metadata) (*
 	if prevb != nil {
 		return nil, marks.ErrExists
 	}
-	emptyRef, err := s.tx.dmach.Post(ctx, s.tx.tx, nil)
-	if err != nil {
-		return nil, err
-	}
 	b := MarkState{
 		Info: marks.Info{
 			Config:      md.Config,
 			Annotations: md.Annotations,
 			CreatedAt:   tai64.Now().TAI64(),
 		},
-		Target: *emptyRef,
+		// Leave target as zeros for null,
 	}
 	if err := s.tx.Put(ctx, name, b); err != nil {
 		return nil, err

@@ -334,9 +334,11 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			infoJSON, err := json.Marshal(struct {
 				Authors    []inet256.ID `json:"authors"`
 				AuthoredAt tai64.TAI64  `json:"authored_at"`
+				Message    string       `json:"message"`
 			}{
 				Authors:    params.Authors,
 				AuthoredAt: params.AuthoredAt,
+				Message:    params.Message,
 			})
 			if err != nil {
 				return nil, err

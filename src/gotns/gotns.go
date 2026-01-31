@@ -171,10 +171,12 @@ func (tx *Tx) Put(ctx context.Context, name string, b MarkState) error {
 	if err := marks.CheckName(name); err != nil {
 		return err
 	}
-	if yes, err := stores.ExistsUnit(ctx, tx.tx, b.Target.CID); err != nil {
-		return err
-	} else if !yes {
-		return fmt.Errorf("mark target not found: %v", b.Target.CID)
+	if !b.Target.IsZero() {
+		if yes, err := stores.ExistsUnit(ctx, tx.tx, b.Target.CID); err != nil {
+			return err
+		} else if !yes {
+			return fmt.Errorf("mark target not found: %v", b.Target.CID)
+		}
 	}
 	return tx.kvtx.Put(ctx, []byte(name), b.Marshal(nil))
 }

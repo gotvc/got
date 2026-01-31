@@ -62,26 +62,38 @@ func (r *Repo) Stat(ctx context.Context, se marks.SnapExpr, p string) (*gotfs.In
 
 // CheckAll runs integrity checks on all marks in the local Space.
 func (r *Repo) CheckAll(ctx context.Context) error {
-	return r.ForEachMark(ctx, "", func(name string) error {
-		logctx.Infof(ctx, "checking mark %q", name)
-		se := &marks.SnapExpr_Mark{
-			Space: "",
-			Name:  name,
-		}
-		err := r.ViewSnapshot(ctx, se, func(vctx *marks.ViewCtx) error {
-			return vctx.VC.Check(ctx, vctx.Stores[2], *vctx.Root, func(payload marks.Payload) error {
-				return vctx.FS.Check(ctx, vctx.Stores[1], payload.Root, func(ref gdat.Ref) error {
-					ok, err := stores.ExistsUnit(ctx, vctx.Stores[0], ref.CID)
-					if err != nil {
-						return err
-					}
-					if !ok {
-						return fmt.Errorf("dangling reference to %v", ref)
-					}
-					return nil
-				})
-			})
-		})
+	sp, err := r.GetSpace(ctx, "")
+	if err != nil {
 		return err
+	}
+	return sp.Do(ctx, true, func(st marks.SpaceTx) error {
+		for name, err := range st.All(ctx) {
+			if err != nil {
+				return err
+			}
+			logctx.Infof(ctx, "checking mark %q", name)
+			se := &marks.SnapExpr_Mark{
+				Space: "",
+				Name:  name,
+			}
+
+			if err := marks.ViewSnapshot(ctx, st, se, func(vctx *marks.ViewCtx) error {
+				return vctx.VC.Check(ctx, vctx.Stores[2], *vctx.Root, func(payload marks.Payload) error {
+					return vctx.FS.Check(ctx, vctx.Stores[1], payload.Root, func(ref gdat.Ref) error {
+						ok, err := stores.ExistsUnit(ctx, vctx.Stores[0], ref.CID)
+						if err != nil {
+							return err
+						}
+						if !ok {
+							return fmt.Errorf("dangling reference to %v", ref)
+						}
+						return nil
+					})
+				})
+			}); err != nil {
+				return err
+			}
+		}
+		return nil
 	})
 }

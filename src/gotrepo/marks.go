@@ -89,7 +89,7 @@ func (r *Repo) ConfigureMark(ctx context.Context, fqname FQM, md marks.Metadata)
 }
 
 // ForEachBranch calls fn once for each branch, or until an error is returned from fn
-func (r *Repo) ForEachMark(ctx context.Context, spaceName string, fn func(string) error) error {
+func (r *Repo) ForEachMark(ctx context.Context, spaceName string, fn func(name string) error) error {
 	space, err := r.GetSpace(ctx, spaceName)
 	if err != nil {
 		return err

@@ -94,17 +94,23 @@ func (mtx *MarkTx) WO() [3]stores.Writing {
 }
 
 // Save saves the snapshot to the Mark
-func (b *MarkTx) Save(ctx context.Context, snap *Snap) error {
-	if snap == nil {
+func (m *MarkTx) Save(ctx context.Context, snap *Snap) error {
+	ss := m.stx.Stores()
+	if snap != nil {
+		ref, err := m.GotVC().PostSnapshot(ctx, ss[2], *snap)
+		if err != nil {
+			return err
+		}
+		if err := m.stx.SetTarget(ctx, m.name, *ref); err != nil {
+			return err
+		}
+	} else {
 		var zeroRef gdat.Ref
-		return b.stx.SetTarget(ctx, b.name, zeroRef)
+		if err := m.stx.SetTarget(ctx, m.name, zeroRef); err != nil {
+			return err
+		}
 	}
-	ss := b.stx.Stores()
-	ref, err := b.GotVC().PostSnapshot(ctx, ss[2], *snap)
-	if err != nil {
-		return err
-	}
-	return b.stx.SetTarget(ctx, b.name, *ref)
+	return nil
 }
 
 // Load loads a snapshot from the Mark
@@ -157,7 +163,6 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Snap, err
 		if err != nil {
 			return err
 		}
-		return nil
 	}
 	modctx := ModifyCtx{
 		VC:     m.GotVC(),
@@ -174,21 +179,7 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Snap, err
 			return err
 		}
 	}
-	if y != nil {
-		ref, err := modctx.VC.PostSnapshot(ctx, ss[2], *y)
-		if err != nil {
-			return err
-		}
-		if err := m.stx.SetTarget(ctx, m.name, *ref); err != nil {
-			return err
-		}
-	} else {
-		var zeroRef gdat.Ref
-		if err := m.stx.SetTarget(ctx, m.name, zeroRef); err != nil {
-			return err
-		}
-	}
-	return nil
+	return m.Save(ctx, y)
 }
 
 // ModifyCtx is the context passed to the modify function.
