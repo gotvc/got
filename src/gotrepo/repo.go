@@ -37,8 +37,7 @@ const (
 )
 
 type (
-	Space  = marks.Space
-	Volume = marks.Volume
+	Space = marks.Space
 
 	Ref  = gotkv.Ref
 	Root = gotfs.Root

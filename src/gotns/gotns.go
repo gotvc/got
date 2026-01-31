@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"iter"
 	"time"
 
 	"blobcache.io/blobcache/src/blobcache"
@@ -185,60 +186,36 @@ func (tx *Tx) Delete(ctx context.Context, name string) error {
 	return tx.kvtx.Delete(ctx, []byte(name))
 }
 
-func (tx *Tx) ListNames(ctx context.Context, span marks.Span, limit int) ([]string, error) {
-	if err := tx.loadKV(ctx); err != nil {
-		return nil, err
+func (tx *Tx) AllNames(ctx context.Context) iter.Seq2[string, error] {
+	return func(yield func(string, error) bool) {
+		if err := tx.loadKV(ctx); err != nil {
+			yield("", err)
+			return
+		}
+		_, err := tx.kvtx.Flush(ctx)
+		if err != nil {
+			yield("", err)
+			return
+		}
+		it := tx.kvtx.Iterate(ctx, gotkv.TotalSpan())
+		//it := tx.kvmach.NewIterator(tx.tx, *root, span2)
+		it2 := streams.NewMap(it, func(dst *string, x gotkv.Entry) {
+			*dst = string(x.Key)
+		})
+		for {
+			name, err := streams.Next(ctx, it2)
+			if err != nil {
+				if streams.IsEOS(err) {
+					break
+				}
+				yield("", err)
+				return
+			}
+			if !yield(name, nil) {
+				return
+			}
+		}
 	}
-	_, err := tx.kvtx.Flush(ctx)
-	if err != nil {
-		return nil, err
-	}
-	span2 := gotkv.TotalSpan()
-	if span.Begin != "" {
-		span2.Begin = []byte(span.Begin)
-	}
-	if span.End != "" {
-		span2.End = []byte(span.End)
-	}
-	it := tx.kvtx.Iterate(ctx, span2)
-	//it := tx.kvmach.NewIterator(tx.tx, *root, span2)
-	it2 := streams.NewMap(it, func(dst *string, x gotkv.Entry) {
-		*dst = string(x.Key)
-	})
-	if limit < 1 {
-		limit = 1024
-	}
-	return streams.Collect(ctx, it2, limit)
-}
-
-func (tx *Tx) SaveMarkRoot(ctx context.Context, name string, data []byte) error {
-	m, err := tx.Get(ctx, name)
-	if err != nil {
-		return err
-	}
-	if m == nil {
-		return fmt.Errorf("cannot load branch root for %s; it does not exist", name)
-	}
-	ref, err := tx.dmach.Post(ctx, tx.tx, data)
-	if err != nil {
-		return err
-	}
-	m.Target = *ref
-	return tx.Put(ctx, name, *m)
-}
-
-func (tx *Tx) LoadBranchRoot(ctx context.Context, name string, dst *[]byte) error {
-	b, err := tx.Get(ctx, name)
-	if err != nil {
-		return err
-	}
-	if b == nil {
-		return fmt.Errorf("cannot load branch root for %s; it does not exist", name)
-	}
-	return tx.dmach.GetF(ctx, tx.tx, b.Target, func(data []byte) error {
-		*dst = append((*dst)[0:], data...)
-		return nil
-	})
 }
 
 func (tx *Tx) Abort(ctx context.Context) error {

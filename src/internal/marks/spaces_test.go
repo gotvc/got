@@ -3,8 +3,6 @@ package marks
 import (
 	"testing"
 
-	"github.com/gotvc/got/src/gdat"
-	"github.com/gotvc/got/src/internal/volumes"
 	"github.com/stretchr/testify/require"
 )
 
@@ -13,10 +11,7 @@ func TestMemSpace(t *testing.T) {
 }
 
 func newTestSpace(t testing.TB) Space {
-	newVolume := func() volumes.Volume {
-		return volumes.NewMemory(gdat.Hash, 1<<22)
-	}
-	return NewMem(newVolume)
+	return NewMem()
 }
 
 func TestCheckName(t *testing.T) {

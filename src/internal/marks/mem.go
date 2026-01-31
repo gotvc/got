@@ -3,12 +3,14 @@ package marks
 import (
 	"context"
 	"errors"
+	"iter"
+	"slices"
 	"sync"
 
-	"github.com/gotvc/got/src/internal/volumes"
+	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/tai64"
 	"golang.org/x/exp/maps"
-	"golang.org/x/exp/slices"
 )
 
 var _ Space = (*MemSpace)(nil)
@@ -16,24 +18,18 @@ var _ SpaceTx = (*memSpaceTx)(nil)
 
 var errReadOnly = errors.New("marks: read-only transaction")
 
-type memSpaceTx struct {
-	space  *MemSpace
-	modify bool
-}
-
 type MemSpace struct {
-	newVolume func() volumes.Volume
-
 	mu      sync.RWMutex
 	infos   map[string]Info
-	volumes map[string]Volume
+	targets map[string]gdat.Ref
+	store   stores.RWD
 }
 
-func NewMem(newVolume func() volumes.Volume) Space {
+func NewMem() Space {
 	return &MemSpace{
-		newVolume: newVolume,
-		infos:     map[string]Info{},
-		volumes:   make(map[string]Volume),
+		infos:   map[string]Info{},
+		targets: map[string]gdat.Ref{},
+		store:   stores.NewMem(),
 	}
 }
 
@@ -64,7 +60,6 @@ func (r *MemSpace) createLocked(ctx context.Context, name string, cfg Metadata) 
 	if _, exists := r.infos[name]; exists {
 		return nil, ErrExists
 	}
-	r.volumes[name] = r.newVolume()
 	info := cfg.AsInfo()
 	info.CreatedAt = tai64.Now().TAI64()
 	r.infos[name] = info
@@ -85,48 +80,39 @@ func (r *MemSpace) setLocked(ctx context.Context, name string, cfg Metadata) err
 
 func (r *MemSpace) deleteLocked(ctx context.Context, name string) error {
 	delete(r.infos, name)
-	delete(r.volumes, name)
+	delete(r.targets, name)
 	return nil
 }
 
-func (r *MemSpace) listLocked(ctx context.Context, span Span, limit int) (ret []string, _ error) {
+func (r *MemSpace) listLocked() (ret []string) {
 	keys := maps.Keys(r.infos)
 	slices.Sort(keys)
 	for _, name := range keys {
-		if limit > 0 && len(ret) >= limit {
-			break
-		}
-		if span.Contains(name) {
-			ret = append(ret, name)
-		}
+		ret = append(ret, name)
 	}
-	return ret, nil
+	return ret
 }
 
-func (r *MemSpace) openLocked(ctx context.Context, name string) (*Mark, error) {
-	if _, exists := r.volumes[name]; !exists {
-		return nil, ErrNotExist
-	}
-	info, exists := r.infos[name]
-	if !exists {
-		return nil, ErrNotExist
-	}
-	return &Mark{
-		Volume: r.volumes[name],
-		Info:   info,
-	}, nil
+type memSpaceTx struct {
+	space  *MemSpace
+	modify bool
 }
 
 func (tx *memSpaceTx) Create(ctx context.Context, name string, md Metadata) (*Info, error) {
+	tx.space.mu.Lock()
+	defer tx.space.mu.Unlock()
 	return tx.space.createLocked(ctx, name, md)
 }
 
-func (tx *memSpaceTx) List(ctx context.Context, span Span, limit int) ([]string, error) {
-	return tx.space.listLocked(ctx, span, limit)
-}
-
-func (tx *memSpaceTx) Open(ctx context.Context, name string) (*Mark, error) {
-	return tx.space.openLocked(ctx, name)
+func (tx *memSpaceTx) All(context.Context) iter.Seq2[string, error] {
+	names := tx.space.listLocked()
+	return func(yield func(string, error) bool) {
+		for _, name := range names {
+			if !yield(name, nil) {
+				return
+			}
+		}
+	}
 }
 
 func (tx *memSpaceTx) Inspect(ctx context.Context, name string) (*Info, error) {
@@ -140,9 +126,37 @@ func (tx *memSpaceTx) Delete(ctx context.Context, name string) error {
 	return tx.space.deleteLocked(ctx, name)
 }
 
-func (tx *memSpaceTx) Set(ctx context.Context, name string, cfg Metadata) error {
+func (tx *memSpaceTx) SetMetadata(ctx context.Context, name string, md Metadata) error {
 	if !tx.modify {
 		return errReadOnly
 	}
-	return tx.space.setLocked(ctx, name, cfg)
+	return tx.space.setLocked(ctx, name, md)
+}
+
+func (tx *memSpaceTx) Stores() [3]stores.RW {
+	return [3]stores.RW{
+		tx.space.store,
+		tx.space.store,
+		tx.space.store,
+	}
+}
+
+func (tx *memSpaceTx) GetTarget(ctx context.Context, name string, ref *gdat.Ref) (bool, error) {
+	var ok bool
+	*ref, ok = tx.space.targets[name]
+	return ok, nil
+}
+
+func (tx *memSpaceTx) SetTarget(ctx context.Context, name string, ref gdat.Ref) error {
+	if !tx.modify {
+		return errReadOnly
+	}
+	tx.space.mu.Lock()
+	defer tx.space.mu.Unlock()
+	_, exists := tx.space.infos[name]
+	if !exists {
+		return ErrNotExist
+	}
+	tx.space.targets[name] = ref
+	return nil
 }

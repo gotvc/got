@@ -83,9 +83,13 @@ func doCreate(ctx context.Context, sp Space, name string, cfg Metadata) (*Info, 
 func doList(ctx context.Context, sp Space, span Span, limit int) ([]string, error) {
 	var names []string
 	err := sp.Do(ctx, false, func(st SpaceTx) error {
-		var err error
-		names, err = st.List(ctx, span, limit)
-		return err
+		for name, err := range st.All(ctx) {
+			if err != nil {
+				return err
+			}
+			names = append(names, name)
+		}
+		return nil
 	})
 	return names, err
 }

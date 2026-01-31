@@ -20,19 +20,20 @@ func (r *Repo) SyncUnit(ctx context.Context, src, dst FQM, force bool) error {
 	if err != nil {
 		return err
 	}
+	// Even if these are the same space,
 	return dstSpace.Do(ctx, true, func(dstTx marks.SpaceTx) error {
 		return srcSpace.Do(ctx, false, func(srcTx marks.SpaceTx) error {
-			dstBranch, err := dstTx.Open(ctx, dst.Name)
+			dstMTx, err := marks.NewMarkTx(ctx, dstTx, dst.Name)
 			if err != nil {
 				return err
 			}
 			ctx, cf := metrics.Child(ctx, "syncing volumes")
 			defer cf()
-			srcBranch, err := srcTx.Open(ctx, src.Name)
+			srcMTx, err := marks.NewMarkTx(ctx, srcTx, src.Name)
 			if err != nil {
 				return err
 			}
-			return marks.Sync(ctx, srcBranch, dstBranch, force)
+			return marks.Sync(ctx, srcMTx, dstMTx, force)
 		})
 	})
 }

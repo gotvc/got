@@ -9,6 +9,7 @@ import (
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gottests"
 	"github.com/gotvc/got/src/gotwc"
+	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/testutil"
 )
 
@@ -71,8 +72,8 @@ func TestMultiRepoSync(t *testing.T) {
 	// create local master on sites[2] and sync content into it.
 	sites[2].CreateMark(localMaster)
 	sites[2].Sync(originMaster, localMaster)
-	require.Contains(t, sites[2].Ls(localMaster, ""), "myfile.txt")
-	require.Equal(t, testData, sites[2].Cat(localMaster, "myfile.txt"))
+	require.Contains(t, sites[2].Ls(markExpr(localMaster), ""), "myfile.txt")
+	require.Equal(t, testData, sites[2].Cat(markExpr(localMaster), "myfile.txt"))
 }
 
 func TestClone(t *testing.T) {
@@ -101,4 +102,11 @@ func getOne[K comparable, V any](m map[K]V) K {
 		return k
 	}
 	panic("no keys in map")
+}
+
+func markExpr(fqm gotrepo.FQM) *marks.SnapExpr_Mark {
+	return &marks.SnapExpr_Mark{
+		Space: fqm.Space,
+		Name:  fqm.Name,
+	}
 }
