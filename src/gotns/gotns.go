@@ -21,7 +21,7 @@ import (
 func BeginTx(ctx context.Context, dmach *gdat.Machine, kvmach *gotkv.Machine, vol volumes.Volume, modify bool) (*Tx, error) {
 	ctx, cf := context.WithTimeoutCause(ctx, 3*time.Second, errors.New("trying to begin transaction"))
 	defer cf()
-	tx, err := vol.BeginTx(ctx, blobcache.TxParams{Modify: true})
+	tx, err := vol.BeginTx(ctx, blobcache.TxParams{Modify: modify})
 	if err != nil {
 		return nil, err
 	}
@@ -129,21 +129,16 @@ func (tx *Tx) loadKV(ctx context.Context) error {
 	if err := tx.tx.Load(ctx, &root); err != nil {
 		return err
 	}
-	var kvr gotkv.Root
 	if len(root) == 0 {
-		r, err := tx.kvmach.NewEmpty(ctx, tx.tx)
-		if err != nil {
-			return err
-		}
-		kvr = *r
+		tx.kvtx = tx.kvmach.NewTxEmpty(tx.tx)
 	} else {
 		r, err := ParseRoot(root)
 		if err != nil {
 			return err
 		}
-		kvr = r.Marks
+		kvr := r.Marks
+		tx.kvtx = tx.kvmach.NewTx(tx.tx, kvr)
 	}
-	tx.kvtx = tx.kvmach.NewTx(tx.tx, kvr)
 	return nil
 }
 
@@ -194,11 +189,14 @@ func (tx *Tx) AllNames(ctx context.Context) iter.Seq2[string, error] {
 			yield("", err)
 			return
 		}
-		_, err := tx.kvtx.Flush(ctx)
-		if err != nil {
-			yield("", err)
-			return
+		if tx.kvtx.Queued() > 0 {
+			_, err := tx.kvtx.Flush(ctx)
+			if err != nil {
+				yield("", err)
+				return
+			}
 		}
+
 		it := tx.kvtx.Iterate(ctx, gotkv.TotalSpan())
 		//it := tx.kvmach.NewIterator(tx.tx, *root, span2)
 		it2 := streams.NewMap(it, func(dst *string, x gotkv.Entry) {
