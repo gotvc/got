@@ -12,7 +12,6 @@ import (
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/stores"
-	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 )
@@ -21,31 +20,29 @@ var _ iofs.FS = &FS{}
 
 // FS implements io/fs.FS
 type FS struct {
-	ctx    context.Context
-	branch marks.Mark
+	ctx  context.Context
+	vctx *marks.ViewCtx
 }
 
-func New(ctx context.Context, b marks.Mark) *FS {
+func New(ctx context.Context, vctx *marks.ViewCtx) *FS {
 	return &FS{
-		ctx:    ctx,
-		branch: b,
+		ctx:  ctx,
+		vctx: vctx,
 	}
 }
 
 func (s *FS) Open(name string) (iofs.File, error) {
 	logctx.Infof(s.ctx, "open %q", name)
-	snap, tx, err := s.branch.GetTarget(s.ctx)
-	if err != nil {
-		return nil, err
-	}
-	if snap == nil {
+	var root gotfs.Root
+	if s.vctx.Root == nil {
 		return nil, iofs.ErrNotExist
 	}
-	fsag := s.branch.GotFS()
-	if _, err := fsag.GetInfo(s.ctx, tx, snap.Payload.Root, name); err != nil {
+	ss := s.vctx.FSRO()
+	fsag := s.vctx.FS
+	if _, err := fsag.GetInfo(s.ctx, ss[1], root, name); err != nil {
 		return nil, convertError(err)
 	}
-	return NewFile(s.ctx, fsag, tx, snap.Payload.Root, name), nil
+	return NewFile(s.ctx, fsag, ss, root, name), nil
 }
 
 var _ iofs.File = &File{}
@@ -56,26 +53,22 @@ var _ io.Seeker = &File{}
 type File struct {
 	ctx   context.Context
 	gotfs *gotfs.Machine
-	txn   volumes.Tx
+	ss    [2]stores.Reading
 	root  gotfs.Root
 	path  string
 
 	r *gotfs.Reader
 }
 
-func NewFile(ctx context.Context, fsag *gotfs.Machine, txn volumes.Tx, root gotfs.Root, p string) *File {
+func NewFile(ctx context.Context, fsag *gotfs.Machine, ss [2]stores.Reading, root gotfs.Root, p string) *File {
 	return &File{
 		ctx:   ctx,
 		gotfs: fsag,
-		txn:   txn,
+		ss:    ss,
 		root:  root,
 		path:  p,
 	}
 }
-
-// func (f *File) Write([]byte) (int, error) {
-// 	return 0, errors.New("writing not supported")
-// }
 
 func (f *File) Read(buf []byte) (int, error) {
 	if err := f.ensureReader(); err != nil {
@@ -128,11 +121,11 @@ func (f *File) ReadDir(n int) (ret []iofs.DirEntry, _ error) {
 }
 
 func (f *File) Close() error {
-	return f.txn.Abort(f.ctx)
+	return nil
 }
 
 func (f *File) getStores() [2]stores.Reading {
-	return [2]stores.Reading{f.txn, f.txn}
+	return f.ss
 }
 
 func (f *File) ensureReader() error {

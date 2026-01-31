@@ -10,14 +10,14 @@ import (
 
 	"github.com/gotvc/got/src/adapters/gotftp"
 	"github.com/gotvc/got/src/adapters/gotiofs"
-	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/internal/marks"
 )
 
 var httpCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "serve files over HTTP",
 	},
-	Pos: []star.Positional{fqmnParam},
+	Pos: []star.Positional{snapExprParam},
 	Flags: map[string]star.Flag{
 		"addr": addrParam,
 	},
@@ -28,24 +28,21 @@ var httpCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		branchName := markNameParam.Load(c)
-		b, err := repo.GetMark(ctx, gotrepo.FQM{Name: branchName})
-		if err != nil {
-			return err
-		}
-		fs := gotiofs.New(ctx, *b)
-		h := http.FileServer(http.FS(fs))
-		addr, _ := addrParam.LoadOpt(c)
-		if addr == "" {
-			addr = "127.0.0.1:6006"
-		}
-		l, err := net.Listen("tcp", addr)
-		if err != nil {
-			return err
-		}
-		defer l.Close()
-		logctx.Infof(ctx, "serving on http://%v", l.Addr())
-		return http.Serve(l, h)
+		return repo.ViewSnapshot(ctx, snapExprParam.Load(c), func(vctx *marks.ViewCtx) error {
+			fs := gotiofs.New(ctx, vctx)
+			h := http.FileServer(http.FS(fs))
+			addr, _ := addrParam.LoadOpt(c)
+			if addr == "" {
+				addr = "127.0.0.1:6006"
+			}
+			l, err := net.Listen("tcp", addr)
+			if err != nil {
+				return err
+			}
+			defer l.Close()
+			logctx.Infof(ctx, "serving on http://%v", l.Addr())
+			return http.Serve(l, h)
+		})
 	},
 }
 
@@ -53,7 +50,7 @@ var ftpCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "serve files over FTP",
 	},
-	Pos: []star.Positional{fqmnParam},
+	Pos: []star.Positional{snapExprParam},
 	Flags: map[string]star.Flag{
 		"addr": addrParam,
 	},
@@ -64,11 +61,6 @@ var ftpCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		fqm := fqmnParam.Load(c)
-		b, err := repo.GetMark(ctx, fqm)
-		if err != nil {
-			return err
-		}
 		addr, _ := addrParam.LoadOpt(c)
 		if addr == "" {
 			addr = "127.0.0.1:6006"
@@ -78,22 +70,24 @@ var ftpCmd = star.Command{
 			return err
 		}
 		defer l.Close()
-		s, err := ftpserver.NewServer(&ftpserver.Options{
-			Auth:   ftpAuth{},
-			Driver: gotftp.NewDriver(ctx, *b),
-			Perm:   ftpserver.NewSimplePerm("owner", "group"),
+		return repo.ViewSnapshot(ctx, snapExprParam.Load(c), func(vcx *marks.ViewCtx) error {
+			s, err := ftpserver.NewServer(&ftpserver.Options{
+				Auth:   ftpAuth{},
+				Driver: gotftp.NewDriver(ctx, vcx),
+				Perm:   ftpserver.NewSimplePerm("owner", "group"),
+			})
+			if err != nil {
+				return err
+			}
+			logctx.Infof(ctx, "serving on ftp://%v", l.Addr())
+			return s.Serve(l)
 		})
-		if err != nil {
-			return err
-		}
-		logctx.Infof(ctx, "serving on ftp://%v", l.Addr())
-		return s.Serve(l)
 	},
 }
 
-var fqmnParam = star.Required[gotrepo.FQM]{
-	ID:       "fqmn",
-	Parse:    parseFQName,
+var snapExprParam = star.Required[marks.SnapExpr]{
+	ID:       "snapshot-expr",
+	Parse:    marks.ParseSnapExpr,
 	ShortDoc: "a fully qualified mark name",
 }
 

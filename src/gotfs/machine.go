@@ -265,10 +265,10 @@ func (mach *Machine) maxInfo(ctx context.Context, ms stores.Reading, root gotkv.
 
 var firstKey = newInfoKey("").Marshal(nil)
 
-func (mach *Machine) Check(ctx context.Context, s stores.Reading, root Root, checkData func(ref gdat.Ref) error) error {
+func (mach *Machine) Check(ctx context.Context, ms stores.Reading, root Root, checkData func(ref gdat.Ref) error) error {
 	var lastPath *string
 	var lastOffset *uint64
-	return mach.gotkv.ForEach(ctx, s, *root.toGotKV(), gotkv.Span{}, func(ent gotkv.Entry) error {
+	return mach.gotkv.ForEach(ctx, ms, *root.toGotKV(), gotkv.Span{}, func(ent gotkv.Entry) error {
 		var key Key
 		if err := key.Unmarshal(ent.Key); err != nil {
 			return err

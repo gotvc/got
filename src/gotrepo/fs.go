@@ -2,6 +2,7 @@ package gotrepo
 
 import (
 	"context"
+	"fmt"
 	"io"
 
 	"github.com/gotvc/got/src/gdat"
@@ -11,22 +12,35 @@ import (
 	"go.brendoncarroll.net/stdctx/logctx"
 )
 
-func (r *Repo) Ls(ctx context.Context, mark FQM, p string, fn func(gotfs.DirEnt) error) error {
-	branch, err := r.GetMark(ctx, mark)
+func (r *Repo) ViewFS(ctx context.Context, se marks.SnapExpr, fn func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error) error {
+	sp, err := r.GetSpace(ctx, se.GetSpace())
 	if err != nil {
 		return err
 	}
-	return branch.ViewFS(ctx, func(mach *gotfs.Machine, stores stores.Reading, root gotfs.Root) error {
+	return sp.Do(ctx, false, func(st marks.SpaceTx) error {
+		ref, err := se.Resolve(ctx, st)
+		if err != nil {
+			return err
+		}
+		ss := st.Stores()
+		snap, err := marks.GetSnapshot(ctx, ss[2], *ref)
+		if err != nil {
+			return err
+		}
+		fsmach := gotfs.NewMachine()
+		s := st.Stores()
+		return fn(fsmach, s[1], snap.Payload.Root)
+	})
+}
+
+func (r *Repo) Ls(ctx context.Context, se marks.SnapExpr, p string, fn func(gotfs.DirEnt) error) error {
+	return r.ViewFS(ctx, se, func(mach *gotfs.Machine, stores stores.Reading, root gotfs.Root) error {
 		return mach.ReadDir(ctx, stores, root, p, fn)
 	})
 }
 
-func (r *Repo) Cat(ctx context.Context, mark FQM, p string, w io.Writer) error {
-	branch, err := r.GetMark(ctx, mark)
-	if err != nil {
-		return err
-	}
-	return branch.ViewFS(ctx, func(mach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
+func (r *Repo) Cat(ctx context.Context, se marks.SnapExpr, p string, w io.Writer) error {
+	return r.ViewFS(ctx, se, func(mach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
 		fr, err := mach.NewReader(ctx, [2]stores.Reading{s, s}, root, p)
 		if err != nil {
 			return err
@@ -36,43 +50,38 @@ func (r *Repo) Cat(ctx context.Context, mark FQM, p string, w io.Writer) error {
 	})
 }
 
-func (r *Repo) Stat(ctx context.Context, mark FQM, p string) (*gotfs.Info, error) {
-	branch, err := r.GetMark(ctx, mark)
-	if err != nil {
-		return nil, err
-	}
+func (r *Repo) Stat(ctx context.Context, se marks.SnapExpr, p string) (*gotfs.Info, error) {
 	var info *gotfs.Info
-	if err := branch.ViewFS(ctx, func(mach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
+	err := r.ViewFS(ctx, se, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
 		var err error
-		info, err = mach.GetInfo(ctx, s, root, p)
+		info, err = fsmach.GetInfo(ctx, s, root, p)
 		return err
-	}); err != nil {
-		return nil, err
-	}
-	return info, nil
+	})
+	return info, err
 }
 
 // CheckAll runs integrity checks on all marks in the local Space.
 func (r *Repo) CheckAll(ctx context.Context) error {
 	return r.ForEachMark(ctx, "", func(name string) error {
 		logctx.Infof(ctx, "checking mark %q", name)
-		mark, err := r.GetMark(ctx, FQM{Name: name})
-		if err != nil {
-			return err
+		se := &marks.SnapExpr_Mark{
+			Space: "",
+			Name:  name,
 		}
-		snap, tx, err := mark.GetTarget(ctx)
-		if err != nil {
-			return err
-		}
-		if snap == nil {
-			return nil
-		}
-		defer tx.Abort(ctx)
-		vcmach := mark.GotVC()
-		return vcmach.Check(ctx, tx, *snap, func(payload marks.Payload) error {
-			return mark.GotFS().Check(ctx, tx, payload.Root, func(ref gdat.Ref) error {
-				return nil
+		err := r.ViewSnapshot(ctx, se, func(vctx *marks.ViewCtx) error {
+			return vctx.VC.Check(ctx, vctx.Stores[2], *vctx.Root, func(payload marks.Payload) error {
+				return vctx.FS.Check(ctx, vctx.Stores[1], payload.Root, func(ref gdat.Ref) error {
+					ok, err := stores.ExistsUnit(ctx, vctx.Stores[0], ref.CID)
+					if err != nil {
+						return err
+					}
+					if !ok {
+						return fmt.Errorf("dangling reference to %v", ref)
+					}
+					return nil
+				})
 			})
 		})
+		return err
 	})
 }

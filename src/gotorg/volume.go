@@ -68,7 +68,7 @@ func (m *Machine) ForEachVolume(ctx context.Context, s stores.Reading, x State, 
 	})
 }
 
-type VolumeConstructor = func(nsVol, innerVol marks.Volume) *Volume
+type VolumeConstructor = func(nsVol, innerVol volumes.Volume) *Volume
 
 func (m *Machine) Open(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, volid blobcache.OID, writeAccess bool) (*blobcache.LinkToken, VolumeConstructor, error) {
 	vent, err := m.GetVolume(ctx, s, x, volid)
@@ -86,7 +86,7 @@ func (m *Machine) Open(ctx context.Context, s stores.Reading, x State, actAs Ide
 	rs := secret.Ratchet(int(ratchet) - 1).DeriveSym()
 	symSecret := &rs
 
-	mkVol := func(nsVol, innerVol marks.Volume) *Volume {
+	mkVol := func(nsVol, innerVol volumes.Volume) *Volume {
 		return newVolume(m, actAs.SigPrivateKey, nsVol, innerVol, symSecret)
 	}
 	lt := vent.LinkToken()

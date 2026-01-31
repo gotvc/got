@@ -204,7 +204,7 @@ func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string
 	return nil, nil
 }
 
-func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, actAs IdenPrivate, writeAccess bool) (marks.Volume, error) {
+func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, actAs IdenPrivate, writeAccess bool) (volumes.Volume, error) {
 	nsh, err := c.adjustHandle(ctx, nsh)
 	if err != nil {
 		return nil, err

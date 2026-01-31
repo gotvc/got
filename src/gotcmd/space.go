@@ -36,8 +36,9 @@ var spaceListCmd = star.Command{
 			switch {
 			case scfg.Blobcache != nil:
 				oid = scfg.Blobcache.URL.Base
-			case scfg.Org != nil:
-				oid = scfg.Org.Base
+			default:
+				c.Printf("ERROR: don't know how to print %v\n", scfg)
+				continue
 			}
 			peerID := scfg.Blobcache.URL.Node
 			c.Printf("%-30s %16s... %16s...\n", name, peerID.Base64String()[:16], oid.String()[:16])

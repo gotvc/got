@@ -19,7 +19,7 @@ type Snapshotable interface {
 	Marshal(out []byte) []byte
 }
 
-type Snapshot[T Snapshotable] struct {
+type Vertex[T Snapshotable] struct {
 	// N is the critical distance to the root.
 	// N is 0 if there are no parents.
 	// N is the max of the parents' N + 1.
@@ -34,15 +34,15 @@ type Snapshot[T Snapshotable] struct {
 	Payload T
 }
 
-func ParseSnapshot[T Snapshotable](data []byte, parser Parser[T]) (*Snapshot[T], error) {
-	var a Snapshot[T]
+func ParseSnapshot[T Snapshotable](data []byte, parser Parser[T]) (*Vertex[T], error) {
+	var a Vertex[T]
 	if err := a.Unmarshal(data, parser); err != nil {
 		return nil, err
 	}
 	return &a, nil
 }
 
-func (a Snapshot[T]) Marshal(out []byte) []byte {
+func (a Vertex[T]) Marshal(out []byte) []byte {
 	out = sbe.AppendUint64(out, a.N)
 	out = append(out, a.CreatedAt.Marshal()...)
 
@@ -61,7 +61,7 @@ func (a Snapshot[T]) Marshal(out []byte) []byte {
 	return out
 }
 
-func (a *Snapshot[T]) Unmarshal(data []byte, parsePayload Parser[T]) error {
+func (a *Vertex[T]) Unmarshal(data []byte, parsePayload Parser[T]) error {
 	// N
 	n, data, err := sbe.ReadUint64(data)
 	if err != nil {
@@ -118,7 +118,7 @@ func (a *Snapshot[T]) Unmarshal(data []byte, parsePayload Parser[T]) error {
 	return nil
 }
 
-func (a Snapshot[T]) Equals(b Snapshot[T]) bool {
+func (a Vertex[T]) Equals(b Vertex[T]) bool {
 	var parentsEqual bool
 	if len(a.Parents) != len(b.Parents) {
 		parentsEqual = false
@@ -138,14 +138,14 @@ func (a Snapshot[T]) Equals(b Snapshot[T]) bool {
 
 // SnapshotParams are the parameters required to create a new snapshot.
 type SnapshotParams[T Snapshotable] struct {
-	Parents   []Snapshot[T]
+	Parents   []Vertex[T]
 	Creator   inet256.ID
 	CreatedAt tai64.TAI64
 	// Payload is the thing being snapshot
 	Payload T
 }
 
-func (a *Machine[T]) NewSnapshot(ctx context.Context, s stores.Writing, sp SnapshotParams[T]) (*Snapshot[T], error) {
+func (a *Machine[T]) NewSnapshot(ctx context.Context, s stores.Writing, sp SnapshotParams[T]) (*Vertex[T], error) {
 	var n uint64
 	parentRefs := make([]Ref, len(sp.Parents))
 	for i, parent := range sp.Parents {
@@ -162,7 +162,7 @@ func (a *Machine[T]) NewSnapshot(ctx context.Context, s stores.Writing, sp Snaps
 		a, b := parentRefs[i].CID, parentRefs[j].CID
 		return a.Compare(b) < 0
 	})
-	return &Snapshot[T]{
+	return &Vertex[T]{
 		N:         n,
 		CreatedAt: sp.CreatedAt,
 		Parents:   parentRefs,
@@ -172,13 +172,13 @@ func (a *Machine[T]) NewSnapshot(ctx context.Context, s stores.Writing, sp Snaps
 }
 
 // NewZero creates a new snapshot with no parent
-func (mach *Machine[T]) NewZero(ctx context.Context, s stores.Writing, sp SnapshotParams[T]) (*Snapshot[T], error) {
+func (mach *Machine[T]) NewZero(ctx context.Context, s stores.Writing, sp SnapshotParams[T]) (*Vertex[T], error) {
 	sp.Parents = nil
 	return mach.NewSnapshot(ctx, s, sp)
 }
 
 // PostSnapshot marshals the snapshot and posts it to the store
-func (ag *Machine[T]) PostSnapshot(ctx context.Context, s stores.Writing, x Snapshot[T]) (*Ref, error) {
+func (ag *Machine[T]) PostSnapshot(ctx context.Context, s stores.Writing, x Vertex[T]) (*Ref, error) {
 	if ag.readOnly {
 		panic("gotvc: operator is read-only. This is a bug.")
 	}
@@ -186,8 +186,8 @@ func (ag *Machine[T]) PostSnapshot(ctx context.Context, s stores.Writing, x Snap
 }
 
 // GetSnapshot retrieves the snapshot referenced by ref from the store.
-func (ag *Machine[T]) GetSnapshot(ctx context.Context, s stores.Reading, ref Ref) (*Snapshot[T], error) {
-	var x *Snapshot[T]
+func (ag *Machine[T]) GetSnapshot(ctx context.Context, s stores.Reading, ref Ref) (*Vertex[T], error) {
+	var x *Vertex[T]
 	if err := ag.da.GetF(ctx, s, ref, func(data []byte) error {
 		var err error
 		x, err = ParseSnapshot[T](data, ag.parse)
@@ -200,7 +200,7 @@ func (ag *Machine[T]) GetSnapshot(ctx context.Context, s stores.Reading, ref Ref
 
 // Squash turns multiple snapshots into one.
 // It preserves the latest version of the data, but destroys versioning granularity
-func (ag *Machine[T]) Squash(ctx context.Context, s stores.RW, x Snapshot[T], n int) (*Snapshot[T], error) {
+func (ag *Machine[T]) Squash(ctx context.Context, s stores.RW, x Vertex[T], n int) (*Vertex[T], error) {
 	if n < 1 {
 		return nil, fmt.Errorf("cannot squash single commit")
 	}
@@ -215,7 +215,7 @@ func (ag *Machine[T]) Squash(ctx context.Context, s stores.RW, x Snapshot[T], n 
 		return nil, err
 	}
 	if n == 1 {
-		return &Snapshot[T]{
+		return &Vertex[T]{
 			N:       parent.N,
 			Payload: x.Payload,
 			Parents: parent.Parents,
@@ -231,7 +231,7 @@ func (ag *Machine[T]) Squash(ctx context.Context, s stores.RW, x Snapshot[T], n 
 
 // RefFromSnapshot computes a ref for snap if it was posted to s.
 // It only calls s.Hash and s.MaxSize; it does not mutate s.
-func (ag *Machine[T]) RefFromSnapshot(snap Snapshot[T]) Ref {
+func (ag *Machine[T]) RefFromSnapshot(snap Vertex[T]) Ref {
 	s2 := stores.NewVoid()
 	ref, err := ag.PostSnapshot(context.TODO(), s2, snap)
 	if err != nil {
@@ -241,7 +241,7 @@ func (ag *Machine[T]) RefFromSnapshot(snap Snapshot[T]) Ref {
 }
 
 // Check ensures that snapshot is valid.
-func (a *Machine[T]) Check(ctx context.Context, s stores.Reading, snap Snapshot[T], checkRoot func(T) error) error {
+func (a *Machine[T]) Check(ctx context.Context, s stores.Reading, snap Vertex[T], checkRoot func(T) error) error {
 	logctx.Infof(ctx, "checking snapshot #%d", snap.N)
 	if err := checkRoot(snap.Payload); err != nil {
 		return err
