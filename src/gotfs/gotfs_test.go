@@ -39,6 +39,34 @@ func TestKeys(t *testing.T) {
 			Dirs: map[string]fs.FileMode{
 				"": 0o755,
 			},
+			Files: map[string]string{
+				"a.txt": "",
+			},
+			Expect: [][]byte{
+				makeInfoKey(""),
+				makeInfoKey("a.txt"),
+			},
+		},
+		{
+			Dirs: map[string]fs.FileMode{
+				"":       0o755,
+				"subdir": 0o755,
+			},
+			Files: map[string]string{
+				"a.txt":        "",
+				"subdir/b.txt": "",
+			},
+			Expect: [][]byte{
+				makeInfoKey(""),
+				makeInfoKey("a.txt"),
+				makeInfoKey("subdir"),
+				makeInfoKey("subdir/b.txt"),
+			},
+		},
+		{
+			Dirs: map[string]fs.FileMode{
+				"": 0o755,
+			},
 			Expect: [][]byte{
 				makeInfoKey(""),
 			},
