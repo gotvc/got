@@ -140,6 +140,9 @@ func (s *SpaceTx) GetTarget(ctx context.Context, name string, dst *gdat.Ref) (bo
 	if err != nil {
 		return false, err
 	}
+	if mstate == nil {
+		return false, marks.ErrNotExist
+	}
 	if mstate.Target.IsZero() {
 		return false, nil
 	}

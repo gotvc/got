@@ -93,6 +93,10 @@ func (se SnapExpr_Mark) Resolve(ctx context.Context, tx SpaceTx) (*gdat.Ref, err
 	return &ref, nil
 }
 
+func (se SnapExpr_Mark) String() string {
+	return se.Space + ":" + se.Name
+}
+
 type SnapExpr_Offset struct {
 	X      SnapExpr
 	Offset uint

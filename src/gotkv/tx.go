@@ -34,9 +34,13 @@ func (tx *Tx) Queued() int {
 	return len(tx.edits)
 }
 
+func (tx *Tx) BaseIsZero() bool {
+	return tx.prev.Ref.IsZero()
+}
+
 // Flush writes all in queued mutations to the key-value store.
 func (tx *Tx) Flush(ctx context.Context) (*Root, error) {
-	if tx.prev.Ref.IsZero() {
+	if tx.BaseIsZero() {
 		r, err := tx.m.NewEmpty(ctx, tx.s)
 		if err != nil {
 			return nil, err
@@ -70,7 +74,7 @@ func (tx *Tx) Get(ctx context.Context, key []byte, dst *[]byte) (bool, error) {
 		e := tx.edits[i]
 		return getFromSlice(e.Entries, key, dst)
 	}
-	if tx.prev.Ref.IsZero() {
+	if tx.BaseIsZero() {
 		return false, nil
 	}
 	if err := tx.m.GetF(ctx, tx.s, tx.prev, key, func(val []byte) error {

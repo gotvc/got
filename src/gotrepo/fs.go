@@ -23,6 +23,9 @@ func (r *Repo) ViewFS(ctx context.Context, se marks.SnapExpr, fn func(fsmach *go
 			return err
 		}
 		ss := st.Stores()
+		if ref.IsZero() {
+			return fmt.Errorf("no snapshot found at %v", se)
+		}
 		snap, err := marks.GetSnapshot(ctx, ss[2], *ref)
 		if err != nil {
 			return err
