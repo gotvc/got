@@ -17,7 +17,7 @@ func (r *Repo) ViewSnapshot(ctx context.Context, se SnapExpr, fn func(*marks.Vie
 	if err != nil {
 		return err
 	}
-	return space.Do(ctx, true, func(st marks.SpaceTx) error {
+	return space.Do(ctx, false, func(st marks.SpaceTx) error {
 		return marks.ViewSnapshot(ctx, st, se, fn)
 	})
 }
