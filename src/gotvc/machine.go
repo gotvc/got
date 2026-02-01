@@ -8,9 +8,9 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 )
 
-type Option[T Snapshotable] = func(a *Machine[T])
+type Option[T Marshalable] = func(a *Machine[T])
 
-func WithSalt[T Snapshotable](salt *[32]byte) Option[T] {
+func WithSalt[T Marshalable](salt *[32]byte) Option[T] {
 	return func(a *Machine[T]) {
 		a.salt = salt
 	}
@@ -18,7 +18,7 @@ func WithSalt[T Snapshotable](salt *[32]byte) Option[T] {
 
 type Parser[T any] = func([]byte) (T, error)
 
-type Machine[T Snapshotable] struct {
+type Machine[T Marshalable] struct {
 	parse     Parser[T]
 	salt      *[32]byte
 	cacheSize int
@@ -26,7 +26,7 @@ type Machine[T Snapshotable] struct {
 	da        *gdat.Machine
 }
 
-func NewMachine[T Snapshotable](parse Parser[T], opts ...Option[T]) *Machine[T] {
+func NewMachine[T Marshalable](parse Parser[T], opts ...Option[T]) *Machine[T] {
 	ag := Machine[T]{
 		parse:     parse,
 		cacheSize: 256,

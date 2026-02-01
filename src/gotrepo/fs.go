@@ -69,7 +69,7 @@ func (r *Repo) CheckAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return sp.Do(ctx, true, func(st marks.SpaceTx) error {
+	return sp.Do(ctx, false, func(st marks.SpaceTx) error {
 		for name, err := range st.All(ctx) {
 			if err != nil {
 				return err

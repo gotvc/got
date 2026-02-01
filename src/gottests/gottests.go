@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"iter"
 	"os"
+	"path"
 	"regexp"
 	"strings"
 	"testing"
@@ -89,6 +90,9 @@ func (s *Site) Fetch() {
 }
 
 func (s *Site) CreateFile(p string, data []byte) {
+	if dir := path.Dir(p); dir != "." {
+		require.NoError(s.t, s.Root.MkdirAll(dir, 0o755))
+	}
 	require.NoError(s.t, s.Root.WriteFile(p, data, 0o644))
 }
 

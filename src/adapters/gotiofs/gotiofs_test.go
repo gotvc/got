@@ -24,6 +24,11 @@ func TestFS(t *testing.T) {
 			"b.txt": "hello",
 			"c.txt": "hello",
 		},
+		{
+			"a.txt":         "hello1",
+			"subdir1/b.txt": "hello2",
+			"subdir2/c.txt": "hello3",
+		},
 	}
 	for i, tc := range tcs {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
