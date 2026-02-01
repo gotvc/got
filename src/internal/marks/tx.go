@@ -75,6 +75,11 @@ func (mtx *MarkTx) VCRO() stores.Reading {
 	return ss[0]
 }
 
+func (mtx *MarkTx) VCRW() stores.RW {
+	ss := mtx.stx.Stores()
+	return ss[2]
+}
+
 func (mtx *MarkTx) RO() [3]stores.Reading {
 	ss := mtx.stx.Stores()
 	return [3]stores.Reading{
@@ -145,6 +150,11 @@ func (m *MarkTx) Apply(ctx context.Context, fn func([3]stores.RW, *Snap) (*Snap,
 	} else {
 		y, err = fn(m.stx.Stores(), &x)
 		if err != nil {
+			return err
+		}
+	}
+	if y != nil {
+		if err := syncStores(ctx, m.gotvc, m.gotfs, m.RO(), m.WO(), *y); err != nil {
 			return err
 		}
 	}
