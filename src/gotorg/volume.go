@@ -10,7 +10,7 @@ import (
 
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 )
@@ -99,7 +99,7 @@ func (m *Machine) OpenAt(ctx context.Context, s stores.Reading, x State, actAs I
 		return nil, nil, err
 	}
 	if ent == nil {
-		return nil, nil, marks.ErrNotExist
+		return nil, nil, gotcore.ErrNotExist
 	}
 	ltok, vw, err := m.Open(ctx, s, x, actAs, ent.Volume, writeAccess)
 	if err != nil {

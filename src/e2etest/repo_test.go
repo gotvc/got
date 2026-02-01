@@ -9,7 +9,7 @@ import (
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gottests"
 	"github.com/gotvc/got/src/gotwc"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/testutil"
 )
 
@@ -104,8 +104,8 @@ func getOne[K comparable, V any](m map[K]V) K {
 	panic("no keys in map")
 }
 
-func markExpr(fqm gotrepo.FQM) *marks.SnapExpr_Mark {
-	return &marks.SnapExpr_Mark{
+func markExpr(fqm gotrepo.FQM) *gotcore.SnapExpr_Mark {
+	return &gotcore.SnapExpr_Mark{
 		Space: fqm.Space,
 		Name:  fqm.Name,
 	}

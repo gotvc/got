@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/gotjob"
-	"github.com/gotvc/got/src/internal/marks"
 	"github.com/gotvc/got/src/internal/metrics"
 )
 
@@ -21,19 +21,19 @@ func (r *Repo) SyncUnit(ctx context.Context, src, dst FQM, force bool) error {
 		return err
 	}
 	// Even if these are the same space, 1 read-only and 1 modify should work.
-	return dstSpace.Do(ctx, true, func(dstTx marks.SpaceTx) error {
-		return srcSpace.Do(ctx, false, func(srcTx marks.SpaceTx) error {
-			dstMTx, err := marks.NewMarkTx(ctx, dstTx, dst.Name)
+	return dstSpace.Do(ctx, true, func(dstTx gotcore.SpaceTx) error {
+		return srcSpace.Do(ctx, false, func(srcTx gotcore.SpaceTx) error {
+			dstMTx, err := gotcore.NewMarkTx(ctx, dstTx, dst.Name)
 			if err != nil {
 				return err
 			}
 			ctx, cf := metrics.Child(ctx, "syncing volumes")
 			defer cf()
-			srcMTx, err := marks.NewMarkTx(ctx, srcTx, src.Name)
+			srcMTx, err := gotcore.NewMarkTx(ctx, srcTx, src.Name)
 			if err != nil {
 				return err
 			}
-			return marks.Sync(ctx, srcMTx, dstMTx, force)
+			return gotcore.Sync(ctx, srcMTx, dstMTx, force)
 		})
 	})
 }
@@ -62,7 +62,7 @@ func (r *Repo) SyncSpaces(ctx context.Context, task SyncSpacesTask) error {
 	if err != nil {
 		return err
 	}
-	return marks.SyncSpaces(ctx, marks.SyncSpacesTask{
+	return gotcore.SyncSpaces(ctx, gotcore.SyncSpacesTask{
 		Src:     srcSpace,
 		Dst:     dstSpace,
 		Filter:  task.Filter,
@@ -81,7 +81,7 @@ func (r *Repo) doSyncTasks(jc *gotjob.Ctx, tasks []SyncSpacesTask) error {
 			return err
 		}
 		jc2 := jc.Child(fmt.Sprintf("sync-space %q -> %q", task.Src, task.Dst))
-		if err := marks.SyncSpaces(jc2.Context, marks.SyncSpacesTask{
+		if err := gotcore.SyncSpaces(jc2.Context, gotcore.SyncSpacesTask{
 			Src:     srcSpace,
 			Dst:     dstSpace,
 			Filter:  task.Filter,

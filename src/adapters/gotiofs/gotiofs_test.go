@@ -10,7 +10,7 @@ import (
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gottests"
 	"github.com/gotvc/got/src/gotwc"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -42,7 +42,7 @@ func TestFS(t *testing.T) {
 			}
 			s.Commit(gotwc.CommitParams{})
 
-			require.NoError(t, s.Repo.ViewSnapshot(ctx, marks.SnapExpr_Mark{Name: "master"}, func(vctx *marks.ViewCtx) error {
+			require.NoError(t, s.Repo.ViewSnapshot(ctx, gotcore.SnapExpr_Mark{Name: "master"}, func(vctx *gotcore.ViewCtx) error {
 				fsys := New(ctx, vctx)
 				ps := slices.Collect(maps.Keys(tc))
 				return fstest.TestFS(fsys, ps...)

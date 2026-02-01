@@ -10,7 +10,7 @@ import (
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/internal/gotcfg"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/volumes"
 )
 
@@ -23,7 +23,7 @@ func (r *Repo) ListSpaces(ctx context.Context) (map[string]SpaceSpec, error) {
 // if it finds a match, then the spec is used to construct a space
 // and it is returned.
 // If name is empty, then GetSpace returns the repos default namespace.
-func (r *Repo) GetSpace(ctx context.Context, name string) (marks.Space, error) {
+func (r *Repo) GetSpace(ctx context.Context, name string) (gotcore.Space, error) {
 	if name == "" {
 		return r.makeLocalSpace(ctx)
 	}

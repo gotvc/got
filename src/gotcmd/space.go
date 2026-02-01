@@ -7,7 +7,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"go.brendoncarroll.net/star"
 )
 
@@ -129,7 +129,7 @@ func randomSecret() (ret gdat.DEK) {
 var spaceNameParam = star.Required[string]{
 	ID: "space-name",
 	Parse: func(x string) (string, error) {
-		if err := marks.CheckName(x); err != nil {
+		if err := gotcore.CheckName(x); err != nil {
 			return "", err
 		}
 		return x, nil

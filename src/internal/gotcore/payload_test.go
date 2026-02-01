@@ -1,4 +1,4 @@
-package marks
+package gotcore
 
 import (
 	"fmt"

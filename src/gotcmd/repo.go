@@ -13,7 +13,7 @@ import (
 	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"go.brendoncarroll.net/star"
 )
 
@@ -51,7 +51,7 @@ var initCmd = star.Command{
 		}
 		defer repo.Close()
 		// create the first branch
-		if _, err := repo.CreateMark(c, gotrepo.FQM{Name: "master"}, marks.DefaultConfig(false), nil); err != nil {
+		if _, err := repo.CreateMark(c, gotrepo.FQM{Name: "master"}, gotcore.DefaultConfig(false), nil); err != nil {
 			return err
 		}
 		// setup a working copy in the same directory

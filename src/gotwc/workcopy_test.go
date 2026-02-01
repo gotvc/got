@@ -11,7 +11,7 @@ import (
 
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotrepo"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 	"go.brendoncarroll.net/state/posixfs"
@@ -142,7 +142,7 @@ func TestFork(t *testing.T) {
 	}
 
 	require.NoError(t, wc.Fork(ctx, "branch2"))
-	require.NoError(t, repo.History(ctx, &marks.SnapExpr_Mark{Name: "branch2"}, func(_ gotfs.Ref, _ marks.Snap) error {
+	require.NoError(t, repo.History(ctx, &gotcore.SnapExpr_Mark{Name: "branch2"}, func(_ gotfs.Ref, _ gotcore.Snap) error {
 		return nil
 	}))
 	commitCount := countCommits(t, wc.repo, "branch2")
@@ -151,7 +151,7 @@ func TestFork(t *testing.T) {
 
 func newTestWC(t testing.TB, trackAll bool) *WC {
 	r := gotrepo.NewTestRepo(t)
-	_, err := r.CreateMark(context.TODO(), gotrepo.FQM{Name: nameMaster}, marks.DSConfig{}, nil)
+	_, err := r.CreateMark(context.TODO(), gotrepo.FQM{Name: nameMaster}, gotcore.DSConfig{}, nil)
 	require.NoError(t, err)
 	wcdir := t.TempDir()
 	root := testutil.OpenRoot(t, wcdir)
@@ -173,7 +173,7 @@ func checkFileContent(t testing.TB, wc *WC, p string, r io.Reader) {
 	ctx := testutil.Context(t)
 	pr, pw := io.Pipe()
 	go func() {
-		err := wc.repo.Cat(ctx, marks.SnapExpr_Mark{Name: getHead(t, wc)}, p, pw)
+		err := wc.repo.Cat(ctx, gotcore.SnapExpr_Mark{Name: getHead(t, wc)}, p, pw)
 		if err != nil {
 			pw.CloseWithError(err)
 		} else {
@@ -192,7 +192,7 @@ func getHead(t testing.TB, wc *WC) string {
 func exists(t testing.TB, wc *WC, p string) bool {
 	ctx := testutil.Context(t)
 	var found bool
-	err := wc.repo.Ls(ctx, marks.SnapExpr_Mark{Name: getHead(t, wc)}, path.Dir(p), func(ent gotfs.DirEnt) error {
+	err := wc.repo.Ls(ctx, gotcore.SnapExpr_Mark{Name: getHead(t, wc)}, path.Dir(p), func(ent gotfs.DirEnt) error {
 		found = found || ent.Name == path.Base(p)
 		return nil
 	})
@@ -215,7 +215,7 @@ func checkNotExists(t testing.TB, wc *WC, p string) {
 func countCommits(t testing.TB, repo *gotrepo.Repo, branchName string) int {
 	ctx := testutil.Context(t)
 	var count int
-	repo.History(ctx, marks.SnapExpr_Mark{Name: branchName}, func(_ gotfs.Ref, _ marks.Snap) error {
+	repo.History(ctx, gotcore.SnapExpr_Mark{Name: branchName}, func(_ gotfs.Ref, _ gotcore.Snap) error {
 		count++
 		return nil
 	})

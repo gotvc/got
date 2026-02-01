@@ -1,7 +1,7 @@
 package gotcmd
 
 import (
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"go.brendoncarroll.net/star"
 )
 
@@ -24,7 +24,7 @@ var debugCmd = star.Command{
 		repo := wc.Repo()
 
 		p := debugTypeParam.Load(c)
-		se := &marks.SnapExpr_Mark{Space: "", Name: bname}
+		se := &gotcore.SnapExpr_Mark{Space: "", Name: bname}
 		switch p {
 		case "fs":
 			return repo.DebugFS(ctx, se, c.StdOut)

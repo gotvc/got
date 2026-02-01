@@ -8,7 +8,6 @@ import (
 
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
-	"github.com/gotvc/got/src/internal/marks"
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/state/posixfs"
@@ -21,6 +20,7 @@ import (
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/gotwc/internal/porting"
 	"github.com/gotvc/got/src/gotwc/internal/staging"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/stores"
 )
@@ -67,7 +67,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		}
 		cfg := info.Config
 		paramHash := cfg.Hash()
-		fsmach := marks.GotFS(cfg)
+		fsmach := gotcore.GotFS(cfg)
 		stagetx, err := wc.beginStageTx(ctx, &paramHash, true)
 		if err != nil {
 			return err
@@ -82,7 +82,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		if err := fn(stagingCtx{
 			Stage:    stagetx,
 			Store:    stagingStore,
-			GotFS:    marks.GotFS(cfg),
+			GotFS:    gotcore.GotFS(cfg),
 			FS:       fsys,
 			DB:       porting.NewDB(conn, paramHash),
 			Importer: imp,
@@ -115,7 +115,7 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 			return err
 		}
 		portdb := porting.NewDB(conn, paramHash)
-		fsmach := marks.GotFS(info.Config)
+		fsmach := gotcore.GotFS(info.Config)
 		exp := porting.NewExporter(fsmach, portdb, filtFS, filter)
 		stagingStore, err := wc.repo.BeginStagingTx(ctx, wc.id, false)
 		if err != nil {
@@ -132,7 +132,7 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 	})
 }
 
-func (wc *WC) viewMark(ctx context.Context, fn func(*marks.MarkTx) error) error {
+func (wc *WC) viewMark(ctx context.Context, fn func(*gotcore.MarkTx) error) error {
 	name, err := wc.GetHead()
 	if err != nil {
 		return err
@@ -140,7 +140,7 @@ func (wc *WC) viewMark(ctx context.Context, fn func(*marks.MarkTx) error) error 
 	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: name}, fn)
 }
 
-func (wc *WC) modifyMark(ctx context.Context, fn func(marks.ModifyCtx) (*marks.Snap, error)) error {
+func (wc *WC) modifyMark(ctx context.Context, fn func(gotcore.ModifyCtx) (*gotcore.Snap, error)) error {
 	name, err := wc.GetHead()
 	if err != nil {
 		return err
@@ -222,7 +222,7 @@ func (wc *WC) Put(ctx context.Context, paths ...string) error {
 // Rm deletes a path known to version control.
 func (wc *WC) Rm(ctx context.Context, paths ...string) error {
 	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
-		return wc.viewSnap(ctx, func(vctx *marks.ViewCtx) error {
+		return wc.viewSnap(ctx, func(vctx *gotcore.ViewCtx) error {
 			fsag := vctx.FS
 			stage := sctx.Stage
 			ss := vctx.Stores
@@ -314,7 +314,7 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			params.AuthoredAt = params.CommittedAt
 		}
 
-		if err := wc.modifyMark(ctx, func(mctx marks.ModifyCtx) (*marks.Snap, error) {
+		if err := wc.modifyMark(ctx, func(mctx gotcore.ModifyCtx) (*gotcore.Snap, error) {
 			var root *gotfs.Root
 			if mctx.Root != nil {
 				root = &mctx.Root.Payload.Root
@@ -326,9 +326,9 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			if err != nil {
 				return nil, err
 			}
-			var parents []marks.Snap
+			var parents []gotcore.Snap
 			if mctx.Root != nil {
-				parents = []marks.Snap{*mctx.Root}
+				parents = []gotcore.Snap{*mctx.Root}
 			}
 
 			infoJSON, err := json.Marshal(struct {
@@ -343,11 +343,11 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			if err != nil {
 				return nil, err
 			}
-			nextSnap, err := mctx.VC.NewSnapshot(ctx, s, gotvc.SnapshotParams[marks.Payload]{
+			nextSnap, err := mctx.VC.NewSnapshot(ctx, s, gotvc.SnapshotParams[gotcore.Payload]{
 				Parents:   parents,
 				Creator:   params.Committer,
 				CreatedAt: params.CommittedAt,
-				Payload: marks.Payload{
+				Payload: gotcore.Payload{
 					Root: *nextRoot,
 					Aux:  infoJSON,
 				},
@@ -375,7 +375,7 @@ type FileOperation struct {
 
 func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOperation) error) error {
 	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
-		return wc.viewMark(ctx, func(mt *marks.MarkTx) error {
+		return wc.viewMark(ctx, func(mt *gotcore.MarkTx) error {
 			// NewEmpty makes a Post which will fail because this is a read-only transaction.
 			s := stores.AddWriteLayer(mt.FSRO()[1], stores.NewMem())
 			var root gotfs.Root
@@ -430,7 +430,7 @@ type FileInfo = porting.FileInfo
 //  2. the active branch head
 func (wc *WC) ForEachDirty(ctx context.Context, fn func(fi DirtyFile) error) error {
 	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
-		return wc.viewSnap(ctx, func(vctx *marks.ViewCtx) error {
+		return wc.viewSnap(ctx, func(vctx *gotcore.ViewCtx) error {
 			stage := sctx.Stage
 			fsys, _, err := wc.getFilteredFS(ctx)
 			if err != nil {

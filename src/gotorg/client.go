@@ -11,7 +11,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema/statetrace"
 	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/exp/slices2"
@@ -167,7 +167,7 @@ func (c *Client) DeleteAlias(ctx context.Context, volh blobcache.Handle, name st
 	})
 }
 
-func (c *Client) ListAliases(ctx context.Context, volh blobcache.Handle, span marks.Span, limit int) ([]string, error) {
+func (c *Client) ListAliases(ctx context.Context, volh blobcache.Handle, span gotcore.Span, limit int) ([]string, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return nil, err
@@ -191,7 +191,7 @@ func (c *Client) ListAliases(ctx context.Context, volh blobcache.Handle, span ma
 	return names, nil
 }
 
-func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string) (*marks.Info, error) {
+func (c *Client) Inspect(ctx context.Context, volh blobcache.Handle, name string) (*gotcore.Info, error) {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return nil, err
@@ -327,7 +327,7 @@ func (c *Client) IntroduceSelf() gotorgop.ChangeSet {
 	return cs
 }
 
-// BranchVolumeSpec is the volume spec used for new marks.
+// BranchVolumeSpec is the volume spec used for new gotcore.
 func BranchVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{

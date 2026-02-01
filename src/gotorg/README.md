@@ -1,7 +1,7 @@
 # GotOrg
 
-GotOrg is a permissioned namespace for marks.
-It manages all of the public key cryptography needed to enforce permissions for reading and writing from marks.
+GotOrg is a permissioned namespace for gotcore.
+It manages all of the public key cryptography needed to enforce permissions for reading and writing from gotcore.
 
 The branch Volumes are encrypted with AEADs, and the secret keys are stored encrypted in GotOrg.
 

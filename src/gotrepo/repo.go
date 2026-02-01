@@ -22,7 +22,7 @@ import (
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo/internal/reposchema"
 	"github.com/gotvc/got/src/internal/gotcfg"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/gotvc/got/src/internal/volumes"
 )
@@ -37,12 +37,12 @@ const (
 )
 
 type (
-	Space = marks.Space
+	Space = gotcore.Space
 
 	Ref  = gotkv.Ref
 	Root = gotfs.Root
 
-	Snap = marks.Snap
+	Snap = gotcore.Snap
 )
 
 // Repo manages configuration including the connection to Blobcache

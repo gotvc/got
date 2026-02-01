@@ -11,7 +11,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
@@ -82,7 +82,7 @@ func (r Root) Marshal(out []byte) []byte {
 
 type MarkState struct {
 	// Info is stored as json
-	Info marks.Info `json:"info"`
+	Info gotcore.Info `json:"info"`
 	// Target is stored as json.
 	Target gdat.Ref `json:"target"`
 }
@@ -163,7 +163,7 @@ func (tx *Tx) Put(ctx context.Context, name string, b MarkState) error {
 	if err := tx.loadKV(ctx); err != nil {
 		return err
 	}
-	if err := marks.CheckName(name); err != nil {
+	if err := gotcore.CheckName(name); err != nil {
 		return err
 	}
 	if !b.Target.IsZero() {

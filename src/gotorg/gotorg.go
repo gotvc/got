@@ -95,7 +95,7 @@ type State struct {
 
 	// Authorization tables.
 
-	// Rules holds rules for the namespace, granting look or touch access to marks.
+	// Rules holds rules for the namespace, granting look or touch access to gotcore.
 	Rules gotkv.Root
 	// Obligations holds obligations for the namespace, granting access to volumes.
 	Obligations gotkv.Root

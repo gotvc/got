@@ -7,17 +7,17 @@ import (
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/stdctx/logctx"
 )
 
-func (r *Repo) ViewFS(ctx context.Context, se marks.SnapExpr, fn func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error) error {
+func (r *Repo) ViewFS(ctx context.Context, se gotcore.SnapExpr, fn func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error) error {
 	sp, err := r.GetSpace(ctx, se.GetSpace())
 	if err != nil {
 		return err
 	}
-	return sp.Do(ctx, false, func(st marks.SpaceTx) error {
+	return sp.Do(ctx, false, func(st gotcore.SpaceTx) error {
 		ref, err := se.Resolve(ctx, st)
 		if err != nil {
 			return err
@@ -26,7 +26,7 @@ func (r *Repo) ViewFS(ctx context.Context, se marks.SnapExpr, fn func(fsmach *go
 		if ref.IsZero() {
 			return fmt.Errorf("no snapshot found at %v", se)
 		}
-		snap, err := marks.GetSnapshot(ctx, ss[2], *ref)
+		snap, err := gotcore.GetSnapshot(ctx, ss[2], *ref)
 		if err != nil {
 			return err
 		}
@@ -36,13 +36,13 @@ func (r *Repo) ViewFS(ctx context.Context, se marks.SnapExpr, fn func(fsmach *go
 	})
 }
 
-func (r *Repo) Ls(ctx context.Context, se marks.SnapExpr, p string, fn func(gotfs.DirEnt) error) error {
+func (r *Repo) Ls(ctx context.Context, se gotcore.SnapExpr, p string, fn func(gotfs.DirEnt) error) error {
 	return r.ViewFS(ctx, se, func(mach *gotfs.Machine, stores stores.Reading, root gotfs.Root) error {
 		return mach.ReadDir(ctx, stores, root, p, fn)
 	})
 }
 
-func (r *Repo) Cat(ctx context.Context, se marks.SnapExpr, p string, w io.Writer) error {
+func (r *Repo) Cat(ctx context.Context, se gotcore.SnapExpr, p string, w io.Writer) error {
 	return r.ViewFS(ctx, se, func(mach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
 		fr, err := mach.NewReader(ctx, [2]stores.Reading{s, s}, root, p)
 		if err != nil {
@@ -53,7 +53,7 @@ func (r *Repo) Cat(ctx context.Context, se marks.SnapExpr, p string, w io.Writer
 	})
 }
 
-func (r *Repo) Stat(ctx context.Context, se marks.SnapExpr, p string) (*gotfs.Info, error) {
+func (r *Repo) Stat(ctx context.Context, se gotcore.SnapExpr, p string) (*gotfs.Info, error) {
 	var info *gotfs.Info
 	err := r.ViewFS(ctx, se, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
 		var err error
@@ -69,19 +69,19 @@ func (r *Repo) CheckAll(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	return sp.Do(ctx, false, func(st marks.SpaceTx) error {
+	return sp.Do(ctx, false, func(st gotcore.SpaceTx) error {
 		for name, err := range st.All(ctx) {
 			if err != nil {
 				return err
 			}
 			logctx.Infof(ctx, "checking mark %q", name)
-			se := &marks.SnapExpr_Mark{
+			se := &gotcore.SnapExpr_Mark{
 				Space: "",
 				Name:  name,
 			}
 
-			if err := marks.ViewSnapshot(ctx, st, se, func(vctx *marks.ViewCtx) error {
-				return vctx.VC.Check(ctx, vctx.Stores[2], *vctx.Root, func(payload marks.Payload) error {
+			if err := gotcore.ViewSnapshot(ctx, st, se, func(vctx *gotcore.ViewCtx) error {
+				return vctx.VC.Check(ctx, vctx.Stores[2], *vctx.Root, func(payload gotcore.Payload) error {
 					return vctx.FS.Check(ctx, vctx.Stores[1], payload.Root, func(ref gdat.Ref) error {
 						ok, err := stores.ExistsUnit(ctx, vctx.Stores[0], ref.CID)
 						if err != nil {

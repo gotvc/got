@@ -10,7 +10,7 @@ import (
 
 	"github.com/gotvc/got/src/adapters/gotftp"
 	"github.com/gotvc/got/src/adapters/gotiofs"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 )
 
 var httpCmd = star.Command{
@@ -28,7 +28,7 @@ var httpCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		return repo.ViewSnapshot(ctx, snapExprParam.Load(c), func(vctx *marks.ViewCtx) error {
+		return repo.ViewSnapshot(ctx, snapExprParam.Load(c), func(vctx *gotcore.ViewCtx) error {
 			fs := gotiofs.New(ctx, vctx)
 			h := http.FileServer(http.FS(fs))
 			addr, _ := addrParam.LoadOpt(c)
@@ -70,7 +70,7 @@ var ftpCmd = star.Command{
 			return err
 		}
 		defer l.Close()
-		return repo.ViewSnapshot(ctx, snapExprParam.Load(c), func(vcx *marks.ViewCtx) error {
+		return repo.ViewSnapshot(ctx, snapExprParam.Load(c), func(vcx *gotcore.ViewCtx) error {
 			s, err := ftpserver.NewServer(&ftpserver.Options{
 				Auth:   ftpAuth{},
 				Driver: gotftp.NewDriver(ctx, vcx),
@@ -85,9 +85,9 @@ var ftpCmd = star.Command{
 	},
 }
 
-var snapExprParam = star.Required[marks.SnapExpr]{
+var snapExprParam = star.Required[gotcore.SnapExpr]{
 	ID:       "snapshot-expr",
-	Parse:    marks.ParseSnapExpr,
+	Parse:    gotcore.ParseSnapExpr,
 	ShortDoc: "a fully qualified mark name",
 }
 

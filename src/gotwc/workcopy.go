@@ -17,7 +17,7 @@ import (
 	"github.com/gotvc/got/src/gotwc/internal/porting"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/gotwc/internal/staging"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"go.brendoncarroll.net/exp/slices2"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
@@ -183,7 +183,7 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 			return err
 		}
 		activeInfo, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: activeName})
-		if err != nil && !marks.IsNotExist(err) {
+		if err != nil && !gotcore.IsNotExist(err) {
 			return err
 		}
 		if activeInfo == nil {
@@ -281,7 +281,7 @@ func (wc *WC) Export(ctx context.Context) error {
 		return nil
 	}
 	defer wc.db.Put(conn)
-	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: mname}, func(mtx *marks.MarkTx) error {
+	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: mname}, func(mtx *gotcore.MarkTx) error {
 		paramHash := mtx.Config().Hash()
 		portDB := porting.NewDB(conn, paramHash)
 		fsys, filter, err := wc.getFilteredFS(ctx)
@@ -311,7 +311,7 @@ func (wc *WC) Clobber(ctx context.Context, p string) error {
 		return nil
 	}
 	defer wc.db.Put(conn)
-	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: mname}, func(mtx *marks.MarkTx) error {
+	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: mname}, func(mtx *gotcore.MarkTx) error {
 		paramHash := mtx.Config().Hash()
 		fsys, filter, err := wc.getFilteredFS(ctx)
 		if err != nil {
@@ -395,12 +395,12 @@ func (wc *WC) Cleanup(ctx context.Context) error {
 	return nil
 }
 
-func (wc *WC) viewSnap(ctx context.Context, fn func(*marks.ViewCtx) error) error {
+func (wc *WC) viewSnap(ctx context.Context, fn func(*gotcore.ViewCtx) error) error {
 	mname, err := wc.GetHead()
 	if err != nil {
 		return nil
 	}
-	return wc.repo.ViewSnapshot(ctx, &marks.SnapExpr_Mark{Name: mname}, fn)
+	return wc.repo.ViewSnapshot(ctx, &gotcore.SnapExpr_Mark{Name: mname}, fn)
 }
 
 func (wc *WC) filter(spans []Span) func(p string) bool {

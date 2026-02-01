@@ -8,12 +8,12 @@ import (
 	"blobcache.io/blobcache/src/schema/schematests"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/volumes"
 )
 
 func TestSpace(t *testing.T) {
-	marks.TestSpace(t, func(t testing.TB) marks.Space {
+	gotcore.TestSpace(t, func(t testing.TB) gotcore.Space {
 		spec := DefaultVolumeSpec()
 		bc, volh := schematests.Setup(t, map[blobcache.SchemaName]schema.Constructor{
 			"": schema.NoneConstructor,

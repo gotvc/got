@@ -16,7 +16,7 @@ import (
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -98,7 +98,7 @@ func (s *Site) CreateFile(p string, data []byte) {
 
 func (s *Site) CreateMark(fqname gotrepo.FQM) {
 	ctx := testutil.Context(s.t)
-	_, err := s.Repo.CreateMark(ctx, fqname, marks.DefaultConfig(true), nil)
+	_, err := s.Repo.CreateMark(ctx, fqname, gotcore.DefaultConfig(true), nil)
 	require.NoError(s.t, err)
 }
 
@@ -151,7 +151,7 @@ func (s *Site) Put(ps ...string) {
 	}
 }
 
-func (s *Site) Ls(se marks.SnapExpr, p string) (ret []string) {
+func (s *Site) Ls(se gotcore.SnapExpr, p string) (ret []string) {
 	err := s.Repo.Ls(testutil.Context(s.t), se, p, func(de gotfs.DirEnt) error {
 		ret = append(ret, de.Name)
 		return nil
@@ -160,7 +160,7 @@ func (s *Site) Ls(se marks.SnapExpr, p string) (ret []string) {
 	return ret
 }
 
-func (s *Site) Cat(se marks.SnapExpr, p string) []byte {
+func (s *Site) Cat(se gotcore.SnapExpr, p string) []byte {
 	buf := bytes.Buffer{}
 	err := s.Repo.Cat(testutil.Context(s.t), se, p, &buf)
 	require.NoError(s.t, err)

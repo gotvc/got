@@ -20,7 +20,7 @@ type VolumeEntry struct {
 	HashOfSecrets [][32]byte
 
 	// Aux is extra data associated with the volume.
-	// This will be filled with marks.Info JSON.
+	// This will be filled with gotcore.Info JSON.
 	Aux []byte
 }
 

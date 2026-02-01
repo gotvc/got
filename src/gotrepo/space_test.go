@@ -3,7 +3,7 @@ package gotrepo
 import (
 	"testing"
 
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -11,7 +11,7 @@ import (
 func TestSpace(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	marks.TestSpace(t, func(t testing.TB) marks.Space {
+	gotcore.TestSpace(t, func(t testing.TB) gotcore.Space {
 		dir := t.TempDir()
 		root := testutil.OpenRoot(t, dir)
 		err := Init(root, DefaultConfig())

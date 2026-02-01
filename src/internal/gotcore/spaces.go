@@ -1,4 +1,4 @@
-package marks
+package gotcore
 
 import (
 	"context"
@@ -70,7 +70,7 @@ func (s Span) Contains(x string) bool {
 	return s.Begin <= x && (s.End == "" || s.End > x)
 }
 
-// A Space holds named marks.
+// A Space holds named gotcore.
 type Space interface {
 	// Do calls fn to perform a transaction.
 	Do(ctx context.Context, modify bool, fn func(SpaceTx) error) error
@@ -125,7 +125,7 @@ func CreateIfNotExists(ctx context.Context, stx SpaceTx, k string, cfg Metadata)
 func ForEach(ctx context.Context, stx SpaceTx, span Span, fn func(string) error) (retErr error) {
 	for name := range stx.All(ctx) {
 		if !span.Contains(name) {
-			return fmt.Errorf("marks.ForEach: Space implementation is broken got %s when asking for %v", name, span)
+			return fmt.Errorf("gotcore.ForEach: Space implementation is broken got %s when asking for %v", name, span)
 		}
 		if err := fn(name); err != nil {
 			return err

@@ -8,7 +8,7 @@ import (
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"go.brendoncarroll.net/star"
 )
 
@@ -87,7 +87,7 @@ var lsCmd = star.Command{
 			if err != nil {
 				return err
 			}
-			se = &marks.SnapExpr_Mark{Name: mname}
+			se = &gotcore.SnapExpr_Mark{Name: mname}
 		}
 		p, _ := pathParam.LoadOpt(c)
 		return wc.Repo().Ls(ctx, se, p, func(ent gotfs.DirEnt) error {
@@ -118,7 +118,7 @@ var catCmd = star.Command{
 			if err != nil {
 				return err
 			}
-			se = &marks.SnapExpr_Mark{Name: mname}
+			se = &gotcore.SnapExpr_Mark{Name: mname}
 		}
 		p, _ := pathParam.LoadOpt(c)
 		return wc.Repo().Cat(ctx, se, p, c.StdOut)
@@ -127,7 +127,7 @@ var catCmd = star.Command{
 
 var snapExprOptParam = star.Optional[gotrepo.SnapExpr]{
 	ID:       "snap",
-	Parse:    marks.ParseSnapExpr,
+	Parse:    gotcore.ParseSnapExpr,
 	ShortDoc: "a snapshot expression",
 }
 

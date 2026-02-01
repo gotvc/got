@@ -7,7 +7,7 @@ import (
 
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotorg/internal/gotorgop"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/stores"
 )
 
@@ -70,7 +70,7 @@ func putAlias(entry gotorgop.VolumeAlias) gotkv.Edit {
 	}
 }
 
-func (m *Machine) ListBranches(ctx context.Context, s stores.Reading, state State, span marks.Span, limit int) ([]gotorgop.VolumeAlias, error) {
+func (m *Machine) ListBranches(ctx context.Context, s stores.Reading, state State, span gotcore.Span, limit int) ([]gotorgop.VolumeAlias, error) {
 	span2 := gotkv.TotalSpan()
 	if span.Begin != "" {
 		span2.Begin = []byte(span.Begin)

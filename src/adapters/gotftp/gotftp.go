@@ -9,7 +9,7 @@ import (
 
 	"github.com/gotvc/got/src/adapters/gotiofs"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/stores"
 	ftpserver "goftp.io/server/v2"
 )
@@ -18,10 +18,10 @@ var _ ftpserver.Driver = &Driver{}
 
 type Driver struct {
 	ctx  context.Context
-	vctx *marks.ViewCtx
+	vctx *gotcore.ViewCtx
 }
 
-func NewDriver(ctx context.Context, vctx *marks.ViewCtx) *Driver {
+func NewDriver(ctx context.Context, vctx *gotcore.ViewCtx) *Driver {
 	return &Driver{
 		ctx:  ctx,
 		vctx: vctx,

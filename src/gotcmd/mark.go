@@ -9,7 +9,7 @@ import (
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/metrics"
 	"go.brendoncarroll.net/star"
 	"golang.org/x/sync/errgroup"
@@ -47,7 +47,7 @@ var markCreateCmd = star.Command{
 		defer repo.Close()
 		branchName := markNameParam.Load(c)
 		spaceName, _ := spaceNameOptParam.LoadOpt(c)
-		_, err = repo.CreateMark(ctx, gotrepo.FQM{Space: spaceName, Name: branchName}, marks.DefaultConfig(false), nil)
+		_, err = repo.CreateMark(ctx, gotrepo.FQM{Space: spaceName, Name: branchName}, gotcore.DefaultConfig(false), nil)
 		return err
 	},
 }
@@ -165,7 +165,7 @@ var markInspectCmd = star.Command{
 		name := markNameParam.Load(c)
 		space, _ := spaceNameOptParam.LoadOpt(c)
 		fqm := gotrepo.FQM{Space: space, Name: name}
-		return repo.ViewMark(ctx, fqm, func(mt *marks.MarkTx) error {
+		return repo.ViewMark(ctx, fqm, func(mt *gotcore.MarkTx) error {
 			return prettyPrintJSON(c.StdOut, mt.Info())
 		})
 	},
@@ -195,7 +195,7 @@ var markCpSaltCmd = star.Command{
 		}
 		cfg := dstInfo.Config
 		cfg.Salt = srcInfo.Config.Salt
-		return repo.ConfigureMark(ctx, dst, marks.Metadata{
+		return repo.ConfigureMark(ctx, dst, gotcore.Metadata{
 			Config:      cfg,
 			Annotations: dstInfo.Annotations,
 		})
@@ -250,7 +250,7 @@ var historyCmd = star.Command{
 		eg := errgroup.Group{}
 		eg.Go(func() error {
 			bufw := bufio.NewWriter(pw)
-			err := repo.History(ctx, marks.SnapExpr_Mark{Name: bname}, func(ref gdat.Ref, snap gotrepo.Snap) error {
+			err := repo.History(ctx, gotcore.SnapExpr_Mark{Name: bname}, func(ref gdat.Ref, snap gotrepo.Snap) error {
 				if err := printSnap(bufw, ref, snap); err != nil {
 					return err
 				}
@@ -272,7 +272,7 @@ var historyCmd = star.Command{
 	},
 }
 
-func printSnap(bufw *bufio.Writer, ref gdat.Ref, snap marks.Snap) error {
+func printSnap(bufw *bufio.Writer, ref gdat.Ref, snap gotcore.Snap) error {
 	fmt.Fprintf(bufw, "#%04d\t%v\n", snap.N, ref.CID)
 	fmt.Fprintf(bufw, "FS: %v\n", snap.Payload.Root.Ref.CID)
 	if len(snap.Parents) == 0 {

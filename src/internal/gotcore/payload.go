@@ -1,4 +1,4 @@
-package marks
+package gotcore
 
 import (
 	"github.com/gotvc/got/src/gotfs"

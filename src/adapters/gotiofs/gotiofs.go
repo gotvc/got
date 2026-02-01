@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
@@ -23,10 +23,10 @@ var _ iofs.FS = &FS{}
 // FS implements io/fs.FS
 type FS struct {
 	ctx  context.Context
-	vctx *marks.ViewCtx
+	vctx *gotcore.ViewCtx
 }
 
-func New(ctx context.Context, vctx *marks.ViewCtx) *FS {
+func New(ctx context.Context, vctx *gotcore.ViewCtx) *FS {
 	return &FS{
 		ctx:  ctx,
 		vctx: vctx,
@@ -300,7 +300,7 @@ func convertError(err error) error {
 	switch {
 	case err == nil:
 		return nil
-	case errors.Is(err, marks.ErrNotExist):
+	case errors.Is(err, gotcore.ErrNotExist):
 		return iofs.ErrNotExist
 	case errors.Is(err, posixfs.ErrNotExist):
 		return iofs.ErrNotExist

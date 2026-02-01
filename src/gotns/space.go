@@ -6,14 +6,14 @@ import (
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/tai64"
 )
 
 var (
-	_ marks.Space = &Space{}
+	_ gotcore.Space = &Space{}
 )
 
 type Space struct {
@@ -22,7 +22,7 @@ type Space struct {
 	KVMach *gotkv.Machine
 }
 
-func (s *Space) Do(ctx context.Context, modify bool, fn func(sptx marks.SpaceTx) error) error {
+func (s *Space) Do(ctx context.Context, modify bool, fn func(sptx gotcore.SpaceTx) error) error {
 	if modify {
 		return s.modify(ctx, func(tx *SpaceTx) error {
 			return fn(tx)
@@ -63,7 +63,7 @@ func (s *Space) view(ctx context.Context, fn func(space *SpaceTx) error) error {
 	})
 }
 
-var _ marks.SpaceTx = &SpaceTx{}
+var _ gotcore.SpaceTx = &SpaceTx{}
 
 type SpaceTx struct {
 	kvmach *gotkv.Machine
@@ -71,17 +71,17 @@ type SpaceTx struct {
 	tx     *Tx
 }
 
-// Create implements marks.Space.
-func (s *SpaceTx) Create(ctx context.Context, name string, md marks.Metadata) (*marks.Info, error) {
+// Create implements gotcore.Space.
+func (s *SpaceTx) Create(ctx context.Context, name string, md gotcore.Metadata) (*gotcore.Info, error) {
 	prevb, err := s.tx.Get(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 	if prevb != nil {
-		return nil, marks.ErrExists
+		return nil, gotcore.ErrExists
 	}
 	b := MarkState{
-		Info: marks.Info{
+		Info: gotcore.Info{
 			Config:      md.Config,
 			Annotations: md.Annotations,
 			CreatedAt:   tai64.Now().TAI64(),
@@ -94,30 +94,30 @@ func (s *SpaceTx) Create(ctx context.Context, name string, md marks.Metadata) (*
 	return &b.Info, nil
 }
 
-// Delete implements marks.Space.
+// Delete implements gotcore.Space.
 func (s *SpaceTx) Delete(ctx context.Context, name string) error {
 	return s.tx.Delete(ctx, name)
 }
 
-// Inspect implements marks.Space.
-func (s *SpaceTx) Inspect(ctx context.Context, name string) (*marks.Info, error) {
+// Inspect implements gotcore.Space.
+func (s *SpaceTx) Inspect(ctx context.Context, name string) (*gotcore.Info, error) {
 	b, err := s.tx.Get(ctx, name)
 	if err != nil {
 		return nil, err
 	}
 	if b == nil {
-		return nil, marks.ErrNotExist
+		return nil, gotcore.ErrNotExist
 	}
 	return &b.Info, nil
 }
 
-// List implements marks.Space.
+// List implements gotcore.Space.
 func (s *SpaceTx) All(ctx context.Context) iter.Seq2[string, error] {
 	return s.tx.AllNames(ctx)
 }
 
-// Set implements marks.Space.
-func (s *SpaceTx) SetMetadata(ctx context.Context, name string, md marks.Metadata) error {
+// Set implements gotcore.Space.
+func (s *SpaceTx) SetMetadata(ctx context.Context, name string, md gotcore.Metadata) error {
 	mstate, err := s.tx.Get(ctx, name)
 	if err != nil {
 		return err
@@ -141,7 +141,7 @@ func (s *SpaceTx) GetTarget(ctx context.Context, name string, dst *gdat.Ref) (bo
 		return false, err
 	}
 	if mstate == nil {
-		return false, marks.ErrNotExist
+		return false, gotcore.ErrNotExist
 	}
 	if mstate.Target.IsZero() {
 		return false, nil

@@ -6,14 +6,14 @@ import (
 	"strings"
 
 	"github.com/gotvc/got/src/gdat"
-	"github.com/gotvc/got/src/internal/marks"
+	"github.com/gotvc/got/src/internal/gotcore"
 )
 
 const (
 	nameMaster = "master"
 )
 
-type MarkInfo = marks.Info
+type MarkInfo = gotcore.Info
 
 // FQM represents a fully qualified Mark name.
 type FQM struct {
@@ -34,29 +34,29 @@ func ParseFQName(s string) FQM {
 }
 
 // CreateBranch creates a new mark in the repo's local space.
-func (r *Repo) CreateMark(ctx context.Context, fqname FQM, mcfg marks.DSConfig, anns []marks.Annotation) (*MarkInfo, error) {
-	if err := marks.CheckName(fqname.Name); err != nil {
+func (r *Repo) CreateMark(ctx context.Context, fqname FQM, mcfg gotcore.DSConfig, anns []gotcore.Annotation) (*MarkInfo, error) {
+	if err := gotcore.CheckName(fqname.Name); err != nil {
 		return nil, err
 	}
 	space, err := r.GetSpace(ctx, fqname.Space)
 	if err != nil {
 		return nil, err
 	}
-	var info *marks.Info
-	err = space.Do(ctx, true, func(st marks.SpaceTx) error {
-		info, err = st.Create(ctx, fqname.Name, marks.Metadata{Config: mcfg, Annotations: anns})
+	var info *gotcore.Info
+	err = space.Do(ctx, true, func(st gotcore.SpaceTx) error {
+		info, err = st.Create(ctx, fqname.Name, gotcore.Metadata{Config: mcfg, Annotations: anns})
 		return err
 	})
 	return info, err
 }
 
-func (r *Repo) InspectMark(ctx context.Context, fqname FQM) (*marks.Info, error) {
+func (r *Repo) InspectMark(ctx context.Context, fqname FQM) (*gotcore.Info, error) {
 	space, err := r.GetSpace(ctx, fqname.Space)
 	if err != nil {
 		return nil, err
 	}
-	var info *marks.Info
-	err = space.Do(ctx, false, func(st marks.SpaceTx) error {
+	var info *gotcore.Info
+	err = space.Do(ctx, false, func(st gotcore.SpaceTx) error {
 		var err error
 		info, err = st.Inspect(ctx, fqname.Name)
 		return err
@@ -72,18 +72,18 @@ func (r *Repo) DeleteMark(ctx context.Context, fqname FQM) error {
 	if err != nil {
 		return err
 	}
-	return space.Do(ctx, true, func(st marks.SpaceTx) error {
+	return space.Do(ctx, true, func(st gotcore.SpaceTx) error {
 		return st.Delete(ctx, fqname.Name)
 	})
 }
 
 // ConfigureMark adjusts metadata
-func (r *Repo) ConfigureMark(ctx context.Context, fqname FQM, md marks.Metadata) error {
+func (r *Repo) ConfigureMark(ctx context.Context, fqname FQM, md gotcore.Metadata) error {
 	space, err := r.GetSpace(ctx, fqname.Space)
 	if err != nil {
 		return err
 	}
-	return space.Do(ctx, true, func(st marks.SpaceTx) error {
+	return space.Do(ctx, true, func(st gotcore.SpaceTx) error {
 		return st.SetMetadata(ctx, fqname.Name, md)
 	})
 }
@@ -94,19 +94,19 @@ func (r *Repo) ForEachMark(ctx context.Context, spaceName string, fn func(name s
 	if err != nil {
 		return err
 	}
-	return space.Do(ctx, false, func(st marks.SpaceTx) error {
-		return marks.ForEach(ctx, st, marks.TotalSpan(), fn)
+	return space.Do(ctx, false, func(st gotcore.SpaceTx) error {
+		return gotcore.ForEach(ctx, st, gotcore.TotalSpan(), fn)
 	})
 }
 
 // ViewMark calls fn with a read-only MarkTx
-func (r *Repo) ViewMark(ctx context.Context, fqm FQM, fn func(*marks.MarkTx) error) error {
+func (r *Repo) ViewMark(ctx context.Context, fqm FQM, fn func(*gotcore.MarkTx) error) error {
 	space, err := r.GetSpace(ctx, fqm.Space)
 	if err != nil {
 		return err
 	}
-	return space.Do(ctx, false, func(tx marks.SpaceTx) error {
-		mtx, err := marks.NewMarkTx(ctx, tx, fqm.Name)
+	return space.Do(ctx, false, func(tx gotcore.SpaceTx) error {
+		mtx, err := gotcore.NewMarkTx(ctx, tx, fqm.Name)
 		if err != nil {
 			return err
 		}
@@ -118,8 +118,8 @@ func (r *Repo) ViewMark(ctx context.Context, fqm FQM, fn func(*marks.MarkTx) err
 // If the mark is empty then the snapshot will be nil
 func (r *Repo) MarkLoad(ctx context.Context, fqm FQM) (*Snap, error) {
 	var exists bool
-	var snap marks.Snap
-	if err := r.ViewMark(ctx, fqm, func(mt *marks.MarkTx) error {
+	var snap gotcore.Snap
+	if err := r.ViewMark(ctx, fqm, func(mt *gotcore.MarkTx) error {
 		var err error
 		exists, err = mt.Load(ctx, &snap)
 		return err
@@ -140,7 +140,7 @@ func (r *Repo) CloneMark(ctx context.Context, base, next FQM) error {
 		if err != nil {
 			return err
 		}
-		return space.Do(ctx, true, func(st marks.SpaceTx) error {
+		return space.Do(ctx, true, func(st gotcore.SpaceTx) error {
 			baseInfo, err := st.Inspect(ctx, base.Name)
 			if err != nil {
 				return err
@@ -162,13 +162,13 @@ func (r *Repo) CloneMark(ctx context.Context, base, next FQM) error {
 }
 
 // Modify calls fn to modify the target of a Mark.
-func (r *Repo) Modify(ctx context.Context, fqm FQM, fn func(mc marks.ModifyCtx) (*Snap, error)) error {
+func (r *Repo) Modify(ctx context.Context, fqm FQM, fn func(mc gotcore.ModifyCtx) (*Snap, error)) error {
 	space, err := r.GetSpace(ctx, fqm.Space)
 	if err != nil {
 		return err
 	}
-	return space.Do(ctx, true, func(tx marks.SpaceTx) error {
-		mtx, err := marks.NewMarkTx(ctx, tx, fqm.Name)
+	return space.Do(ctx, true, func(tx gotcore.SpaceTx) error {
+		mtx, err := gotcore.NewMarkTx(ctx, tx, fqm.Name)
 		if err != nil {
 			return err
 		}
