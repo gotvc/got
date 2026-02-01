@@ -15,11 +15,11 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 )
 
-type Snapshotable interface {
+type Marshalable interface {
 	Marshal(out []byte) []byte
 }
 
-type Vertex[T Snapshotable] struct {
+type Vertex[T Marshalable] struct {
 	// N is the critical distance to the root.
 	// N is 0 if there are no parents.
 	// N is the max of the parents' N + 1.
@@ -34,7 +34,7 @@ type Vertex[T Snapshotable] struct {
 	Payload T
 }
 
-func ParseSnapshot[T Snapshotable](data []byte, parser Parser[T]) (*Vertex[T], error) {
+func ParseVertex[T Marshalable](data []byte, parser Parser[T]) (*Vertex[T], error) {
 	var a Vertex[T]
 	if err := a.Unmarshal(data, parser); err != nil {
 		return nil, err
@@ -137,7 +137,7 @@ func (a Vertex[T]) Equals(b Vertex[T]) bool {
 }
 
 // SnapshotParams are the parameters required to create a new snapshot.
-type SnapshotParams[T Snapshotable] struct {
+type SnapshotParams[T Marshalable] struct {
 	Parents   []Vertex[T]
 	Creator   inet256.ID
 	CreatedAt tai64.TAI64
@@ -190,7 +190,7 @@ func (ag *Machine[T]) GetSnapshot(ctx context.Context, s stores.Reading, ref Ref
 	var x *Vertex[T]
 	if err := ag.da.GetF(ctx, s, ref, func(data []byte) error {
 		var err error
-		x, err = ParseSnapshot[T](data, ag.parse)
+		x, err = ParseVertex[T](data, ag.parse)
 		return err
 	}); err != nil {
 		return nil, err

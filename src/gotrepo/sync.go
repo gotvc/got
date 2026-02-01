@@ -20,7 +20,7 @@ func (r *Repo) SyncUnit(ctx context.Context, src, dst FQM, force bool) error {
 	if err != nil {
 		return err
 	}
-	// Even if these are the same space,
+	// Even if these are the same space, 1 read-only and 1 modify should work.
 	return dstSpace.Do(ctx, true, func(dstTx marks.SpaceTx) error {
 		return srcSpace.Do(ctx, false, func(srcTx marks.SpaceTx) error {
 			dstMTx, err := marks.NewMarkTx(ctx, dstTx, dst.Name)
