@@ -4,7 +4,9 @@ package gotiofs
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"io/fs"
 	iofs "io/fs"
 	"path"
 	"time"
@@ -32,10 +34,15 @@ func New(ctx context.Context, vctx *marks.ViewCtx) *FS {
 }
 
 func (s *FS) Open(name string) (iofs.File, error) {
+	if !fs.ValidPath(name) {
+		return nil, fmt.Errorf("bad path %q", name)
+	}
 	logctx.Infof(s.ctx, "open %q", name)
 	var root gotfs.Root
 	if s.vctx.Root == nil {
 		return nil, iofs.ErrNotExist
+	} else {
+		root = s.vctx.Root.Payload.Root
 	}
 	ss := s.vctx.FSRO()
 	fsag := s.vctx.FS
@@ -57,13 +64,16 @@ type File struct {
 	root  gotfs.Root
 	path  string
 
-	r *gotfs.Reader
+	r          *gotfs.Reader
+	dirEntries []iofs.DirEntry
+	dirPos     int
+	dirLoaded  bool
 }
 
-func NewFile(ctx context.Context, fsag *gotfs.Machine, ss [2]stores.Reading, root gotfs.Root, p string) *File {
+func NewFile(ctx context.Context, fsmach *gotfs.Machine, ss [2]stores.Reading, root gotfs.Root, p string) *File {
 	return &File{
 		ctx:   ctx,
-		gotfs: fsag,
+		gotfs: fsmach,
 		ss:    ss,
 		root:  root,
 		path:  p,
@@ -71,6 +81,9 @@ func NewFile(ctx context.Context, fsag *gotfs.Machine, ss [2]stores.Reading, roo
 }
 
 func (f *File) Read(buf []byte) (int, error) {
+	if len(buf) == 0 {
+		return 0, nil
+	}
 	if err := f.ensureReader(); err != nil {
 		return 0, err
 	}
@@ -79,18 +92,47 @@ func (f *File) Read(buf []byte) (int, error) {
 }
 
 func (f *File) ReadAt(buf []byte, off int64) (int, error) {
+	if len(buf) == 0 {
+		return 0, nil
+	}
 	if err := f.ensureReader(); err != nil {
 		return 0, err
 	}
 	if off < 0 {
 		return 0, errors.New("negative offset")
 	}
-	return f.gotfs.ReadFileAt(f.ctx, f.getStores(), f.root, f.path, off, buf)
+	size, err := f.gotfs.SizeOfFile(f.ctx, f.getStores()[1], f.root, f.path)
+	if err != nil {
+		return 0, convertError(err)
+	}
+	if off >= int64(size) {
+		return 0, io.EOF
+	}
+	n, err := f.gotfs.ReadFileAt(f.ctx, f.getStores(), f.root, f.path, off, buf)
+	if err != nil {
+		return n, convertError(err)
+	}
+	if n < len(buf) && off+int64(n) >= int64(size) {
+		return n, io.EOF
+	}
+	return n, nil
 }
 
 func (f *File) Seek(offset int64, whence int) (int64, error) {
 	if err := f.ensureReader(); err != nil {
 		return 0, err
+	}
+	if whence == io.SeekEnd {
+		size, err := f.gotfs.SizeOfFile(f.ctx, f.getStores()[1], f.root, f.path)
+		if err != nil {
+			return 0, convertError(err)
+		}
+		target := int64(size) + offset
+		if target < 0 {
+			return 0, fmt.Errorf("seeked to negative offset: %d", target)
+		}
+		n, err := f.r.Seek(target, io.SeekStart)
+		return n, convertError(err)
 	}
 	n, err := f.r.Seek(offset, whence)
 	return n, convertError(err)
@@ -100,23 +142,23 @@ func (f *File) Stat() (iofs.FileInfo, error) {
 	return Stat(f.ctx, f.gotfs, f.getStores()[1], f.root, f.path)
 }
 
-func (f *File) ReadDir(n int) (ret []iofs.DirEntry, _ error) {
-	stopIter := errors.New("stop iteration")
-	if err := f.gotfs.ReadDir(f.ctx, f.getStores()[1], f.root, f.path, func(e gotfs.DirEnt) error {
-		if n > 0 && len(ret) >= n {
-			return stopIter
-		}
-		ret = append(ret, &dirEntry{
-			name: e.Name,
-			mode: e.Mode,
-			getInfo: func() (iofs.FileInfo, error) {
-				return f.stat(path.Join(f.path, e.Name))
-			},
-		})
-		return nil
-	}); err != nil && !errors.Is(err, stopIter) {
+func (f *File) ReadDir(n int) ([]iofs.DirEntry, error) {
+	if err := f.ensureDirEntries(); err != nil {
 		return nil, err
 	}
+	if f.dirPos >= len(f.dirEntries) {
+		if n > 0 {
+			return nil, io.EOF
+		}
+		return nil, nil
+	}
+
+	remaining := len(f.dirEntries) - f.dirPos
+	if n <= 0 || n > remaining {
+		n = remaining
+	}
+	ret := f.dirEntries[f.dirPos : f.dirPos+n]
+	f.dirPos += n
 	return ret, nil
 }
 
@@ -136,6 +178,28 @@ func (f *File) ensureReader() error {
 		}
 		f.r = r
 	}
+	return nil
+}
+
+func (f *File) ensureDirEntries() error {
+	if f.dirLoaded {
+		return nil
+	}
+	var entries []iofs.DirEntry
+	if err := f.gotfs.ReadDir(f.ctx, f.getStores()[1], f.root, f.path, func(e gotfs.DirEnt) error {
+		entries = append(entries, &dirEntry{
+			name: e.Name,
+			mode: e.Mode,
+			getInfo: func() (iofs.FileInfo, error) {
+				return f.stat(path.Join(f.path, e.Name))
+			},
+		})
+		return nil
+	}); err != nil {
+		return err
+	}
+	f.dirEntries = entries
+	f.dirLoaded = true
 	return nil
 }
 
@@ -165,7 +229,7 @@ func Stat(ctx context.Context, fsag *gotfs.Machine, ms stores.Reading, root gotf
 		name:    path.Base(p),
 		mode:    mode,
 		size:    size,
-		modTime: time.Now(),
+		modTime: time.Unix(0, 0),
 	}, nil
 }
 
