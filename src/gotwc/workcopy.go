@@ -18,7 +18,6 @@ import (
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/gotwc/internal/staging"
 	"github.com/gotvc/got/src/internal/marks"
-	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/slices2"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
@@ -174,7 +173,7 @@ func (wc *WC) GetHead() (string, error) {
 // If one branch is a fork of another, or they have a common ancestor somewhere,
 // the it is very likely that they have the same content parameters.
 func (wc *WC) SetHead(ctx context.Context, name string) error {
-	desiredBranch, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: name})
+	desiredInfo, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: name})
 	if err != nil {
 		return err
 	}
@@ -183,17 +182,17 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 		if err != nil {
 			return err
 		}
-		activeBranch, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: activeName})
+		activeInfo, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: activeName})
 		if err != nil && !marks.IsNotExist(err) {
 			return err
 		}
-		if activeBranch == nil {
+		if activeInfo == nil {
 			return nil
 		}
 		// if active branch has the same salt as the desired branch, then
 		// there is no check to do.
 		// If they have different parameters, then we need to check if the staging area is empty.
-		if desiredBranch.Info.Config.Hash() != activeBranch.Info.Config.Hash() {
+		if desiredInfo.Config.Hash() != activeInfo.Config.Hash() {
 			stagetx, err := wc.beginStageTx(ctx, nil, false)
 			if err != nil {
 				return err
@@ -277,24 +276,28 @@ func (wc *WC) Export(ctx context.Context) error {
 	if err != nil {
 		return nil
 	}
-	mark, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: mname})
-	if err != nil {
-		return nil
-	}
-	paramHash := mark.Info.Config.Hash()
 	conn, err := wc.db.Take(ctx)
 	if err != nil {
 		return nil
 	}
 	defer wc.db.Put(conn)
-	portDB := porting.NewDB(conn, paramHash)
-	fsys, filter, err := wc.getFilteredFS(ctx)
-	if err != nil {
-		return err
-	}
-	return mark.ViewFS(ctx, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
-		exp := porting.NewExporter(fsmach, portDB, fsys, filter)
-		return exp.ExportPath(ctx, s, s, root, "")
+	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: mname}, func(mtx *marks.MarkTx) error {
+		paramHash := mtx.Config().Hash()
+		portDB := porting.NewDB(conn, paramHash)
+		fsys, filter, err := wc.getFilteredFS(ctx)
+		if err != nil {
+			return err
+		}
+		var root gotfs.Root
+		if ok, err := mtx.LoadFS(ctx, &root); err != nil {
+			return err
+		} else if !ok {
+			logctx.Warnf(ctx, "mark does not have a snapshot, nothing to export")
+			return nil
+		}
+		exp := porting.NewExporter(mtx.GotFS(), portDB, fsys, filter)
+		ss := mtx.FSRO()
+		return exp.ExportPath(ctx, ss[1], ss[0], root, "")
 	})
 }
 
@@ -303,24 +306,28 @@ func (wc *WC) Clobber(ctx context.Context, p string) error {
 	if err != nil {
 		return nil
 	}
-	mark, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: mname})
-	if err != nil {
-		return nil
-	}
-	paramHash := mark.Info.Config.Hash()
 	conn, err := wc.db.Take(ctx)
 	if err != nil {
 		return nil
 	}
 	defer wc.db.Put(conn)
-	fsys, filter, err := wc.getFilteredFS(ctx)
-	if err != nil {
-		return err
-	}
-	return mark.ViewFS(ctx, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
+	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: mname}, func(mtx *marks.MarkTx) error {
+		paramHash := mtx.Config().Hash()
+		fsys, filter, err := wc.getFilteredFS(ctx)
+		if err != nil {
+			return err
+		}
 		portDB := porting.NewDB(conn, paramHash)
-		exp := porting.NewExporter(fsmach, portDB, fsys, filter)
-		return exp.Clobber(ctx, s, s, root, p)
+		exp := porting.NewExporter(mtx.GotFS(), portDB, fsys, filter)
+		ss := mtx.FSRO()
+		var root gotfs.Root
+		if ok, err := mtx.LoadFS(ctx, &root); err != nil {
+			return err
+		} else if !ok {
+			logctx.Warnf(ctx, "mark has no snapshot, nothing to clobber")
+			return nil
+		}
+		return exp.Clobber(ctx, ss[1], ss[0], root, p)
 	})
 }
 
@@ -386,6 +393,14 @@ func (wc *WC) Cleanup(ctx context.Context) error {
 		return err
 	}
 	return nil
+}
+
+func (wc *WC) viewSnap(ctx context.Context, fn func(*marks.ViewCtx) error) error {
+	mname, err := wc.GetHead()
+	if err != nil {
+		return nil
+	}
+	return wc.repo.ViewSnapshot(ctx, &marks.SnapExpr_Mark{Name: mname}, fn)
 }
 
 func (wc *WC) filter(spans []Span) func(p string) bool {

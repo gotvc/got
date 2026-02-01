@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"iter"
 	"time"
 
 	"blobcache.io/blobcache/src/blobcache"
@@ -20,7 +21,7 @@ import (
 func BeginTx(ctx context.Context, dmach *gdat.Machine, kvmach *gotkv.Machine, vol volumes.Volume, modify bool) (*Tx, error) {
 	ctx, cf := context.WithTimeoutCause(ctx, 3*time.Second, errors.New("trying to begin transaction"))
 	defer cf()
-	tx, err := vol.BeginTx(ctx, blobcache.TxParams{Modify: true})
+	tx, err := vol.BeginTx(ctx, blobcache.TxParams{Modify: modify})
 	if err != nil {
 		return nil, err
 	}
@@ -128,21 +129,16 @@ func (tx *Tx) loadKV(ctx context.Context) error {
 	if err := tx.tx.Load(ctx, &root); err != nil {
 		return err
 	}
-	var kvr gotkv.Root
 	if len(root) == 0 {
-		r, err := tx.kvmach.NewEmpty(ctx, tx.tx)
-		if err != nil {
-			return err
-		}
-		kvr = *r
+		tx.kvtx = tx.kvmach.NewTxEmpty(tx.tx)
 	} else {
 		r, err := ParseRoot(root)
 		if err != nil {
 			return err
 		}
-		kvr = r.Marks
+		kvr := r.Marks
+		tx.kvtx = tx.kvmach.NewTx(tx.tx, kvr)
 	}
-	tx.kvtx = tx.kvmach.NewTx(tx.tx, kvr)
 	return nil
 }
 
@@ -170,10 +166,12 @@ func (tx *Tx) Put(ctx context.Context, name string, b MarkState) error {
 	if err := marks.CheckName(name); err != nil {
 		return err
 	}
-	if yes, err := stores.ExistsUnit(ctx, tx.tx, b.Target.CID); err != nil {
-		return err
-	} else if !yes {
-		return fmt.Errorf("mark target not found: %v", b.Target.CID)
+	if !b.Target.IsZero() {
+		if yes, err := stores.ExistsUnit(ctx, tx.tx, b.Target.CID); err != nil {
+			return err
+		} else if !yes {
+			return fmt.Errorf("mark target not found: %v", b.Target.CID)
+		}
 	}
 	return tx.kvtx.Put(ctx, []byte(name), b.Marshal(nil))
 }
@@ -185,60 +183,39 @@ func (tx *Tx) Delete(ctx context.Context, name string) error {
 	return tx.kvtx.Delete(ctx, []byte(name))
 }
 
-func (tx *Tx) ListNames(ctx context.Context, span marks.Span, limit int) ([]string, error) {
-	if err := tx.loadKV(ctx); err != nil {
-		return nil, err
-	}
-	_, err := tx.kvtx.Flush(ctx)
-	if err != nil {
-		return nil, err
-	}
-	span2 := gotkv.TotalSpan()
-	if span.Begin != "" {
-		span2.Begin = []byte(span.Begin)
-	}
-	if span.End != "" {
-		span2.End = []byte(span.End)
-	}
-	it := tx.kvtx.Iterate(ctx, span2)
-	//it := tx.kvmach.NewIterator(tx.tx, *root, span2)
-	it2 := streams.NewMap(it, func(dst *string, x gotkv.Entry) {
-		*dst = string(x.Key)
-	})
-	if limit < 1 {
-		limit = 1024
-	}
-	return streams.Collect(ctx, it2, limit)
-}
+func (tx *Tx) AllNames(ctx context.Context) iter.Seq2[string, error] {
+	return func(yield func(string, error) bool) {
+		if err := tx.loadKV(ctx); err != nil {
+			yield("", err)
+			return
+		}
+		if tx.kvtx.Queued() > 0 {
+			_, err := tx.kvtx.Flush(ctx)
+			if err != nil {
+				yield("", err)
+				return
+			}
+		}
 
-func (tx *Tx) SaveMarkRoot(ctx context.Context, name string, data []byte) error {
-	m, err := tx.Get(ctx, name)
-	if err != nil {
-		return err
+		it := tx.kvtx.Iterate(ctx, gotkv.TotalSpan())
+		//it := tx.kvmach.NewIterator(tx.tx, *root, span2)
+		it2 := streams.NewMap(it, func(dst *string, x gotkv.Entry) {
+			*dst = string(x.Key)
+		})
+		for {
+			name, err := streams.Next(ctx, it2)
+			if err != nil {
+				if streams.IsEOS(err) {
+					break
+				}
+				yield("", err)
+				return
+			}
+			if !yield(name, nil) {
+				return
+			}
+		}
 	}
-	if m == nil {
-		return fmt.Errorf("cannot load branch root for %s; it does not exist", name)
-	}
-	ref, err := tx.dmach.Post(ctx, tx.tx, data)
-	if err != nil {
-		return err
-	}
-	m.Target = *ref
-	return tx.Put(ctx, name, *m)
-}
-
-func (tx *Tx) LoadBranchRoot(ctx context.Context, name string, dst *[]byte) error {
-	b, err := tx.Get(ctx, name)
-	if err != nil {
-		return err
-	}
-	if b == nil {
-		return fmt.Errorf("cannot load branch root for %s; it does not exist", name)
-	}
-	return tx.dmach.GetF(ctx, tx.tx, b.Target, func(data []byte) error {
-		*dst = append((*dst)[0:], data...)
-		return nil
-	})
 }
 
 func (tx *Tx) Abort(ctx context.Context) error {

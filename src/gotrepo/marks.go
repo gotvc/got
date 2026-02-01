@@ -2,10 +2,11 @@ package gotrepo
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/internal/marks"
-	"github.com/gotvc/got/src/internal/metrics"
 )
 
 const (
@@ -41,7 +42,12 @@ func (r *Repo) CreateMark(ctx context.Context, fqname FQM, mcfg marks.DSConfig, 
 	if err != nil {
 		return nil, err
 	}
-	return space.Create(ctx, fqname.Name, marks.Metadata{Config: mcfg, Annotations: anns})
+	var info *marks.Info
+	err = space.Do(ctx, true, func(st marks.SpaceTx) error {
+		info, err = st.Create(ctx, fqname.Name, marks.Metadata{Config: mcfg, Annotations: anns})
+		return err
+	})
+	return info, err
 }
 
 func (r *Repo) InspectMark(ctx context.Context, fqname FQM) (*marks.Info, error) {
@@ -49,16 +55,13 @@ func (r *Repo) InspectMark(ctx context.Context, fqname FQM) (*marks.Info, error)
 	if err != nil {
 		return nil, err
 	}
-	return space.Inspect(ctx, fqname.Name)
-}
-
-// GetBranch returns a specific branch, or an error if it does not exist
-func (r *Repo) GetMark(ctx context.Context, fqname FQM) (*marks.Mark, error) {
-	space, err := r.GetSpace(ctx, fqname.Space)
-	if err != nil {
-		return nil, err
-	}
-	return space.Open(ctx, fqname.Name)
+	var info *marks.Info
+	err = space.Do(ctx, false, func(st marks.SpaceTx) error {
+		var err error
+		info, err = st.Inspect(ctx, fqname.Name)
+		return err
+	})
+	return info, err
 }
 
 // DeleteBranch deletes a mark
@@ -69,7 +72,9 @@ func (r *Repo) DeleteMark(ctx context.Context, fqname FQM) error {
 	if err != nil {
 		return err
 	}
-	return space.Delete(ctx, fqname.Name)
+	return space.Do(ctx, true, func(st marks.SpaceTx) error {
+		return st.Delete(ctx, fqname.Name)
+	})
 }
 
 // ConfigureMark adjusts metadata
@@ -78,54 +83,82 @@ func (r *Repo) ConfigureMark(ctx context.Context, fqname FQM, md marks.Metadata)
 	if err != nil {
 		return err
 	}
-	return space.Set(ctx, fqname.Name, md)
+	return space.Do(ctx, true, func(st marks.SpaceTx) error {
+		return st.SetMetadata(ctx, fqname.Name, md)
+	})
 }
 
 // ForEachBranch calls fn once for each branch, or until an error is returned from fn
-func (r *Repo) ForEachMark(ctx context.Context, spaceName string, fn func(string) error) error {
+func (r *Repo) ForEachMark(ctx context.Context, spaceName string, fn func(name string) error) error {
 	space, err := r.GetSpace(ctx, spaceName)
 	if err != nil {
 		return err
 	}
-	return marks.ForEach(ctx, space, marks.TotalSpan(), fn)
+	return space.Do(ctx, false, func(st marks.SpaceTx) error {
+		return marks.ForEach(ctx, st, marks.TotalSpan(), fn)
+	})
+}
+
+// ViewMark calls fn with a read-only MarkTx
+func (r *Repo) ViewMark(ctx context.Context, fqm FQM, fn func(*marks.MarkTx) error) error {
+	space, err := r.GetSpace(ctx, fqm.Space)
+	if err != nil {
+		return err
+	}
+	return space.Do(ctx, false, func(tx marks.SpaceTx) error {
+		mtx, err := marks.NewMarkTx(ctx, tx, fqm.Name)
+		if err != nil {
+			return err
+		}
+		return fn(mtx)
+	})
 }
 
 // MarkLoad loads the Snapshot that the mark points to.
-func (r *Repo) MarkLoad(ctx context.Context, mark FQM) (*Snap, error) {
-	m, err := r.GetMark(ctx, mark)
-	if err != nil {
+// If the mark is empty then the snapshot will be nil
+func (r *Repo) MarkLoad(ctx context.Context, fqm FQM) (*Snap, error) {
+	var exists bool
+	var snap marks.Snap
+	if err := r.ViewMark(ctx, fqm, func(mt *marks.MarkTx) error {
+		var err error
+		exists, err = mt.Load(ctx, &snap)
+		return err
+	}); err != nil {
 		return nil, err
 	}
-	snap, tx, err := m.GetTarget(ctx)
-	if err != nil {
-		return nil, err
+	if !exists {
+		return nil, nil
 	}
-	if err := tx.Abort(ctx); err != nil {
-		return nil, err
-	}
-	return snap, nil
+	return &snap, nil
 }
 
 // CloneMark creates a new branch called next and sets its head to match base's
+// TODO: currently marks can only be cloned within the same space.
 func (r *Repo) CloneMark(ctx context.Context, base, next FQM) error {
-	baseBranch, err := r.GetMark(ctx, base)
-	if err != nil {
-		return err
+	if base.Space == next.Space {
+		space, err := r.GetSpace(ctx, base.Space)
+		if err != nil {
+			return err
+		}
+		return space.Do(ctx, true, func(st marks.SpaceTx) error {
+			baseInfo, err := st.Inspect(ctx, base.Name)
+			if err != nil {
+				return err
+			}
+			if _, err := st.Create(ctx, next.Name, baseInfo.AsMetadata()); err != nil {
+				return err
+			}
+			var ref gdat.Ref
+			if ok, err := st.GetTarget(ctx, base.Name, &ref); err != nil {
+				return err
+			} else if !ok {
+				ref = gdat.Ref{}
+			}
+			return st.SetTarget(ctx, next.Name, ref)
+		})
+	} else {
+		return fmt.Errorf("marks can only be cloned in the same space")
 	}
-	_, err = r.CreateMark(ctx, next, baseBranch.Config(), baseBranch.Info.Annotations)
-	if err != nil {
-		return err
-	}
-	nextBranch, err := r.GetMark(ctx, next)
-	if err != nil {
-		return err
-	}
-	ctx, cf := metrics.Child(ctx, "syncing")
-	defer cf()
-	if err := marks.Sync(ctx, baseBranch, nextBranch, false); err != nil {
-		return err
-	}
-	return nil
 }
 
 // Modify calls fn to modify the target of a Mark.
@@ -134,30 +167,11 @@ func (r *Repo) Modify(ctx context.Context, fqm FQM, fn func(mc marks.ModifyCtx) 
 	if err != nil {
 		return err
 	}
-	m, err := space.Open(ctx, fqm.Name)
-	if err != nil {
-		return err
-	}
-	return m.Modify(ctx, fn)
-}
-
-func (r *Repo) History(ctx context.Context, mark FQM, fn func(ref Ref, s Snap) error) error {
-	branch, err := r.GetMark(ctx, mark)
-	if err != nil {
-		return err
-	}
-	return branch.History(ctx, fn)
-}
-
-func (r *Repo) CleanupMark(ctx context.Context, mark FQM) error {
-	b, err := r.GetMark(ctx, mark)
-	if err != nil {
-		return err
-	}
-	ctx, cf := metrics.Child(ctx, "cleanup volume")
-	defer cf()
-	if err := marks.CleanupVolume(ctx, b.Volume, b.Info); err != nil {
-		return err
-	}
-	return nil
+	return space.Do(ctx, true, func(tx marks.SpaceTx) error {
+		mtx, err := marks.NewMarkTx(ctx, tx, fqm.Name)
+		if err != nil {
+			return err
+		}
+		return mtx.Modify(ctx, fn)
+	})
 }

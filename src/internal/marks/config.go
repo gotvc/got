@@ -6,6 +6,7 @@ import (
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/gotvc"
 )
 
 // DSConfig holds all data structure parameters
@@ -83,4 +84,12 @@ func DefaultConfig(public bool) DSConfig {
 			},
 		},
 	}
+}
+
+func GotFS(cfg DSConfig) *gotfs.Machine {
+	return newGotFS(&cfg)
+}
+
+func GotVC(cfg DSConfig) *gotvc.Machine[Payload] {
+	return newGotVC(&cfg)
 }

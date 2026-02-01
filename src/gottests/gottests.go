@@ -147,8 +147,8 @@ func (s *Site) Put(ps ...string) {
 	}
 }
 
-func (s *Site) Ls(b gotrepo.FQM, p string) (ret []string) {
-	err := s.Repo.Ls(testutil.Context(s.t), b, p, func(de gotfs.DirEnt) error {
+func (s *Site) Ls(se marks.SnapExpr, p string) (ret []string) {
+	err := s.Repo.Ls(testutil.Context(s.t), se, p, func(de gotfs.DirEnt) error {
 		ret = append(ret, de.Name)
 		return nil
 	})
@@ -156,9 +156,9 @@ func (s *Site) Ls(b gotrepo.FQM, p string) (ret []string) {
 	return ret
 }
 
-func (s *Site) Cat(b gotrepo.FQM, p string) []byte {
+func (s *Site) Cat(se marks.SnapExpr, p string) []byte {
 	buf := bytes.Buffer{}
-	err := s.Repo.Cat(testutil.Context(s.t), b, p, &buf)
+	err := s.Repo.Cat(testutil.Context(s.t), se, p, &buf)
 	require.NoError(s.t, err)
 	return buf.Bytes()
 }

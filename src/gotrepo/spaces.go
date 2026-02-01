@@ -63,17 +63,11 @@ type SpaceSpec struct {
 	// Blobcache is a arbitrary Blobcache Volume
 	// The contents of the Volume are expected to be in the GotNS format.
 	Blobcache *VolumeSpec `json:"bc,omitempty"`
-	// Org is an arbitrary Blobcache Volume
-	// The contents of the Volume are expected to be in the GotOrg format
-	Org *blobcache.URL `json:"org,omitempty"`
 }
 
 func (ss SpaceSpec) Validate() error {
 	var count int
 	if ss.Blobcache != nil {
-		count++
-	}
-	if ss.Org != nil {
 		count++
 	}
 	if count != 1 {

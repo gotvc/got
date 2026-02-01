@@ -6,7 +6,7 @@ import (
 	"github.com/gotvc/got/src/internal/sbe"
 )
 
-type Snap = gotvc.Snapshot[Payload]
+type Snap = gotvc.Vertex[Payload]
 
 // Payload is the thing being snapshotted.
 type Payload struct {

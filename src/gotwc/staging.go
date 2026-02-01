@@ -57,7 +57,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		if err != nil {
 			return err
 		}
-		mark, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: branchName})
+		info, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: branchName})
 		if err != nil {
 			return err
 		}
@@ -65,7 +65,9 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		if err != nil {
 			return err
 		}
-		paramHash := mark.Config().Hash()
+		cfg := info.Config
+		paramHash := cfg.Hash()
+		fsmach := marks.GotFS(cfg)
 		stagetx, err := wc.beginStageTx(ctx, &paramHash, true)
 		if err != nil {
 			return err
@@ -74,13 +76,13 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		stagingStore := stagetx.Store()
 		storePair := [2]stores.RW{stagingStore, stagingStore}
 		dirState := porting.NewDB(conn, paramHash)
-		imp := porting.NewImporter(mark.GotFS(), dirState, storePair)
-		exp := porting.NewExporter(mark.GotFS(), dirState, fsys, filter)
+		imp := porting.NewImporter(fsmach, dirState, storePair)
+		exp := porting.NewExporter(fsmach, dirState, fsys, filter)
 
 		if err := fn(stagingCtx{
 			Stage:    stagetx,
 			Store:    stagingStore,
-			GotFS:    mark.GotFS(),
+			GotFS:    marks.GotFS(cfg),
 			FS:       fsys,
 			DB:       porting.NewDB(conn, paramHash),
 			Importer: imp,
@@ -99,11 +101,11 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
 	return sqlutil.DoTxRO(ctx, wc.db, func(conn *sqlutil.Conn) error {
 		branchName, err := wc.GetHead()
-		branch, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: branchName})
+		info, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: branchName})
 		if err != nil {
 			return err
 		}
-		paramHash := branch.Info.Config.Hash()
+		paramHash := info.Config.Hash()
 		stagetx, err := wc.beginStageTx(ctx, &paramHash, false)
 		if err != nil {
 			return err
@@ -113,14 +115,15 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 			return err
 		}
 		portdb := porting.NewDB(conn, paramHash)
-		exp := porting.NewExporter(branch.GotFS(), portdb, filtFS, filter)
+		fsmach := marks.GotFS(info.Config)
+		exp := porting.NewExporter(fsmach, portdb, filtFS, filter)
 		stagingStore, err := wc.repo.BeginStagingTx(ctx, wc.id, false)
 		if err != nil {
 			return err
 		}
 		defer stagingStore.Abort(ctx)
 		return fn(stagingCtx{
-			GotFS:    branch.GotFS(),
+			GotFS:    fsmach,
 			Stage:    stagetx,
 			Store:    stagingStore,
 			Exporter: exp,
@@ -129,16 +132,12 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 	})
 }
 
-func (wc *WC) viewMark(ctx context.Context) (*marks.Snap, marks.Tx, error) {
+func (wc *WC) viewMark(ctx context.Context, fn func(*marks.MarkTx) error) error {
 	name, err := wc.GetHead()
 	if err != nil {
-		return nil, nil, err
+		return err
 	}
-	mark, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: name})
-	if err != nil {
-		return nil, nil, err
-	}
-	return mark.GetTarget(ctx)
+	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: name}, fn)
 }
 
 func (wc *WC) modifyMark(ctx context.Context, fn func(marks.ModifyCtx) (*marks.Snap, error)) error {
@@ -146,11 +145,7 @@ func (wc *WC) modifyMark(ctx context.Context, fn func(marks.ModifyCtx) (*marks.S
 	if err != nil {
 		return err
 	}
-	mark, err := wc.repo.GetMark(ctx, gotrepo.FQM{Name: name})
-	if err != nil {
-		return err
-	}
-	return mark.Modify(ctx, fn)
+	return wc.repo.Modify(ctx, gotrepo.FQM{Name: name}, fn)
 }
 
 // Add adds paths from the working directory to the staging area.
@@ -227,24 +222,23 @@ func (wc *WC) Put(ctx context.Context, paths ...string) error {
 // Rm deletes a path known to version control.
 func (wc *WC) Rm(ctx context.Context, paths ...string) error {
 	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
-		snap, voltx, err := wc.viewMark(ctx)
-		if err != nil {
-			return err
-		}
-		defer voltx.Abort(ctx)
-		fsag := sctx.GotFS
-		stage := sctx.Stage
-		for _, target := range paths {
-			if snap == nil {
-				return fmt.Errorf("path %q not found", target)
+		return wc.viewSnap(ctx, func(vctx *marks.ViewCtx) error {
+			fsag := vctx.FS
+			stage := sctx.Stage
+			ss := vctx.Stores
+
+			for _, target := range paths {
+				if vctx.Root == nil {
+					return fmt.Errorf("path %q not found", target)
+				}
+				if err := fsag.ForEachLeaf(ctx, ss[1], vctx.Root.Payload.Root, target, func(p string, _ *gotfs.Info) error {
+					return stage.Delete(ctx, p)
+				}); err != nil {
+					return err
+				}
 			}
-			if err := fsag.ForEachLeaf(ctx, voltx, snap.Payload.Root, target, func(p string, _ *gotfs.Info) error {
-				return stage.Delete(ctx, p)
-			}); err != nil {
-				return err
-			}
-		}
-		return nil
+			return nil
+		})
 	})
 }
 
@@ -325,7 +319,8 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			if mctx.Root != nil {
 				root = &mctx.Root.Payload.Root
 			}
-			s := stores.AddWriteLayer(mctx.Store, scratch)
+			// TODO: this does not preserve the separate stores.
+			s := stores.AddWriteLayer(mctx.Stores[1], scratch)
 			ss := [2]stores.RW{s, s}
 			nextRoot, err := stage.Apply(ctx, mctx.FS, ss, root)
 			if err != nil {
@@ -339,9 +334,11 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			infoJSON, err := json.Marshal(struct {
 				Authors    []inet256.ID `json:"authors"`
 				AuthoredAt tai64.TAI64  `json:"authored_at"`
+				Message    string       `json:"message"`
 			}{
 				Authors:    params.Authors,
 				AuthoredAt: params.AuthoredAt,
+				Message:    params.Message,
 			})
 			if err != nil {
 				return nil, err
@@ -378,43 +375,40 @@ type FileOperation struct {
 
 func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOperation) error) error {
 	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
-		stage := sctx.Stage
-		snap, voltx, err := wc.viewMark(ctx)
-		if err != nil {
-			return err
-		}
-		defer voltx.Abort(ctx)
-
-		// NewEmpty makes a Post which will fail because this is a read-only transaction.
-		s := stores.AddWriteLayer(voltx, stores.NewMem())
-		var root gotfs.Root
-		if snap != nil {
-			root = snap.Payload.Root
-		} else {
-			rootPtr, err := sctx.GotFS.NewEmpty(ctx, s, 0o755)
-			if err != nil {
+		return wc.viewMark(ctx, func(mt *marks.MarkTx) error {
+			// NewEmpty makes a Post which will fail because this is a read-only transaction.
+			s := stores.AddWriteLayer(mt.FSRO()[1], stores.NewMem())
+			var root gotfs.Root
+			if ok, err := mt.LoadFS(ctx, &root); err != nil {
 				return err
-			}
-			root = *rootPtr
-		}
-		return stage.ForEach(ctx, func(ent staging.Entry) error {
-			sop := ent.Op
-			var op FileOperation
-			switch {
-			case sop.Delete != nil:
-				op.Delete = sop.Delete
-			case sop.Put != nil:
-				md, err := sctx.GotFS.GetInfo(ctx, s, root, ent.Path)
-				if err != nil && !posixfs.IsErrNotExist(err) {
+			} else if !ok {
+				rootPtr, err := sctx.GotFS.NewEmpty(ctx, s, 0o755)
+				if err != nil {
 					return err
 				}
-				if md == nil {
-					op.Create = sop.Put
-				} else {
-					op.Modify = sop.Put
-				}
+				root = *rootPtr
 			}
-			return fn(ent.Path, op)
+			stage := sctx.Stage
+
+			return stage.ForEach(ctx, func(ent staging.Entry) error {
+				sop := ent.Op
+				var op FileOperation
+				switch {
+				case sop.Delete != nil:
+					op.Delete = sop.Delete
+				case sop.Put != nil:
+					md, err := sctx.GotFS.GetInfo(ctx, s, root, ent.Path)
+					if err != nil && !posixfs.IsErrNotExist(err) {
+						return err
+					}
+					if md == nil {
+						op.Create = sop.Put
+					} else {
+						op.Modify = sop.Put
+					}
+				}
+				return fn(ent.Path, op)
+			})
 		})
 	})
 }
@@ -436,36 +430,33 @@ type FileInfo = porting.FileInfo
 //  2. the active branch head
 func (wc *WC) ForEachDirty(ctx context.Context, fn func(fi DirtyFile) error) error {
 	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
-		_, voltx, err := wc.viewMark(ctx)
-		if err != nil {
-			return err
-		}
-		defer voltx.Abort(ctx)
-		stage := sctx.Stage
-		fsys, _, err := wc.getFilteredFS(ctx)
-		if err != nil {
-			return err
-		}
-		uk := wc.newUnknownIterator(sctx.DB, fsys)
-		return streams.ForEach(ctx, uk, func(ukp unknownFile) error {
-			p := ukp.Path()
-			// filter staging
-			var op staging.Operation
-			if found, err := stage.Get(ctx, p, &op); err != nil {
+		return wc.viewSnap(ctx, func(vctx *marks.ViewCtx) error {
+			stage := sctx.Stage
+			fsys, _, err := wc.getFilteredFS(ctx)
+			if err != nil {
 				return err
-			} else if found {
-				if op.Delete != nil && !ukp.Current.Ok {
-					// File is gone, and staging deleted it, skip.
-					return nil
-				}
-				// If it is a Put operation, then it is definitely different,
-				// otherwise it would be in the database, and would have been filtered by the matching join.
 			}
-			return fn(DirtyFile{
-				Path:       p,
-				Exists:     ukp.Current.Ok,
-				Mode:       ukp.Current.X.Mode,
-				ModifiedAt: ukp.Current.X.ModifiedAt,
+			uk := wc.newUnknownIterator(sctx.DB, fsys)
+			return streams.ForEach(ctx, uk, func(ukp unknownFile) error {
+				p := ukp.Path()
+				// filter staging
+				var op staging.Operation
+				if found, err := stage.Get(ctx, p, &op); err != nil {
+					return err
+				} else if found {
+					if op.Delete != nil && !ukp.Current.Ok {
+						// File is gone, and staging deleted it, skip.
+						return nil
+					}
+					// If it is a Put operation, then it is definitely different,
+					// otherwise it would be in the database, and would have been filtered by the matching join.
+				}
+				return fn(DirtyFile{
+					Path:       p,
+					Exists:     ukp.Current.Ok,
+					Mode:       ukp.Current.X.Mode,
+					ModifiedAt: ukp.Current.X.ModifiedAt,
+				})
 			})
 		})
 	})

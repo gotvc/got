@@ -40,7 +40,7 @@ func NewMachine[T Snapshotable](parse Parser[T], opts ...Option[T]) *Machine[T] 
 }
 
 // ForEach calls fn once for each Ref in the snapshot graph.
-func (m *Machine[T]) ForEach(ctx context.Context, s stores.Reading, xs []Ref, fn func(Ref, Snapshot[T]) error) error {
+func (m *Machine[T]) ForEach(ctx context.Context, s stores.Reading, xs []Ref, fn func(Ref, Vertex[T]) error) error {
 	visited := map[Ref]struct{}{}
 	refs := newRefQueue()
 	refs.push(xs...)

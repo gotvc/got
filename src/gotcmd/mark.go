@@ -164,11 +164,10 @@ var markInspectCmd = star.Command{
 		defer repo.Close()
 		name := markNameParam.Load(c)
 		space, _ := spaceNameOptParam.LoadOpt(c)
-		branch, err := repo.GetMark(ctx, gotrepo.FQM{Space: space, Name: name})
-		if err != nil {
-			return err
-		}
-		return prettyPrintJSON(c.StdOut, branch.Info)
+		fqm := gotrepo.FQM{Space: space, Name: name}
+		return repo.ViewMark(ctx, fqm, func(mt *marks.MarkTx) error {
+			return prettyPrintJSON(c.StdOut, mt.Info())
+		})
 	},
 }
 
@@ -251,7 +250,7 @@ var historyCmd = star.Command{
 		eg := errgroup.Group{}
 		eg.Go(func() error {
 			bufw := bufio.NewWriter(pw)
-			err := repo.History(ctx, gotrepo.FQM{Name: bname}, func(ref gdat.Ref, snap gotrepo.Snap) error {
+			err := repo.History(ctx, marks.SnapExpr_Mark{Name: bname}, func(ref gdat.Ref, snap gotrepo.Snap) error {
 				if err := printSnap(bufw, ref, snap); err != nil {
 					return err
 				}

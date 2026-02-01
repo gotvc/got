@@ -2,8 +2,8 @@ package gotns
 
 import (
 	"context"
+	"iter"
 
-	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/marks"
@@ -17,122 +17,62 @@ var (
 )
 
 type Space struct {
-	Volume marks.Volume
+	Volume volumes.Volume
 	DMach  *gdat.Machine
 	KVMach *gotkv.Machine
 }
 
-func (s *Space) modify(ctx context.Context, fn func(space *txSpace) error) error {
+func (s *Space) Do(ctx context.Context, modify bool, fn func(sptx marks.SpaceTx) error) error {
+	if modify {
+		return s.modify(ctx, func(tx *SpaceTx) error {
+			return fn(tx)
+		})
+	} else {
+		return s.view(ctx, func(tx *SpaceTx) error {
+			return fn(tx)
+		})
+	}
+}
+
+func (s *Space) modify(ctx context.Context, fn func(space *SpaceTx) error) error {
 	tx, err := BeginTx(ctx, s.DMach, s.KVMach, s.Volume, true)
 	if err != nil {
 		return err
 	}
 	defer tx.Abort(ctx)
-	if err := fn(&txSpace{vol: s.Volume, tx: tx}); err != nil {
+	if err := fn(&SpaceTx{
+		kvmach: s.KVMach,
+		dmach:  s.DMach,
+		tx:     tx,
+	}); err != nil {
 		return err
 	}
 	return tx.Commit(ctx)
 }
 
-func (s *Space) view(ctx context.Context, fn func(space *txSpace) error) error {
+func (s *Space) view(ctx context.Context, fn func(space *SpaceTx) error) error {
 	tx, err := BeginTx(ctx, s.DMach, s.KVMach, s.Volume, false)
 	if err != nil {
 		return err
 	}
 	defer tx.Abort(ctx)
-	return fn(&txSpace{vol: s.Volume, tx: tx})
-}
-
-// Create implements marks.Space.
-func (s *Space) Create(ctx context.Context, name string, cfg marks.Metadata) (*marks.Info, error) {
-	var info *marks.Info
-	if err := s.modify(ctx, func(s *txSpace) error {
-		info2, err := s.Create(ctx, name, cfg)
-		if err != nil {
-			return err
-		}
-		info = info2
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return info, nil
-}
-
-// Delete implements marks.Space.
-func (s *Space) Delete(ctx context.Context, name string) error {
-	return s.modify(ctx, func(space *txSpace) error {
-		return space.Delete(ctx, name)
+	return fn(&SpaceTx{
+		kvmach: s.KVMach,
+		dmach:  s.DMach,
+		tx:     tx,
 	})
 }
 
-// Inspect implements marks.Space.
-func (s *Space) Inspect(ctx context.Context, name string) (*marks.Info, error) {
-	var info *marks.Info
-	if err := s.view(ctx, func(space *txSpace) error {
-		info2, err := space.Inspect(ctx, name)
-		if err != nil {
-			return err
-		}
-		info = info2
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return info, nil
-}
+var _ marks.SpaceTx = &SpaceTx{}
 
-// List implements marks.Space.
-func (s *Space) List(ctx context.Context, span marks.Span, limit int) ([]string, error) {
-	var names []string
-	if err := s.view(ctx, func(space *txSpace) error {
-		names2, err := space.List(ctx, span, limit)
-		if err != nil {
-			return err
-		}
-		names = names2
-		return nil
-	}); err != nil {
-		return nil, err
-	}
-	return names, nil
-}
-
-// Open implements marks.Space.
-func (s *Space) Open(ctx context.Context, name string) (*marks.Mark, error) {
-	info, err := s.Inspect(ctx, name)
-	if err != nil {
-		return nil, err
-	}
-	vol := &VirtVolume{
-		vol:     s.Volume,
-		kvmach:  s.KVMach,
-		dmach:   s.DMach,
-		name:    name,
-		closeTx: true,
-	}
-	return &marks.Mark{
-		Volume: vol,
-		Info:   *info,
-	}, nil
-}
-
-// Set implements marks.Space.
-func (s *Space) Set(ctx context.Context, name string, cfg marks.Metadata) error {
-	return s.modify(ctx, func(s *txSpace) error {
-		return s.Set(ctx, name, cfg)
-	})
-}
-
-type txSpace struct {
-	vol    marks.Volume
+type SpaceTx struct {
 	kvmach *gotkv.Machine
 	dmach  *gdat.Machine
 	tx     *Tx
 }
 
 // Create implements marks.Space.
-func (s *txSpace) Create(ctx context.Context, name string, md marks.Metadata) (*marks.Info, error) {
+func (s *SpaceTx) Create(ctx context.Context, name string, md marks.Metadata) (*marks.Info, error) {
 	prevb, err := s.tx.Get(ctx, name)
 	if err != nil {
 		return nil, err
@@ -140,17 +80,13 @@ func (s *txSpace) Create(ctx context.Context, name string, md marks.Metadata) (*
 	if prevb != nil {
 		return nil, marks.ErrExists
 	}
-	emptyRef, err := s.tx.dmach.Post(ctx, s.tx.tx, nil)
-	if err != nil {
-		return nil, err
-	}
 	b := MarkState{
 		Info: marks.Info{
 			Config:      md.Config,
 			Annotations: md.Annotations,
 			CreatedAt:   tai64.Now().TAI64(),
 		},
-		Target: *emptyRef,
+		// Leave target as zeros for null,
 	}
 	if err := s.tx.Put(ctx, name, b); err != nil {
 		return nil, err
@@ -159,12 +95,12 @@ func (s *txSpace) Create(ctx context.Context, name string, md marks.Metadata) (*
 }
 
 // Delete implements marks.Space.
-func (s *txSpace) Delete(ctx context.Context, name string) error {
+func (s *SpaceTx) Delete(ctx context.Context, name string) error {
 	return s.tx.Delete(ctx, name)
 }
 
 // Inspect implements marks.Space.
-func (s *txSpace) Inspect(ctx context.Context, name string) (*marks.Info, error) {
+func (s *SpaceTx) Inspect(ctx context.Context, name string) (*marks.Info, error) {
 	b, err := s.tx.Get(ctx, name)
 	if err != nil {
 		return nil, err
@@ -176,105 +112,46 @@ func (s *txSpace) Inspect(ctx context.Context, name string) (*marks.Info, error)
 }
 
 // List implements marks.Space.
-func (s *txSpace) List(ctx context.Context, span marks.Span, limit int) ([]string, error) {
-	return s.tx.ListNames(ctx, span, limit)
+func (s *SpaceTx) All(ctx context.Context) iter.Seq2[string, error] {
+	return s.tx.AllNames(ctx)
 }
 
 // Set implements marks.Space.
-func (s *txSpace) Set(ctx context.Context, name string, cfg marks.Metadata) error {
-	panic("unimplemented")
-}
-
-var _ volumes.Volume = &VirtVolume{}
-
-// VirtVolume is a virtual volume containing the a Marks root as the VirtVolume root.
-type VirtVolume struct {
-	vol     marks.Volume
-	kvmach  *gotkv.Machine
-	dmach   *gdat.Machine
-	name    string
-	closeTx bool
-}
-
-var _ volumes.Tx = &VirtVolumeTx{}
-
-// BeginTx implements volumes.Volume.
-func (v *VirtVolume) BeginTx(ctx context.Context, tp volumes.TxParams) (volumes.Tx, error) {
-	tx, err := v.vol.BeginTx(ctx, tp)
+func (s *SpaceTx) SetMetadata(ctx context.Context, name string, md marks.Metadata) error {
+	mstate, err := s.tx.Get(ctx, name)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	tx2 := NewTx(tx, v.dmach, v.kvmach)
-	return &VirtVolumeTx{tx: tx2, name: v.name, closeTx: v.closeTx}, nil
+	mstate.Info.Annotations = md.Annotations
+	mstate.Info.Config = md.Config
+	return s.tx.Put(ctx, name, *mstate)
 }
 
-// VirtVolumeTx is a transaction on a branch volume.
-type VirtVolumeTx struct {
-	tx   *Tx
-	name string
-	// closeTx causes Commit and Abort to also be called on tx.
-	closeTx bool
-
-	root []byte
-}
-
-// Abort implements volumes.Tx.
-func (vvt *VirtVolumeTx) Abort(ctx context.Context) error {
-	if vvt.closeTx {
-		if err := vvt.tx.Abort(ctx); err != nil {
-			return err
-		}
+func (s *SpaceTx) Stores() [3]stores.RW {
+	return [3]stores.RW{
+		s.tx.tx,
+		s.tx.tx,
+		s.tx.tx,
 	}
-	return nil
 }
 
-// Commit implements volumes.Tx.
-func (vvt *VirtVolumeTx) Commit(ctx context.Context) error {
-	if vvt.root != nil {
-		if err := vvt.tx.SaveMarkRoot(ctx, vvt.name, vvt.root); err != nil {
-			return err
-		}
+func (s *SpaceTx) GetTarget(ctx context.Context, name string, dst *gdat.Ref) (bool, error) {
+	mstate, err := s.tx.Get(ctx, name)
+	if err != nil {
+		return false, err
 	}
-	if vvt.closeTx {
-		if err := vvt.tx.Commit(ctx); err != nil {
-			return err
-		}
+	if mstate.Target.IsZero() {
+		return false, nil
 	}
-	return nil
+	*dst = mstate.Target
+	return true, nil
 }
 
-// Exists implements volumes.Tx.
-func (vvt *VirtVolumeTx) Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error {
-	return vvt.tx.tx.Exists(ctx, cids, dst)
-}
-
-// Get implements volumes.Tx.
-func (vvt *VirtVolumeTx) Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, error) {
-	return vvt.tx.tx.Get(ctx, cid, buf)
-}
-
-// Post implements volumes.Tx.
-func (vvt *VirtVolumeTx) Post(ctx context.Context, data []byte) (blobcache.CID, error) {
-	return vvt.tx.tx.Post(ctx, data)
-}
-
-// Load implements volumes.Tx.
-func (vvt *VirtVolumeTx) Load(ctx context.Context, dst *[]byte) error {
-	return vvt.tx.LoadBranchRoot(ctx, vvt.name, dst)
-}
-
-// Save implements volumes.Tx.
-func (vvt *VirtVolumeTx) Save(ctx context.Context, src []byte) error {
-	vvt.root = append(vvt.root[:0], src...)
-	return nil
-}
-
-// Hash implements volumes.Tx.
-func (vvt *VirtVolumeTx) Hash(data []byte) blobcache.CID {
-	return stores.Hash(data)
-}
-
-// MaxSize implements volumes.Tx.
-func (vvt *VirtVolumeTx) MaxSize() int {
-	return vvt.tx.tx.MaxSize()
+func (s *SpaceTx) SetTarget(ctx context.Context, name string, ref gdat.Ref) error {
+	mstate, err := s.tx.Get(ctx, name)
+	if err != nil {
+		return err
+	}
+	mstate.Target = ref
+	return s.tx.Put(ctx, name, *mstate)
 }

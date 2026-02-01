@@ -18,6 +18,10 @@ type Tx struct {
 	edits []Edit
 }
 
+func (m *Machine) NewTxEmpty(s stores.RW) *Tx {
+	return m.NewTx(s, Root{})
+}
+
 func (m *Machine) NewTx(s stores.RW, prev Root) *Tx {
 	return &Tx{
 		m:    m,
@@ -26,8 +30,19 @@ func (m *Machine) NewTx(s stores.RW, prev Root) *Tx {
 	}
 }
 
+func (tx *Tx) Queued() int {
+	return len(tx.edits)
+}
+
 // Flush writes all in queued mutations to the key-value store.
 func (tx *Tx) Flush(ctx context.Context) (*Root, error) {
+	if tx.prev.Ref.IsZero() {
+		r, err := tx.m.NewEmpty(ctx, tx.s)
+		if err != nil {
+			return nil, err
+		}
+		tx.prev = *r
+	}
 	nextRoot, err := tx.m.Edit(ctx, tx.s, tx.prev, tx.edits...)
 	if err != nil {
 		return nil, err

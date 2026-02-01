@@ -15,7 +15,6 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
 	"github.com/cloudflare/circl/sign/ed25519"
-	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo/internal/reposchema"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.inet256.org/inet256/src/inet256"
@@ -117,8 +116,6 @@ func mkSchema(spec blobcache.SchemaSpec) (schema.Schema, error) {
 	switch spec.Name {
 	case reposchema.SchemaName_GotRepo:
 		return reposchema.Constructor(spec.Params, nil)
-	case reposchema.SchemeName_GotOrg:
-		return gotorg.SchemaConstructor(spec.Params, nil)
 	case "":
 		return schema.None{}, nil
 	default:
