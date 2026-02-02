@@ -134,6 +134,26 @@ func TestExport(t *testing.T) {
 				Path: filepath.Join("dir", "old.txt"),
 			},
 		},
+		{
+			Name: "tracked entry without working file",
+			InDB: []FileInfo{
+				{Path: "tracked.txt", Mode: 0o644, Size: 0},
+			},
+			InGot: []FileEntry{
+				{Path: "tracked.txt", Mode: 0o644, Data: "got"},
+			},
+			ExportPath: "tracked.txt",
+		},
+		{
+			Name: "unrelated tracked entry",
+			InDB: []FileInfo{
+				{Path: "other.txt", Mode: 0o644, Size: 0},
+			},
+			InGot: []FileEntry{
+				{Path: "target.txt", Mode: 0o644, Data: "data"},
+			},
+			ExportPath: "target.txt",
+		},
 	}
 
 	for _, tt := range tests {
@@ -163,7 +183,7 @@ func TestExport(t *testing.T) {
 			for _, info := range tt.InDB {
 				require.NoError(t, db.PutInfo(ctx, info))
 			}
-			root := makeGotFS(t, s, tt.InGot)
+			root := makeGotFS(t, mach, s, tt.InGot)
 
 			exp := NewExporter(mach, db, fsys, func(string) bool { return true })
 			err := exp.ExportPath(ctx, s, s, root, tt.ExportPath)
@@ -241,25 +261,23 @@ func newTestDB(t testing.TB, ctx context.Context, cfg gotcore.DSConfig) (*sqluti
 	return conn, cfg.Hash()
 }
 
-func makeGotFS(t testing.TB, s stores.RW, ents []FileEntry) gotfs.Root {
+func makeGotFS(t testing.TB, fsmach *gotfs.Machine, s stores.RW, ents []FileEntry) gotfs.Root {
 	t.Helper()
-	cfg := gotcore.DefaultConfig(true)
-	mach := gotcore.GotFS(cfg)
 	ctx := testutil.Context(t)
-	root, err := mach.NewEmpty(ctx, s, 0o755)
+	root, err := fsmach.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
 	for _, ent := range ents {
 		if ent.Mode.IsDir() {
-			root, err = mach.MkdirAll(ctx, s, *root, ent.Path)
+			root, err = fsmach.MkdirAll(ctx, s, *root, ent.Path)
 			require.NoError(t, err)
 			continue
 		}
 		parent := filepath.Dir(ent.Path)
 		if parent != "." && parent != "" {
-			root, err = mach.MkdirAll(ctx, s, *root, parent)
+			root, err = fsmach.MkdirAll(ctx, s, *root, parent)
 			require.NoError(t, err)
 		}
-		root, err = mach.PutFile(ctx, [2]stores.RW{s, s}, *root, ent.Path, strings.NewReader(ent.Data))
+		root, err = fsmach.PutFile(ctx, [2]stores.RW{s, s}, *root, ent.Path, strings.NewReader(ent.Data))
 		require.NoError(t, err)
 	}
 	return *root
