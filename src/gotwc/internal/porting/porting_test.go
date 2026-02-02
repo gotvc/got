@@ -248,6 +248,85 @@ func TestImporterReimportOnChange(t *testing.T) {
 	}
 }
 
+func TestByGotPersistence(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(t *testing.T, ctx context.Context, fsys posixfs.FS, mach *gotfs.Machine, db *DB, s stores.RW) (string, error)
+		want  bool
+	}{
+		{
+			name: "export sets by_got",
+			setup: func(t *testing.T, ctx context.Context, fsys posixfs.FS, mach *gotfs.Machine, db *DB, s stores.RW) (string, error) {
+				root := makeGotFS(t, mach, s, []FileEntry{
+					{Path: "export.txt", Mode: 0o644, Data: "data"},
+				})
+				exp := NewExporter(mach, db, fsys, func(string) bool { return true })
+				return "export.txt", exp.ExportPath(ctx, s, s, root, "export.txt")
+			},
+			want: true,
+		},
+		{
+			name: "export dir sets by_got",
+			setup: func(t *testing.T, ctx context.Context, fsys posixfs.FS, mach *gotfs.Machine, db *DB, s stores.RW) (string, error) {
+				root := makeGotFS(t, mach, s, []FileEntry{
+					{Path: "exportdir", Mode: 0o755 | fs.ModeDir},
+				})
+				exp := NewExporter(mach, db, fsys, func(string) bool { return true })
+				return "exportdir", exp.ExportPath(ctx, s, s, root, "exportdir")
+			},
+			want: true,
+		},
+		{
+			name: "import sets by_got false",
+			setup: func(t *testing.T, ctx context.Context, fsys posixfs.FS, mach *gotfs.Machine, db *DB, s stores.RW) (string, error) {
+				if err := posixfs.PutFile(ctx, fsys, "import.txt", 0o644, strings.NewReader("data")); err != nil {
+					return "import.txt", err
+				}
+				imp := NewImporter(mach, db, [2]stores.RW{s, s})
+				_, err := imp.ImportFile(ctx, fsys, "import.txt")
+				return "import.txt", err
+			},
+			want: false,
+		},
+		{
+			name: "import dir sets by_got false",
+			setup: func(t *testing.T, ctx context.Context, fsys posixfs.FS, mach *gotfs.Machine, db *DB, s stores.RW) (string, error) {
+				if err := posixfs.MkdirAll(fsys, "importdir", 0o755); err != nil {
+					return "importdir", err
+				}
+				imp := NewImporter(mach, db, [2]stores.RW{s, s})
+				_, err := imp.ImportPath(ctx, fsys, "importdir")
+				return "importdir", err
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := testutil.Context(t)
+
+			fsys := posixfs.NewDirFS(t.TempDir())
+			cfg := gotcore.DefaultConfig(false)
+			conn, paramHash := newTestDB(t, ctx, cfg)
+			mach := gotcore.GotFS(cfg)
+			s := stores.NewMem()
+			db := NewDB(conn, paramHash)
+
+			p, err := tt.setup(t, ctx, fsys, mach, db, s)
+			require.NoError(t, err)
+
+			var got FileInfo
+			ok, err := db.GetInfo(ctx, p, &got)
+			require.NoError(t, err)
+			require.True(t, ok)
+			require.Equal(t, tt.want, got.ByGot)
+		})
+	}
+}
+
 func newTestDB(t testing.TB, ctx context.Context, cfg gotcore.DSConfig) (*sqlutil.Conn, [32]byte) {
 	t.Helper()
 	pool := sqlutil.NewTestPool(t)

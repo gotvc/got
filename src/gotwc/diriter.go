@@ -42,9 +42,21 @@ func (it *unknownIter) Next(ctx context.Context, dst []unknownFile) (int, error)
 	return it.it.Next(ctx, dst)
 }
 
+func hasChangedDirAware(a, b *porting.FileInfo) bool {
+	if a.Mode.IsDir() || b.Mode.IsDir() {
+		return a.Mode != b.Mode
+	}
+	return porting.HasChanged(a, b)
+}
+
 // newUnknownIterator iterates over files which are unknown to the database.
-func (wc *WC) newUnknownIterator(db *porting.DB, fsys posixfs.FS) streams.Iterator[unknownFile] {
-	dbit := streams.NewPeeker(db.NewInfoIterator(), nil)
+func (wc *WC) newUnknownIterator(db *porting.DB, fsys posixfs.FS, spans []Span) streams.Iterator[unknownFile] {
+	dbit := streams.NewPeeker(streams.NewFilter(db.NewInfoIterator(), func(ent porting.FileInfo) bool {
+		if strings.HasPrefix(ent.Path, ".got") {
+			return false
+		}
+		return spansContain(spans, ent.Path)
+	}), nil)
 	fsit := streams.NewPeeker(porting.NewFSInfoIter(fsys), nil)
 	join := streams.NewOJoiner(dbit, fsit, func(left porting.FileInfo, right FileInfo) int {
 		return strings.Compare(left.Path, right.Path)
@@ -55,7 +67,7 @@ func (wc *WC) newUnknownIterator(db *porting.DB, fsys posixfs.FS) streams.Iterat
 			// path only exists in 1
 			return true
 		case x.Left.Ok && x.Right.Ok:
-			return porting.HasChanged(&x.Left.X, &x.Right.X)
+			return hasChangedDirAware(&x.Left.X, &x.Right.X)
 		}
 		return false
 	})

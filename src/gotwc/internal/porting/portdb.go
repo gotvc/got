@@ -17,6 +17,7 @@ type FileInfo struct {
 	ModifiedAt tai64.TAI64N
 	Mode       fs.FileMode
 	Size       int64
+	ByGot      bool
 }
 
 // DB stores metadata about the state of the directory and
@@ -39,11 +40,11 @@ func (db *DB) PutInfo(ctx context.Context, ent FileInfo) error {
 	if err := sqlutil.Exec(db.conn, `DELETE FROM fsroots WHERE path = ? AND param_hash = ?`, p, db.paramHash[:]); err != nil {
 		return err
 	}
-	return sqlutil.Exec(db.conn, `INSERT OR REPLACE INTO dirstate (path, mode, modtime, size) VALUES (?, ?, ?, ?)`, p, uint32(ent.Mode), ent.ModifiedAt.Marshal(), ent.Size)
+	return sqlutil.Exec(db.conn, `INSERT OR REPLACE INTO dirstate (path, mode, modtime, size, by_got) VALUES (?, ?, ?, ?, ?)`, p, uint32(ent.Mode), ent.ModifiedAt.Marshal(), ent.Size, ent.ByGot)
 }
 
 func (db *DB) GetInfo(ctx context.Context, p string, dst *FileInfo) (bool, error) {
-	return sqlutil.GetOne(db.conn, dst, scanInfo, `SELECT path, modtime, mode, size FROM dirstate WHERE path = ?`, p)
+	return sqlutil.GetOne(db.conn, dst, scanInfo, `SELECT path, modtime, mode, size, by_got FROM dirstate WHERE path = ?`, p)
 }
 
 func (db *DB) NewInfoIterator() *DBInfoIterator {
@@ -88,6 +89,7 @@ func (db *DB) GetFSRoot(ctx context.Context, p string, dst *gotfs.Root) (bool, e
 // 1: modtime
 // 2: mode
 // 3: size
+// 4: by_got
 func scanInfo(stmt *sqlite.Stmt, dst *FileInfo) error {
 	dst.Path = stmt.ColumnText(0)
 	var modtime [8 + 4]byte
@@ -97,6 +99,7 @@ func scanInfo(stmt *sqlite.Stmt, dst *FileInfo) error {
 	}
 	dst.Mode = fs.FileMode(stmt.ColumnInt64(2))
 	dst.Size = stmt.ColumnInt64(3)
+	dst.ByGot = stmt.ColumnInt64(4) != 0
 	return nil
 }
 
@@ -109,6 +112,6 @@ func scanFSRoot(stmt *sqlite.Stmt, dst *gotfs.Root) error {
 type DBInfoIterator = streams.SeqErr[FileInfo]
 
 func NewDBInfoIterator(conn *sqlutil.Conn) *DBInfoIterator {
-	seq := sqlutil.Select(conn, scanInfo, `SELECT path, modtime, mode, size FROM dirstate ORDER BY path`)
+	seq := sqlutil.Select(conn, scanInfo, `SELECT path, modtime, mode, size, by_got FROM dirstate ORDER BY path`)
 	return streams.NewSeqErr(seq)
 }

@@ -93,6 +93,7 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 		Path:       p,
 		Mode:       finfo.Mode(),
 		ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
+		ByGot:      false,
 	}); err != nil {
 		return nil, err
 	}
@@ -145,6 +146,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 		}
 	}
 	// need update
+	finfo.ByGot = false
 	if err := pr.db.PutInfo(ctx, *finfo); err != nil {
 		return nil, err
 	}

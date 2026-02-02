@@ -436,7 +436,11 @@ func (wc *WC) ForEachDirty(ctx context.Context, fn func(fi DirtyFile) error) err
 			if err != nil {
 				return err
 			}
-			uk := wc.newUnknownIterator(sctx.DB, fsys)
+			spans, err := wc.ListSpans(ctx)
+			if err != nil {
+				return err
+			}
+			uk := wc.newUnknownIterator(sctx.DB, fsys, spans)
 			return streams.ForEach(ctx, uk, func(ukp unknownFile) error {
 				p := ukp.Path()
 				// filter staging
