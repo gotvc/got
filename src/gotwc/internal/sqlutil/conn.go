@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"iter"
+	"sync/atomic"
 	"testing"
 
 	"blobcache.io/blobcache/src/blobcache"
@@ -16,6 +17,8 @@ import (
 // Type aliases for convenience
 type Pool = sqlitex.Pool
 type Conn = sqlite.Conn
+
+var testPoolCounter uint64
 
 func OpenPool(p string) (*Pool, error) {
 	// Set up connection options with WAL mode and foreign keys
@@ -32,7 +35,8 @@ func OpenPool(p string) (*Pool, error) {
 }
 
 func NewTestPool(t testing.TB) *Pool {
-	pool, err := sqlitex.NewPool("file::memory:?mode=memory&cache=shared", sqlitex.PoolOptions{
+	id := atomic.AddUint64(&testPoolCounter, 1)
+	pool, err := sqlitex.NewPool(fmt.Sprintf("file:memdb-%d?mode=memory&cache=shared", id), sqlitex.PoolOptions{
 		PoolSize: 1,
 	})
 	require.NoError(t, err)

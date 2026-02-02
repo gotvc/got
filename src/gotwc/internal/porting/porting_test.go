@@ -71,6 +71,69 @@ func TestExport(t *testing.T) {
 				Path: filepath.Join("dir", "untracked.txt"),
 			},
 		},
+		{
+			Name: "export new file",
+			InGot: []FileEntry{
+				{Path: "new.txt", Mode: 0o644, Data: "data"},
+			},
+			ExportPath: "new.txt",
+		},
+		{
+			Name: "export new dir",
+			InGot: []FileEntry{
+				{Path: "newdir", Mode: 0o755 | fs.ModeDir},
+			},
+			ExportPath: "newdir",
+		},
+		{
+			Name: "replace empty dir with file",
+			InFS: []FileEntry{
+				{Path: "swap", Mode: 0o755 | fs.ModeDir},
+			},
+			InGot: []FileEntry{
+				{Path: "swap", Mode: 0o644, Data: "file"},
+			},
+			ExportPath: "swap",
+			Err: ErrWouldClobber{
+				Op:   "write",
+				Path: "swap",
+			},
+		},
+		{
+			Name: "file overwrite tracked changed",
+			InFS: []FileEntry{
+				{Path: "tracked.txt", Mode: 0o644, Data: "on disk"},
+			},
+			InDB: []FileInfo{
+				{Path: "tracked.txt", Mode: 0o644, Size: 1},
+			},
+			InGot: []FileEntry{
+				{Path: "tracked.txt", Mode: 0o644, Data: "got"},
+			},
+			ExportPath: "tracked.txt",
+			Err: ErrWouldClobber{
+				Op:   "write",
+				Path: "tracked.txt",
+			},
+		},
+		{
+			Name: "delete tracked changed child",
+			InFS: []FileEntry{
+				{Path: "dir", Mode: 0o755 | fs.ModeDir},
+				{Path: filepath.Join("dir", "old.txt"), Mode: 0o644, Data: "old"},
+			},
+			InDB: []FileInfo{
+				{Path: filepath.Join("dir", "old.txt"), Mode: 0o644, Size: 0},
+			},
+			InGot: []FileEntry{
+				{Path: "dir", Mode: 0o755 | fs.ModeDir},
+			},
+			ExportPath: "dir",
+			Err: ErrWouldClobber{
+				Op:   "delete",
+				Path: filepath.Join("dir", "old.txt"),
+			},
+		},
 	}
 
 	for _, tt := range tests {
