@@ -32,7 +32,7 @@ func OpenPool(p string) (*Pool, error) {
 }
 
 func NewTestPool(t testing.TB) *Pool {
-	pool, err := sqlitex.NewPool(":memory:", sqlitex.PoolOptions{
+	pool, err := sqlitex.NewPool("file::memory:?mode=memory&cache=shared", sqlitex.PoolOptions{
 		PoolSize: 1,
 	})
 	require.NoError(t, err)
