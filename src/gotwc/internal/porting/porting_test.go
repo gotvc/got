@@ -91,36 +91,19 @@ func TestExport(t *testing.T) {
 				require.NoError(t, posixfs.PutFile(ctx, fsys, ent.Path, ent.Mode, strings.NewReader(ent.Data)))
 			}
 
-			cfg := gotcore.DefaultConfig(false)
+			cfg := gotcore.DefaultConfig(true)
 			conn, paramHash := newTestDB(t, ctx, cfg)
 			mach := gotcore.GotFS(cfg)
-			store := stores.NewMem()
-			ms := store
-			ds := store
+			s := stores.NewMem()
 			db := NewDB(conn, paramHash)
 
 			for _, info := range tt.InDB {
 				require.NoError(t, db.PutInfo(ctx, info))
 			}
-			root, err := mach.NewEmpty(ctx, ms, 0o755)
-			require.NoError(t, err)
-			for _, ent := range tt.InGot {
-				if ent.Mode.IsDir() {
-					root, err = mach.MkdirAll(ctx, ms, *root, ent.Path)
-					require.NoError(t, err)
-					continue
-				}
-				parent := filepath.Dir(ent.Path)
-				if parent != "." && parent != "" {
-					root, err = mach.MkdirAll(ctx, ms, *root, parent)
-					require.NoError(t, err)
-				}
-				root, err = mach.PutFile(ctx, [2]stores.RW{ds, ms}, *root, ent.Path, strings.NewReader(ent.Data))
-				require.NoError(t, err)
-			}
+			root := makeGotFS(t, s, tt.InGot)
 
 			exp := NewExporter(mach, db, fsys, func(string) bool { return true })
-			err = exp.ExportPath(ctx, ms, ds, *root, tt.ExportPath)
+			err := exp.ExportPath(ctx, s, s, root, tt.ExportPath)
 			if tt.Err == nil {
 				require.NoError(t, err)
 				return
@@ -193,6 +176,30 @@ func newTestDB(t testing.TB, ctx context.Context, cfg gotcore.DSConfig) (*sqluti
 
 	require.NoError(t, migrations.EnsureAll(conn, dbmig.ListMigrations()))
 	return conn, cfg.Hash()
+}
+
+func makeGotFS(t testing.TB, s stores.RW, ents []FileEntry) gotfs.Root {
+	t.Helper()
+	cfg := gotcore.DefaultConfig(true)
+	mach := gotcore.GotFS(cfg)
+	ctx := testutil.Context(t)
+	root, err := mach.NewEmpty(ctx, s, 0o755)
+	require.NoError(t, err)
+	for _, ent := range ents {
+		if ent.Mode.IsDir() {
+			root, err = mach.MkdirAll(ctx, s, *root, ent.Path)
+			require.NoError(t, err)
+			continue
+		}
+		parent := filepath.Dir(ent.Path)
+		if parent != "." && parent != "" {
+			root, err = mach.MkdirAll(ctx, s, *root, parent)
+			require.NoError(t, err)
+		}
+		root, err = mach.PutFile(ctx, [2]stores.RW{s, s}, *root, ent.Path, strings.NewReader(ent.Data))
+		require.NoError(t, err)
+	}
+	return *root
 }
 
 func readFileFromRoot(t testing.TB, ctx context.Context, mach *gotfs.Machine, ms, ds stores.Reading, root *gotfs.Root, p string) string {
