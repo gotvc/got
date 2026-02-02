@@ -21,10 +21,10 @@ import (
 func TestInit(t *testing.T) {
 	ctx := testutil.Context(t)
 	bc := bclocal.NewTestService(t)
-	rootish := bcns.Objectish{}
-	nsc, err := bcns.ClientForVolume(ctx, bc, rootish)
+	rootExpr := bcns.ObjectExpr{}
+	nsc, err := bcns.ClientForVolumeExpr(ctx, bc, rootExpr)
 	require.NoError(t, err)
-	nsh, err := rootish.Open(ctx, bc)
+	nsh, err := rootExpr.Open(ctx, bc)
 	require.NoError(t, err)
 
 	volh, err := nsc.CreateAt(ctx, *nsh, "test", BranchVolumeSpec())

@@ -5,7 +5,7 @@ go 1.24.0
 toolchain go1.24.1
 
 require (
-	blobcache.io/blobcache v0.0.4-0.20260119183202-6429a0ddfceb
+	blobcache.io/blobcache v0.0.4-0.20260202151429-c7a5c63d7245
 	capnproto.org/go/capnp/v3 v3.1.0-alpha.2
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/cloudflare/circl v1.6.1
