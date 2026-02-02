@@ -2,8 +2,11 @@ package gotcmd
 
 import (
 	"crypto/rand"
+	"encoding/hex"
+	"fmt"
 
 	bcclient "blobcache.io/blobcache/client/go"
+	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo"
@@ -16,6 +19,7 @@ var spaceCmd = star.NewDir(star.Metadata{
 }, map[string]star.Command{
 	"list":      spaceListCmd,
 	"create-bc": spaceCreateBcCmd,
+	"add-bc":    spaceAddBcCmd,
 	"sync":      spaceSyncCmd,
 })
 
@@ -118,6 +122,65 @@ var spaceCreateBcCmd = star.Command{
 				Secret: randomSecret(),
 			},
 		})
+	},
+}
+
+var spaceAddBcCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "adds an existing Space backed by a Blobcache Volume",
+	},
+	Pos: []star.Positional{spaceNameParam},
+	Flags: map[string]star.Flag{
+		"url":    bcURLParam,
+		"secret": secretParam,
+	},
+	F: func(c star.Context) error {
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		bc := bcclient.NewClientFromEnv()
+		u := bcURLParam.Load(c)
+		volh, err := bcsdk.OpenURL(c, bc, u)
+		if err != nil {
+			return err
+		}
+		defer bc.Drop(c, *volh)
+		_, err = bc.InspectVolume(c, *volh)
+		if err != nil {
+			return err
+		}
+		return repo.CreateSpace(c, spaceNameParam.Load(c), gotrepo.SpaceSpec{
+			Blobcache: &gotrepo.VolumeSpec{
+				URL:    u,
+				Secret: secretParam.Load(c),
+			},
+		})
+	},
+}
+
+var bcURLParam = star.Required[blobcache.URL]{
+	ID: "bc-url",
+	Parse: func(x string) (blobcache.URL, error) {
+		u, err := blobcache.ParseURL(x)
+		if err != nil {
+			return blobcache.URL{}, err
+		}
+		return *u, nil
+	},
+}
+
+var secretParam = star.Required[[32]byte]{
+	ID: "secret",
+	Parse: func(s string) ([32]byte, error) {
+		data, err := hex.DecodeString(s)
+		if err != nil {
+			return [32]byte{}, nil
+		}
+		if len(data) != 32 {
+			return [32]byte{}, fmt.Errorf("secret is wrong length")
+		}
+		return [32]byte(data), nil
 	},
 }
 
