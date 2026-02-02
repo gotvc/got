@@ -9,7 +9,6 @@ import (
 	bcclient "blobcache.io/blobcache/client/go"
 	"blobcache.io/blobcache/src/blobcache"
 	_ "blobcache.io/blobcache/src/blobcachecmd"
-	"blobcache.io/blobcache/src/schema/bcns"
 	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc"
@@ -181,22 +180,20 @@ var volNameParam = star.Required[string]{
 	ShortDoc: "the name in the namespace to use for the new volume",
 }
 
-func createRepoVol(ctx context.Context, svc blobcache.Service, volName string) (*blobcache.Handle, error) {
-	nsc, err := bcns.ClientForVolume(ctx, svc, bcns.Objectish{})
+// createVol create a new volume according to spec at volname in the namespace
+func createVol(ctx context.Context, svc blobcache.Service, volName string, spec blobcache.VolumeSpec) (*blobcache.Handle, error) {
+	nsh, nsc, err := bcclient.OpenNSRoot(ctx, svc)
 	if err != nil {
 		return nil, err
 	}
-	nsh := blobcache.Handle{} // assume the root
-	spec := gotrepo.RepoVolumeSpec(false)
-	return nsc.CreateAt(ctx, nsh, volName, spec)
+	defer svc.Drop(ctx, *nsh)
+	return nsc.CreateAt(ctx, *nsh, volName, spec)
+}
+
+func createRepoVol(ctx context.Context, svc blobcache.Service, volName string) (*blobcache.Handle, error) {
+	return createVol(ctx, svc, volName, gotrepo.RepoVolumeSpec(false))
 }
 
 func createNSVol(ctx context.Context, svc blobcache.Service, volName string) (*blobcache.Handle, error) {
-	nsc, err := bcns.ClientForVolume(ctx, svc, bcns.Objectish{})
-	if err != nil {
-		return nil, err
-	}
-	nsh := blobcache.Handle{} // assume the root
-	spec := gotns.DefaultVolumeSpec()
-	return nsc.CreateAt(ctx, nsh, volName, spec)
+	return createVol(ctx, svc, volName, gotns.DefaultVolumeSpec())
 }
