@@ -137,7 +137,12 @@ func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.Reading, root 
 		var dbinfo FileInfo
 		if found, err := pr.db.GetInfo(ctx, p, &dbinfo); err != nil {
 			return err
-		} else if found && HasChanged(&dbinfo, finfo) {
+		} else if !found {
+			return ErrWouldClobber{
+				Op:   "write",
+				Path: p,
+			}
+		} else if HasChanged(&dbinfo, finfo) {
 			return ErrWouldClobber{
 				Op:   "write",
 				Path: p,
