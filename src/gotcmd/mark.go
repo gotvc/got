@@ -22,11 +22,14 @@ var markCmd = star.NewDir(
 		"create":  markCreateCmd,
 		"list":    markListCmd,
 		"del":     markDeleteCmd,
-		"load":    markLoadCmd,
 		"inspect": markInspectCmd,
-		"cp-salt": markCpSaltCmd,
-		"sync":    markSyncCmd,
 		"as":      markAsCmd,
+		"cp":      markCpCmd,
+		"mv":      markMvCmd,
+
+		"load":    markLoadCmd,
+		"sync":    markSyncCmd,
+		"cp-salt": markCpSaltCmd,
 	},
 )
 
@@ -117,6 +120,52 @@ var markDeleteCmd = star.Command{
 		spaceName, _ := spaceNameOptParam.LoadOpt(c)
 		return repo.DeleteMark(ctx, gotrepo.FQM{Space: spaceName, Name: name})
 	},
+}
+
+var markMvCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "moves a mark from one name to another within a space",
+	},
+	Flags: map[string]star.Flag{
+		"space": spaceNameOptParam,
+	},
+	Pos: []star.Positional{srcMarkNameParam, dstMarkNameParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		space, _ := spaceNameOptParam.LoadOpt(c)
+		return repo.MoveMark(ctx, space, srcMarkNameParam.Load(c), dstMarkNameParam.Load(c))
+	},
+}
+
+var markCpCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "copies a mark from one name to another, the new name must be available",
+	},
+	Pos: []star.Positional{srcMarkParam, dstMarkParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		return repo.CloneMark(ctx, srcMarkParam.Load(c), dstMarkParam.Load(c))
+	},
+}
+
+var srcMarkNameParam = star.Required[string]{
+	ID:    "src-mark",
+	Parse: star.ParseString,
+}
+
+var dstMarkNameParam = star.Required[string]{
+	ID:    "dst-mark",
+	Parse: star.ParseString,
 }
 
 var markLoadCmd = star.Command{

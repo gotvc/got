@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/internal/gotcore"
 )
 
@@ -132,6 +131,19 @@ func (r *Repo) MarkLoad(ctx context.Context, fqm FQM) (*Snap, error) {
 	return &snap, nil
 }
 
+func (r *Repo) MoveMark(ctx context.Context, spaceName, from, to string) error {
+	space, err := r.GetSpace(ctx, spaceName)
+	if err != nil {
+		return err
+	}
+	return space.Do(ctx, true, func(st gotcore.SpaceTx) error {
+		if err := gotcore.CloneMark(ctx, st, from, to); err != nil {
+			return err
+		}
+		return st.Delete(ctx, from)
+	})
+}
+
 // CloneMark creates a new branch called next and sets its head to match base's
 // TODO: currently marks can only be cloned within the same space.
 func (r *Repo) CloneMark(ctx context.Context, base, next FQM) error {
@@ -141,20 +153,7 @@ func (r *Repo) CloneMark(ctx context.Context, base, next FQM) error {
 			return err
 		}
 		return space.Do(ctx, true, func(st gotcore.SpaceTx) error {
-			baseInfo, err := st.Inspect(ctx, base.Name)
-			if err != nil {
-				return err
-			}
-			if _, err := st.Create(ctx, next.Name, baseInfo.AsMetadata()); err != nil {
-				return err
-			}
-			var ref gdat.Ref
-			if ok, err := st.GetTarget(ctx, base.Name, &ref); err != nil {
-				return err
-			} else if !ok {
-				ref = gdat.Ref{}
-			}
-			return st.SetTarget(ctx, next.Name, ref)
+			return gotcore.CloneMark(ctx, st, base.Name, next.Name)
 		})
 	} else {
 		return fmt.Errorf("marks can only be cloned in the same space")

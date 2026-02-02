@@ -134,6 +134,23 @@ func ForEach(ctx context.Context, stx SpaceTx, span Span, fn func(string) error)
 	return nil
 }
 
+func CloneMark(ctx context.Context, st SpaceTx, from, to string) error {
+	baseInfo, err := st.Inspect(ctx, from)
+	if err != nil {
+		return err
+	}
+	if _, err := st.Create(ctx, to, baseInfo.AsMetadata()); err != nil {
+		return err
+	}
+	var ref gdat.Ref
+	if ok, err := st.GetTarget(ctx, from, &ref); err != nil {
+		return err
+	} else if !ok {
+		ref = gdat.Ref{}
+	}
+	return st.SetTarget(ctx, to, ref)
+}
+
 // SyncSpacesTask contains parameters needed to
 // copy marks from one space to another.
 type SyncSpacesTask struct {
