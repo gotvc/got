@@ -190,7 +190,7 @@ type Machine struct {
 
 func New() Machine {
 	m := Machine{
-		gotkv: gotkv.NewMachine(1<<14, 1<<20),
+		gotkv: gotkv.NewMachine(gotkv.Params{MeanSize: 1 << 14, MaxSize: 1 << 20}),
 		led: statetrace.Machine[Root]{
 			ParseState: ParseRoot,
 		},

@@ -23,7 +23,7 @@ type Client struct {
 }
 
 func NewClient(svc blobcache.Service) Client {
-	mach := gotkv.NewMachine(1<<14, 1<<22)
+	mach := gotkv.NewMachine(gotkv.Params{MeanSize: 1 << 14, MaxSize: 1 << 22})
 	return Client{
 		Service: svc,
 		GotKV:   mach,

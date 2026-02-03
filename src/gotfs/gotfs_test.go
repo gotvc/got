@@ -115,7 +115,10 @@ func TestKeys(t *testing.T) {
 			},
 		},
 	}
-	kvmach := gotkv.NewMachine(DefaultMeanBlobSizeMetadata, DefaultMaxBlobSize)
+	kvmach := gotkv.NewMachine(gotkv.Params{
+		MeanSize: DefaultMeanBlobSizeMetadata,
+		MaxSize:  DefaultMaxBlobSize,
+	})
 	for i, tc := range tcs {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			ctx, mach, s := setup(t)

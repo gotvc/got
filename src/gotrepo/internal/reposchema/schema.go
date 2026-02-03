@@ -33,7 +33,7 @@ func Constructor(params json.RawMessage, mkSchema schema.Factory) (schema.Schema
 func NewSchema() *Schema {
 	const meanSize = 1 << 14
 	const maxSize = 1 << 22
-	mach := gotkv.NewMachine(meanSize, maxSize)
+	mach := gotkv.NewMachine(gotkv.Params{MeanSize: meanSize, MaxSize: maxSize})
 	return &Schema{GotKV: mach}
 }
 

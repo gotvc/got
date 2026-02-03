@@ -91,12 +91,12 @@ func NewMachine(opts ...Option) *Machine {
 	)
 	var treeSeed [16]byte
 	gdat.DeriveKey(treeSeed[:], o.salt, []byte("gotkv-seed"))
-	o.gotkv = gotkv.NewMachine(
-		o.meanSizeMetadata,
-		o.maxBlobSize,
-		gotkv.WithDataMachine(metaOp),
-		gotkv.WithSeed(&treeSeed),
-	)
+	o.gotkv = gotkv.NewMachine(gotkv.Params{
+		DataMach: metaOp,
+		MeanSize: o.meanSizeMetadata,
+		MaxSize:  o.maxBlobSize,
+		Seed:     treeSeed,
+	})
 	lobOpts := []gotlob.Option{
 		gotlob.WithChunking(false, func(onChunk chunking.ChunkHandler) *chunking.ContentDefined {
 			return chunking.NewContentDefined(o.minSizeData, o.meanSizeData, o.maxBlobSize, o.chunkingSeed, onChunk)

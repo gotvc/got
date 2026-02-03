@@ -105,7 +105,7 @@ type SpaceTx interface {
 
 // GetSnapshot reads a snapshot from the store.
 func GetSnapshot(ctx context.Context, s stores.Reading, ref gdat.Ref) (*Snap, error) {
-	vcmach := gotvc.NewMachine(ParsePayload)
+	vcmach := gotvc.NewMachine(ParsePayload, gotvc.Config{})
 	return vcmach.GetSnapshot(ctx, s, ref)
 }
 

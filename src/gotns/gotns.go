@@ -29,7 +29,7 @@ func BeginTx(ctx context.Context, dmach *gdat.Machine, kvmach *gotkv.Machine, vo
 }
 
 func NewGotKV() gotkv.Machine {
-	return gotkv.NewMachine(1<<13, 1<<18)
+	return gotkv.NewMachine(gotkv.Params{MeanSize: 1 << 13, MaxSize: 1 << 18})
 }
 
 func NewTx(tx volumes.Tx, dmach *gdat.Machine, kvmach *gotkv.Machine) *Tx {

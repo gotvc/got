@@ -331,9 +331,10 @@ func newGotFS(b *DSConfig, opts ...gotfs.Option) *gotfs.Machine {
 }
 
 // NewGotVC creates a new gotvc.Machine suitable for writing to the mark
-func newGotVC(b *DSConfig, opts ...gotvc.Option[Payload]) *VCMach {
-	opts = append(opts, gotvc.WithSalt[Payload](deriveVCSalt(b)))
-	return gotvc.NewMachine(ParsePayload, opts...)
+func newGotVC(b *DSConfig) *VCMach {
+	return gotvc.NewMachine(ParsePayload, gotvc.Config{
+		Salt: *deriveVCSalt(b),
+	})
 }
 
 func deriveFSSalt(b *DSConfig) *[32]byte {

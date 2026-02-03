@@ -45,7 +45,7 @@ type Tx struct {
 }
 
 func DefaultGotKV() gotkv.Machine {
-	return gotkv.NewMachine(1<<12, 1<<18)
+	return gotkv.NewMachine(gotkv.Params{MeanSize: 1 << 12, MaxSize: 1 << 18})
 }
 
 // New wraps a transaction to create a transaction on a Stage

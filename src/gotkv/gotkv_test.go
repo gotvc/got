@@ -78,7 +78,7 @@ func testSetup(t *testing.T) (context.Context, stores.RW, *Root) {
 }
 
 func newTestMachine(t testing.TB) Machine {
-	return NewMachine(1<<13, 1<<16)
+	return NewMachine(Params{MeanSize: 1 << 13, MaxSize: 1 << 16})
 }
 
 func BenchmarkPut(b *testing.B) {

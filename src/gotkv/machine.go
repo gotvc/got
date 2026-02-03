@@ -46,24 +46,11 @@ func (it *Iterator) Seek(ctx context.Context, gteq []byte) error {
 	return it.it.Seek(ctx, Entry{Key: gteq})
 }
 
-// Option is used to configure an Machine
-type Option func(ag *Machine)
-
-func WithDataMachine(ro *gdat.Machine) Option {
-	return func(a *Machine) {
-		a.da = ro
-	}
-}
-
-// WithSeed returns an Option which sets the seed for an Machine.
-// Seed affects node boundaries.
-func WithSeed(seed *[16]byte) Option {
-	if seed == nil {
-		panic("seed cannot be nil")
-	}
-	return func(a *Machine) {
-		a.seed = seed
-	}
+type Params struct {
+	DataMach *gdat.Machine
+	MaxSize  int
+	MeanSize int
+	Seed     [16]byte
 }
 
 // Machine holds common configuration for operations on gotkv instances.
@@ -72,27 +59,28 @@ func WithSeed(seed *[16]byte) Option {
 type Machine struct {
 	da                *gdat.Machine
 	maxSize, meanSize int
-	seed              *[16]byte
+	seed              [16]byte
 }
 
 // NewMachine returns an operator which will create nodes with mean size `meanSize`
 // and maximum size `maxSize`.
-func NewMachine(meanSize, maxSize int, opts ...Option) Machine {
-	ag := Machine{
-		da:       gdat.NewMachine(),
-		meanSize: meanSize,
-		maxSize:  maxSize,
+func NewMachine(p Params) Machine {
+	if p.DataMach == nil {
+		p.DataMach = gdat.NewMachine()
 	}
-	if ag.meanSize <= 0 {
-		panic(fmt.Sprintf("gotkv.NewMachine: invalid average size %d", ag.meanSize))
+	mach := Machine{
+		da:       p.DataMach,
+		meanSize: p.MeanSize,
+		maxSize:  p.MaxSize,
+		seed:     p.Seed,
 	}
-	if ag.maxSize <= 0 {
-		panic(fmt.Sprintf("gotkv.NewMachine: invalid max size %d", ag.maxSize))
+	if mach.meanSize <= 0 {
+		panic(fmt.Sprintf("gotkv.NewMachine: invalid average size %d", mach.meanSize))
 	}
-	for _, opt := range opts {
-		opt(&ag)
+	if mach.maxSize <= 0 {
+		panic(fmt.Sprintf("gotkv.NewMachine: invalid max size %d", mach.maxSize))
 	}
-	return ag
+	return mach
 }
 
 func (a *Machine) MeanSize() int {
@@ -220,7 +208,7 @@ func (a *Machine) NewBuilder(s stores.RW) *Builder {
 		Store:           &ptreeStore{ag: a.da, s: s},
 		MeanSize:        a.meanSize,
 		MaxSize:         a.maxSize,
-		Seed:            a.seed,
+		Seed:            &a.seed,
 		NewEncoder:      func() ptree.Encoder[Entry] { return &Encoder{} },
 		NewIndexEncoder: func() ptree.IndexEncoder[Entry, Ref] { return &IndexEncoder{} },
 		Compare:         compareEntries,

@@ -8,34 +8,27 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 )
 
-type Option[T Marshalable] = func(a *Machine[T])
-
-func WithSalt[T Marshalable](salt *[32]byte) Option[T] {
-	return func(a *Machine[T]) {
-		a.salt = salt
-	}
+type Config struct {
+	Salt [32]byte
 }
 
 type Parser[T any] = func([]byte) (T, error)
 
 type Machine[T Marshalable] struct {
 	parse     Parser[T]
-	salt      *[32]byte
+	cfg       Config
 	cacheSize int
 	readOnly  bool
 	da        *gdat.Machine
 }
 
-func NewMachine[T Marshalable](parse Parser[T], opts ...Option[T]) *Machine[T] {
+func NewMachine[T Marshalable](parse Parser[T], cfg Config) *Machine[T] {
 	ag := Machine[T]{
 		parse:     parse,
+		cfg:       cfg,
 		cacheSize: 256,
-		salt:      &[32]byte{},
 	}
-	for _, opt := range opts {
-		opt(&ag)
-	}
-	ag.da = gdat.NewMachine(gdat.WithSalt(ag.salt), gdat.WithCacheSize(ag.cacheSize))
+	ag.da = gdat.NewMachine(gdat.WithSalt(&ag.cfg.Salt), gdat.WithCacheSize(ag.cacheSize))
 	return &ag
 }
 

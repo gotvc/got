@@ -16,7 +16,7 @@ func TestAddPrefix(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
 	s := stores.NewMem()
-	ag := NewMachine(1<<13, 1<<16)
+	ag := NewMachine(Params{MeanSize: 1 << 13, MaxSize: 1 << 16})
 	b := ag.NewBuilder(s)
 
 	const N = 1e4
