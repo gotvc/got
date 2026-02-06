@@ -73,6 +73,7 @@ func (pr *Exporter) Clobber(ctx context.Context, ms, ds stores.Reading, root got
 	if err != nil {
 		return err
 	}
+	finfo.ByGot = true
 	return pr.db.PutInfo(ctx, *finfo)
 }
 
@@ -122,9 +123,21 @@ func (pr *Exporter) exportDir(ctx context.Context, ms, ds stores.Reading, root g
 		}
 	}
 	// list all the entries that should exist, and recursively call ExportPath
-	return pr.gotfs.ReadDir(ctx, ms, root, p, func(e gotfs.DirEnt) error {
+	if err := pr.gotfs.ReadDir(ctx, ms, root, p, func(e gotfs.DirEnt) error {
 		return pr.ExportPath(ctx, ms, ds, root, e.Name)
-	})
+	}); err != nil {
+		return err
+	}
+	// record directory state after exporting children
+	dirInfo, err := stat(pr.fsx, p)
+	if err != nil {
+		return err
+	}
+	dirInfo.ByGot = true
+	if err := pr.db.PutInfo(ctx, *dirInfo); err != nil {
+		return err
+	}
+	return nil
 }
 
 // exportFile exports a known file in root
@@ -169,6 +182,7 @@ func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.Reading, root 
 	if err != nil {
 		return err
 	}
+	finfo.ByGot = true
 	return pr.db.PutInfo(ctx, *finfo)
 }
 
