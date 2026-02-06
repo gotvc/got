@@ -147,7 +147,7 @@ type SnapshotParams[T Marshalable] struct {
 
 func (a *Machine[T]) NewSnapshot(ctx context.Context, s stores.Writing, sp SnapshotParams[T]) (*Vertex[T], error) {
 	var n uint64
-	var maxCreatedAt tai64.TAI64
+	maxCreatedAt := sp.CreatedAt
 	parentRefs := make([]Ref, len(sp.Parents))
 	for i, parent := range sp.Parents {
 		maxCreatedAt = max(maxCreatedAt, parent.CreatedAt)
