@@ -32,6 +32,15 @@ var nameRegExp = regexp.MustCompile(`^[\w-/=_.]+$`)
 
 const MaxNameLen = 1024
 
+type ErrRefIntegrity struct {
+	Ref   gdat.Ref
+	Store string
+}
+
+func (e ErrRefIntegrity) Error() string {
+	return fmt.Sprintf("this operation would create a dangling reference ref=%v in the store=%s", e.Ref, e.Store)
+}
+
 type ErrInvalidName struct {
 	Name   string
 	Reason string

@@ -83,8 +83,10 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 		// Steps contains the set of Mark names, and the snapshots they point to.
 		Steps []Step
 	}
+
+	cfg := DSConfig{}
 	s := stores.NewMem()
-	snap0 := makeSnap(t, s, nil, makeFS(t, s, map[string]string{
+	snap0 := makeSnap(t, cfg, s, nil, makeFS(t, s, map[string]string{
 		"a": "0",
 	}))
 	tcs := []testCase{
@@ -111,7 +113,7 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 				},
 				{
 					Snaps: map[string]*Snap{
-						"a": makeSnap(t, s, []Snap{*snap0}, makeFS(t, s, map[string]string{
+						"a": makeSnap(t, cfg, s, []Snap{*snap0}, makeFS(t, s, map[string]string{
 							"a": "1",
 						})),
 					},
@@ -226,9 +228,9 @@ func makeFS(t testing.TB, s stores.RW, files map[string]string) gotfs.Root {
 	return *root
 }
 
-func makeSnap(t testing.TB, s stores.Writing, parents []Snap, fsroot gotfs.Root) *Snap {
+func makeSnap(t testing.TB, cfg DSConfig, s stores.Writing, parents []Snap, fsroot gotfs.Root) *Snap {
 	ctx := testutil.Context(t)
-	vcmach := gotvc.NewMachine(ParsePayload, gotvc.Config{})
+	vcmach := gotvc.NewMachine(ParsePayload, gotvc.Config{Salt: cfg.Salt})
 	snap, err := vcmach.NewSnapshot(ctx, s, gotvc.SnapshotParams[Payload]{
 		Parents: parents,
 		Payload: Payload{
