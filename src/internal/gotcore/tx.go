@@ -300,7 +300,8 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 				return nil, fmt.Errorf("cannot CAS, dst ref is not parent of src ref")
 			}
 		}
-		if err := syncStores(ctx, dst.GotVC(), dst.GotFS(), src.RO(), dst.WO(), *goal); err != nil {
+		dsts2 := [3]stores.Writing{dsts[0], dsts[1], dsts[2]}
+		if err := syncStores(ctx, dst.GotVC(), dst.GotFS(), src.RO(), dsts2, *goal); err != nil {
 			return nil, err
 		}
 		return goal, nil
