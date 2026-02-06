@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
+	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
 
@@ -91,6 +92,10 @@ func (ref *Ref) UnmarshalBinary(x []byte) error {
 func (r Ref) String() string {
 	data, _ := r.MarshalText()
 	return string(data)
+}
+
+func (r *Ref) Equals(other *Ref) bool {
+	return r.CID == other.CID && subtle.ConstantTimeCompare(r.DEK[:], other.DEK[:]) == 1
 }
 
 func (r Ref) IsZero() bool {

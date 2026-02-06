@@ -147,8 +147,10 @@ type SnapshotParams[T Marshalable] struct {
 
 func (a *Machine[T]) NewSnapshot(ctx context.Context, s stores.Writing, sp SnapshotParams[T]) (*Vertex[T], error) {
 	var n uint64
+	maxCreatedAt := sp.CreatedAt
 	parentRefs := make([]Ref, len(sp.Parents))
 	for i, parent := range sp.Parents {
+		maxCreatedAt = max(maxCreatedAt, parent.CreatedAt)
 		parentRef, err := a.PostSnapshot(ctx, s, parent)
 		if err != nil {
 			return nil, err
@@ -164,7 +166,7 @@ func (a *Machine[T]) NewSnapshot(ctx context.Context, s stores.Writing, sp Snaps
 	})
 	return &Vertex[T]{
 		N:         n,
-		CreatedAt: sp.CreatedAt,
+		CreatedAt: maxCreatedAt,
 		Parents:   parentRefs,
 		Creator:   sp.Creator,
 		Payload:   sp.Payload,

@@ -120,7 +120,7 @@ func (r *Repo) MarkLoad(ctx context.Context, fqm FQM) (*Snap, error) {
 	var snap gotcore.Snap
 	if err := r.ViewMark(ctx, fqm, func(mt *gotcore.MarkTx) error {
 		var err error
-		exists, err = mt.Load(ctx, &snap)
+		exists, err = mt.LoadSnap(ctx, &snap)
 		return err
 	}); err != nil {
 		return nil, err
