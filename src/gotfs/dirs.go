@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/gotvc/got/src/gotkv"
@@ -168,14 +169,25 @@ func (di *dirIterator) Next(ctx context.Context) (*DirEnt, error) {
 		return nil, err
 	}
 	p := key.Path()
-	name := cleanName(p[len(di.p):])
+	rel := cleanName(p[len(di.p):])
+	if rel == "" {
+		return nil, fmt.Errorf("empty dir entry while iterating directory %q", di.p)
+	}
+	childName := rel
+	if i := strings.IndexByte(rel, Sep); i >= 0 {
+		childName = rel[:i]
+	}
 	dirEnt := DirEnt{
-		Name: name,
+		Name: childName,
 		Mode: os.FileMode(md.Mode),
 	}
 
-	// now we have to advance through the file or directory to fully consume it.
-	prefix := newInfoKey(p).Prefix(nil)
+	// now we have to advance through the child subtree to fully consume it.
+	childPath := childName
+	if di.p != "" {
+		childPath = path.Join(di.p, childName)
+	}
+	prefix := newInfoKey(childPath).Prefix(nil)
 	end := gotkv.PrefixEnd(prefix)
 	if err := di.iter.Seek(ctx, end); err != nil {
 		return nil, err
