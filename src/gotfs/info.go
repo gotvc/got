@@ -12,6 +12,7 @@ import (
 	"github.com/gotvc/got/src/gotfs/gotfscnp"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
+	"go.brendoncarroll.net/exp/streams"
 )
 
 type Info struct {
@@ -90,13 +91,25 @@ func parseInfo(data []byte) (*Info, error) {
 }
 
 // PutInfo assigns metadata to p
-func (mach *Machine) PutInfo(ctx context.Context, s stores.RW, x Root, p string, md *Info) (*Root, error) {
+func (mach *Machine) PutInfo(ctx context.Context, s stores.RW, x Root, p string, info *Info) (*Root, error) {
+	if info == nil {
+		return nil, fmt.Errorf("gotfs.PutInfo: info cannot be nil")
+	}
 	p = cleanPath(p)
 	if err := checkPath(p); err != nil {
 		return nil, err
 	}
+	if p != "" {
+		// if it's not the root then check for immediate parent.
+		parent := parentPath(p)
+		if yes, err := mach.ExistsDir(ctx, s, x, parent); err != nil {
+			return nil, err
+		} else if !yes {
+			return nil, fmt.Errorf("missing parent directory for %s (%s)", p, parent)
+		}
+	}
 	k := newInfoKey(p)
-	root, err := mach.gotkv.Put(ctx, s, *x.toGotKV(), k.Marshal(nil), md.marshal())
+	root, err := mach.gotkv.Put(ctx, s, *x.toGotKV(), k.Marshal(nil), info.marshal())
 	return newRoot(root), err
 }
 
@@ -155,5 +168,47 @@ func (mach *Machine) checkNoEntry(ctx context.Context, s stores.Reading, x Root,
 		return os.ErrExist
 	default:
 		return err
+	}
+}
+
+type InfoEntry struct {
+	Path string
+	Info Info
+}
+
+var _ streams.Iterator[InfoEntry] = &InfoIterator{}
+
+type InfoIterator struct {
+	s    stores.RW
+	root Root
+	kvit *gotkv.Iterator
+
+	kvents [1]gotkv.Entry
+}
+
+func (mach *Machine) NewInfoIterator(s stores.RW, root Root) *InfoIterator {
+	kvit := mach.gotkv.NewIterator(s, root.ToGotKV(), gotkv.TotalSpan())
+	return &InfoIterator{s: s, root: root, kvit: kvit}
+}
+
+func (it *InfoIterator) Next(ctx context.Context, dst []InfoEntry) (int, error) {
+	// TODO: skip past data entries, instead of manually filtering in a loop.
+	for {
+		if _, err := it.kvit.Next(ctx, it.kvents[:]); err != nil {
+			return 0, err
+		}
+		var key Key
+		if err := key.Unmarshal(it.kvents[0].Key); err != nil {
+			return 0, err
+		}
+		if key.IsInfo() {
+			info, err := parseInfo(it.kvents[0].Value)
+			if err != nil {
+				return 0, err
+			}
+			dst[0].Info = *info
+			dst[0].Path = key.Path()
+			return 1, nil
+		}
 	}
 }

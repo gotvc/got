@@ -127,8 +127,7 @@ func (tx *Tx) Commit(ctx context.Context) error {
 	return tx.tx.Commit(ctx)
 }
 
-// Put replaces a path at p with root
-func (tx *Tx) Put(ctx context.Context, p string, root gotfs.Root) error {
+func (tx *Tx) put(ctx context.Context, p string, op Operation) error {
 	if err := tx.setup(ctx); err != nil {
 		return nil
 	}
@@ -136,14 +135,29 @@ func (tx *Tx) Put(ctx context.Context, p string, root gotfs.Root) error {
 	if err := tx.CheckConflict(ctx, p); err != nil {
 		return err
 	}
-	op := Operation{
-		Put: (*PutOp)(&root),
-	}
 	val, err := json.Marshal(op)
 	if err != nil {
 		return err
 	}
 	return tx.kvtx.Put(ctx, []byte(p), val)
+}
+
+// Put replaces a path at p with root
+func (tx *Tx) PutRoot(ctx context.Context, p string, root gotfs.Root) error {
+	op := Operation{
+		Put: (*PutOp)(&root),
+	}
+	return tx.put(ctx, p, op)
+}
+
+// PutInfo creates a root, which can be used to overwrite just the info.
+func PutInfo(ctx context.Context, fsmach *gotfs.Machine, ms stores.RW, p string, info gotfs.Info) (*gotfs.Root, error) {
+	p = cleanPath(p)
+	root, err := fsmach.NewEmpty(ctx, ms, 0)
+	if err != nil {
+		return nil, err
+	}
+	return fsmach.PutInfo(ctx, ms, *root, p, &info)
 }
 
 // Delete removes a file at p with root

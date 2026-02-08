@@ -149,7 +149,7 @@ func (wc *WC) modifyMark(ctx context.Context, fn func(gotcore.ModifyCtx) (*gotco
 }
 
 // Add adds paths from the working directory to the staging area.
-// Directories are traversed, and only paths are added.
+// Directories are traversed, and only tracked paths are added.
 // Adding a directory will update any existing paths and add new ones, it will not remove paths
 // from version control
 func (wc *WC) Add(ctx context.Context, paths ...string) error {
@@ -157,7 +157,13 @@ func (wc *WC) Add(ctx context.Context, paths ...string) error {
 		stage := sctx.Stage
 		porter := sctx.Importer
 		for _, target := range paths {
-			if err := posixfs.WalkLeaves(ctx, sctx.FS, target, func(p string, _ posixfs.DirEnt) error {
+			it := porting.NewFSInfoIter(sctx.FS, target)
+			if err := streams.ForEach(ctx, it, func(info porting.FileInfo) error {
+				p := info.Path
+				if info.Mode.IsDir() {
+					// TODO, this should set the mode on the directory
+					return nil
+				}
 				if err := stage.CheckConflict(ctx, p); err != nil {
 					return err
 				}
@@ -167,7 +173,7 @@ func (wc *WC) Add(ctx context.Context, paths ...string) error {
 				if err != nil {
 					return err
 				}
-				return stage.Put(ctx, p, *fileRoot)
+				return stage.PutRoot(ctx, p, *fileRoot)
 			}); err != nil {
 				return err
 			}
@@ -210,7 +216,7 @@ func (wc *WC) Put(ctx context.Context, paths ...string) error {
 					return err
 				}
 			} else {
-				if err := stage.Put(ctx, p, *root); err != nil {
+				if err := stage.PutRoot(ctx, p, *root); err != nil {
 					return err
 				}
 			}
@@ -223,17 +229,22 @@ func (wc *WC) Put(ctx context.Context, paths ...string) error {
 func (wc *WC) Rm(ctx context.Context, paths ...string) error {
 	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
 		return wc.viewSnap(ctx, func(vctx *gotcore.ViewCtx) error {
-			fsag := vctx.FS
 			stage := sctx.Stage
-			ss := vctx.Stores
 
 			for _, target := range paths {
+				if _, err := sctx.FS.Stat(target); err != nil && !posixfs.IsErrNotExist(err) {
+					return err
+				} else if err == nil {
+					return fmt.Errorf("cannot stage rm, file exists at path %s", target)
+				}
+				if err := sctx.DB.Delete(ctx, target); err != nil {
+					return err
+				}
+
 				if vctx.Root == nil {
 					return fmt.Errorf("path %q not found", target)
 				}
-				if err := fsag.ForEachLeaf(ctx, ss[1], vctx.Root.Payload.Root, target, func(p string, _ *gotfs.Info) error {
-					return stage.Delete(ctx, p)
-				}); err != nil {
+				if err := stage.Delete(ctx, target); err != nil {
 					return err
 				}
 			}

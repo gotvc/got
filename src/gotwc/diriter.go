@@ -57,7 +57,7 @@ func (wc *WC) newUnknownIterator(db *porting.DB, fsys posixfs.FS, spans []Span) 
 		}
 		return spansContain(spans, ent.Path)
 	}), nil)
-	fsit := streams.NewPeeker(porting.NewFSInfoIter(fsys), nil)
+	fsit := streams.NewPeeker(porting.NewFSInfoIter(fsys, ""), nil)
 	join := streams.NewOJoiner(dbit, fsit, func(left porting.FileInfo, right FileInfo) int {
 		return strings.Compare(left.Path, right.Path)
 	})
