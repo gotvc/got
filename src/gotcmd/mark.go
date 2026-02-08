@@ -238,16 +238,14 @@ var markCpSaltCmd = star.Command{
 		if err != nil {
 			return err
 		}
-		dstInfo, err := repo.InspectMark(ctx, dst)
-		if err != nil {
+		if err := repo.ConfigureMark(ctx, dst, func(m gotcore.Metadata) gotcore.Metadata {
+			m.Config.Salt = srcInfo.Config.Salt
+			return m
+		}); err != nil {
 			return err
 		}
-		cfg := dstInfo.Config
-		cfg.Salt = srcInfo.Config.Salt
-		return repo.ConfigureMark(ctx, dst, gotcore.Metadata{
-			Config:      cfg,
-			Annotations: dstInfo.Annotations,
-		})
+		c.Printf("OK: configured %v: salt=%x", dst, srcInfo.Config.Salt[:])
+		return nil
 	},
 }
 
@@ -346,13 +344,13 @@ var markNameParam = star.Required[string]{
 }
 
 var srcMarkParam = star.Required[gotrepo.FQM]{
-	ID:       "src",
+	ID:       "src-mark",
 	Parse:    parseFQName,
 	ShortDoc: "the source bookmark",
 }
 
 var dstMarkParam = star.Required[gotrepo.FQM]{
-	ID:       "dst",
+	ID:       "dst-mark",
 	Parse:    parseFQName,
 	ShortDoc: "the destination bookmark",
 }

@@ -84,6 +84,11 @@ func (s *Site) Clone() Site {
 	return other
 }
 
+func (s *Site) CheckAll() {
+	ctx := testutil.Context(s.t)
+	require.NoError(s.t, s.Repo.CheckAll(ctx))
+}
+
 func (s *Site) Fetch() {
 	ctx := testutil.Context(s.t)
 	require.NoError(s.t, s.Repo.Fetch(ctx))

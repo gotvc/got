@@ -235,6 +235,7 @@ type ViewCtx struct {
 	VC     *VCMach
 	FS     *FSMach
 	Stores [3]stores.Reading
+	Target gdat.Ref
 	Root   *Snap
 }
 
@@ -260,6 +261,7 @@ func ViewSnapshot(ctx context.Context, stx SpaceTx, se SnapExpr, fn func(vctx *V
 		VC:     vcmach,
 		FS:     fsmach,
 		Stores: [3]stores.Reading{ss[0], ss[1], ss[2]},
+		Target: *ref,
 		Root:   snap,
 	}
 	return fn(&vctx)
@@ -267,6 +269,9 @@ func ViewSnapshot(ctx context.Context, stx SpaceTx, se SnapExpr, fn func(vctx *V
 
 // SyncVolumes syncs the contents of src to dst.
 func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
+	if !force && src.info.Config.Salt != dst.info.Config.Salt {
+		return fmt.Errorf("cannot sync volumes with different salts, must use force=true")
+	}
 	return dst.Apply(ctx, func(dsts [3]stores.RW, x gdat.Ref) (gdat.Ref, error) {
 		var goal *Snap
 		var goalRef gdat.Ref
@@ -298,7 +303,7 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 				return gdat.Ref{}, err
 			}
 			if !force && !hasAncestor {
-				return gdat.Ref{}, fmt.Errorf("cannot CAS, dst ref is not parent of src ref")
+				return gdat.Ref{}, fmt.Errorf("cannot CAS, prev ref %v is not parent of next ref %v", x, goalRef)
 			}
 		}
 		ref, err := syncSnapRef(ctx, dst.GotVC(), dst.GotFS(), src.RO(), dst.WO(), goalRef)
@@ -309,9 +314,12 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 	})
 }
 
-func History(ctx context.Context, vcmach *VCMach, s stores.Reading, snap Snap, fn func(ref gdat.Ref, snap Snap) error) error {
-	ref := vcmach.RefFromSnapshot(snap)
-	if err := fn(ref, snap); err != nil {
+func History(ctx context.Context, vcmach *VCMach, s stores.Reading, snapRef gdat.Ref, fn func(ref gdat.Ref, snap Snap) error) error {
+	snap, err := vcmach.GetSnapshot(ctx, s, snapRef)
+	if err != nil {
+		return err
+	}
+	if err := fn(snapRef, *snap); err != nil {
 		return err
 	}
 	return vcmach.ForEach(ctx, s, snap.Parents, fn)

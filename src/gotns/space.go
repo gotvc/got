@@ -122,6 +122,9 @@ func (s *SpaceTx) SetMetadata(ctx context.Context, name string, md gotcore.Metad
 	if err != nil {
 		return err
 	}
+	if mstate == nil {
+		return gotcore.ErrNotExist
+	}
 	mstate.Info.Annotations = md.Annotations
 	mstate.Info.Config = md.Config
 	return s.tx.Put(ctx, name, *mstate)

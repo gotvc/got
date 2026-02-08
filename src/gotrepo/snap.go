@@ -24,7 +24,7 @@ func (r *Repo) ViewSnapshot(ctx context.Context, se SnapExpr, fn func(*gotcore.V
 
 func (r *Repo) History(ctx context.Context, se SnapExpr, fn func(ref Ref, s Snap) error) error {
 	return r.ViewSnapshot(ctx, se, func(vctx *gotcore.ViewCtx) error {
-		return gotcore.History(ctx, vctx.VC, vctx.Stores[2], *vctx.Root, fn)
+		return gotcore.History(ctx, vctx.VC, vctx.Stores[2], vctx.Target, fn)
 	})
 }
 

@@ -77,13 +77,17 @@ func (r *Repo) DeleteMark(ctx context.Context, fqname FQM) error {
 }
 
 // ConfigureMark adjusts metadata
-func (r *Repo) ConfigureMark(ctx context.Context, fqname FQM, md gotcore.Metadata) error {
+func (r *Repo) ConfigureMark(ctx context.Context, fqname FQM, fn func(gotcore.Metadata) gotcore.Metadata) error {
 	space, err := r.GetSpace(ctx, fqname.Space)
 	if err != nil {
 		return err
 	}
 	return space.Do(ctx, true, func(st gotcore.SpaceTx) error {
-		return st.SetMetadata(ctx, fqname.Name, md)
+		info, err := st.Inspect(ctx, fqname.Name)
+		if err != nil {
+			return err
+		}
+		return st.SetMetadata(ctx, fqname.Name, fn(info.AsMetadata()))
 	})
 }
 

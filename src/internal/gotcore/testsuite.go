@@ -113,6 +113,21 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 				},
 				{
 					Snaps: map[string]*Snap{
+						"a": snap0,
+					},
+					Force: false,
+				}},
+		}, {
+			Store: s,
+			Steps: []Step{
+				{
+					Snaps: map[string]*Snap{
+						"a": snap0,
+					},
+					Force: false,
+				},
+				{
+					Snaps: map[string]*Snap{
 						"a": makeSnap(t, cfg, s, []Snap{*snap0}, makeFS(t, s, map[string]string{
 							"a": "1",
 						})),
