@@ -127,8 +127,7 @@ func (tx *Tx) Commit(ctx context.Context) error {
 	return tx.tx.Commit(ctx)
 }
 
-// Put replaces a path at p with root
-func (tx *Tx) Put(ctx context.Context, p string, root gotfs.Root) error {
+func (tx *Tx) put(ctx context.Context, p string, op Operation) error {
 	if err := tx.setup(ctx); err != nil {
 		return nil
 	}
@@ -136,8 +135,36 @@ func (tx *Tx) Put(ctx context.Context, p string, root gotfs.Root) error {
 	if err := tx.CheckConflict(ctx, p); err != nil {
 		return err
 	}
+	val, err := json.Marshal(op)
+	if err != nil {
+		return err
+	}
+	return tx.kvtx.Put(ctx, []byte(p), val)
+}
+
+// Put replaces a path at p with root
+func (tx *Tx) PutRoot(ctx context.Context, p string, root gotfs.Root) error {
 	op := Operation{
 		Put: (*PutOp)(&root),
+	}
+	return tx.put(ctx, p, op)
+}
+
+func (tx *Tx) PutInfo(ctx context.Context, fsmach *gotfs.Machine, ms stores.RW, p string, info gotfs.Info) error {
+	if err := tx.setup(ctx); err != nil {
+		return nil
+	}
+	p = cleanPath(p)
+	root, err := fsmach.NewEmpty(ctx, ms, 0)
+	if err != nil {
+		return err
+	}
+	root, err = fsmach.PutInfo(ctx, ms, *root, p, &info)
+	if err != nil {
+		return err
+	}
+	op := Operation{
+		Put: (*PutOp)(root),
 	}
 	val, err := json.Marshal(op)
 	if err != nil {

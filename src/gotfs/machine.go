@@ -355,3 +355,15 @@ func (mach *Machine) Exists(ctx context.Context, ms stores.Reading, root Root, p
 	}
 	return true, nil
 }
+
+// ExistsDir returns true if there is an INFO object at p which is a directory.
+func (mach *Machine) ExistsDir(ctx context.Context, ms stores.Reading, root Root, p string) (bool, error) {
+	info, err := mach.GetInfo(ctx, ms, root, p)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return info.Mode.IsDir(), nil
+}

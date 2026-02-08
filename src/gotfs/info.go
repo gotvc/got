@@ -12,6 +12,7 @@ import (
 	"github.com/gotvc/got/src/gotfs/gotfscnp"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
+	"go.brendoncarroll.net/exp/streams"
 )
 
 type Info struct {
@@ -90,13 +91,25 @@ func parseInfo(data []byte) (*Info, error) {
 }
 
 // PutInfo assigns metadata to p
-func (mach *Machine) PutInfo(ctx context.Context, s stores.RW, x Root, p string, md *Info) (*Root, error) {
+func (mach *Machine) PutInfo(ctx context.Context, s stores.RW, x Root, p string, info *Info) (*Root, error) {
+	if info == nil {
+		return nil, fmt.Errorf("gotfs.PutInfo: info cannot be nil")
+	}
 	p = cleanPath(p)
 	if err := checkPath(p); err != nil {
 		return nil, err
 	}
+	if p != "" {
+		// if it's not the root then check for immediate parent.
+		parent := parentPath(p)
+		if yes, err := mach.ExistsDir(ctx, s, x, parent); err != nil {
+			return nil, err
+		} else if !yes {
+			return nil, fmt.Errorf("missing parent directory for %s (%s)", p, parent)
+		}
+	}
 	k := newInfoKey(p)
-	root, err := mach.gotkv.Put(ctx, s, *x.toGotKV(), k.Marshal(nil), md.marshal())
+	root, err := mach.gotkv.Put(ctx, s, *x.toGotKV(), k.Marshal(nil), info.marshal())
 	return newRoot(root), err
 }
 
@@ -156,4 +169,39 @@ func (mach *Machine) checkNoEntry(ctx context.Context, s stores.Reading, x Root,
 	default:
 		return err
 	}
+}
+
+var _ streams.Iterator[Info] = &InfoIterator{}
+
+type InfoIterator struct {
+	s    stores.RW
+	root Root
+	kvit *gotkv.Iterator
+
+	ents []gotkv.Entry
+	n    int
+}
+
+func (mach *Machine) NewInfoIterator(s stores.RW, root Root) *InfoIterator {
+	kvit := mach.gotkv.NewIterator(s, root.ToGotKV(), gotkv.TotalSpan())
+	return &InfoIterator{s: s, root: root, kvit: kvit}
+}
+
+func (it *InfoIterator) Next(ctx context.Context, dst []Info) (int, error) {
+	if it.n >= len(it.ents) {
+		// need to refill
+		n, err := it.kvit.Next(ctx, it.ents)
+		if err != nil {
+			return n, err
+		}
+	}
+	var n int
+	for i := 0; i < len(dst) && i < len(it.ents); i++ {
+		info, err := parseInfo(it.ents[n+i].Value)
+		if err != nil {
+			return 0, err
+		}
+		dst[i] = *info
+	}
+	return n, nil
 }
