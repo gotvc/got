@@ -2,13 +2,15 @@ package porting
 
 import (
 	"context"
-	"io"
+	"fmt"
 	"io/fs"
+	"os"
 	"path"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotwc/internal/dbmig"
 	"github.com/gotvc/got/src/gotwc/internal/migrations"
@@ -17,6 +19,7 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
+	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/posixfs"
 )
 
@@ -204,46 +207,69 @@ func TestExport(t *testing.T) {
 	}
 }
 
-func TestImporterReimportOnChange(t *testing.T) {
-	tests := []struct {
-		name    string
-		initial string
-		updated string
-	}{
+// TestImportPath tests that Importer.ImportPath returns a
+// valid gotfs.Root which contains all the imported files.
+func TestImportPath(t *testing.T) {
+	type testCase struct {
+		// FS is the contents of the file system
+		FS []FileEntry
+		// Path is what is passed to import path
+		Path string
+	}
+	tcs := []testCase{
 		{
-			name:    "content change triggers reimport",
-			initial: "one",
-			updated: "two two",
+			FS: []FileEntry{
+				{Path: "a.txt", Mode: 0o644, Data: "one"},
+				{Path: "b.txt", Mode: 0o644, Data: "two"},
+				{Path: "c.txt", Mode: 0o644, Data: "three"},
+			},
+			Path: "a.txt",
+		},
+		{
+			FS: []FileEntry{
+				{Path: "subdir1", Mode: 0o755 | fs.ModeDir},
+				{Path: "subdir2", Mode: 0o755 | fs.ModeDir},
+				{Path: "subdir3", Mode: 0o755 | fs.ModeDir},
+				{Path: "subdir2/a.txt", Mode: 0o644, Data: "one"},
+				{Path: "subdir2/b.txt", Mode: 0o644, Data: "two"},
+				{Path: "subdir2/c.txt", Mode: 0o644, Data: "three"},
+			},
+			Path: "subdir2",
 		},
 	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
+	for i, tc := range tcs {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			ctx := testutil.Context(t)
 
-			fsys := posixfs.NewDirFS(t.TempDir())
-			require.NoError(t, posixfs.PutFile(ctx, fsys, "a.txt", 0o644, strings.NewReader(tt.initial)))
-
+			// setup imp
+			dst := stores.NewMem()
 			cfg := gotcore.DefaultConfig(false)
-			conn, paramHash := newTestDB(t, ctx, cfg)
 			mach := gotcore.GotFS(cfg)
-			ms := stores.NewMem()
-			ds := stores.NewMem()
+			conn, paramHash := newTestDB(t, ctx, cfg)
 			db := NewDB(conn, paramHash)
-			imp := NewImporter(mach, db, [2]stores.RW{ds, ms})
+			imp := NewImporter(mach, db, [2]stores.RW{dst, dst})
 
-			root1, err := imp.ImportFile(ctx, fsys, "a.txt")
+			// prepare files on disk
+			dir := testutil.OpenRoot(t, t.TempDir())
+			writeToFS(t, dir, tc.FS)
+
+			// do import
+			fsys := posixfs.NewDirFS(dir.Name())
+			root, err := imp.ImportPath(ctx, fsys, tc.Path)
 			require.NoError(t, err)
-			require.Equal(t, tt.initial, readFileFromRoot(t, ctx, mach, ms, ds, root1, ""))
+			require.NoError(t, mach.Check(ctx, dst, *root, func(gdat.Ref) error {
+				return nil
+			}))
 
-			require.NoError(t, posixfs.PutFile(ctx, fsys, "a.txt", 0o644, strings.NewReader(tt.updated)))
-			root2, err := imp.ImportFile(ctx, fsys, "a.txt")
+			it := mach.NewInfoIterator(dst, *root)
+			infos, err := streams.Collect(ctx, it, len(tc.FS))
 			require.NoError(t, err)
-			require.Equal(t, tt.updated, readFileFromRoot(t, ctx, mach, ms, ds, root2, ""))
-
-			require.False(t, gotfs.Equal(*root1, *root2))
+			for _, ent := range infos {
+				p := path.Join(tc.Path, ent.Path)
+				finfo, err := dir.Stat(p)
+				require.NoError(t, err)
+				require.Equal(t, finfo.Mode(), ent.Info.Mode)
+			}
 		})
 	}
 }
@@ -259,6 +285,18 @@ func newTestDB(t testing.TB, ctx context.Context, cfg gotcore.DSConfig) (*sqluti
 
 	require.NoError(t, migrations.EnsureAll(conn, dbmig.ListMigrations()))
 	return conn, cfg.Hash()
+}
+
+func writeToFS(t testing.TB, dir *os.Root, ents []FileEntry) {
+	t.Helper()
+	for _, ent := range ents {
+		mode := ent.Mode & fs.ModePerm
+		if ent.Mode.IsDir() {
+			require.NoError(t, dir.Mkdir(ent.Path, mode))
+		} else {
+			require.NoError(t, dir.WriteFile(ent.Path, []byte(ent.Data), mode))
+		}
+	}
 }
 
 func makeGotFS(t testing.TB, fsmach *gotfs.Machine, s stores.RW, ents []FileEntry) gotfs.Root {
@@ -281,13 +319,4 @@ func makeGotFS(t testing.TB, fsmach *gotfs.Machine, s stores.RW, ents []FileEntr
 		require.NoError(t, err)
 	}
 	return *root
-}
-
-func readFileFromRoot(t testing.TB, ctx context.Context, mach *gotfs.Machine, ms, ds stores.Reading, root *gotfs.Root, p string) string {
-	t.Helper()
-	r, err := mach.NewReader(ctx, [2]stores.Reading{ds, ms}, *root, p)
-	require.NoError(t, err)
-	data, err := io.ReadAll(r)
-	require.NoError(t, err)
-	return string(data)
 }

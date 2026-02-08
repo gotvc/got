@@ -171,15 +171,19 @@ func (mach *Machine) checkNoEntry(ctx context.Context, s stores.Reading, x Root,
 	}
 }
 
-var _ streams.Iterator[Info] = &InfoIterator{}
+type InfoEntry struct {
+	Path string
+	Info Info
+}
+
+var _ streams.Iterator[InfoEntry] = &InfoIterator{}
 
 type InfoIterator struct {
 	s    stores.RW
 	root Root
 	kvit *gotkv.Iterator
 
-	ents []gotkv.Entry
-	n    int
+	kvents [1]gotkv.Entry
 }
 
 func (mach *Machine) NewInfoIterator(s stores.RW, root Root) *InfoIterator {
@@ -187,21 +191,24 @@ func (mach *Machine) NewInfoIterator(s stores.RW, root Root) *InfoIterator {
 	return &InfoIterator{s: s, root: root, kvit: kvit}
 }
 
-func (it *InfoIterator) Next(ctx context.Context, dst []Info) (int, error) {
-	if it.n >= len(it.ents) {
-		// need to refill
-		n, err := it.kvit.Next(ctx, it.ents)
-		if err != nil {
-			return n, err
-		}
-	}
-	var n int
-	for i := 0; i < len(dst) && i < len(it.ents); i++ {
-		info, err := parseInfo(it.ents[n+i].Value)
-		if err != nil {
+func (it *InfoIterator) Next(ctx context.Context, dst []InfoEntry) (int, error) {
+	// TODO: skip past data entries, instead of manually filtering in a loop.
+	for {
+		if _, err := it.kvit.Next(ctx, it.kvents[:]); err != nil {
 			return 0, err
 		}
-		dst[i] = *info
+		var key Key
+		if err := key.Unmarshal(it.kvents[0].Key); err != nil {
+			return 0, err
+		}
+		if key.IsInfo() {
+			info, err := parseInfo(it.kvents[0].Value)
+			if err != nil {
+				return 0, err
+			}
+			dst[0].Info = *info
+			dst[0].Path = key.Path()
+			return 1, nil
+		}
 	}
-	return n, nil
 }
