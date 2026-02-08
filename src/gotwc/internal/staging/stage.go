@@ -150,27 +150,14 @@ func (tx *Tx) PutRoot(ctx context.Context, p string, root gotfs.Root) error {
 	return tx.put(ctx, p, op)
 }
 
-func (tx *Tx) PutInfo(ctx context.Context, fsmach *gotfs.Machine, ms stores.RW, p string, info gotfs.Info) error {
-	if err := tx.setup(ctx); err != nil {
-		return nil
-	}
+// PutInfo creates a root, which can be used to overwrite just the info.
+func PutInfo(ctx context.Context, fsmach *gotfs.Machine, ms stores.RW, p string, info gotfs.Info) (*gotfs.Root, error) {
 	p = cleanPath(p)
 	root, err := fsmach.NewEmpty(ctx, ms, 0)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	root, err = fsmach.PutInfo(ctx, ms, *root, p, &info)
-	if err != nil {
-		return err
-	}
-	op := Operation{
-		Put: (*PutOp)(root),
-	}
-	val, err := json.Marshal(op)
-	if err != nil {
-		return err
-	}
-	return tx.kvtx.Put(ctx, []byte(p), val)
+	return fsmach.PutInfo(ctx, ms, *root, p, &info)
 }
 
 // Delete removes a file at p with root

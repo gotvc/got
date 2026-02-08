@@ -11,7 +11,7 @@ import (
 )
 
 // NewFSInfoIter iterates over all the tracked paths in the filesystem.
-func NewFSInfoIter(fsys posixfs.FS) streams.Iterator[FileInfo] {
+func NewFSInfoIter(fsys posixfs.FS, base string) streams.Iterator[FileInfo] {
 	seq := func(yield func(FileInfo, error) bool) {
 		var walk func(string) bool
 		walk = func(p string) bool {
@@ -49,7 +49,7 @@ func NewFSInfoIter(fsys posixfs.FS) streams.Iterator[FileInfo] {
 			}
 			return true
 		}
-		walk("")
+		walk(base)
 	}
 	return streams.NewSeqErr(seq)
 }

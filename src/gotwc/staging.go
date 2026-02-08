@@ -149,7 +149,7 @@ func (wc *WC) modifyMark(ctx context.Context, fn func(gotcore.ModifyCtx) (*gotco
 }
 
 // Add adds paths from the working directory to the staging area.
-// Directories are traversed, and only paths are added.
+// Directories are traversed, and only tracked paths are added.
 // Adding a directory will update any existing paths and add new ones, it will not remove paths
 // from version control
 func (wc *WC) Add(ctx context.Context, paths ...string) error {
@@ -157,7 +157,13 @@ func (wc *WC) Add(ctx context.Context, paths ...string) error {
 		stage := sctx.Stage
 		porter := sctx.Importer
 		for _, target := range paths {
-			if err := posixfs.WalkLeaves(ctx, sctx.FS, target, func(p string, _ posixfs.DirEnt) error {
+			it := porting.NewFSInfoIter(sctx.FS, target)
+			if err := streams.ForEach(ctx, it, func(info porting.FileInfo) error {
+				p := info.Path
+				if info.Mode.IsDir() {
+					// TODO, this should set the mode on the directory
+					return nil
+				}
 				if err := stage.CheckConflict(ctx, p); err != nil {
 					return err
 				}
@@ -174,9 +180,6 @@ func (wc *WC) Add(ctx context.Context, paths ...string) error {
 			if finfo, err := sctx.FS.Stat(target); err != nil && !posixfs.IsErrNotExist(err) {
 				return err
 			} else if err == nil && finfo.IsDir() {
-				if err := stage.PutInfo(ctx, sctx.GotFS, sctx.Store, target, gotfs.Info{Mode: finfo.Mode()}); err != nil {
-					return err
-				}
 				if err := sctx.DB.PutInfo(ctx, FileInfo{
 					Path:       target,
 					Mode:       finfo.Mode(),
