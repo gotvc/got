@@ -108,6 +108,7 @@ func TestCheckout(t *testing.T) {
 				// Check that the checkout did not happen.
 				site.AssertFSEquals(tc.InFS)
 			}
+			site.CheckAll()
 		})
 	}
 }
