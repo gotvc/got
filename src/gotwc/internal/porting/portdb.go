@@ -35,6 +35,9 @@ func NewDB(conn *sqlutil.Conn, paramHash [32]byte) *DB {
 }
 
 func (db *DB) PutInfo(ctx context.Context, ent FileInfo) error {
+	if ent.Path == "" {
+		return fmt.Errorf("import/export DB does not allow the root to be stored")
+	}
 	p := ent.Path
 	// replacing the info should also delete the root if it exists.
 	if err := sqlutil.Exec(db.conn, `DELETE FROM fsroots WHERE path = ? AND param_hash = ?`, p, db.paramHash[:]); err != nil {

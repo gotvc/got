@@ -74,6 +74,9 @@ func (pr *Exporter) Clobber(ctx context.Context, ms, ds stores.Reading, root got
 		return err
 	}
 	finfo.ByGot = true
+	if p == "" {
+		return nil
+	}
 	return pr.db.PutInfo(ctx, *finfo)
 }
 
@@ -134,8 +137,10 @@ func (pr *Exporter) exportDir(ctx context.Context, ms, ds stores.Reading, root g
 		return err
 	}
 	dirInfo.ByGot = true
-	if err := pr.db.PutInfo(ctx, *dirInfo); err != nil {
-		return err
+	if p != "" {
+		if err := pr.db.PutInfo(ctx, *dirInfo); err != nil {
+			return err
+		}
 	}
 	return nil
 }

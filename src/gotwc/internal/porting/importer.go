@@ -46,7 +46,12 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 	}
 	if !finfo.Mode().IsDir() {
 		return pr.importFile(ctx, fsx, p)
+	} else {
+		return pr.importDir(ctx, fsx, p, finfo)
 	}
+}
+
+func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, finfo fs.FileInfo) (*gotfs.Root, error) {
 	var changes []gotfs.Segment
 	emptyDir, err := createEmptyDir(ctx, pr.gotfs, pr.ms, finfo.Mode())
 	if err != nil {
@@ -88,14 +93,16 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 	if err != nil {
 		return nil, err
 	}
-	// for directories we don't add the root, just the mode and modified at.
-	if err := pr.db.PutInfo(ctx, FileInfo{
-		Path:       p,
-		Mode:       finfo.Mode(),
-		ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
-		ByGot:      false,
-	}); err != nil {
-		return nil, err
+	if p != "" {
+		// for directories we don't add the root, just the mode and modified at.
+		if err := pr.db.PutInfo(ctx, FileInfo{
+			Path:       p,
+			Mode:       finfo.Mode(),
+			ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
+			ByGot:      false,
+		}); err != nil {
+			return nil, err
+		}
 	}
 	return root, nil
 }
@@ -212,17 +219,5 @@ func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms stores.RW, mode
 func HasChanged(a, b *FileInfo) bool {
 	return a.ModifiedAt != b.ModifiedAt ||
 		a.Mode != b.Mode ||
-		a.Size != b.Size
-}
-
-func needsUpdate(ctx context.Context, db *DB, p string, finfo posixfs.FileInfo) (bool, error) {
-	var ent FileInfo
-	ok, err := db.GetInfo(ctx, p, &ent)
-	if err != nil {
-		return false, err
-	}
-	if !ok {
-		return true, nil
-	}
-	return ent.ModifiedAt != tai64.FromGoTime(finfo.ModTime()), nil
+		(!a.Mode.IsDir() && a.Size != b.Size)
 }
