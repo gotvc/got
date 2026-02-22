@@ -104,21 +104,23 @@ var spaceCreateBcCmd = star.Command{
 			return err
 		}
 		bcsvc := bcclient.NewClientFromEnv()
-		ep, err := bcsvc.Endpoint(c)
-		if err != nil {
-			return err
-		}
 		volname := volNameParam.Load(c)
 		h, err := createNSVol(c, bcsvc, volname)
 		if err != nil {
 			return err
 		}
+		var bcurl blobcache.URL
+		ep, err := bcsvc.Endpoint(c)
+		if err != nil {
+			return err
+		}
+		bcurl = blobcache.URL{
+			Node: ep.Peer,
+			Base: h.OID,
+		}
 		return repo.CreateSpace(c, spaceNameParam.Load(c), gotrepo.SpaceSpec{
 			Blobcache: &gotrepo.VolumeSpec{
-				URL: blobcache.URL{
-					Node: ep.Peer,
-					Base: h.OID,
-				},
+				URL:    bcurl,
 				Secret: randomSecret(),
 			},
 		})
