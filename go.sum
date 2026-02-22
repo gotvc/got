@@ -1,5 +1,5 @@
-blobcache.io/blobcache v0.0.4-0.20260202151429-c7a5c63d7245 h1:Vn3B5fhCim5HY3tJ03LbA4EtYgrz6g5hKbosu1Ugz08=
-blobcache.io/blobcache v0.0.4-0.20260202151429-c7a5c63d7245/go.mod h1:phc/TZZyR5weI6lpqB7jEjj97OX+KRZzDpzcyWEsoQ0=
+blobcache.io/blobcache v0.4.0 h1:oEMACdENtFLWtmCOJBjzq+8ICR4jTy0NIY7IH4uLPvo=
+blobcache.io/blobcache v0.4.0/go.mod h1:HKmzz0R46QuLc2+ciIQeui55/Psr0d5isO+fLD4utfc=
 blobcache.io/glfs v0.0.0-20260119180351-4a7f3a2103a2 h1:sOVE7lGfpfMA99X0oIBbGFaGJXOgdyUIScv8HGCOF6g=
 blobcache.io/glfs v0.0.0-20260119180351-4a7f3a2103a2/go.mod h1:EA5BUCl0/IF3W84sNGiixgKHac+Y2rGIAmSJgBaaMjA=
 capnproto.org/go/capnp/v3 v3.1.0-alpha.2 h1:93ISpqHf2/3WQlfrBP0tT8Dg/RQc3uq6DV36vN0ePWk=
@@ -176,8 +176,8 @@ github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e h1:JVG44RsyaB9T2KIHavM
 github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e/go.mod h1:RbqR21r5mrJuqunuUZ/Dhy/avygyECGrLceyNeo4LiM=
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
-go.brendoncarroll.net/exp v0.0.0-20260128162803-7de289922cb8 h1:a7zTrvz06KgLuAlj1cWSzn96XxpckvbOPMrH6qN3MTw=
-go.brendoncarroll.net/exp v0.0.0-20260128162803-7de289922cb8/go.mod h1:vb9wjeVzZb45i2sZHcyHszGzgOV2ogtKQOZzRKmhF4I=
+go.brendoncarroll.net/exp v0.0.0-20260214014235-1b1b9442d149 h1:isQfvOT+D16Wkkp33n27NW502eHbkOA/CoEXRvIJPZA=
+go.brendoncarroll.net/exp v0.0.0-20260214014235-1b1b9442d149/go.mod h1:vb9wjeVzZb45i2sZHcyHszGzgOV2ogtKQOZzRKmhF4I=
 go.brendoncarroll.net/p2p v0.0.0-20241118201502-2abd1a6f58e7 h1:OdTUjSViUQ1Q0XmoT2OSaQr1vqnhoSqLulvTaTZrPVY=
 go.brendoncarroll.net/p2p v0.0.0-20241118201502-2abd1a6f58e7/go.mod h1:b0MYiwcKuEAUbvV5z3e843rTFnsaX5IthIiyxeMUtUg=
 go.brendoncarroll.net/star v0.0.0-20251226172902-a1111c13c6b3 h1:pJBRAqXQixDoandRN5Z+MMvylF6HI7MbjwkrEVicD24=

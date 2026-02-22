@@ -1,11 +1,9 @@
 module github.com/gotvc/got
 
-go 1.24.0
-
-toolchain go1.24.1
+go 1.25.0
 
 require (
-	blobcache.io/blobcache v0.0.4-0.20260202151429-c7a5c63d7245
+	blobcache.io/blobcache v0.4.0
 	capnproto.org/go/capnp/v3 v3.1.0-alpha.2
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/cloudflare/circl v1.6.1
@@ -13,7 +11,7 @@ require (
 	github.com/fatih/color v1.13.0
 	github.com/hashicorp/golang-lru v1.0.2
 	github.com/stretchr/testify v1.11.1
-	go.brendoncarroll.net/exp v0.0.0-20260128162803-7de289922cb8
+	go.brendoncarroll.net/exp v0.0.0-20260214014235-1b1b9442d149
 	go.brendoncarroll.net/star v0.0.0-20251226172902-a1111c13c6b3
 	go.brendoncarroll.net/state v0.0.0-20241118200920-627c9c196901
 	go.brendoncarroll.net/stdctx v0.0.0-20241118190518-40d09f4d11e7
