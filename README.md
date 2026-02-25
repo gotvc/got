@@ -73,7 +73,10 @@ $ got add large_file.dat
 ```
 
 ## More
-Read more about configuration in [doc/Config.md](./doc/Config.md).
+Read more about [concepts](./doc/2
+.0_Concepts.md).
 
 Support and development discussion happen in the INET256 discord.
 [<img src="https://discord.com/assets/cb48d2a8d4991281d7a6a95d2f58195e.svg" width="80">](https://discord.gg/TWy6aVWJ7f)
+
+[![Matrix](https://img.shields.io/matrix/inet256:inet256.org?server_fqdn=matrix.inet256.org&label=Matrix%20Space&logo=matrix)](https://matrix.to/#/#inet256:inet256.org)
