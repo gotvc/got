@@ -2,39 +2,81 @@ package gotfsvm
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"slices"
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/internal/gotjob"
 	"github.com/gotvc/got/src/internal/stores"
 )
+
+// Machine holds configuration for operating on GotFS filesystems.
+type Machine struct {
+	gotfs *gotfs.Machine
+	gdat  *gdat.Machine
+}
+
+func New(fsmach *gotfs.Machine) Machine {
+	return Machine{gotfs: fsmach, gdat: gdat.NewMachine()}
+}
 
 // Function maps a []gotfs.Root to a gotfs.Root
 // Function is a root expression, and the number of inputs it takes.
 type Function struct {
 	// Arity is the number of inputs the function takes
 	Arity uint32
-	Expr  Expr
+	Ref   gdat.Ref
 }
 
-// Machine holds configuration for operating on GotFS filesystems.
-type Machine struct {
-	gotfs *gotfs.Machine
+// NewFunction creates a new function from an expression.
+func (m *Machine) NewFunction(ctx context.Context, s stores.Writing, body Expr) (Function, error) {
+	arity, err := getExprArity(&body)
+	if err != nil {
+		return Function{}, err
+	}
+	// TODO: better marshaling
+	data, err := json.Marshal(body)
+	if err != nil {
+		return Function{}, err
+	}
+	ref, err := m.gdat.Post(ctx, s, data)
+	if err != nil {
+		return Function{}, err
+	}
+	return Function{
+		Arity: arity,
+		Ref:   *ref,
+	}, nil
 }
 
-func New(fsmach *gotfs.Machine) Machine {
-	return Machine{gotfs: fsmach}
+func (m *Machine) getBody(ctx context.Context, s stores.Reading, fn Function) (Expr, error) {
+	var body Expr
+	err := m.gdat.GetF(ctx, s, fn.Ref, func(data []byte) error {
+		var err error
+		body, err = parseExpr(data)
+		return err
+	})
+	return body, err
 }
 
+// Apply applies a function to inputs.
 func (m *Machine) Apply(ctx context.Context, dst [2]stores.RW, fn Function, inputs []Input) (gotfs.Root, error) {
 	if len(inputs) != int(fn.Arity) {
 		return gotfs.Root{}, fmt.Errorf("function takes %d inputs, have %d", fn.Arity, len(inputs))
 	}
-	return m.EvalRoot(&EvalCtx{
+	ec := EvalCtx{
 		Ctx:    ctx,
 		Inputs: inputs,
 		Dst:    dst,
-	}, &fn.Expr)
+		Job:    gotjob.New(ctx),
+	}
+	body, err := m.getBody(ctx, dst[1], fn)
+	if err != nil {
+		return gotfs.Root{}, err
+	}
+	return m.EvalRoot(&ec, &body)
 }
 
 type Input struct {
@@ -47,6 +89,7 @@ type EvalCtx struct {
 	Ctx    context.Context
 	Dst    [2]stores.RW
 	Inputs []Input
+	Job    gotjob.Ctx
 }
 
 // Eval evaluates an expression.
@@ -105,21 +148,26 @@ func (m *Machine) Eval(ectx *EvalCtx, expr *Expr) (Value, error) {
 		}
 		return &Value_Root{Root: *result}, nil
 	case OpCode_CONCAT:
-
-		panic("CONCAT not yet implemented")
+		segs, err := m.flattenConcat(ectx, nil, expr)
+		if err != nil {
+			return nil, err
+		}
+		seg, err := m.gotfs.Concat(ctx, ectx.Dst, slices.Values(segs))
+		if err != nil {
+			return nil, err
+		}
+		return (*Value_Segment)(&seg), nil
 	case OpCode_PROMOTE:
 		seg, err := m.evalSegment(ectx, args[0])
 		if err != nil {
 			return nil, err
 		}
-		root := gotfs.Root{Ref: seg.Root.Ref, Depth: seg.Root.Depth}
+		root := gotfs.Root{Ref: seg.Contents.Ref, Depth: seg.Contents.Depth}
 		if err := m.gotfs.Check(ctx, ectx.Dst[0], root, func(ref gdat.Ref) error { return nil }); err != nil {
 			return nil, err
 		}
 		return &Value_Root{Root: root}, nil
 
-	case OpCode_EditInfo:
-		return nil, fmt.Errorf("EditInfo not yet implemented")
 	default:
 		return nil, fmt.Errorf("unrecognized op %v", expr.Op)
 	}
@@ -143,11 +191,11 @@ func (m *Machine) evalInt(ectx *EvalCtx, x *Expr) (int32, error) {
 	if err != nil {
 		return 0, err
 	}
-	idx, ok := val.(*Value_Int)
+	idx, ok := val.(Value_Nat)
 	if !ok {
 		return 0, fmt.Errorf("expected int, got %T", val)
 	}
-	return int32(*idx), nil
+	return int32(idx), nil
 }
 
 func (m *Machine) evalSegment(ectx *EvalCtx, expr *Expr) (*Value_Segment, error) {
@@ -172,4 +220,25 @@ func (m *Machine) evalPath(ectx *EvalCtx, expr *Expr) (string, error) {
 		return "", fmt.Errorf("expected path, got %T", val)
 	}
 	return string(*v), nil
+}
+
+func (m *Machine) flattenConcat(ectx *EvalCtx, out []gotfs.Segment, expr *Expr) ([]gotfs.Segment, error) {
+	if expr.Op == OpCode_CONCAT {
+		var err error
+		out, err = m.flattenConcat(ectx, out, expr.Args[0])
+		if err != nil {
+			return nil, err
+		}
+		out, err = m.flattenConcat(ectx, out, expr.Args[1])
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		vs, err := m.evalSegment(ectx, expr)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, gotfs.Segment(*vs))
+	}
+	return out, nil
 }

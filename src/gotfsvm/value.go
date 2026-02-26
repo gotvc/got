@@ -2,7 +2,6 @@ package gotfsvm
 
 import (
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotkv"
 )
 
 type Value interface {
@@ -17,12 +16,7 @@ type Value_Root struct {
 func (r *Value_Root) isValue() {}
 
 // Value_Segment is a segment of a filesystem, not a valid filesystem on it's own.
-type Value_Segment struct {
-	// Span is the region that has a correct filesystem.
-	Span gotfs.Span
-	// Root is the gotkv.Root containing the filesystem.
-	Root gotkv.Root
-}
+type Value_Segment gotfs.Segment
 
 func (r *Value_Segment) isValue() {}
 
@@ -39,9 +33,9 @@ type Value_Info struct {
 
 func (r *Value_Info) isValue() {}
 
-type Value_Int int32
+type Value_Nat uint32
 
-func (r *Value_Int) isValue() {}
+func (r Value_Nat) isValue() {}
 
 // Value_Span is a span within a filesystem
 type Value_Span struct {

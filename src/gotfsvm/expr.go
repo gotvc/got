@@ -1,6 +1,7 @@
 package gotfsvm
 
 import (
+	"encoding/json"
 	"fmt"
 	"iter"
 
@@ -10,26 +11,38 @@ import (
 
 type OpCode uint32
 
+// 0-Arity
 const (
-	OpCode_UNKNOWN = iota
+	OpCode_UNKNOWN = 0
 
+	op0ArityOffset = iota<<24 | (0 << 30)
 	// Literal is a literally specified Value
 	// () -> (Value)
 	OpCode_Lit
+)
 
+// 1-Arity
+const (
+	op1ArityOffset = iota<<24 | (1 << 30)
 	// Input refers to a previoius snapshot by index
 	// (index) -> (Root)
 	// This Op reads from the entire input at the index.
 	OpCode_Input
 
+	// Promote checks a segment for consistency and returns a root.
+	// (Segment) -> Root
+	OpCode_PROMOTE
+)
+
+// 2-Arity
+const (
+	op2ArityOffset = iota<<24 | (2 << 30)
 	// Select produces a segment from a Span within a Root
 	// (Root, Span) -> (Segment)
 	// This Op reads only from the Span within root.
 	OpCode_SELECT
-	// Promote checks a segment for consistency and returns a root.
-	// (Segment) -> Root
-	OpCode_PROMOTE
 
+	// Concat takes 2 segments and concatenates them to produce a larger segment
 	// ShiftOut shifts a segment out to a path
 	// (Segment, Path) -> (Segment)
 	OpCode_ShiftOut
@@ -40,16 +53,23 @@ const (
 	// Pick produces a Root, taken from a specific path within another Root
 	// (Root, Path) -> (Root)
 	OpCode_PICK
+
+	// (Segment, Segment) -> Segment
+	OpCode_CONCAT
+)
+
+const (
+	op3ArityOffset = (iota << 24) | 3<<30
+
 	// Place takes a root, a path and a second root, and places the second root at that path in the first root.
 	// The parent of that path must already exist in root.
 	// (Root, Path, Root) -> Root
 	OpCode_PLACE
-	// Concat takes 2 segments and concatenates them to produce a larger segment
-	// (Segment, Segment) -> Segment
-	OpCode_CONCAT
-
-	OpCode_EditInfo
 )
+
+func (o OpCode) Arity() int {
+	return int(o >> 30)
+}
 
 func (o OpCode) String() string {
 	switch o {
@@ -71,8 +91,6 @@ func (o OpCode) String() string {
 		return "concat"
 	case OpCode_PROMOTE:
 		return "promote"
-	case OpCode_EditInfo:
-		return "editinfo"
 	default:
 		return fmt.Sprintf("UNKNOWN(%d)", o)
 	}
@@ -83,6 +101,12 @@ type Expr struct {
 	Args [3]*Expr
 	// If the OpCode is for a literal then it will be provided here, otherwise it will be nil.
 	Literal Value
+}
+
+func parseExpr(data []byte) (Expr, error) {
+	var ret Expr
+	err := json.Unmarshal(data, &ret)
+	return ret, err
 }
 
 func (e *Expr) Pretty(out []byte, indent int) []byte {
@@ -110,29 +134,23 @@ func (e *Expr) String() string {
 	return string(e.Pretty(nil, 0))
 }
 
-func (e *Expr) ReadsFrom() iter.Seq[ReadSpan] {
+// Passthrough returns the ReadSpans that will not be changed from the input.
+func (e *Expr) Passthrough() iter.Seq[ReadSpan] {
 	switch e.Op {
 	case OpCode_CONCAT:
-		return iterConcat(e.Args[0].ReadsFrom(), e.Args[1].ReadsFrom())
+		return iterConcat(e.Args[0].Passthrough(), e.Args[1].Passthrough())
 	case OpCode_Input:
-		validx := e.Args[0].Literal.(*Value_Int)
+		validx := e.Args[0].Literal.(*Value_Nat)
 		return iterUnit(ReadSpan{
 			Index: int(*validx),
 			Span:  gotkv.TotalSpan(),
 		})
 	case OpCode_SELECT, OpCode_ShiftOut, OpCode_ShiftIn, OpCode_PICK, OpCode_PROMOTE:
-		return e.Args[0].ReadsFrom()
+		return e.Args[0].Passthrough()
 	case OpCode_PLACE:
-		return iterConcat(e.Args[0].ReadsFrom(), e.Args[2].ReadsFrom())
+		return iterConcat(e.Args[0].Passthrough(), e.Args[2].Passthrough())
 	default:
 		return iterEmpty[ReadSpan]()
-	}
-}
-
-func (e *Expr) WritesTo() iter.Seq[gotfs.Span] {
-	switch e.Op {
-	default:
-		return iterEmpty[gotfs.Span]()
 	}
 }
 
@@ -172,4 +190,35 @@ func iterUnit[T any](x T) iter.Seq[T] {
 	return func(yield func(T) bool) {
 		yield(x)
 	}
+}
+
+func getExprArity(x *Expr) (ret uint32, _ error) {
+	if x == nil {
+		return 0, nil
+	}
+	switch x.Op {
+	case OpCode_Input:
+		idxExpr := x.Args[0]
+		if idxExpr == nil {
+			return 0, fmt.Errorf("invalid expr, cannot get arity")
+		}
+		val := idxExpr.Literal
+		if val == nil {
+			return 0, fmt.Errorf("missin literal, cannot get arity")
+		}
+		idx, ok := val.(Value_Nat)
+		if ok {
+			return 0, nil
+		}
+		return uint32(idx), nil
+	default:
+		for _, arg := range x.Args {
+			a2, err := getExprArity(arg)
+			if err != nil {
+				return 0, err
+			}
+			ret = max(ret, a2)
+		}
+	}
+	return ret, nil
 }
