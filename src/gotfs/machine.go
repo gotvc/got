@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"iter"
 	"os"
+	"slices"
 	"strings"
 
 	"go.brendoncarroll.net/stdctx/logctx"
@@ -117,8 +119,8 @@ func (mach *Machine) MeanBlobSizeMetadata() int {
 	return mach.meanSizeMetadata
 }
 
-// Select returns a new root containing everything under p, shifted to the root.
-func (mach *Machine) Select(ctx context.Context, s stores.RW, root Root, p string) (*Root, error) {
+// Pick returns a new root containing everything under p, shifted to the root.
+func (mach *Machine) Pick(ctx context.Context, s stores.RW, root Root, p string) (*Root, error) {
 	p = cleanPath(p)
 	_, err := mach.GetInfo(ctx, s, root, p)
 	if err != nil {
@@ -196,23 +198,16 @@ func (mach *Machine) Graft(ctx context.Context, ss [2]stores.RW, root Root, p st
 	k := newInfoKey(p)
 	return mach.Splice(ctx, ss, []Segment{
 		{
-			Span: gotkv.Span{Begin: nil, End: k.Marshal(nil)},
-			Contents: Expr{
-				Root: *root2,
-			},
+			Span:     gotkv.Span{Begin: nil, End: k.Marshal(nil)},
+			Contents: root2.ToGotKV(),
 		},
 		{
-			Span: SpanForPath(p),
-			Contents: Expr{
-				Root:      branch,
-				AddPrefix: p,
-			},
+			Span:     SpanForPath(p),
+			Contents: mach.addPrefix(branch, p),
 		},
 		{
-			Span: gotkv.Span{Begin: gotkv.PrefixEnd(k.Prefix(nil)), End: nil},
-			Contents: Expr{
-				Root: *root2,
-			},
+			Span:     gotkv.Span{Begin: gotkv.PrefixEnd(k.Prefix(nil)), End: nil},
+			Contents: root2.ToGotKV(),
 		},
 	})
 }
@@ -317,32 +312,97 @@ func (mach *Machine) Check(ctx context.Context, ms stores.Reading, root Root, ch
 	})
 }
 
-func (mach *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (*Root, error) {
+// Segment is a contiguous subset of a GotFS instance.
+// It may not be a valid Root.
+type Segment struct {
+	// Span is the span in the final Splice operation
+	Span gotkv.Span
+	// Contents is the gotkv instance representing the segment.
+	// If it contains entries outside of Span, they will not be used.
+	Contents gotkv.Root
+}
+
+func (s Segment) String() string {
+	return fmt.Sprintf("{ %v : %v}", s.Span, s.Contents.Ref)
+}
+
+// ShiftOut shifts all the entries in a segment out by path.
+// A path at a/b/ in x will be at p + a/b/ in the returned segment.
+func (mach *Machine) ShiftOut(x Segment, p string) Segment {
+	k := newInfoKey(p)
+	newRoot := mach.gotkv.AddPrefix(x.Contents, k.Prefix(nil))
+	return Segment{
+		Span: gotkv.Span{
+			Begin: slices.Concat(k.Prefix(nil), x.Span.Begin),
+			End:   slices.Concat(k.Prefix(nil), x.Span.End),
+		},
+		Contents: newRoot,
+	}
+}
+
+func (mach *Machine) Concat(ctx context.Context, ss [2]stores.RW, segs iter.Seq[Segment]) (Segment, error) {
 	b := mach.NewBuilder(ctx, ss[1], ss[0])
-	for i, seg := range segs {
-		if i > 0 && bytes.Compare(segs[i-1].Span.End, segs[i].Span.Begin) > 0 {
-			return nil, fmt.Errorf("segs out of order, %d end=%q %d begin=%q", i-1, segs[i-1].Span.End, i, segs[i].Span.Begin)
+
+	var i int
+	var firstSeg, prevSeg Segment
+	for seg := range segs {
+		if i > 0 && bytes.Compare(prevSeg.Span.End, seg.Span.Begin) > 0 {
+			return Segment{}, fmt.Errorf("segs out of order, %d end=%q %d begin=%q", i-1, prevSeg.Span.End, i, seg.Span.Begin)
+		} else {
+			firstSeg = seg
 		}
 
 		var root gotkv.Root
-		if seg.Contents.Root.Ref.IsZero() {
+		if seg.Contents.Ref.IsZero() {
 			r, err := mach.gotkv.NewEmpty(ctx, ss[1])
 			if err != nil {
-				return nil, err
+				return Segment{}, err
 			}
 			root = *r
 		} else {
-			if seg.Contents.AddPrefix != "" {
-				root = mach.addPrefix(seg.Contents.Root, seg.Contents.AddPrefix)
-			} else {
-				root = seg.Contents.Root.ToGotKV()
-			}
+			root = seg.Contents
 		}
 		if err := b.copyFrom(ctx, root, seg.Span); err != nil {
-			return nil, err
+			return Segment{}, err
 		}
+		i++
+		prevSeg = seg
 	}
-	return b.Finish()
+	out, err := b.Finish()
+	if err != nil {
+		return Segment{}, err
+	}
+	return Segment{
+		Span: gotkv.Span{
+			Begin: firstSeg.Span.Begin,
+			End:   prevSeg.Span.End,
+		},
+		Contents: out.ToGotKV(),
+	}, nil
+}
+
+// Promote promotes a segment to a Root if the segment has the correct first key.
+func Promote(ctx context.Context, seg Segment) (*Root, error) {
+	var key Key
+	if err := unmarshalInfoKey(seg.Contents.First, &key); err != nil {
+		panic(err)
+	}
+	if key.Path() != "" {
+		return nil, fmt.Errorf("segment is not a valid gotfs.Root")
+	}
+	return &Root{
+		Ref:   seg.Contents.Ref,
+		Depth: seg.Contents.Depth,
+	}, nil
+}
+
+// Splice is equivalent to Concat followed by Promote
+func (mach *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (*Root, error) {
+	seg, err := mach.Concat(ctx, ss, slices.Values(segs))
+	if err != nil {
+		return nil, err
+	}
+	return Promote(ctx, seg)
 }
 
 func (mach *Machine) Exists(ctx context.Context, ms stores.Reading, root Root, p string) (bool, error) {

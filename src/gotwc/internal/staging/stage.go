@@ -311,13 +311,7 @@ func (tx *Tx) Apply(ctx context.Context, fsag *gotfs.Machine, ss [2]stores.RW, b
 			if err != nil {
 				return err
 			}
-			segs = append(segs, gotfs.Segment{
-				Span: gotfs.SpanForPath(p),
-				Contents: gotfs.Expr{
-					Root:      gotfs.Root(*fileOp.Put),
-					AddPrefix: p,
-				},
-			})
+			segs = append(segs, fsag.ShiftOut(gotfs.Root(*fileOp.Put).Segment(), p))
 		case fileOp.Delete != nil:
 			segs = append(segs, gotfs.Segment{
 				Span: gotfs.SpanForPath(p),
