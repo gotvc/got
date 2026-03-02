@@ -329,12 +329,15 @@ func (s Segment) String() string {
 // ShiftOut shifts all the entries in a segment out by path.
 // A path at a/b/ in x will be at p + a/b/ in the returned segment.
 func (mach *Machine) ShiftOut(x Segment, p string) Segment {
-	k := newInfoKey(p)
-	newRoot := mach.gotkv.AddPrefix(x.Contents, k.Prefix(nil))
+	prefix := pathPrefixNoTrail(nil, p)
+	if len(prefix) == 0 {
+		return x
+	}
+	newRoot := mach.gotkv.AddPrefix(x.Contents, prefix)
 	return Segment{
 		Span: gotkv.Span{
-			Begin: slices.Concat(k.Prefix(nil), x.Span.Begin),
-			End:   slices.Concat(k.Prefix(nil), x.Span.End),
+			Begin: slices.Concat(prefix, x.Span.Begin),
+			End:   slices.Concat(prefix, x.Span.End),
 		},
 		Contents: newRoot,
 	}

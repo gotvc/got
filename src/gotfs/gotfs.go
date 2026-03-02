@@ -62,7 +62,7 @@ func (r Root) ToGotKV() gotkv.Root {
 // Segment returns the root as a single segment.
 func (r Root) Segment() Segment {
 	return Segment{
-		Span:     gotkv.TotalSpan(),
+		Span:     SpanForPath(""),
 		Contents: r.ToGotKV(),
 	}
 }
