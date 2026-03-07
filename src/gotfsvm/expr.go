@@ -65,6 +65,10 @@ const (
 	// The parent of that path must already exist in root.
 	// (Root, Path, Root) -> Root
 	OpCode_PLACE
+
+	// MkdirAll creates the directory at path and any of its ancestors if necessary.
+	// (Root, Path, FileMode) -> Root
+	OpCode_MKDIRALL
 )
 
 func (o OpCode) Arity() int {
@@ -91,6 +95,8 @@ func (o OpCode) String() string {
 		return "concat"
 	case OpCode_PROMOTE:
 		return "promote"
+	case OpCode_MKDIRALL:
+		return "mkdirall"
 	default:
 		return fmt.Sprintf("UNKNOWN(%d)", o)
 	}
@@ -149,6 +155,8 @@ func (e *Expr) Passthrough() iter.Seq[ReadSpan] {
 		return e.Args[0].Passthrough()
 	case OpCode_PLACE:
 		return iterConcat(e.Args[0].Passthrough(), e.Args[2].Passthrough())
+	case OpCode_MKDIRALL:
+		return e.Args[0].Passthrough()
 	default:
 		return iterEmpty[ReadSpan]()
 	}

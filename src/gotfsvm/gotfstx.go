@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"slices"
 
 	"github.com/gotvc/got/src/gdat"
@@ -66,7 +67,7 @@ func (m *Machine) Apply(ctx context.Context, dst [2]stores.RW, fn Function, inpu
 	if len(inputs) != int(fn.Arity) {
 		return gotfs.Root{}, fmt.Errorf("function takes %d inputs, have %d", fn.Arity, len(inputs))
 	}
-	ec := EvalCtx{
+	ec := evalCtx{
 		Ctx:    ctx,
 		Inputs: inputs,
 		Dst:    dst,
@@ -76,7 +77,7 @@ func (m *Machine) Apply(ctx context.Context, dst [2]stores.RW, fn Function, inpu
 	if err != nil {
 		return gotfs.Root{}, err
 	}
-	return m.EvalRoot(&ec, &body)
+	return m.evalRoot(&ec, &body)
 }
 
 type Input struct {
@@ -84,16 +85,16 @@ type Input struct {
 	Root   gotfs.Root
 }
 
-// EvalCtx holds the context for evaluating expressions.
-type EvalCtx struct {
+// evalCtx holds the context for evaluating expressions.
+type evalCtx struct {
 	Ctx    context.Context
 	Dst    [2]stores.RW
 	Inputs []Input
 	Job    gotjob.Ctx
 }
 
-// Eval evaluates an expression.
-func (m *Machine) Eval(ectx *EvalCtx, expr *Expr) (Value, error) {
+// eval evaluates an expression.
+func (m *Machine) eval(ectx *evalCtx, expr *Expr) (Value, error) {
 	ctx := ectx.Ctx
 	args := expr.Args
 
@@ -110,13 +111,22 @@ func (m *Machine) Eval(ectx *EvalCtx, expr *Expr) (Value, error) {
 		}
 		return &Value_Root{Root: ectx.Inputs[idx].Root}, nil
 	case OpCode_SELECT:
-		panic("SELECT not yet implemented")
+		root, err := m.evalRoot(ectx, args[0])
+		if err != nil {
+			return nil, err
+		}
+		span, err := m.evalSpan(ectx, args[1])
+		if err != nil {
+			return nil, err
+		}
+		seg := gotfs.Segment{Span: span, Contents: root.ToGotKV()}
+		return (*Value_Segment)(&seg), nil
 	case OpCode_ShiftOut:
 		panic("ShiftOut not yet implemented")
 	case OpCode_ShiftIn:
 		panic("ShiftIn not yet implemented")
 	case OpCode_PICK:
-		root, err := m.EvalRoot(ectx, args[0])
+		root, err := m.evalRoot(ectx, args[0])
 		if err != nil {
 			return nil, err
 		}
@@ -130,7 +140,7 @@ func (m *Machine) Eval(ectx *EvalCtx, expr *Expr) (Value, error) {
 		}
 		return &Value_Root{Root: *result}, nil
 	case OpCode_PLACE:
-		base, err := m.EvalRoot(ectx, args[0])
+		base, err := m.evalRoot(ectx, args[0])
 		if err != nil {
 			return nil, err
 		}
@@ -138,11 +148,29 @@ func (m *Machine) Eval(ectx *EvalCtx, expr *Expr) (Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		mount, err := m.EvalRoot(ectx, args[2])
+		mount, err := m.evalRoot(ectx, args[2])
 		if err != nil {
 			return nil, err
 		}
 		result, err := m.gotfs.Graft(ectx.Ctx, ectx.Dst, base, path, mount)
+		if err != nil {
+			return nil, err
+		}
+		return &Value_Root{Root: *result}, nil
+	case OpCode_MKDIRALL:
+		root, err := m.evalRoot(ectx, args[0])
+		if err != nil {
+			return nil, err
+		}
+		path, err := m.evalPath(ectx, args[1])
+		if err != nil {
+			return nil, err
+		}
+		_, err = m.evalFileMode(ectx, args[2])
+		if err != nil {
+			return nil, err
+		}
+		result, err := m.gotfs.MkdirAll(ctx, ectx.Dst[1], root, path)
 		if err != nil {
 			return nil, err
 		}
@@ -173,9 +201,9 @@ func (m *Machine) Eval(ectx *EvalCtx, expr *Expr) (Value, error) {
 	}
 }
 
-// EvalRoot calls Eval but errors if the result is not a root.
-func (m *Machine) EvalRoot(ectx *EvalCtx, expr *Expr) (gotfs.Root, error) {
-	val, err := m.Eval(ectx, expr)
+// evalRoot calls eval but errors if the result is not a root.
+func (m *Machine) evalRoot(ectx *evalCtx, expr *Expr) (gotfs.Root, error) {
+	val, err := m.eval(ectx, expr)
 	if err != nil {
 		return gotfs.Root{}, err
 	}
@@ -186,8 +214,8 @@ func (m *Machine) EvalRoot(ectx *EvalCtx, expr *Expr) (gotfs.Root, error) {
 	return valroot.Root, nil
 }
 
-func (m *Machine) evalInt(ectx *EvalCtx, x *Expr) (int32, error) {
-	val, err := m.Eval(ectx, x)
+func (m *Machine) evalInt(ectx *evalCtx, x *Expr) (int32, error) {
+	val, err := m.eval(ectx, x)
 	if err != nil {
 		return 0, err
 	}
@@ -198,8 +226,8 @@ func (m *Machine) evalInt(ectx *EvalCtx, x *Expr) (int32, error) {
 	return int32(idx), nil
 }
 
-func (m *Machine) evalSegment(ectx *EvalCtx, expr *Expr) (*Value_Segment, error) {
-	val, err := m.Eval(ectx, expr)
+func (m *Machine) evalSegment(ectx *evalCtx, expr *Expr) (*Value_Segment, error) {
+	val, err := m.eval(ectx, expr)
 	if err != nil {
 		return nil, err
 	}
@@ -210,8 +238,32 @@ func (m *Machine) evalSegment(ectx *EvalCtx, expr *Expr) (*Value_Segment, error)
 	return v, nil
 }
 
-func (m *Machine) evalPath(ectx *EvalCtx, expr *Expr) (string, error) {
-	val, err := m.Eval(ectx, expr)
+func (m *Machine) evalSpan(ectx *evalCtx, expr *Expr) (gotfs.Span, error) {
+	val, err := m.eval(ectx, expr)
+	if err != nil {
+		return gotfs.Span{}, err
+	}
+	v, ok := val.(*Value_Span)
+	if !ok {
+		return gotfs.Span{}, fmt.Errorf("expected span, got %T", val)
+	}
+	return gotfs.Span(v.Span), nil
+}
+
+func (m *Machine) evalFileMode(ectx *evalCtx, expr *Expr) (os.FileMode, error) {
+	val, err := m.eval(ectx, expr)
+	if err != nil {
+		return 0, err
+	}
+	v, ok := val.(Value_FileMode)
+	if !ok {
+		return 0, fmt.Errorf("expected filemode, got %T", val)
+	}
+	return os.FileMode(v), nil
+}
+
+func (m *Machine) evalPath(ectx *evalCtx, expr *Expr) (string, error) {
+	val, err := m.eval(ectx, expr)
 	if err != nil {
 		return "", err
 	}
@@ -222,7 +274,7 @@ func (m *Machine) evalPath(ectx *EvalCtx, expr *Expr) (string, error) {
 	return string(*v), nil
 }
 
-func (m *Machine) flattenConcat(ectx *EvalCtx, out []gotfs.Segment, expr *Expr) ([]gotfs.Segment, error) {
+func (m *Machine) flattenConcat(ectx *evalCtx, out []gotfs.Segment, expr *Expr) ([]gotfs.Segment, error) {
 	if expr.Op == OpCode_CONCAT {
 		var err error
 		out, err = m.flattenConcat(ectx, out, expr.Args[0])

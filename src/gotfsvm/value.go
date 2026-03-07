@@ -1,6 +1,8 @@
 package gotfsvm
 
 import (
+	"os"
+
 	"github.com/gotvc/got/src/gotfs"
 )
 
@@ -48,3 +50,8 @@ func (r *Value_Span) isValue() {}
 type Value_Path string
 
 func (r *Value_Path) isValue() {}
+
+// Value_FileMode is a file mode
+type Value_FileMode os.FileMode
+
+func (r Value_FileMode) isValue() {}

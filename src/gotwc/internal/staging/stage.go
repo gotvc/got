@@ -14,7 +14,6 @@ import (
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotfsvm"
 	"github.com/gotvc/got/src/gotkv"
-	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 )
@@ -289,29 +288,19 @@ func (tx *Tx) IsEmpty(ctx context.Context) (bool, error) {
 	}
 }
 
-func (tx *Tx) Apply(ctx context.Context, fsag *gotfs.Machine, ss [2]stores.RW, base *gotfs.Root) (*gotfs.Root, error) {
-	if base == nil {
-		var err error
-		base, err = fsag.NewEmpty(ctx, ss[1], 0o755)
-		if err != nil {
-			return nil, err
-		}
-	}
+func (tx *Tx) CreateFunction(ctx context.Context, fsag *gotfs.Machine, ss [2]stores.RW) (gotfsvm.Function, error) {
 	it, err := tx.Iterate(ctx, gotkv.TotalSpan())
 	if err != nil {
-		return nil, err
+		return gotfsvm.Function{}, err
 	}
+	baseExpr := gotfsvm.InputExpr(0)
 	var segs []gotfs.Segment
 	err = streams.ForEach(ctx, it, func(ent Entry) error {
 		fileOp := ent.Op
 		p := ent.Path
 		switch {
 		case fileOp.Put != nil:
-			var err error
-			base, err = fsag.MkdirAll(ctx, ss[1], *base, path.Dir(p))
-			if err != nil {
-				return err
-			}
+			baseExpr = gotfsvm.MkdirAllExpr(baseExpr, path.Dir(p), 0o755)
 			segs = append(segs, fsag.ShiftOut(gotfs.Root(*fileOp.Put).Segment(), p))
 		case fileOp.Delete != nil:
 			segs = append(segs, gotfs.Segment{
@@ -321,22 +310,38 @@ func (tx *Tx) Apply(ctx context.Context, fsag *gotfs.Machine, ss [2]stores.RW, b
 			logctx.Warnf(ctx, "empty op for path %q", p)
 			return nil
 		}
-
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return gotfsvm.Function{}, err
 	}
-	segs = gotfsvm.ChangesOnBase(*base, segs)
-	ctx, cf := metrics.Child(ctx, "splicing")
-	defer cf()
-	metrics.SetDenom(ctx, "segs", len(segs), "segs")
-	root, err := fsag.Splice(ctx, ss, segs)
+	concatExpr := gotfsvm.ChangesOnBase(baseExpr, segs)
+	body := gotfsvm.PromoteExpr(concatExpr)
+	vm := gotfsvm.New(fsag)
+	return vm.NewFunction(ctx, ss[1], *body)
+}
+
+func (tx *Tx) Apply(ctx context.Context, fsmach *gotfs.Machine, ss [2]stores.RW, base *gotfs.Root) (*gotfs.Root, error) {
+	if base == nil {
+		var err error
+		base, err = fsmach.NewEmpty(ctx, ss[1], 0o755)
+		if err != nil {
+			return nil, err
+		}
+	}
+	fn, err := tx.CreateFunction(ctx, fsmach, ss)
 	if err != nil {
 		return nil, err
 	}
-	metrics.AddInt(ctx, "segs", len(segs), "segs")
-	return root, nil
+	vm := gotfsvm.New(fsmach)
+	root, err := vm.Apply(ctx, ss, fn, []gotfsvm.Input{{
+		Stores: [2]stores.Reading{ss[0], ss[1]},
+		Root:   *base,
+	}})
+	if err != nil {
+		return nil, err
+	}
+	return &root, nil
 }
 
 func (tx *Tx) Store() stores.RW {
