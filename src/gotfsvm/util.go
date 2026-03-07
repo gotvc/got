@@ -63,6 +63,6 @@ func selectExpr(root *Expr, span gotkv.Span) *Expr {
 }
 
 func litSegment(seg gotfs.Segment) *Expr {
-	vs := Value_Segment(seg)
+	vs := Value_Segment{seg}
 	return &Expr{Op: OpCode_Lit, Literal: &vs}
 }

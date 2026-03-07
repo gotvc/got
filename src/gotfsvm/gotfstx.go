@@ -120,7 +120,7 @@ func (m *Machine) eval(ectx *evalCtx, expr *Expr) (Value, error) {
 			return nil, err
 		}
 		seg := gotfs.Segment{Span: span, Contents: root.ToGotKV()}
-		return (*Value_Segment)(&seg), nil
+		return &Value_Segment{seg}, nil
 	case OpCode_ShiftOut:
 		panic("ShiftOut not yet implemented")
 	case OpCode_ShiftIn:
@@ -184,7 +184,7 @@ func (m *Machine) eval(ectx *evalCtx, expr *Expr) (Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		return (*Value_Segment)(&seg), nil
+		return &Value_Segment{seg}, nil
 	case OpCode_PROMOTE:
 		seg, err := m.evalSegment(ectx, args[0])
 		if err != nil {
@@ -226,16 +226,16 @@ func (m *Machine) evalInt(ectx *evalCtx, x *Expr) (int32, error) {
 	return int32(idx), nil
 }
 
-func (m *Machine) evalSegment(ectx *evalCtx, expr *Expr) (*Value_Segment, error) {
+func (m *Machine) evalSegment(ectx *evalCtx, expr *Expr) (gotfs.Segment, error) {
 	val, err := m.eval(ectx, expr)
 	if err != nil {
-		return nil, err
+		return gotfs.Segment{}, err
 	}
 	v, ok := val.(*Value_Segment)
 	if !ok {
-		return nil, fmt.Errorf("expected segment, got %T", val)
+		return gotfs.Segment{}, fmt.Errorf("expected segment, got %T", val)
 	}
-	return v, nil
+	return v.Segment, nil
 }
 
 func (m *Machine) evalSpan(ectx *evalCtx, expr *Expr) (gotfs.Span, error) {
@@ -286,11 +286,11 @@ func (m *Machine) flattenConcat(ectx *evalCtx, out []gotfs.Segment, expr *Expr) 
 			return nil, err
 		}
 	} else {
-		vs, err := m.evalSegment(ectx, expr)
+		seg, err := m.evalSegment(ectx, expr)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, gotfs.Segment(*vs))
+		out = append(out, seg)
 	}
 	return out, nil
 }
