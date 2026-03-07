@@ -319,6 +319,7 @@ type Segment struct {
 	Span gotkv.Span
 	// Contents is the gotkv instance representing the segment.
 	// If it contains entries outside of Span, they will not be used.
+	// If Contents is the zero value, then it will be interpretted as empty
 	Contents gotkv.Root
 }
 

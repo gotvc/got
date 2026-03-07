@@ -321,29 +321,6 @@ func (tx *Tx) CreateFunction(ctx context.Context, fsag *gotfs.Machine, ss [2]sto
 	return vm.NewFunction(ctx, ss[1], *body)
 }
 
-func (tx *Tx) Apply(ctx context.Context, fsmach *gotfs.Machine, ss [2]stores.RW, base *gotfs.Root) (*gotfs.Root, error) {
-	if base == nil {
-		var err error
-		base, err = fsmach.NewEmpty(ctx, ss[1], 0o755)
-		if err != nil {
-			return nil, err
-		}
-	}
-	fn, err := tx.CreateFunction(ctx, fsmach, ss)
-	if err != nil {
-		return nil, err
-	}
-	vm := gotfsvm.New(fsmach)
-	root, err := vm.Apply(ctx, ss, fn, []gotfsvm.Input{{
-		Stores: [2]stores.Reading{ss[0], ss[1]},
-		Root:   *base,
-	}})
-	if err != nil {
-		return nil, err
-	}
-	return &root, nil
-}
-
 func (tx *Tx) Store() stores.RW {
 	return tx.tx
 }

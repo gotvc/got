@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/fs"
 
+	"github.com/gotvc/got/src/gotfsvm"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"go.brendoncarroll.net/exp/streams"
@@ -333,7 +334,11 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			// TODO: this does not preserve the separate stores.
 			s := stores.AddWriteLayer(mctx.Stores[1], scratch)
 			ss := [2]stores.RW{s, s}
-			nextRoot, err := stage.Apply(ctx, mctx.FS, ss, root)
+			fn, err := sctx.Stage.CreateFunction(ctx, mctx.FS, ss)
+			if err != nil {
+				return nil, err
+			}
+			nextRoot, err := apply(ctx, mctx.FS, ss, root, fn)
 			if err != nil {
 				return nil, err
 			}
@@ -501,4 +506,25 @@ func (wc *WC) cleanupStagingBlobs(ctx context.Context) error {
 		return err
 	}
 	return tx.Commit(ctx)
+}
+
+// apply applies a function to a root to create a new function.
+// TODO: maybe move this into gotcore.
+func apply(ctx context.Context, fsmach *gotfs.Machine, ss [2]stores.RW, base *gotfs.Root, fn gotfsvm.Function) (*gotfs.Root, error) {
+	if base == nil {
+		var err error
+		base, err = fsmach.NewEmpty(ctx, ss[1], 0o755)
+		if err != nil {
+			return nil, err
+		}
+	}
+	vm := gotfsvm.New(fsmach)
+	root, err := vm.Apply(ctx, ss, fn, []gotfsvm.Input{{
+		Stores: [2]stores.Reading{ss[0], ss[1]},
+		Root:   *base,
+	}})
+	if err != nil {
+		return nil, err
+	}
+	return &root, nil
 }
