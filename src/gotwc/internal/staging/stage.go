@@ -12,6 +12,7 @@ import (
 	"go.brendoncarroll.net/stdctx/logctx"
 
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/gotfsvm"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/stores"
@@ -326,7 +327,7 @@ func (tx *Tx) Apply(ctx context.Context, fsag *gotfs.Machine, ss [2]stores.RW, b
 	if err != nil {
 		return nil, err
 	}
-	segs = gotfs.ChangesOnBase(*base, segs)
+	segs = gotfsvm.ChangesOnBase(*base, segs)
 	ctx, cf := metrics.Child(ctx, "splicing")
 	defer cf()
 	metrics.SetDenom(ctx, "segs", len(segs), "segs")

@@ -222,3 +222,16 @@ func getExprArity(x *Expr) (ret uint32, _ error) {
 	}
 	return ret, nil
 }
+
+func Concat(xs ...*Expr) *Expr {
+	switch len(xs) {
+	case 0:
+		return &Expr{}
+	case 1:
+		return xs[0]
+	default:
+		l := Concat(xs[:len(xs)/2]...)
+		r := Concat(xs[len(xs)/2:]...)
+		return Concat(l, r)
+	}
+}
