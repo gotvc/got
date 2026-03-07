@@ -109,6 +109,108 @@ type Expr struct {
 	Literal Value
 }
 
+type taggedValue struct {
+	Type string          `json:"t"`
+	Data json.RawMessage `json:"d"`
+}
+
+func marshalValue(v Value) (*taggedValue, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var typeName string
+	switch v.(type) {
+	case *Value_Root:
+		typeName = "root"
+	case *Value_Segment:
+		typeName = "segment"
+	case *Value_Extent:
+		typeName = "extent"
+	case *Value_Info:
+		typeName = "info"
+	case Value_Nat:
+		typeName = "nat"
+	case *Value_Span:
+		typeName = "span"
+	case *Value_Path:
+		typeName = "path"
+	case Value_FileMode:
+		typeName = "filemode"
+	default:
+		return nil, fmt.Errorf("unknown value type %T", v)
+	}
+	data, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	return &taggedValue{Type: typeName, Data: data}, nil
+}
+
+func unmarshalValue(tv *taggedValue) (Value, error) {
+	if tv == nil {
+		return nil, nil
+	}
+	switch tv.Type {
+	case "root":
+		var v Value_Root
+		return &v, json.Unmarshal(tv.Data, &v)
+	case "segment":
+		var v Value_Segment
+		return &v, json.Unmarshal(tv.Data, &v)
+	case "extent":
+		var v Value_Extent
+		return &v, json.Unmarshal(tv.Data, &v)
+	case "info":
+		var v Value_Info
+		return &v, json.Unmarshal(tv.Data, &v)
+	case "nat":
+		var v Value_Nat
+		err := json.Unmarshal(tv.Data, &v)
+		return v, err
+	case "span":
+		var v Value_Span
+		return &v, json.Unmarshal(tv.Data, &v)
+	case "path":
+		var v Value_Path
+		return &v, json.Unmarshal(tv.Data, &v)
+	case "filemode":
+		var v Value_FileMode
+		err := json.Unmarshal(tv.Data, &v)
+		return v, err
+	default:
+		return nil, fmt.Errorf("unknown value type %q", tv.Type)
+	}
+}
+
+type jsonExpr struct {
+	Op      OpCode       `json:"op"`
+	Args    [3]*Expr     `json:"args"`
+	Literal *taggedValue `json:"lit,omitempty"`
+}
+
+func (e Expr) MarshalJSON() ([]byte, error) {
+	tv, err := marshalValue(e.Literal)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(jsonExpr{Op: e.Op, Args: e.Args, Literal: tv})
+}
+
+func (e *Expr) UnmarshalJSON(data []byte) error {
+	var je jsonExpr
+	if err := json.Unmarshal(data, &je); err != nil {
+		return err
+	}
+	e.Op = je.Op
+	e.Args = je.Args
+	v, err := unmarshalValue(je.Literal)
+	if err != nil {
+		return err
+	}
+	e.Literal = v
+	return nil
+}
+
 func parseExpr(data []byte) (Expr, error) {
 	var ret Expr
 	err := json.Unmarshal(data, &ret)
@@ -215,10 +317,10 @@ func getExprArity(x *Expr) (ret uint32, _ error) {
 			return 0, fmt.Errorf("missin literal, cannot get arity")
 		}
 		idx, ok := val.(Value_Nat)
-		if ok {
-			return 0, nil
+		if !ok {
+			return 0, fmt.Errorf("expected nat literal, got %T", val)
 		}
-		return uint32(idx), nil
+		return uint32(idx) + 1, nil
 	default:
 		for _, arg := range x.Args {
 			a2, err := getExprArity(arg)
@@ -237,9 +339,11 @@ func Concat(xs ...*Expr) *Expr {
 		return &Expr{}
 	case 1:
 		return xs[0]
+	case 2:
+		return &Expr{Op: OpCode_CONCAT, Args: [3]*Expr{xs[0], xs[1]}}
 	default:
 		l := Concat(xs[:len(xs)/2]...)
 		r := Concat(xs[len(xs)/2:]...)
-		return Concat(l, r)
+		return &Expr{Op: OpCode_CONCAT, Args: [3]*Expr{l, r}}
 	}
 }
