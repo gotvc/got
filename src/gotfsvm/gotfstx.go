@@ -97,6 +97,8 @@ func (m *Machine) eval(ectx *evalCtx, expr *Expr) (Value, error) {
 	args := expr.Args
 
 	switch expr.Op {
+	case OpCode_Nat:
+		return expr.Data, nil
 	case OpCode_Data:
 		return expr.Data, nil
 	case OpCode_Input:

@@ -50,7 +50,7 @@ func (w *IWriter) WriteExpr(x *Expr) (uint32, error) {
 		// add it to the data table, and replace the first arg with the index
 		dataIdx := Value_Nat(len(w.data))
 		w.data = append(w.data, x.Data)
-		x.Args[0] = Literal(&dataIdx)
+		x.Args[0] = Literal(dataIdx)
 	}
 
 	arr := x.Op.Arity()
@@ -209,20 +209,21 @@ func parseFunctionBody(ctx context.Context, gm *gdat.Machine, s stores.Reading, 
 
 		switch arity {
 		case 0:
-			op = OpCode(payload>>16) & 0x3fff
+			// opcode in bits 24-29, nat value in bits 0-23
+			op = OpCode(payload) & 0x3f00_0000
 			op |= OpCode(arity) << 30
 		case 1:
-			op = OpCode(payload>>16) & 0x3fff
-			op |= OpCode(arity) << 30
+			// opcode in bits 16-31 (including arity), arg offset in bits 0-15
+			op = OpCode(payload) & 0xffff_0000
 			args[0] = uint32(payload) & 0xffff
 		case 2:
-			op = OpCode(payload>>16) & 0x3fff
-			op |= OpCode(arity) << 30
+			// opcode in bits 16-31 (including arity), args in bits 0-15
+			op = OpCode(payload) & 0xffff_0000
 			args[0] = uint32(payload) & 0xff
 			args[1] = (uint32(payload) >> 8) & 0xff
 		case 3:
-			op = OpCode(payload>>24) & 0x3f
-			op |= OpCode(arity) << 30
+			// opcode in bits 24-31 (including arity), args in bits 0-23
+			op = OpCode(payload) & 0xff00_0000
 			args[0] = uint32(payload) & 0xff
 			args[1] = (uint32(payload) >> 8) & 0xff
 			args[2] = (uint32(payload) >> 16) & 0xff
@@ -230,12 +231,9 @@ func parseFunctionBody(ctx context.Context, gm *gdat.Machine, s stores.Reading, 
 
 		expr := &Expr{Op: op}
 
-		if arity == 1 && op == OpCode_Data {
-			litIdx := uint32(payload) & 0xffff
-			if int(litIdx) >= len(vals) {
-				return nil, fmt.Errorf("literal index %d out of bounds (have %d)", litIdx, len(vals))
-			}
-			expr.Data = vals[litIdx]
+		if arity == 0 && op == OpCode_Nat {
+			natVal := Value_Nat(uint32(payload) & 0x00ff_ffff)
+			expr.Data = natVal
 		}
 
 		// Resolve relative arg offsets back to absolute indices.
@@ -245,6 +243,19 @@ func parseFunctionBody(ctx context.Context, gm *gdat.Machine, s stores.Reading, 
 				return nil, fmt.Errorf("instruction %d: arg %d offset %d out of bounds", i, j, args[j])
 			}
 			expr.Args[j] = exprs[absIdx]
+		}
+
+		if op == OpCode_Data {
+			// The first arg is a Nat holding the index into the data table.
+			natExpr := expr.Args[0]
+			if natExpr == nil || natExpr.Op != OpCode_Nat {
+				return nil, fmt.Errorf("instruction %d: Data op missing Nat arg", i)
+			}
+			dataIdx := int(natExpr.Data.(Value_Nat))
+			if dataIdx >= len(vals) {
+				return nil, fmt.Errorf("data index %d out of bounds (have %d)", dataIdx, len(vals))
+			}
+			expr.Data = vals[dataIdx]
 		}
 
 		exprs[i] = expr

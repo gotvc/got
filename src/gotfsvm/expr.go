@@ -16,15 +16,13 @@ type OpCode uint32
 const (
 	OpCode_UNKNOWN = 0
 
-	op0ArityOffset = iota<<24 | (0 << 30)
-
 	// OpCode_Nat produces a 32 bit Nat from 24 bits of data stored in the instruction.
 	OpCode_Nat = 32 << 24
 )
 
 // 1-Arity
 const (
-	op1ArityOffset = iota<<24 | (1 << 30)
+	op1ArityOffset = (1 << 30) | iota<<24
 	// Input refers to a previoius snapshot by index
 	// (index) -> (Root)
 	// This Op reads from the entire input at the index.
@@ -144,9 +142,9 @@ func (e *Expr) Passthrough() iter.Seq[ReadSpan] {
 	case OpCode_CONCAT:
 		return iterConcat(e.Args[0].Passthrough(), e.Args[1].Passthrough())
 	case OpCode_Input:
-		validx := e.Args[0].Data.(*Value_Nat)
+		validx := e.Args[0].Data.(Value_Nat)
 		return iterUnit(ReadSpan{
-			Index: int(*validx),
+			Index: int(validx),
 			Span:  gotkv.TotalSpan(),
 		})
 	case OpCode_SELECT, OpCode_ShiftOut, OpCode_ShiftIn, OpCode_PICK, OpCode_PROMOTE:
