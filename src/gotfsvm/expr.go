@@ -1,7 +1,6 @@
 package gotfsvm
 
 import (
-	"encoding/json"
 	"fmt"
 	"iter"
 
@@ -9,6 +8,8 @@ import (
 	"github.com/gotvc/got/src/gotkv"
 )
 
+// OpCode is just the arity and opcode bits.
+// OpCode can be OR'd directly into an I to set the op and arity.
 type OpCode uint32
 
 // 0-Arity
@@ -16,9 +17,9 @@ const (
 	OpCode_UNKNOWN = 0
 
 	op0ArityOffset = iota<<24 | (0 << 30)
-	// Literal is a literally specified Value
-	// () -> (Value)
-	OpCode_Lit
+
+	// OpCode_Nat produces a 32 bit Nat from 24 bits of data stored in the instruction.
+	OpCode_Nat = 32 << 24
 )
 
 // 1-Arity
@@ -28,6 +29,9 @@ const (
 	// (index) -> (Root)
 	// This Op reads from the entire input at the index.
 	OpCode_Input
+	// OpCode_Data loads from an index in the data table.
+	// (index) -> (Value)
+	OpCode_Data
 
 	// Promote checks a segment for consistency and returns a root.
 	// (Segment) -> Root
@@ -77,8 +81,8 @@ func (o OpCode) Arity() int {
 
 func (o OpCode) String() string {
 	switch o {
-	case OpCode_Lit:
-		return "lit"
+	case OpCode_Data:
+		return "data"
 	case OpCode_Input:
 		return "input"
 	case OpCode_SELECT:
@@ -105,43 +109,8 @@ func (o OpCode) String() string {
 type Expr struct {
 	Op   OpCode
 	Args [3]*Expr
-	// If the OpCode is for a literal then it will be provided here, otherwise it will be nil.
-	Literal Value
-}
-
-type jsonExpr struct {
-	Op      OpCode       `json:"op"`
-	Args    [3]*Expr     `json:"args"`
-	Literal *taggedValue `json:"lit,omitempty"`
-}
-
-func (e Expr) MarshalJSON() ([]byte, error) {
-	tv, err := marshalValue(e.Literal)
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(jsonExpr{Op: e.Op, Args: e.Args, Literal: tv})
-}
-
-func (e *Expr) UnmarshalJSON(data []byte) error {
-	var je jsonExpr
-	if err := json.Unmarshal(data, &je); err != nil {
-		return err
-	}
-	e.Op = je.Op
-	e.Args = je.Args
-	v, err := unmarshalValue(je.Literal)
-	if err != nil {
-		return err
-	}
-	e.Literal = v
-	return nil
-}
-
-func parseExpr(data []byte) (Expr, error) {
-	var ret Expr
-	err := json.Unmarshal(data, &ret)
-	return ret, err
+	// If the expression takes a value from the data table then that will be included here.
+	Data Value
 }
 
 func (e *Expr) Pretty(out []byte, indent int) []byte {
@@ -175,7 +144,7 @@ func (e *Expr) Passthrough() iter.Seq[ReadSpan] {
 	case OpCode_CONCAT:
 		return iterConcat(e.Args[0].Passthrough(), e.Args[1].Passthrough())
 	case OpCode_Input:
-		validx := e.Args[0].Literal.(*Value_Nat)
+		validx := e.Args[0].Data.(*Value_Nat)
 		return iterUnit(ReadSpan{
 			Index: int(*validx),
 			Span:  gotkv.TotalSpan(),
@@ -239,7 +208,7 @@ func getExprArity(x *Expr) (ret uint32, _ error) {
 		if idxExpr == nil {
 			return 0, fmt.Errorf("invalid expr, cannot get arity")
 		}
-		val := idxExpr.Literal
+		val := idxExpr.Data
 		if val == nil {
 			return 0, fmt.Errorf("missin literal, cannot get arity")
 		}

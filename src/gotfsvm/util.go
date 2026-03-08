@@ -8,16 +8,26 @@ import (
 )
 
 func RootExpr(root gotfs.Root) *Expr {
-	return &Expr{Op: OpCode_Lit, Literal: &Value_Root{root}}
+	return Literal(&Value_Root{root})
 }
 
 func InputExpr(index int) *Expr {
 	idx := Value_Nat(index)
-	return &Expr{Op: OpCode_Input, Args: [3]*Expr{{Op: OpCode_Lit, Literal: idx}}}
+	return &Expr{Op: OpCode_Input, Args: [3]*Expr{Literal(idx)}}
 }
 
 func PromoteExpr(seg *Expr) *Expr {
 	return &Expr{Op: OpCode_PROMOTE, Args: [3]*Expr{seg}}
+}
+
+func Literal(val Value) *Expr {
+	var op OpCode
+	if _, ok := val.(Value_Nat); ok {
+		op = OpCode_Nat
+	} else {
+		op = OpCode_Data
+	}
+	return &Expr{Op: op, Data: val}
 }
 
 func MkdirAllExpr(root *Expr, path string, mode os.FileMode) *Expr {
@@ -25,8 +35,8 @@ func MkdirAllExpr(root *Expr, path string, mode os.FileMode) *Expr {
 	m := Value_FileMode(mode)
 	return &Expr{Op: OpCode_MKDIRALL, Args: [3]*Expr{
 		root,
-		{Op: OpCode_Lit, Literal: &p},
-		{Op: OpCode_Lit, Literal: m},
+		Literal(&p),
+		Literal(m),
 	}}
 }
 
@@ -57,12 +67,12 @@ func selectExpr(root *Expr, span gotkv.Span) *Expr {
 		Op: OpCode_SELECT,
 		Args: [3]*Expr{
 			root,
-			{Op: OpCode_Lit, Literal: &Value_Span{Span: gotfs.Span(span)}},
+			{Op: OpCode_Data, Data: &Value_Span{Span: gotfs.Span(span)}},
 		},
 	}
 }
 
 func litSegment(seg gotfs.Segment) *Expr {
 	vs := Value_Segment{seg}
-	return &Expr{Op: OpCode_Lit, Literal: &vs}
+	return &Expr{Op: OpCode_Data, Data: &vs}
 }

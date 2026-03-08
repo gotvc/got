@@ -2,7 +2,6 @@ package gotfsvm
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"slices"
@@ -37,26 +36,25 @@ func (m *Machine) NewFunction(ctx context.Context, s stores.Writing, body Expr) 
 	if err != nil {
 		return Function{}, err
 	}
-	// TODO: better marshaling
-	data, err := json.Marshal(body)
-	if err != nil {
+	w := NewIWriter(m)
+	if _, err := w.WriteExpr(&body); err != nil {
 		return Function{}, err
 	}
-	ref, err := m.gdat.Post(ctx, s, data)
+	ref, err := w.Flush(ctx, s)
 	if err != nil {
 		return Function{}, err
 	}
 	return Function{
 		Arity: arity,
-		Ref:   *ref,
+		Ref:   ref,
 	}, nil
 }
 
-func (m *Machine) getBody(ctx context.Context, s stores.Reading, fn Function) (Expr, error) {
-	var body Expr
+func (m *Machine) getBody(ctx context.Context, s stores.Reading, fn Function) (*Expr, error) {
+	var body *Expr
 	err := m.gdat.GetF(ctx, s, fn.Ref, func(data []byte) error {
 		var err error
-		body, err = parseExpr(data)
+		body, err = parseFunctionBody(ctx, m.gdat, s, data)
 		return err
 	})
 	return body, err
@@ -77,7 +75,7 @@ func (m *Machine) Apply(ctx context.Context, dst [2]stores.RW, fn Function, inpu
 	if err != nil {
 		return gotfs.Root{}, err
 	}
-	return m.evalRoot(&ec, &body)
+	return m.evalRoot(&ec, body)
 }
 
 type Input struct {
@@ -99,8 +97,8 @@ func (m *Machine) eval(ectx *evalCtx, expr *Expr) (Value, error) {
 	args := expr.Args
 
 	switch expr.Op {
-	case OpCode_Lit:
-		return expr.Literal, nil
+	case OpCode_Data:
+		return expr.Data, nil
 	case OpCode_Input:
 		idx, err := m.evalInt(ectx, args[0])
 		if err != nil {

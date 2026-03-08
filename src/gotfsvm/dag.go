@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/internal/stores"
@@ -13,20 +14,17 @@ import (
 // I is a single instruction, it represents a node in a computation DAG.
 type I uint32
 
-// marshalFunc marshals the body of a function, and then
-// appends the instruction for the expression.
-func marshalFunc(out []byte, body *Expr) []byte {
-	cache := make(map[*Expr]uint32)
-	_, out = marshalExpr(out, cache, 0, body)
-	return out
-}
-
 // IWriter writes an instruction stream.
 type IWriter struct {
-	mach  *Machine
-	out   []byte
+	mach *Machine
+
+	// out is the buffer being written to
+	out []byte
+	// cache is the index that each *Expr was written to, this allows a DAG instead of
+	// just a tree
 	cache map[*Expr]uint32
-	lits  []Value
+	// data is the per-function data table of constant values
+	data []Value
 }
 
 func NewIWriter(mach *Machine) IWriter {
@@ -45,11 +43,25 @@ func (w *IWriter) WriteExpr(x *Expr) (uint32, error) {
 	}
 	offset := uint32(w.ILen())
 
+	// special cases
+	switch x.Op {
+	case OpCode_Data:
+		// if there is data, then we need to take it and
+		// add it to the data table, and replace the first arg with the index
+		dataIdx := Value_Nat(len(w.data))
+		w.data = append(w.data, x.Data)
+		x.Args[0] = Literal(&dataIdx)
+	}
+
 	arr := x.Op.Arity()
 	// args holds the args offsets
 	var args [3]uint32
 	for i := range args[:arr] {
-		args[i], w.out = marshalExpr(w.out, w.cache, offset, x.Args[i])
+		var err error
+		args[i], err = w.WriteExpr(x.Args[i])
+		if err != nil {
+			return 0, err
+		}
 		if args[i] >= offset {
 			// nodes were added, so we need to increment nextIdx
 			offset = args[i] + 1
@@ -67,30 +79,41 @@ func (w *IWriter) WriteExpr(x *Expr) (uint32, error) {
 	var payload I
 	switch arr {
 	case 0:
+		payload |= I(x.Op) & 0x3f00_0000
+		if x.Op == OpCode_Nat {
+			payload |= I(x.Data.(Value_Nat) & 0x00ff_ffff)
+		}
 	case 1:
-		// top 14 bits are for the opcode
-		payload |= I(x.Op) << 16
+		// 14 bits are for the opcode
+		payload |= I(x.Op)
 		// low 16 bits are for the arg offset
-		payload |= I(args[0]) & 0xff
+		payload |= I(args[0]) & 0xffff
 	case 2:
-		// top 14 bits are for the opcode
-		payload |= I(x.Op) << 16
+		// 14 bits are for the opcode
+		payload |= I(x.Op)
 		// each arg gets 8 bits of offset
 		for i := range args[:arr] {
-			payload |= I(args[i]) << (i * 8)
+			if args[i] > 255 {
+				return 0, fmt.Errorf("relative offset too large %d", args[i])
+			}
+			payload |= I(args[i]&0xff) << (i * 8)
 		}
 	case 3:
-		// top 6 bits are for the opcode
-		payload |= I(x.Op) << 24
+		// 6 bits are for the opcode
+		payload |= I(x.Op) & 0x3f00_0000
 		// each arg gets 8 bits of offset
 		for i := range args[:arr] {
-			payload |= I(args[i]) << (i * 8)
+			if args[i] > 255 {
+				return 0, fmt.Errorf("relative offset too large %d", args[i])
+			}
+			payload |= I(args[i]&0xff) << (i * 8)
 		}
 	}
 	// set the arity
 	payload |= I(arr) << 30
 
 	w.out = binary.LittleEndian.AppendUint32(w.out, uint32(payload))
+	w.cache[x] = offset
 	return offset, nil
 }
 
@@ -105,8 +128,12 @@ func (w *IWriter) Bytes() []byte {
 func (w *IWriter) postValues(ctx context.Context, swo stores.Writing) (gdat.Ref, error) {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
-	for _, val := range w.lits {
-		if err := enc.Encode(val); err != nil {
+	for _, val := range w.data {
+		tv, err := marshalValue(val)
+		if err != nil {
+			return gdat.Ref{}, err
+		}
+		if err := enc.Encode(tv); err != nil {
 			return gdat.Ref{}, err
 		}
 	}
@@ -132,44 +159,97 @@ func (w *IWriter) Flush(ctx context.Context, swo stores.Writing) (gdat.Ref, erro
 	return *ref2, nil
 }
 
-// marshalExpr appends the expr to out if necessary and returns the index that it was written to
-// as well as the new version of out.
-// out may not need to be updated if the expression is in the cache
-func marshalExpr(out []byte, cache map[*Expr]uint32, offset uint32, x *Expr) (uint32, []byte) {
-	arr := x.Op.Arity()
-	// args holds the args offsets
-	var args [3]uint32
-	for i := range args[:arr] {
-		args[i], out = marshalExpr(out, cache, offset, x.Args[i])
-		if args[i] >= offset {
-			// nodes were added, so we need to increment nextIdx
-			offset = args[i] + 1
+func parseFunctionBody(ctx context.Context, gm *gdat.Machine, s stores.Reading, data []byte) (*Expr, error) {
+	if len(data) < gdat.RefSize {
+		return nil, fmt.Errorf("data too short: %d", len(data))
+	}
+
+	// Fetch the literals from the ref in the first 64 bytes.
+	var ref gdat.Ref
+	if err := ref.Unmarshal(data[:gdat.RefSize]); err != nil {
+		return nil, fmt.Errorf("parsing constants ref: %w", err)
+	}
+	var vals []Value
+	if err := gm.GetF(ctx, s, ref, func(vdata []byte) error {
+		dec := json.NewDecoder(bytes.NewReader(vdata))
+		for dec.More() {
+			var tv taggedValue
+			if err := dec.Decode(&tv); err != nil {
+				return err
+			}
+			v, err := unmarshalValue(&tv)
+			if err != nil {
+				return err
+			}
+			vals = append(vals, v)
 		}
-	}
-	// at this point offset will not need to change.
-	// reassign arg offsets to the relative offset.
-	// There will never be a need for zero offset, so shift 1 down to 0, 2 down to 1, etc.
-	for i := range args[:arr] {
-		args[i] = offset - args[i] - 1
+		return nil
+	}); err != nil {
+		return nil, fmt.Errorf("fetching constants: %w", err)
 	}
 
-	var payload I
-	switch arr {
-	case 0:
-	case 1:
-		// low 16 bits are for the offset
-
-	case 2:
-	case 3:
+	instData := data[gdat.RefSize:]
+	if len(instData)%4 != 0 {
+		return nil, fmt.Errorf("instruction data not aligned: %d", len(instData))
+	}
+	n := len(instData) / 4
+	if n == 0 {
+		return nil, fmt.Errorf("no instructions")
 	}
 
-	payload |= I(arr) << 30
-	out = binary.LittleEndian.AppendUint32(out, uint32(payload))
+	// Decode each instruction into an Expr, storing them by index.
+	exprs := make([]*Expr, n)
+	for i := range n {
+		raw := binary.LittleEndian.Uint32(instData[i*4 : (i+1)*4])
+		payload := I(raw)
+		arity := int(payload >> 30)
 
-	cache[x] = offset
-	return offset, out
-}
+		var op OpCode
+		var args [3]uint32
 
-func parseFunction(data []byte) (Function, error) {
-	return Function{}, nil
+		switch arity {
+		case 0:
+			op = OpCode(payload>>16) & 0x3fff
+			op |= OpCode(arity) << 30
+		case 1:
+			op = OpCode(payload>>16) & 0x3fff
+			op |= OpCode(arity) << 30
+			args[0] = uint32(payload) & 0xffff
+		case 2:
+			op = OpCode(payload>>16) & 0x3fff
+			op |= OpCode(arity) << 30
+			args[0] = uint32(payload) & 0xff
+			args[1] = (uint32(payload) >> 8) & 0xff
+		case 3:
+			op = OpCode(payload>>24) & 0x3f
+			op |= OpCode(arity) << 30
+			args[0] = uint32(payload) & 0xff
+			args[1] = (uint32(payload) >> 8) & 0xff
+			args[2] = (uint32(payload) >> 16) & 0xff
+		}
+
+		expr := &Expr{Op: op}
+
+		if arity == 1 && op == OpCode_Data {
+			litIdx := uint32(payload) & 0xffff
+			if int(litIdx) >= len(vals) {
+				return nil, fmt.Errorf("literal index %d out of bounds (have %d)", litIdx, len(vals))
+			}
+			expr.Data = vals[litIdx]
+		}
+
+		// Resolve relative arg offsets back to absolute indices.
+		for j := range arity {
+			absIdx := int(i) - int(args[j]) - 1
+			if absIdx < 0 || absIdx >= i {
+				return nil, fmt.Errorf("instruction %d: arg %d offset %d out of bounds", i, j, args[j])
+			}
+			expr.Args[j] = exprs[absIdx]
+		}
+
+		exprs[i] = expr
+	}
+
+	// The last instruction is the root of the expression.
+	return exprs[n-1], nil
 }
