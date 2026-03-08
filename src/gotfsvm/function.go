@@ -12,11 +12,14 @@ import (
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/sbe"
+	"go.brendoncarroll.net/exp/streams"
 )
 
 const (
 	dataTabHeaderSize = gdat.RefSize + 4
 )
+
+var dataTabParams = gotkv.Params{MaxSize: 1 << 16, MeanSize: 1 << 13}
 
 // Function maps a []gotfs.Root to a gotfs.Root
 // Function is a root expression, and the number of inputs it takes.
@@ -156,20 +159,27 @@ func (fb *FnBuilder) Root(root gotfs.Root) ExprT[gotfs.Root] {
 // Segment adds a Segment as data to the function.
 func (fb *FnBuilder) Segment(seg gotfs.Segment) ExprT[gotfs.Segment] {
 	dataIdx := fb.fc.appendData(&Value_Segment{Segment: seg})
-	vt := fb.fc.append1(OpCode_Data, Vertex(dataIdx))
-	return ExprT[gotfs.Segment]{i: vt}
+	n := fb.Nat(uint32(dataIdx))
+	return ExprT[gotfs.Segment]{fb.fc.append1(OpCode_Data, n.i)}
 }
 
 func (fb *FnBuilder) Path(p string) ExprT[string] {
-	return ExprT[string]{}
+	v := Value_Path(p)
+	dataIdx := fb.fc.appendData(&v)
+	n := fb.Nat(uint32(dataIdx))
+	return ExprT[string]{fb.fc.append1(OpCode_Data, n.i)}
 }
 
 func (fb *FnBuilder) FileMode(m fs.FileMode) ExprT[fs.FileMode] {
-	return ExprT[fs.FileMode]{}
+	dataIdx := fb.fc.appendData(Value_FileMode(m))
+	n := fb.Nat(uint32(dataIdx))
+	return ExprT[fs.FileMode]{fb.fc.append1(OpCode_Data, n.i)}
 }
 
 func (fb *FnBuilder) Span(span gotfs.Span) ExprT[gotfs.Span] {
-	return ExprT[gotfs.Span]{}
+	dataIdx := fb.fc.appendData(&Value_Span{Span: span})
+	n := fb.Nat(uint32(dataIdx))
+	return ExprT[gotfs.Span]{fb.fc.append1(OpCode_Data, n.i)}
 }
 
 func (fb *FnBuilder) Promote(x ExprT[gotfs.Segment]) ExprT[gotfs.Root] {
@@ -218,7 +228,9 @@ func (fb *FnBuilder) Select(root ExprT[gotfs.Root], span gotkv.Span) ExprT[gotfs
 }
 
 func (fb *FnBuilder) MkdirAll(base ExprT[gotfs.Root], p string, mode fs.FileMode) ExprT[gotfs.Root] {
-	return ExprT[gotfs.Root]{}
+	pathV := fb.Path(p)
+	modeV := fb.FileMode(mode)
+	return ExprT[gotfs.Root]{fb.fc.append3(OpCode_MKDIRALL, base.i, pathV.i, modeV.i)}
 }
 
 // I is a single instruction, it represents a node in a computation DAG.
@@ -250,12 +262,12 @@ func (i I) Args() (ret [3]uint32) {
 	case 1:
 		ret[0] = uint32(i) & 0x0000_ffff
 	case 2:
-		ret[0] = (uint32(i) >> 8) & 0xff
-		ret[1] = (uint32(i) >> 16) & 0xff
+		ret[0] = uint32(i) & 0xff
+		ret[1] = (uint32(i) >> 8) & 0xff
 	case 3:
-		ret[0] = (uint32(i) >> 8) & 0xff
-		ret[1] = (uint32(i) >> 16) & 0xff
-		ret[2] = (uint32(i) >> 24) & 0xff
+		ret[0] = uint32(i) & 0xff
+		ret[1] = (uint32(i) >> 8) & 0xff
+		ret[2] = (uint32(i) >> 16) & 0xff
 	default:
 	}
 	return ret
@@ -272,7 +284,44 @@ type fnBody struct {
 }
 
 func (m *Machine) loadFunction(ctx context.Context, s stores.Reading, ref gdat.Ref) (fnBody, error) {
-	return fnBody{}, nil
+	var fb fnBody
+	if err := m.gdat.GetF(ctx, s, ref, func(data []byte) error {
+		if len(data) < dataTabHeaderSize {
+			return fmt.Errorf("data too short: %d", len(data))
+		}
+
+		// Reconstruct the gotkv root from the header.
+		// The header is: Ref (RefSize) + Depth (1 byte) + 3 zero padding bytes.
+		var kvroot gotkv.Root
+		if err := kvroot.Unmarshal(data[:dataTabHeaderSize]); err != nil {
+			return fmt.Errorf("parsing constants ref: %w", err)
+		}
+		kvroot.First = binary.BigEndian.AppendUint32(nil, 0)
+
+		// Load values from the data table.
+		kvmach := gotkv.NewMachine(dataTabParams)
+		it := kvmach.NewIterator(s, kvroot, gotkv.TotalSpan())
+		if err := streams.ForEach(ctx, it, func(ent gotkv.Entry) error {
+			var tv taggedValue
+			if err := json.Unmarshal(ent.Value, &tv); err != nil {
+				return err
+			}
+			val, err := unmarshalValue(&tv)
+			if err != nil {
+				return err
+			}
+			fb.data = append(fb.data, val)
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		// Parse the DAG from the remaining bytes.
+		return fb.unmarshalDAG(data[dataTabHeaderSize:])
+	}); err != nil {
+		return fnBody{}, err
+	}
+	return fb, nil
 }
 
 // marshalDAG marshals just the DAG portion of the fnBody and appends it to out.
@@ -311,13 +360,34 @@ func (fb *fnBody) appendData(val Value) int {
 }
 
 func (fb *fnBody) append(op OpCode, args [3]Vertex) Vertex {
-	var ix I
+	arr := op.Arity()
 	// convert to relative offsets
 	var relOff [3]uint32
 	offset := uint32(len(fb.dag))
-	for i := range args[:op.Arity()] {
+	for i := range relOff[:arr] {
 		relOff[i] = offset - uint32(args[i]) - 1
 	}
+
+	var ix I
+	switch arr {
+	case 0:
+		ix = I(op)
+	case 1:
+		ix = I(op) | I(relOff[0]&0xffff)
+	case 2:
+		ix = I(op)
+		for i := range relOff[:arr] {
+			ix |= I(relOff[i]&0xff) << (i * 8)
+		}
+	case 3:
+		ix = I(op) & 0xff00_0000
+		for i := range relOff[:arr] {
+			ix |= I(relOff[i]&0xff) << (i * 8)
+		}
+	}
+	// set the arity
+	ix |= I(arr) << 30
+
 	fb.dag = append(fb.dag, ix)
 	return fb.Output()
 }

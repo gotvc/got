@@ -72,7 +72,11 @@ func (m *Machine) eval(ectx *evalCtx, expr Vertex) (Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		return nat, nil
+		idx := uint32(nat)
+		if idx >= ectx.Fn.DataLen() {
+			return nil, fmt.Errorf("data index %d out of bounds (have %d)", idx, ectx.Fn.DataLen())
+		}
+		return ectx.Fn.Data(idx), nil
 	case OpCode_Input:
 		idx, err := m.evalNat(ectx, args[0])
 		if err != nil {
