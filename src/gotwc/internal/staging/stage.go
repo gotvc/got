@@ -293,32 +293,33 @@ func (tx *Tx) CreateFunction(ctx context.Context, fsag *gotfs.Machine, ss [2]sto
 	if err != nil {
 		return gotfsvm.Function{}, err
 	}
-	baseExpr := gotfsvm.InputExpr(0)
-	var segs []gotfs.Segment
-	err = streams.ForEach(ctx, it, func(ent Entry) error {
-		fileOp := ent.Op
-		p := ent.Path
-		switch {
-		case fileOp.Put != nil:
-			baseExpr = gotfsvm.MkdirAllExpr(baseExpr, path.Dir(p), 0o755)
-			segs = append(segs, fsag.ShiftOut(gotfs.Root(*fileOp.Put).Segment(), p))
-		case fileOp.Delete != nil:
-			segs = append(segs, gotfs.Segment{
-				Span: gotfs.SpanForPath(p),
-			})
-		default:
-			logctx.Warnf(ctx, "empty op for path %q", p)
-			return nil
-		}
-		return nil
-	})
-	if err != nil {
-		return gotfsvm.Function{}, err
-	}
-	concatExpr := gotfsvm.ChangesOnBase(baseExpr, segs)
-	body := gotfsvm.PromoteExpr(concatExpr)
 	vm := gotfsvm.New(fsag)
-	return vm.NewFunction(ctx, ss[1], *body)
+	return vm.NewFunction(ctx, ss[1], func(fb *gotfsvm.FnBuilder) (gotfsvm.ExprT[gotfs.Root], error) {
+		baseExpr := fb.Input(0)
+		var segs []gotfs.Segment
+		err = streams.ForEach(ctx, it, func(ent Entry) error {
+			fileOp := ent.Op
+			p := ent.Path
+			switch {
+			case fileOp.Put != nil:
+				baseExpr = fb.MkdirAll(baseExpr, path.Dir(p), 0o755)
+				segs = append(segs, fsag.ShiftOut(gotfs.Root(*fileOp.Put).Segment(), p))
+			case fileOp.Delete != nil:
+				segs = append(segs, gotfs.Segment{
+					Span: gotfs.SpanForPath(p),
+				})
+			default:
+				logctx.Warnf(ctx, "empty op for path %q", p)
+				return nil
+			}
+			return nil
+		})
+		if err != nil {
+			return gotfsvm.ExprT[gotfs.Root]{}, err
+		}
+		concatExpr := fb.ChangesOnBase(baseExpr, segs)
+		return fb.Promote(concatExpr), nil
+	})
 }
 
 func (tx *Tx) Store() stores.RW {

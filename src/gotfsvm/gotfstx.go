@@ -22,60 +22,23 @@ func New(fsmach *gotfs.Machine) Machine {
 	return Machine{gotfs: fsmach, gdat: gdat.NewMachine(gdat.Params{})}
 }
 
-// Function maps a []gotfs.Root to a gotfs.Root
-// Function is a root expression, and the number of inputs it takes.
-type Function struct {
-	// Arity is the number of inputs the function takes
-	Arity uint32
-	Ref   gdat.Ref
-}
-
-// NewFunction creates a new function from an expression.
-func (m *Machine) NewFunction(ctx context.Context, s stores.RW, body Expr) (Function, error) {
-	arity, err := getExprArity(&body)
-	if err != nil {
-		return Function{}, err
-	}
-	w := NewIWriter(m)
-	if _, err := w.WriteExpr(&body); err != nil {
-		return Function{}, err
-	}
-	ref, err := w.Flush(ctx, s)
-	if err != nil {
-		return Function{}, err
-	}
-	return Function{
-		Arity: arity,
-		Ref:   ref,
-	}, nil
-}
-
-func (m *Machine) getBody(ctx context.Context, s stores.Reading, fn Function) (*Expr, error) {
-	var body *Expr
-	err := m.gdat.GetF(ctx, s, fn.Ref, func(data []byte) error {
-		var err error
-		body, err = parseFunctionBody(ctx, m.gdat, s, data)
-		return err
-	})
-	return body, err
-}
-
 // Apply applies a function to inputs.
 func (m *Machine) Apply(ctx context.Context, dst [2]stores.RW, fn Function, inputs []Input) (gotfs.Root, error) {
 	if len(inputs) != int(fn.Arity) {
 		return gotfs.Root{}, fmt.Errorf("function takes %d inputs, have %d", fn.Arity, len(inputs))
+	}
+	body, err := m.loadFunction(ctx, dst[1], fn.Ref)
+	if err != nil {
+		return gotfs.Root{}, err
 	}
 	ec := evalCtx{
 		Ctx:    ctx,
 		Inputs: inputs,
 		Dst:    dst,
 		Job:    gotjob.New(ctx),
+		Fn:     body,
 	}
-	body, err := m.getBody(ctx, dst[1], fn)
-	if err != nil {
-		return gotfs.Root{}, err
-	}
-	return m.evalRoot(&ec, body)
+	return m.evalRoot(&ec, body.Output())
 }
 
 type Input struct {
@@ -89,20 +52,29 @@ type evalCtx struct {
 	Dst    [2]stores.RW
 	Inputs []Input
 	Job    gotjob.Ctx
+	Fn     fnBody
 }
 
 // eval evaluates an expression.
-func (m *Machine) eval(ectx *evalCtx, expr *Expr) (Value, error) {
+func (m *Machine) eval(ectx *evalCtx, expr Vertex) (Value, error) {
 	ctx := ectx.Ctx
-	args := expr.Args
+	oc := ectx.Fn.Op(expr)
+	args := ectx.Fn.Args(expr)
 
-	switch expr.Op {
-	case OpCode_Nat:
-		return expr.Data, nil
+	if OpCode_Nat == oc&0xff00_0000 {
+		ix := ectx.Fn.at(expr)
+		return Value_Nat(ix & 0x00ff_ffff), nil
+	}
+
+	switch oc {
 	case OpCode_Data:
-		return expr.Data, nil
+		nat, err := m.evalNat(ectx, args[0])
+		if err != nil {
+			return nil, err
+		}
+		return nat, nil
 	case OpCode_Input:
-		idx, err := m.evalInt(ectx, args[0])
+		idx, err := m.evalNat(ectx, args[0])
 		if err != nil {
 			return nil, err
 		}
@@ -197,12 +169,12 @@ func (m *Machine) eval(ectx *evalCtx, expr *Expr) (Value, error) {
 		return &Value_Root{Root: root}, nil
 
 	default:
-		return nil, fmt.Errorf("unrecognized op %v", expr.Op)
+		return nil, fmt.Errorf("unrecognized op %v", oc)
 	}
 }
 
 // evalRoot calls eval but errors if the result is not a root.
-func (m *Machine) evalRoot(ectx *evalCtx, expr *Expr) (gotfs.Root, error) {
+func (m *Machine) evalRoot(ectx *evalCtx, expr Vertex) (gotfs.Root, error) {
 	val, err := m.eval(ectx, expr)
 	if err != nil {
 		return gotfs.Root{}, err
@@ -214,19 +186,19 @@ func (m *Machine) evalRoot(ectx *evalCtx, expr *Expr) (gotfs.Root, error) {
 	return valroot.Root, nil
 }
 
-func (m *Machine) evalInt(ectx *evalCtx, x *Expr) (int32, error) {
+func (m *Machine) evalNat(ectx *evalCtx, x Vertex) (Value_Nat, error) {
 	val, err := m.eval(ectx, x)
 	if err != nil {
 		return 0, err
 	}
-	idx, ok := val.(Value_Nat)
+	nat, ok := val.(Value_Nat)
 	if !ok {
 		return 0, fmt.Errorf("expected int, got %T", val)
 	}
-	return int32(idx), nil
+	return nat, nil
 }
 
-func (m *Machine) evalSegment(ectx *evalCtx, expr *Expr) (gotfs.Segment, error) {
+func (m *Machine) evalSegment(ectx *evalCtx, expr Vertex) (gotfs.Segment, error) {
 	val, err := m.eval(ectx, expr)
 	if err != nil {
 		return gotfs.Segment{}, err
@@ -238,7 +210,7 @@ func (m *Machine) evalSegment(ectx *evalCtx, expr *Expr) (gotfs.Segment, error) 
 	return v.Segment, nil
 }
 
-func (m *Machine) evalSpan(ectx *evalCtx, expr *Expr) (gotfs.Span, error) {
+func (m *Machine) evalSpan(ectx *evalCtx, expr Vertex) (gotfs.Span, error) {
 	val, err := m.eval(ectx, expr)
 	if err != nil {
 		return gotfs.Span{}, err
@@ -250,7 +222,7 @@ func (m *Machine) evalSpan(ectx *evalCtx, expr *Expr) (gotfs.Span, error) {
 	return gotfs.Span(v.Span), nil
 }
 
-func (m *Machine) evalFileMode(ectx *evalCtx, expr *Expr) (os.FileMode, error) {
+func (m *Machine) evalFileMode(ectx *evalCtx, expr Vertex) (os.FileMode, error) {
 	val, err := m.eval(ectx, expr)
 	if err != nil {
 		return 0, err
@@ -262,7 +234,7 @@ func (m *Machine) evalFileMode(ectx *evalCtx, expr *Expr) (os.FileMode, error) {
 	return os.FileMode(v), nil
 }
 
-func (m *Machine) evalPath(ectx *evalCtx, expr *Expr) (string, error) {
+func (m *Machine) evalPath(ectx *evalCtx, expr Vertex) (string, error) {
 	val, err := m.eval(ectx, expr)
 	if err != nil {
 		return "", err
@@ -274,14 +246,16 @@ func (m *Machine) evalPath(ectx *evalCtx, expr *Expr) (string, error) {
 	return string(*v), nil
 }
 
-func (m *Machine) flattenConcat(ectx *evalCtx, out []gotfs.Segment, expr *Expr) ([]gotfs.Segment, error) {
-	if expr.Op == OpCode_CONCAT {
+func (m *Machine) flattenConcat(ectx *evalCtx, out []gotfs.Segment, expr Vertex) ([]gotfs.Segment, error) {
+	op := ectx.Fn.Op(expr)
+	args := ectx.Fn.Args(expr)
+	if op == OpCode_CONCAT {
 		var err error
-		out, err = m.flattenConcat(ectx, out, expr.Args[0])
+		out, err = m.flattenConcat(ectx, out, args[0])
 		if err != nil {
 			return nil, err
 		}
-		out, err = m.flattenConcat(ectx, out, expr.Args[1])
+		out, err = m.flattenConcat(ectx, out, args[1])
 		if err != nil {
 			return nil, err
 		}

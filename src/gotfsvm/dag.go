@@ -12,9 +12,6 @@ import (
 	"go.brendoncarroll.net/exp/streams"
 )
 
-// I is a single instruction, it represents a node in a computation DAG.
-type I uint32
-
 // IWriter writes an instruction stream.
 type IWriter struct {
 	mach  *Machine
