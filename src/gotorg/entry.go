@@ -39,7 +39,7 @@ func (m *Machine) PutAlias(ctx context.Context, s stores.RW, state State, entry 
 	if err != nil {
 		return nil, err
 	}
-	state.VolumeNames = *aliasState
+	state.VolumeNames = aliasState
 	nextState, err := m.FulfillObligations(ctx, s, state, entry.Name, secret)
 	if err != nil {
 		return nil, err
@@ -53,7 +53,7 @@ func (m *Machine) DeleteAlias(ctx context.Context, s stores.RW, State State, nam
 	if err != nil {
 		return nil, err
 	}
-	State.VolumeNames = *entsState
+	State.VolumeNames = entsState
 	return &State, nil
 }
 

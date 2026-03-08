@@ -37,7 +37,7 @@ func TestWrite(t *testing.T) {
 	require.NoError(t, err)
 	for i := 0; i < N; i++ {
 		prefix := fmt.Sprintf("key-%04d-data", i)
-		r, err := ag.NewReader(ctx, ms, ds, *root, []byte(prefix))
+		r, err := ag.NewReader(ctx, ms, ds, root, []byte(prefix))
 		require.NoError(t, err)
 		t.Logf("reading prefix %q", prefix)
 		testutil.StreamsEqual(t, testutil.RandomStream(i, size), r)
@@ -78,7 +78,7 @@ func TestCopyFrom(t *testing.T) {
 		require.NoError(t, err)
 		root, err := b.Finish(ctx)
 		require.NoError(t, err)
-		roots[i] = *root
+		roots[i] = root
 	}
 
 	b := ag.NewBuilder(ctx, ms, ds)
@@ -92,13 +92,13 @@ func TestCopyFrom(t *testing.T) {
 	for i := range roots {
 		prefix := strconv.Itoa(i) + "\x00"
 
-		r, err := ag.NewReader(ctx, ms, ds, *root, []byte(prefix))
+		r, err := ag.NewReader(ctx, ms, ds, root, []byte(prefix))
 		require.NoError(t, err)
 		rng := testutil.RandomStream(i, 1e8)
 		testutil.StreamsEqual(t, rng, r)
 
 		k := strconv.Itoa(i)
-		v, err := gotkv.Get(ctx, ms, *root, []byte(k))
+		v, err := gotkv.Get(ctx, ms, root, []byte(k))
 		require.NoError(t, err, "%v", k)
 		require.Equal(t, "test-value", string(v))
 	}
@@ -131,7 +131,7 @@ func TestCopyExtents(t *testing.T) {
 	for i := range rngs {
 		rngs[i] = testutil.RandomStream(i, 10e6)
 	}
-	actual, err := ag.NewReader(ctx, ms, ds, *root, []byte("0"))
+	actual, err := ag.NewReader(ctx, ms, ds, root, []byte("0"))
 	require.NoError(t, err)
 	expected := io.MultiReader(rngs...)
 	testutil.StreamsEqual(t, expected, actual)

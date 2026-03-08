@@ -92,7 +92,7 @@ func (tx *Tx) setup(ctx context.Context) error {
 				return err
 			}
 		}
-		kvroot = *r
+		kvroot = r
 	}
 	tx.kvtx = tx.gotkv.NewTx(s, kvroot)
 	return nil

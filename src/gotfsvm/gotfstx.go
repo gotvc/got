@@ -31,7 +31,7 @@ type Function struct {
 }
 
 // NewFunction creates a new function from an expression.
-func (m *Machine) NewFunction(ctx context.Context, s stores.Writing, body Expr) (Function, error) {
+func (m *Machine) NewFunction(ctx context.Context, s stores.RW, body Expr) (Function, error) {
 	arity, err := getExprArity(&body)
 	if err != nil {
 		return Function{}, err

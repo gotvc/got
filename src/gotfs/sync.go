@@ -13,7 +13,7 @@ import (
 // dst and src should both be metadata stores.
 // copyData will be called to sync metadata
 func (mach *Machine) Sync(ctx context.Context, src [2]stores.Reading, dst [2]stores.Writing, root Root) error {
-	return mach.gotkv.Sync(ctx, src[1], dst[1], *root.toGotKV(), func(ent gotkv.Entry) error {
+	return mach.gotkv.Sync(ctx, src[1], dst[1], root.toGotKV(), func(ent gotkv.Entry) error {
 		if isExtentKey(ent.Key) {
 			ext, err := parseExtent(ent.Value)
 			if err != nil {
@@ -27,7 +27,7 @@ func (mach *Machine) Sync(ctx context.Context, src [2]stores.Reading, dst [2]sto
 
 // Populate adds the ID for all the metadata blobs to mdSet and all the data blobs to dataSet
 func (mach *Machine) Populate(ctx context.Context, s stores.Reading, root Root, mdSet, dataSet cadata.Set) error {
-	return mach.gotkv.Populate(ctx, s, *root.toGotKV(), mdSet, func(ent gotkv.Entry) error {
+	return mach.gotkv.Populate(ctx, s, root.toGotKV(), mdSet, func(ent gotkv.Entry) error {
 		if isExtentKey(ent.Key) {
 			ext, err := parseExtent(ent.Value)
 			if err != nil {

@@ -128,12 +128,12 @@ func (db *DeltaBuilder) PutInfo(ctx context.Context, p string, info *Info) error
 	})
 }
 
-func (db *DeltaBuilder) Finish(ctx context.Context) (*Delta, error) {
+func (db *DeltaBuilder) Finish(ctx context.Context) (Delta, error) {
 	root, err := db.b.Finish(ctx)
 	if err != nil {
-		return nil, err
+		return Delta{}, err
 	}
-	return (*Delta)(root), nil
+	return (Delta)(root), nil
 }
 
 func (db *DeltaBuilder) write(ctx context.Context, x DeltaEntry) error {

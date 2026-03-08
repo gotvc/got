@@ -39,20 +39,20 @@ func (tx *Tx) BaseIsZero() bool {
 }
 
 // Flush writes all in queued mutations to the key-value store.
-func (tx *Tx) Flush(ctx context.Context) (*Root, error) {
+func (tx *Tx) Flush(ctx context.Context) (Root, error) {
 	if tx.BaseIsZero() {
 		r, err := tx.m.NewEmpty(ctx, tx.s)
 		if err != nil {
-			return nil, err
+			return Root{}, err
 		}
-		tx.prev = *r
+		tx.prev = r
 	}
 	nextRoot, err := tx.m.Edit(ctx, tx.s, tx.prev, tx.edits...)
 	if err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	tx.edits = tx.edits[:0]
-	tx.prev = *nextRoot
+	tx.prev = nextRoot
 	return nextRoot, nil
 }
 

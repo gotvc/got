@@ -220,7 +220,7 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityUnit) (
 		if err != nil {
 			return nil, err
 		}
-		*dst = *kvr
+		*dst = kvr
 	}
 
 	// create initial group secret
@@ -332,7 +332,7 @@ func (m *Machine) mapKV(ctx context.Context, s stores.RW, kvr *gotkv.Root, fn fu
 	if err != nil {
 		return err
 	}
-	*kvr = *nextKvr
+	*kvr = nextKvr
 	return nil
 }
 

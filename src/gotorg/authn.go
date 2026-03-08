@@ -40,7 +40,7 @@ func (m *Machine) PutIDUnit(ctx context.Context, s stores.Writing, state State, 
 	if err != nil {
 		return nil, err
 	}
-	state.IDUnits = *leafState
+	state.IDUnits = leafState
 	return &state, nil
 }
 
@@ -70,7 +70,7 @@ func (m *Machine) DropIDUnit(ctx context.Context, s stores.RW, state State, id i
 	if err != nil {
 		return nil, err
 	}
-	state.IDUnits = *leafState
+	state.IDUnits = leafState
 	return &state, nil
 }
 
@@ -91,7 +91,7 @@ func (m *Machine) PutGroup(ctx context.Context, s stores.RW, state State, group 
 	if err != nil {
 		return nil, err
 	}
-	state.Groups = *groupState
+	state.Groups = groupState
 	return &state, nil
 }
 
@@ -222,7 +222,7 @@ func (m *Machine) AddMember(ctx context.Context, s stores.RW, x State, gid Group
 	if err != nil {
 		return nil, err
 	}
-	x.Memberships = *memState
+	x.Memberships = memState
 	return &x, nil
 }
 
@@ -235,7 +235,7 @@ func (m *Machine) RemoveMember(ctx context.Context, s stores.RW, state State, gi
 	if err != nil {
 		return nil, err
 	}
-	state.Memberships = *memState
+	state.Memberships = memState
 	return &state, nil
 }
 
@@ -353,7 +353,7 @@ func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, state State, gid 
 	if err != nil {
 		return nil, err
 	}
-	state.Memberships = *memRoot
+	state.Memberships = memRoot
 
 	return &state, nil
 }

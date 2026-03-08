@@ -67,8 +67,8 @@ func (r Root) Segment() Segment {
 	}
 }
 
-func newRoot(x *gotkv.Root) *Root {
-	if x == nil {
+func newRoot(x gotkv.Root) *Root {
+	if x.Equal(gotkv.Root{}) {
 		return nil
 	}
 	var key Key
@@ -84,12 +84,12 @@ func newRoot(x *gotkv.Root) *Root {
 	}
 }
 
-func (r *Root) toGotKV() *gotkv.Root {
+func (r *Root) toGotKV() gotkv.Root {
 	if r == nil {
-		return nil
+		return gotkv.Root{}
 	}
 	r2 := r.ToGotKV()
-	return &r2
+	return r2
 }
 
 const MaxPathLen = gotkv.MaxKeySize - 9

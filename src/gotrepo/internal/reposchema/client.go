@@ -47,7 +47,7 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 	if err != nil {
 		return nil, nil, err
 	}
-	sve, err := c.getNS(ctx, txn, *root)
+	sve, err := c.getNS(ctx, txn, root)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -73,7 +73,7 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 		Token:  *ltok,
 		Secret: generateDEK(),
 	}
-	root, err = c.setNS(ctx, txn, *root, *sve)
+	root, err = c.setNS(ctx, txn, root, *sve)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -104,7 +104,7 @@ func (c *Client) StagingArea(ctx context.Context, repoVol blobcache.OID, wcid St
 	if err != nil {
 		return nil, nil, err
 	}
-	if sve, err := c.getStage(ctx, txn, *root, wcid); err != nil {
+	if sve, err := c.getStage(ctx, txn, root, wcid); err != nil {
 		return nil, nil, err
 	} else if sve != nil {
 		return c.openSubvolume(ctx, *rootH, *sve)
@@ -119,7 +119,7 @@ func (c *Client) StagingArea(ctx context.Context, repoVol blobcache.OID, wcid St
 		Token:  *svTok,
 		Secret: generateDEK(),
 	}
-	root, err = c.putStage(ctx, txn, *root, wcid, sve)
+	root, err = c.putStage(ctx, txn, root, wcid, sve)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -147,7 +147,7 @@ func (c *Client) ForEachStage(ctx context.Context, repoVol blobcache.OID, fn fun
 		return err
 	}
 	span := gotkv.PrefixSpan([]byte("stage/"))
-	return c.GotKV.ForEach(ctx, txn, *root, span, func(ent gotkv.Entry) error {
+	return c.GotKV.ForEach(ctx, txn, root, span, func(ent gotkv.Entry) error {
 		var paramHash [32]byte
 		hexData := bytes.TrimPrefix(ent.Key, []byte("stage/"))
 		if _, err := hex.Decode(hexData, paramHash[:]); err != nil {
@@ -179,21 +179,20 @@ func (c *Client) rootHandle(ctx context.Context, repoVol blobcache.OID) (*blobca
 	return c.Service.OpenFiat(ctx, repoVol, blobcache.Action_ALL)
 }
 
-func (c *Client) getRoot(ctx context.Context, txn *bcsdk.Tx) (*gotkv.Root, error) {
+func (c *Client) getRoot(ctx context.Context, txn *bcsdk.Tx) (gotkv.Root, error) {
 	var rootData []byte
 	if err := txn.Load(ctx, &rootData); err != nil {
-		return nil, err
+		return gotkv.Root{}, err
 	}
-	var root *gotkv.Root
+	var root gotkv.Root
 	if len(rootData) > 0 {
-		root = new(gotkv.Root)
 		if err := root.Unmarshal(rootData); err != nil {
-			return nil, err
+			return gotkv.Root{}, err
 		}
 	} else {
 		newRoot, err := c.GotKV.NewEmpty(ctx, txn)
 		if err != nil {
-			return nil, err
+			return gotkv.Root{}, err
 		}
 		root = newRoot
 	}
@@ -212,7 +211,7 @@ func (c *Client) getStage(ctx context.Context, s stores.Reading, root gotkv.Root
 	return parseSubvolEntry(val)
 }
 
-func (c *Client) putStage(ctx context.Context, s stores.RW, root gotkv.Root, wcid StageID, sve subvolEntry) (*gotkv.Root, error) {
+func (c *Client) putStage(ctx context.Context, s stores.RW, root gotkv.Root, wcid StageID, sve subvolEntry) (gotkv.Root, error) {
 	return c.GotKV.Put(ctx, s, root, stageKey(wcid), sve.Marshal(nil))
 }
 
@@ -228,7 +227,7 @@ func (c *Client) getNS(ctx context.Context, s stores.Reading, root gotkv.Root) (
 	return parseSubvolEntry(val)
 }
 
-func (c *Client) setNS(ctx context.Context, s stores.RW, root gotkv.Root, sve subvolEntry) (*gotkv.Root, error) {
+func (c *Client) setNS(ctx context.Context, s stores.RW, root gotkv.Root, sve subvolEntry) (gotkv.Root, error) {
 	return c.GotKV.Put(ctx, s, root, nsKey, sve.Marshal(nil))
 }
 

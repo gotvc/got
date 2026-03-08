@@ -128,28 +128,28 @@ func (mach *Machine) Pick(ctx context.Context, s stores.RW, root Root, p string)
 	}
 	x := root.toGotKV()
 	span := SpanForPath(p)
-	if x, err = mach.deleteOutside(ctx, s, *x, span); err != nil {
+	if x, err = mach.deleteOutside(ctx, s, x, span); err != nil {
 		return nil, err
 	}
 	if p == "" {
 		return newRoot(x), nil
 	}
 	prefix := pathPrefixNoTrail(nil, p)
-	y, err := mach.gotkv.RemovePrefix(ctx, s, *x, prefix)
+	y, err := mach.gotkv.RemovePrefix(ctx, s, x, prefix)
 	if err != nil {
 		return nil, err
 	}
 	return newRoot(y), err
 }
 
-func (mach *Machine) deleteOutside(ctx context.Context, s stores.RW, root gotkv.Root, span gotkv.Span) (*gotkv.Root, error) {
-	x := &root
+func (mach *Machine) deleteOutside(ctx context.Context, s stores.RW, root gotkv.Root, span gotkv.Span) (gotkv.Root, error) {
+	x := root
 	var err error
-	if x, err = mach.gotkv.DeleteSpan(ctx, s, *x, gotkv.Span{Begin: nil, End: span.Begin}); err != nil {
-		return nil, err
+	if x, err = mach.gotkv.DeleteSpan(ctx, s, x, gotkv.Span{Begin: nil, End: span.Begin}); err != nil {
+		return gotkv.Root{}, err
 	}
-	if x, err = mach.gotkv.DeleteSpan(ctx, s, *x, gotkv.Span{Begin: span.End, End: nil}); err != nil {
-		return nil, err
+	if x, err = mach.gotkv.DeleteSpan(ctx, s, x, gotkv.Span{Begin: span.End, End: nil}); err != nil {
+		return gotkv.Root{}, err
 	}
 	return x, err
 }
@@ -171,7 +171,7 @@ func (mach *Machine) ForEach(ctx context.Context, s stores.Reading, root Root, p
 		return nil
 	}
 	span := SpanForPath(p)
-	return mach.gotkv.ForEach(ctx, s, *root.toGotKV(), span, fn2)
+	return mach.gotkv.ForEach(ctx, s, root.toGotKV(), span, fn2)
 }
 
 // ForEachLeaf calls fn with each regular file in root, beneath p.
@@ -217,7 +217,7 @@ func (mach *Machine) addPrefix(root Root, p string) gotkv.Root {
 	if len(prefix) == 0 {
 		return root.ToGotKV()
 	}
-	root2 := mach.gotkv.AddPrefix(*root.toGotKV(), prefix)
+	root2 := mach.gotkv.AddPrefix(root.toGotKV(), prefix)
 	return root2
 }
 
@@ -263,7 +263,7 @@ var firstKey = newInfoKey("").Marshal(nil)
 func (mach *Machine) Check(ctx context.Context, ms stores.Reading, root Root, checkData func(ref gdat.Ref) error) error {
 	var lastPath *string
 	var lastOffset *uint64
-	return mach.gotkv.ForEach(ctx, ms, *root.toGotKV(), gotkv.Span{}, func(ent gotkv.Entry) error {
+	return mach.gotkv.ForEach(ctx, ms, root.toGotKV(), gotkv.Span{}, func(ent gotkv.Entry) error {
 		var key Key
 		if err := key.Unmarshal(ent.Key); err != nil {
 			return err
@@ -362,7 +362,7 @@ func (mach *Machine) Concat(ctx context.Context, ss [2]stores.RW, segs iter.Seq[
 			if err != nil {
 				return Segment{}, err
 			}
-			root = *r
+			root = r
 		} else {
 			root = seg.Contents
 		}

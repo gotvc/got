@@ -24,7 +24,7 @@ func (b *Builder) Put(ctx context.Context, key, value []byte) error {
 	return b.b.Put(ctx, Entry{Key: key, Value: value})
 }
 
-func (b *Builder) Finish(ctx context.Context) (*Root, error) {
+func (b *Builder) Finish(ctx context.Context) (Root, error) {
 	root, err := b.b.Finish(ctx)
 	return newRoot(root), err
 }
@@ -120,7 +120,7 @@ func (a *Machine) Get(ctx context.Context, s stores.Reading, x Root, key []byte)
 
 // Put returns a new version of the instance x with the entry at key corresponding to value.
 // If an entry at key already exists it is overwritten, otherwise it will be created.
-func (a *Machine) Put(ctx context.Context, s stores.RW, x Root, key, value []byte) (*Root, error) {
+func (a *Machine) Put(ctx context.Context, s stores.RW, x Root, key, value []byte) (Root, error) {
 	return a.Edit(ctx, s, x, Edit{
 		Span:    SingleKeySpan(key),
 		Entries: []Entry{{Key: key, Value: value}},
@@ -129,19 +129,19 @@ func (a *Machine) Put(ctx context.Context, s stores.RW, x Root, key, value []byt
 
 // Delete returns a new version of the instance x where there is no entry for key.
 // If key does not exist no error is returned.
-func (a *Machine) Delete(ctx context.Context, s stores.RW, x Root, key []byte) (*Root, error) {
+func (a *Machine) Delete(ctx context.Context, s stores.RW, x Root, key []byte) (Root, error) {
 	return a.DeleteSpan(ctx, s, x, kvstreams.SingleItemSpan(key))
 }
 
 // DeleteSpan returns a new version of the instance x where there are no entries contained in span.
-func (a *Machine) DeleteSpan(ctx context.Context, s stores.RW, x Root, span Span) (*Root, error) {
+func (a *Machine) DeleteSpan(ctx context.Context, s stores.RW, x Root, span Span) (Root, error) {
 	return a.Edit(ctx, s, x, Edit{
 		Span: span,
 	})
 }
 
 // NewEmpty returns a new GotKV instance with no entries.
-func (a *Machine) NewEmpty(ctx context.Context, s stores.RW) (*Root, error) {
+func (a *Machine) NewEmpty(ctx context.Context, s stores.RW) (Root, error) {
 	b := a.NewBuilder(s)
 	return b.Finish(ctx)
 }
@@ -187,18 +187,18 @@ func (a *Machine) AddPrefix(x Root, prefix []byte) Root {
 // RemovePrefix removes a prefix from all the keys in instance x.
 // RemotePrefix errors if all the entries in x do not share a common prefix.
 // This is a O(1) operation.
-func (a *Machine) RemovePrefix(ctx context.Context, s stores.RW, x Root, prefix []byte) (*Root, error) {
+func (a *Machine) RemovePrefix(ctx context.Context, s stores.RW, x Root, prefix []byte) (Root, error) {
 	if yes, err := a.HasPrefix(ctx, s, x, prefix); err != nil {
-		return nil, err
+		return Root{}, err
 	} else if yes {
-		return nil, fmt.Errorf("tree does not have prefix %q", prefix)
+		return Root{}, fmt.Errorf("tree does not have prefix %q", prefix)
 	}
 	y := Root{
 		First: append([]byte{}, x.First[len(prefix):]...),
 		Ref:   x.Ref,
 		Depth: x.Depth,
 	}
-	return &y, nil
+	return y, nil
 }
 
 // NewBuilder returns a Builder for constructing a GotKV instance.
@@ -263,17 +263,17 @@ type Edit struct {
 
 // Edit applies a batch of edits to the tree x.
 // If edits overlap, the later edit takes prescendence.
-func (a *Machine) Edit(ctx context.Context, s stores.RW, x Root, edits ...Edit) (*Root, error) {
+func (a *Machine) Edit(ctx context.Context, s stores.RW, x Root, edits ...Edit) (Root, error) {
 	edits = compactEdits(edits)
 	iters := make([]kvstreams.Iterator, 2*len(edits)+1)
 	var begin []byte
 	for i, mut := range edits {
 		if err := checkMutation(mut); err != nil {
-			return nil, err
+			return Root{}, err
 		}
 		if i > 0 {
 			if bytes.Compare(mut.Span.Begin, edits[i-1].Span.End) < 0 {
-				return nil, fmt.Errorf("spans out of order %d start: %q < %d end: %q", i, mut.Span.Begin, i-1, mut.Span.End)
+				return Root{}, fmt.Errorf("spans out of order %d start: %q < %d end: %q", i, mut.Span.Begin, i-1, mut.Span.End)
 			}
 		}
 		beforeIter := a.NewIterator(s, x, Span{
@@ -302,11 +302,11 @@ func checkMutation(mut Edit) error {
 
 // Concat copies data from the iterators in order.
 // If the iterators produce out of order keys concat errors.
-func (a *Machine) Concat(ctx context.Context, s stores.RW, iters ...kvstreams.Iterator) (*Root, error) {
+func (a *Machine) Concat(ctx context.Context, s stores.RW, iters ...kvstreams.Iterator) (Root, error) {
 	b := a.NewBuilder(s)
 	for _, iter := range iters {
 		if err := CopyAll(ctx, b, iter); err != nil {
-			return nil, err
+			return Root{}, err
 		}
 	}
 	return b.Finish(ctx)

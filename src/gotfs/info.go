@@ -109,7 +109,7 @@ func (mach *Machine) PutInfo(ctx context.Context, s stores.RW, x Root, p string,
 		}
 	}
 	k := newInfoKey(p)
-	root, err := mach.gotkv.Put(ctx, s, *x.toGotKV(), k.Marshal(nil), info.marshal())
+	root, err := mach.gotkv.Put(ctx, s, x.toGotKV(), k.Marshal(nil), info.marshal())
 	return newRoot(root), err
 }
 
