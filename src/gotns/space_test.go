@@ -19,7 +19,7 @@ func TestSpace(t *testing.T) {
 			"": schema.NoneConstructor,
 		}, *spec.Local)
 		vol := &volumes.Blobcache{Service: bc, Handle: volh}
-		dmach := gdat.NewMachine()
+		dmach := gdat.NewMachine(gdat.Params{})
 		kvmach := gotkv.NewMachine(gotkv.Params{MeanSize: 1 << 13, MaxSize: 1 << 18})
 		return &Space{
 			Volume: vol,

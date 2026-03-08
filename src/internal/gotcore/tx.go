@@ -176,11 +176,11 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Snap, err
 		if err != nil {
 			return err
 		}
-		ref, err = syncSnapRef(ctx, m.gotvc, m.gotfs, m.RO(), m.WO(), *ref)
+		ref, err = syncSnapRef(ctx, m.gotvc, m.gotfs, m.RO(), m.WO(), ref)
 		if err != nil {
 			return err
 		}
-		yRef = *ref
+		yRef = ref
 	}
 	return m.Save(ctx, yRef)
 }
@@ -310,7 +310,7 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 		if err != nil {
 			return gdat.Ref{}, err
 		}
-		return *ref, nil
+		return ref, nil
 	})
 }
 
@@ -327,17 +327,17 @@ func History(ctx context.Context, vcmach *VCMach, s stores.Reading, snapRef gdat
 
 // syncSnapRef ensures that all content reachable from Ref is in the dst store.
 // blobs are copied from the source store as needed.
-func syncSnapRef(ctx context.Context, vcmach *VCMach, fsmach *gotfs.Machine, src [3]stores.Reading, dst [3]stores.Writing, ref gdat.Ref) (_ *gdat.Ref, err error) {
+func syncSnapRef(ctx context.Context, vcmach *VCMach, fsmach *gotfs.Machine, src [3]stores.Reading, dst [3]stores.Writing, ref gdat.Ref) (_ gdat.Ref, err error) {
 	ctx, cf := metrics.Child(ctx, "syncing gotvc")
 	defer cf()
 	snap, err := vcmach.GetSnapshot(ctx, src[2], ref)
 	if err != nil {
-		return nil, err
+		return gdat.Ref{}, err
 	}
 	if err := vcmach.Sync(ctx, src[2], dst[2], *snap, func(payload Payload) error {
 		return fsmach.Sync(ctx, [2]stores.Reading{src[0], src[1]}, [2]stores.Writing{dst[0], dst[1]}, payload.Root)
 	}); err != nil {
-		return nil, err
+		return gdat.Ref{}, err
 	}
 	return vcmach.PostSnapshot(ctx, dst[2], *snap)
 }

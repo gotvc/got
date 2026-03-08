@@ -19,7 +19,7 @@ type Machine struct {
 }
 
 func New(fsmach *gotfs.Machine) Machine {
-	return Machine{gotfs: fsmach, gdat: gdat.NewMachine()}
+	return Machine{gotfs: fsmach, gdat: gdat.NewMachine(gdat.Params{})}
 }
 
 // Function maps a []gotfs.Root to a gotfs.Root

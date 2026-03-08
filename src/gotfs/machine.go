@@ -76,10 +76,7 @@ func NewMachine(opts ...Option) *Machine {
 	// data
 	var rawSalt [32]byte
 	gdat.DeriveKey(rawSalt[:], o.salt, []byte("raw"))
-	o.rawOp = gdat.NewMachine(
-		gdat.WithSalt(&rawSalt),
-		gdat.WithCacheSize(o.rawCacheSize),
-	)
+	o.rawOp = gdat.NewMachine(gdat.Params{Salt: rawSalt, CacheSize: &o.rawCacheSize})
 	var chunkingSeed [32]byte
 	gdat.DeriveKey(chunkingSeed[:], o.salt, []byte("chunking"))
 	o.chunkingSeed = &chunkingSeed
@@ -87,10 +84,7 @@ func NewMachine(opts ...Option) *Machine {
 	// metadata
 	var metadataSalt [32]byte
 	gdat.DeriveKey(metadataSalt[:], o.salt, []byte("gotkv"))
-	metaOp := gdat.NewMachine(
-		gdat.WithSalt(&metadataSalt),
-		gdat.WithCacheSize(o.metaCacheSize),
-	)
+	metaOp := gdat.NewMachine(gdat.Params{Salt: metadataSalt, CacheSize: &o.metaCacheSize})
 	var treeSeed [16]byte
 	gdat.DeriveKey(treeSeed[:], o.salt, []byte("gotkv-seed"))
 	o.gotkv = gotkv.NewMachine(gotkv.Params{

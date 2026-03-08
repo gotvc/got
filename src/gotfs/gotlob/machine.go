@@ -105,7 +105,7 @@ func (ag *Machine) post(ctx context.Context, s stores.RW, data []byte) (*Extent,
 	if err != nil {
 		return nil, err
 	}
-	return &Extent{Offset: 0, Length: uint32(len(data)), Ref: *ref}, nil
+	return &Extent{Offset: 0, Length: uint32(len(data)), Ref: ref}, nil
 }
 
 func (ag *Machine) getExtentF(ctx context.Context, ds stores.Reading, ext *Extent, fn func([]byte) error) error {

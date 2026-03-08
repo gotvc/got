@@ -92,7 +92,7 @@ func IsErrKeyNotFound(err error) bool {
 	return errors.Is(err, ErrKeyNotFound) || state.IsErrNotFound[[]byte](err)
 }
 
-var defaultReadOnlyMachine = &Machine{da: gdat.NewMachine()}
+var defaultReadOnlyMachine = &Machine{da: gdat.NewMachine(gdat.Params{})}
 
 // Get is a convenience function for performing Get without creating an Machine.
 func Get(ctx context.Context, s Getter, x Root, key []byte) ([]byte, error) {
@@ -223,7 +223,7 @@ func (s *ptreeStore) Post(ctx context.Context, data []byte) (Ref, error) {
 	if err != nil {
 		return Ref{}, err
 	}
-	return *ref, nil
+	return ref, nil
 }
 
 func (s *ptreeStore) Get(ctx context.Context, ref Ref, buf []byte) (int, error) {

@@ -139,7 +139,7 @@ func TestCopyExtents(t *testing.T) {
 
 func newMach(t testing.TB, opts ...Option) Machine {
 	gkv := gotkv.NewMachine(gotkv.Params{MeanSize: 1 << 13, MaxSize: 1 << 20})
-	dop := gdat.NewMachine()
+	dop := gdat.NewMachine(gdat.Params{})
 	o := NewMachine(&gkv, dop, opts...)
 	return o
 }

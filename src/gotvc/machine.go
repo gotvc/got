@@ -9,26 +9,32 @@ import (
 )
 
 type Config struct {
-	Salt [32]byte
+	Salt      [32]byte
+	CacheSize *int
 }
 
 type Parser[T any] = func([]byte) (T, error)
 
 type Machine[T Marshalable] struct {
-	parse     Parser[T]
-	cfg       Config
-	cacheSize int
-	readOnly  bool
-	da        *gdat.Machine
+	parse    Parser[T]
+	cfg      Config
+	readOnly bool
+	da       *gdat.Machine
 }
 
 func NewMachine[T Marshalable](parse Parser[T], cfg Config) *Machine[T] {
-	ag := Machine[T]{
-		parse:     parse,
-		cfg:       cfg,
-		cacheSize: 256,
+	if cfg.CacheSize != nil {
+		defaultCacheSize := 256
+		cfg.CacheSize = &defaultCacheSize
 	}
-	ag.da = gdat.NewMachine(gdat.WithSalt(&ag.cfg.Salt), gdat.WithCacheSize(ag.cacheSize))
+	ag := Machine[T]{
+		parse: parse,
+		cfg:   cfg,
+	}
+	ag.da = gdat.NewMachine(gdat.Params{
+		Salt:      ag.cfg.Salt,
+		CacheSize: cfg.CacheSize,
+	})
 	return &ag
 }
 

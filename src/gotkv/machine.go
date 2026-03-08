@@ -66,7 +66,7 @@ type Machine struct {
 // and maximum size `maxSize`.
 func NewMachine(p Params) Machine {
 	if p.DataMach == nil {
-		p.DataMach = gdat.NewMachine()
+		p.DataMach = gdat.NewMachine(gdat.Params{})
 	}
 	mach := Machine{
 		da:       p.DataMach,

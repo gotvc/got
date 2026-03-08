@@ -161,7 +161,7 @@ func (w *IWriter) Flush(ctx context.Context, swo stores.RW) (gdat.Ref, error) {
 	if err != nil {
 		return gdat.Ref{}, err
 	}
-	return *ref2, nil
+	return ref2, nil
 }
 
 func parseFunctionBody(ctx context.Context, gm *gdat.Machine, s stores.Reading, data []byte) (*Expr, error) {
