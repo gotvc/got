@@ -3,7 +3,6 @@ package gotfsvm
 import (
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"io/fs"
 
@@ -98,14 +97,7 @@ func (fb *FnBuilder) Flush(ctx context.Context) (Function, error) {
 		b := fb.gotkv.NewBuilder(fb.s)
 		for i, val := range fb.fc.data {
 			key := binary.BigEndian.AppendUint32(nil, uint32(i))
-			tv, err := marshalValue(val)
-			if err != nil {
-				return gotkv.Root{}, err
-			}
-			val, err := json.Marshal(tv)
-			if err != nil {
-				return gotkv.Root{}, err
-			}
+			val := marshalValue(val, nil)
 			if err := b.Put(ctx, key, val); err != nil {
 				return gotkv.Root{}, err
 			}
@@ -302,11 +294,7 @@ func (m *Machine) loadFunction(ctx context.Context, s stores.Reading, ref gdat.R
 		kvmach := gotkv.NewMachine(dataTabParams)
 		it := kvmach.NewIterator(s, kvroot, gotkv.TotalSpan())
 		if err := streams.ForEach(ctx, it, func(ent gotkv.Entry) error {
-			var tv taggedValue
-			if err := json.Unmarshal(ent.Value, &tv); err != nil {
-				return err
-			}
-			val, err := unmarshalValue(&tv)
+			val, err := parseValue(ent.Value)
 			if err != nil {
 				return err
 			}

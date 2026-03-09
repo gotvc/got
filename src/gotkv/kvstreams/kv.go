@@ -1,11 +1,13 @@
 package kvstreams
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"math"
 
+	"go.brendoncarroll.net/exp/sbe"
 	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/state"
 )
 
 // Entry is a single entry in a stream/tree
@@ -60,7 +62,72 @@ func CopyEntry(dst *Entry, src Entry) {
 // A span of keys [Begin, End)
 // If you want to include a specific end key, use the KeyAfter function.
 // nil is interpretted as no bound, not as a 0 length key.  This behaviour is only releveant for End.
-type Span = state.ByteSpan
+type Span struct {
+	Begin []byte
+	End   []byte
+}
+
+// Contains returns true if x is in the Span
+func (s Span) Contains(x []byte) bool {
+	return !(s.AllGt(x) || s.AllLt(x))
+}
+
+// AllLt returns true if every key in the span is less than x
+func (s Span) AllLt(x []byte) bool {
+	return s.End != nil && bytes.Compare(s.End, x) <= 0
+}
+
+// AllGt returns true if every key in the span is greater than x
+func (s Span) AllGt(x []byte) bool {
+	return bytes.Compare(s.Begin, x) > 0
+}
+
+func (s Span) Marshal(out []byte) []byte {
+	if s.Begin != nil {
+		out = sbe.AppendLP16(out, s.Begin)
+	} else {
+		out = sbe.AppendUint16(out, math.MaxUint16)
+	}
+	if s.End != nil {
+		out = sbe.AppendLP16(out, s.End)
+	} else {
+		out = sbe.AppendUint16(out, math.MaxUint16)
+	}
+	return out
+}
+
+func (s *Span) Unmarshal(data []byte) error {
+	// read begin
+	if l, rest, err := sbe.ReadUint16(data); err != nil {
+		return err
+	} else if l == math.MaxUint16 {
+		// sentinel value for nil
+		s.Begin = nil
+		data = rest
+	} else {
+		begin, rest, err := sbe.ReadLP16(data)
+		if err != nil {
+			return err
+		}
+		s.Begin = append(s.Begin[:0], begin...)
+		data = rest
+	}
+
+	if l, _, err := sbe.ReadUint16(data); err != nil {
+		return err
+	} else if l == math.MaxUint16 {
+		// sentinel value for nil
+		s.End = nil
+	} else {
+		end, rest, err := sbe.ReadLP16(data)
+		if err != nil {
+			return err
+		}
+		s.End = append(s.End[:0], end...)
+		data = rest
+	}
+	return nil
+}
 
 func CloneSpan(x Span) Span {
 	var begin, end []byte

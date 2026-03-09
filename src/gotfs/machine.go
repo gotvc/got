@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"go.brendoncarroll.net/exp/sbe"
 	"go.brendoncarroll.net/stdctx/logctx"
 
 	"github.com/gotvc/got/src/chunking"
@@ -309,16 +310,37 @@ func (mach *Machine) Check(ctx context.Context, ms stores.Reading, root Root, ch
 // Segment is a contiguous subset of a GotFS instance.
 // It may not be a valid Root.
 type Segment struct {
-	// Span is the span in the final Splice operation
-	Span gotkv.Span
 	// Contents is the gotkv instance representing the segment.
 	// If it contains entries outside of Span, they will not be used.
 	// If Contents is the zero value, then it will be interpretted as empty
 	Contents gotkv.Root
+	// Span is the span in the final Splice operation
+	Span gotkv.Span
 }
 
 func (s Segment) String() string {
 	return fmt.Sprintf("{ %v : %v}", s.Span, s.Contents.Ref)
+}
+
+func (s *Segment) Marshal(out []byte) []byte {
+	out = sbe.AppendLP16(out, s.Contents.Marshal(nil))
+	out = sbe.AppendLP16(out, s.Span.Marshal(nil))
+	return out
+}
+
+func (s *Segment) Unmarshal(data []byte) error {
+	contentData, data, err := sbe.ReadLP16(data)
+	if err != nil {
+		return err
+	}
+	if err := s.Contents.Unmarshal(contentData); err != nil {
+		return err
+	}
+	spanData, _, err := sbe.ReadLP16(data)
+	if err != nil {
+		return err
+	}
+	return s.Span.Unmarshal(spanData)
 }
 
 // ShiftOut shifts all the entries in a segment out by path.

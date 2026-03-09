@@ -1,15 +1,127 @@
 package gotfsvm
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 
 	"github.com/gotvc/got/src/gotfs"
+	"go.brendoncarroll.net/exp/sbe"
+)
+
+type TypeCode uint8
+
+const (
+	Type_UNKNOWN = iota
+
+	Type_Nat
+	Type_Root
+	Type_Segment
+	Type_Span
+	Type_Info
+	Type_Extent
+	Type_Path
+	Type_FileMode
 )
 
 type Value interface {
 	isValue()
+}
+
+// marshalValue appends the TypeCode for v to out, and then marshals v.
+func marshalValue(x Value, out []byte) []byte {
+	if x == nil {
+		return out
+	}
+	switch x := x.(type) {
+	case *Value_Root:
+		out = append(out, Type_Root)
+		out = x.Root.Marshal(out)
+	case *Value_Segment:
+		out = append(out, Type_Segment)
+		out = x.Segment.Marshal(out)
+	case *Value_Extent:
+		out = append(out, Type_Extent)
+		data, err := x.Extent.MarshalBinary()
+		if err != nil {
+			panic(err)
+		}
+		out = append(out, data...)
+	case *Value_Info:
+		out = append(out, Type_Info)
+		out = x.Info.Marshal(out)
+	case Value_Nat:
+		out = append(out, Type_Nat)
+		out = sbe.AppendUint32(out, uint32(x))
+	case *Value_Span:
+		out = append(out, Type_Span)
+		out = x.Span.Marshal(out)
+	case *Value_Path:
+		out = append(out, Type_Path)
+		out = append(out, *x...)
+	case Value_FileMode:
+		out = append(out, Type_FileMode)
+		out = sbe.AppendUint32(out, uint32(x))
+	default:
+		panic(x)
+	}
+	return out
+}
+
+func parseValue(data []byte) (Value, error) {
+	if len(data) < 1 {
+		return nil, fmt.Errorf("too short to be value")
+	}
+	ty := TypeCode(data[0])
+	data = data[1:]
+	switch ty {
+	case Type_Root:
+		var r gotfs.Root
+		if err := r.Unmarshal(data); err != nil {
+			return nil, err
+		}
+		return &Value_Root{Root: r}, nil
+	case Type_Segment:
+		var s gotfs.Segment
+		if err := s.Unmarshal(data); err != nil {
+			return nil, err
+		}
+		return &Value_Segment{Segment: s}, nil
+	case Type_Extent:
+		var e gotfs.Extent
+		if err := e.UnmarshalBinary(data); err != nil {
+			return nil, err
+		}
+		return &Value_Extent{Extent: e}, nil
+	case Type_Info:
+		var info gotfs.Info
+		if err := info.Unmarshal(data); err != nil {
+			return nil, err
+		}
+		return &Value_Info{Info: info}, nil
+	case Type_Nat:
+		v, _, err := sbe.ReadUint32(data)
+		if err != nil {
+			return nil, err
+		}
+		return Value_Nat(v), nil
+	case Type_Span:
+		var s gotfs.Span
+		if err := s.Unmarshal(data); err != nil {
+			return nil, err
+		}
+		return &Value_Span{Span: s}, nil
+	case Type_Path:
+		p := Value_Path(data)
+		return &p, nil
+	case Type_FileMode:
+		v, _, err := sbe.ReadUint32(data)
+		if err != nil {
+			return nil, err
+		}
+		return Value_FileMode(v), nil
+	default:
+		return nil, fmt.Errorf("cannot parse value of unknown type %v", ty)
+	}
 }
 
 // Value_Root is the root of a GotFS filesystem
@@ -59,76 +171,3 @@ func (r *Value_Path) isValue() {}
 type Value_FileMode os.FileMode
 
 func (r Value_FileMode) isValue() {}
-
-type taggedValue struct {
-	Type string          `json:"t"`
-	Data json.RawMessage `json:"d"`
-}
-
-func marshalValue(v Value) (*taggedValue, error) {
-	if v == nil {
-		return nil, nil
-	}
-	var typeName string
-	switch v.(type) {
-	case *Value_Root:
-		typeName = "root"
-	case *Value_Segment:
-		typeName = "segment"
-	case *Value_Extent:
-		typeName = "extent"
-	case *Value_Info:
-		typeName = "info"
-	case Value_Nat:
-		typeName = "nat"
-	case *Value_Span:
-		typeName = "span"
-	case *Value_Path:
-		typeName = "path"
-	case Value_FileMode:
-		typeName = "filemode"
-	default:
-		return nil, fmt.Errorf("unknown value type %T", v)
-	}
-	data, err := json.Marshal(v)
-	if err != nil {
-		return nil, err
-	}
-	return &taggedValue{Type: typeName, Data: data}, nil
-}
-
-func unmarshalValue(tv *taggedValue) (Value, error) {
-	if tv == nil {
-		return nil, nil
-	}
-	switch tv.Type {
-	case "root":
-		var v Value_Root
-		return &v, json.Unmarshal(tv.Data, &v)
-	case "segment":
-		var v Value_Segment
-		return &v, json.Unmarshal(tv.Data, &v)
-	case "extent":
-		var v Value_Extent
-		return &v, json.Unmarshal(tv.Data, &v)
-	case "info":
-		var v Value_Info
-		return &v, json.Unmarshal(tv.Data, &v)
-	case "nat":
-		var v Value_Nat
-		err := json.Unmarshal(tv.Data, &v)
-		return v, err
-	case "span":
-		var v Value_Span
-		return &v, json.Unmarshal(tv.Data, &v)
-	case "path":
-		var v Value_Path
-		return &v, json.Unmarshal(tv.Data, &v)
-	case "filemode":
-		var v Value_FileMode
-		err := json.Unmarshal(tv.Data, &v)
-		return v, err
-	default:
-		return nil, fmt.Errorf("unknown value type %q", tv.Type)
-	}
-}
