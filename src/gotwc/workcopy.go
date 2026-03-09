@@ -263,7 +263,7 @@ func (wc *WC) StageIsEmpty(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// Export overwrites data in the filesystem with data from the Snapshot at HEAD.
+// Export overwrites data in the filesystem with data from the Commit at HEAD.
 // Only tracked paths are overwritten.
 func (wc *WC) Export(ctx context.Context) error {
 	if emptyStage, err := wc.StageIsEmpty(ctx); err != nil {
@@ -292,7 +292,7 @@ func (wc *WC) Export(ctx context.Context) error {
 		if ok, err := mtx.LoadFS(ctx, &root); err != nil {
 			return err
 		} else if !ok {
-			logctx.Warnf(ctx, "mark does not have a snapshot, nothing to export")
+			logctx.Warnf(ctx, "mark does not have a commit, nothing to export")
 			return nil
 		}
 		exp := porting.NewExporter(mtx.GotFS(), portDB, fsys, filter)
@@ -324,7 +324,7 @@ func (wc *WC) Clobber(ctx context.Context, p string) error {
 		if ok, err := mtx.LoadFS(ctx, &root); err != nil {
 			return err
 		} else if !ok {
-			logctx.Warnf(ctx, "mark has no snapshot, nothing to clobber")
+			logctx.Warnf(ctx, "mark has no commit, nothing to clobber")
 			return nil
 		}
 		return exp.Clobber(ctx, ss[1], ss[0], root, p)
@@ -400,7 +400,7 @@ func (wc *WC) viewSnap(ctx context.Context, fn func(*gotcore.ViewCtx) error) err
 	if err != nil {
 		return nil
 	}
-	return wc.repo.ViewSnapshot(ctx, &gotcore.SnapExpr_Mark{Name: mname}, fn)
+	return wc.repo.ViewCommit(ctx, &gotcore.CommitExpr_Mark{Name: mname}, fn)
 }
 
 func (wc *WC) filter(spans []Span) func(p string) bool {

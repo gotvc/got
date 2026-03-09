@@ -10,7 +10,6 @@ import (
 	"errors"
 
 	"github.com/gotvc/got/src/gdat"
-	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/stores"
 	"golang.org/x/sync/errgroup"
 )
@@ -95,7 +94,7 @@ type SpaceTx interface {
 	Inspect(ctx context.Context, name string) (*Info, error)
 	// SetMetadata sets the metadata for the Mark at name to md
 	SetMetadata(ctx context.Context, name string, md Metadata) error
-	// Delete deletes a Mark and all of it's metadata, the Snapshot is not removed.
+	// Delete deletes a Mark and all of it's metadata, the Commit is not removed.
 	Delete(ctx context.Context, name string) error
 	// All iterates over all the mark names.
 	All(context.Context) iter.Seq2[string, error]
@@ -106,16 +105,10 @@ type SpaceTx interface {
 	// 1: GotFS metadata
 	// 2: GotVC
 	Stores() [3]stores.RW
-	// SetTarget changes the mark so it points to a different snapshot
+	// SetTarget changes the mark so it points to a different commit
 	SetTarget(ctx context.Context, name string, ref gdat.Ref) error
-	// GetTarget retrieves the Snapshot referenced by gdat.Ref
+	// GetTarget retrieves the Commit referenced by gdat.Ref
 	GetTarget(ctx context.Context, name string, dst *gdat.Ref) (bool, error)
-}
-
-// GetSnapshot reads a snapshot from the store.
-func GetSnapshot(ctx context.Context, s stores.Reading, ref gdat.Ref) (*Snap, error) {
-	vcmach := gotvc.NewMachine(ParsePayload, gotvc.Config{})
-	return vcmach.GetSnapshot(ctx, s, ref)
 }
 
 func CreateIfNotExists(ctx context.Context, stx SpaceTx, k string, cfg Metadata) (*Info, error) {

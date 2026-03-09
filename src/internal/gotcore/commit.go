@@ -1,16 +1,22 @@
 package gotcore
 
 import (
+	"context"
+
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/sbe"
+	"github.com/gotvc/got/src/internal/stores"
 )
 
-type Snap = gotvc.Vertex[Payload]
+// Commit is a commitment to a filesystem commit, ancestor Commits, and additional metadata.
+type Commit = gotvc.Vertex[Payload]
 
-// Payload is the thing being snapshotted.
+// Payload is the thing being committed to.
 type Payload struct {
-	Root gotfs.Root
+	// Snap is the commit of the filesystem.
+	Snap gotfs.Root
 	Aux  []byte
 }
 
@@ -23,7 +29,7 @@ func ParsePayload(data []byte) (Payload, error) {
 }
 
 func (p Payload) Marshal(out []byte) []byte {
-	out = p.Root.Marshal(out)
+	out = p.Snap.Marshal(out)
 	out = sbe.AppendLP(out, p.Aux)
 	return out
 }
@@ -37,11 +43,17 @@ func (p *Payload) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	p.Root = *root
+	p.Snap = *root
 	auxData, _, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
 	}
 	p.Aux = auxData
 	return nil
+}
+
+// GetCommit reads a commit from the store.
+func GetCommit(ctx context.Context, s stores.Reading, ref gdat.Ref) (*Commit, error) {
+	vcmach := gotvc.NewMachine(ParsePayload, gotvc.Config{})
+	return vcmach.GetVertex(ctx, s, ref)
 }

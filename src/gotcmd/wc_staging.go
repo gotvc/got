@@ -115,7 +115,7 @@ var clearCmd = star.Command{
 
 var commitCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "applies the contents of staging to the HEAD mark, updating it to the new snapshot",
+		Short: "applies the contents of staging to the HEAD mark, updating it to the new commit",
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context

@@ -141,7 +141,7 @@ func (wc *WC) viewMark(ctx context.Context, fn func(*gotcore.MarkTx) error) erro
 	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: name}, fn)
 }
 
-func (wc *WC) modifyMark(ctx context.Context, fn func(gotcore.ModifyCtx) (*gotcore.Snap, error)) error {
+func (wc *WC) modifyMark(ctx context.Context, fn func(gotcore.ModifyCtx) (*gotcore.Commit, error)) error {
 	name, err := wc.GetHead()
 	if err != nil {
 		return err
@@ -326,10 +326,10 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			params.AuthoredAt = params.CommittedAt
 		}
 
-		if err := wc.modifyMark(ctx, func(mctx gotcore.ModifyCtx) (*gotcore.Snap, error) {
+		if err := wc.modifyMark(ctx, func(mctx gotcore.ModifyCtx) (*gotcore.Commit, error) {
 			var root *gotfs.Root
 			if mctx.Root != nil {
-				root = &mctx.Root.Payload.Root
+				root = &mctx.Root.Payload.Snap
 			}
 			// TODO: this does not preserve the separate stores.
 			s := stores.AddWriteLayer(mctx.Stores[1], scratch)
@@ -342,9 +342,9 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			if err != nil {
 				return nil, err
 			}
-			var parents []gotcore.Snap
+			var parents []gotcore.Commit
 			if mctx.Root != nil {
-				parents = []gotcore.Snap{*mctx.Root}
+				parents = []gotcore.Commit{*mctx.Root}
 			}
 
 			infoJSON, err := json.Marshal(struct {
@@ -359,12 +359,12 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			if err != nil {
 				return nil, err
 			}
-			nextSnap, err := mctx.VC.NewSnapshot(ctx, s, gotvc.SnapshotParams[gotcore.Payload]{
+			nextSnap, err := mctx.VC.NewVertex(ctx, s, gotvc.VertexParams[gotcore.Payload]{
 				Parents:   parents,
 				Creator:   params.Committer,
 				CreatedAt: params.CommittedAt,
 				Payload: gotcore.Payload{
-					Root: *nextRoot,
+					Snap: *nextRoot,
 					Aux:  infoJSON,
 				},
 			})

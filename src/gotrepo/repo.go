@@ -42,7 +42,7 @@ type (
 	Ref  = gotkv.Ref
 	Root = gotfs.Root
 
-	Snap = gotcore.Snap
+	Commit = gotcore.Commit
 )
 
 // Repo manages configuration including the connection to Blobcache

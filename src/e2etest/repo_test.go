@@ -104,8 +104,8 @@ func getOne[K comparable, V any](m map[K]V) K {
 	panic("no keys in map")
 }
 
-func markExpr(fqm gotrepo.FQM) *gotcore.SnapExpr_Mark {
-	return &gotcore.SnapExpr_Mark{
+func markExpr(fqm gotrepo.FQM) *gotcore.CommitExpr_Mark {
+	return &gotcore.CommitExpr_Mark{
 		Space: fqm.Space,
 		Name:  fqm.Name,
 	}

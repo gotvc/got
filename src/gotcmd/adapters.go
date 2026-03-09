@@ -17,7 +17,7 @@ var httpCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "serve files over HTTP",
 	},
-	Pos: []star.Positional{snapExprParam},
+	Pos: []star.Positional{commExprParam},
 	Flags: map[string]star.Flag{
 		"addr": addrParam,
 	},
@@ -28,7 +28,7 @@ var httpCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		return repo.ViewSnapshot(ctx, snapExprParam.Load(c), func(vctx *gotcore.ViewCtx) error {
+		return repo.ViewCommit(ctx, commExprParam.Load(c), func(vctx *gotcore.ViewCtx) error {
 			fs := gotiofs.New(ctx, vctx)
 			h := http.FileServer(http.FS(fs))
 			addr, _ := addrParam.LoadOpt(c)
@@ -50,7 +50,7 @@ var ftpCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "serve files over FTP",
 	},
-	Pos: []star.Positional{snapExprParam},
+	Pos: []star.Positional{commExprParam},
 	Flags: map[string]star.Flag{
 		"addr": addrParam,
 	},
@@ -70,7 +70,7 @@ var ftpCmd = star.Command{
 			return err
 		}
 		defer l.Close()
-		return repo.ViewSnapshot(ctx, snapExprParam.Load(c), func(vcx *gotcore.ViewCtx) error {
+		return repo.ViewCommit(ctx, commExprParam.Load(c), func(vcx *gotcore.ViewCtx) error {
 			s, err := ftpserver.NewServer(&ftpserver.Options{
 				Auth:   ftpAuth{},
 				Driver: gotftp.NewDriver(ctx, vcx),
@@ -85,9 +85,9 @@ var ftpCmd = star.Command{
 	},
 }
 
-var snapExprParam = star.Required[gotcore.SnapExpr]{
-	ID:       "snapshot-expr",
-	Parse:    gotcore.ParseSnapExpr,
+var commExprParam = star.Required[gotcore.CommitExpr]{
+	ID:       "commit-expr",
+	Parse:    gotcore.ParseCommitExpr,
 	ShortDoc: "a fully qualified mark name",
 }
 

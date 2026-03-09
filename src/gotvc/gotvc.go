@@ -23,7 +23,7 @@ func (mach *Machine[T]) isDescendentOf(ctx context.Context, m map[Ref]struct{}, 
 		if _, exists := m[parentRef]; exists {
 			continue
 		}
-		parent, err := mach.GetSnapshot(ctx, s, parentRef)
+		parent, err := mach.GetVertex(ctx, s, parentRef)
 		if err != nil {
 			return false, err
 		}
@@ -42,18 +42,18 @@ func (mach *Machine[T]) isDescendentOf(ctx context.Context, m map[Ref]struct{}, 
 	return false, nil
 }
 
-// Sync ensures dst has all of the data reachable from snap.
-func (m *Machine[T]) Sync(ctx context.Context, src stores.Reading, dst stores.Writing, snap Vertex[T], syncp func(T) error) error {
+// Sync ensures dst has all of the data reachable from vert.
+func (m *Machine[T]) Sync(ctx context.Context, src stores.Reading, dst stores.Writing, vert Vertex[T], syncp func(T) error) error {
 	m2 := *m
 	m2.readOnly = true
-	var sync func(snap Vertex[T]) error
-	sync = func(snap Vertex[T]) error {
-		for _, parentRef := range snap.Parents {
+	var sync func(vert Vertex[T]) error
+	sync = func(vert Vertex[T]) error {
+		for _, parentRef := range vert.Parents {
 			// Skip if the parent is already copieda.
 			if exists, err := stores.ExistsUnit(ctx, dst, parentRef.CID); err != nil {
 				return err
 			} else if !exists {
-				parent, err := m2.GetSnapshot(ctx, src, parentRef)
+				parent, err := m2.GetVertex(ctx, src, parentRef)
 				if err != nil {
 					return err
 				}
@@ -65,13 +65,13 @@ func (m *Machine[T]) Sync(ctx context.Context, src stores.Reading, dst stores.Wr
 				}
 			}
 		}
-		if err := syncp(snap.Payload); err != nil {
+		if err := syncp(vert.Payload); err != nil {
 			return err
 		}
-		metrics.AddInt(ctx, "snapshots", 1, "snapshots")
+		metrics.AddInt(ctx, "commits", 1, "commits")
 		return nil
 	}
-	return sync(snap)
+	return sync(vert)
 }
 
 // Populate adds all the blobcache.CIDs reachable from start to set.
@@ -83,7 +83,7 @@ func (mach *Machine[T]) Populate(ctx context.Context, s stores.Reading, start Ve
 		if err != nil {
 			return err
 		} else if !exists {
-			parent, err := mach.GetSnapshot(ctx, s, parentRef)
+			parent, err := mach.GetVertex(ctx, s, parentRef)
 			if err != nil {
 				return err
 			}

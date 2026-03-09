@@ -42,7 +42,7 @@ func TestFS(t *testing.T) {
 			}
 			s.Commit(gotwc.CommitParams{})
 
-			require.NoError(t, s.Repo.ViewSnapshot(ctx, gotcore.SnapExpr_Mark{Name: "master"}, func(vctx *gotcore.ViewCtx) error {
+			require.NoError(t, s.Repo.ViewCommit(ctx, gotcore.CommitExpr_Mark{Name: "master"}, func(vctx *gotcore.ViewCtx) error {
 				fsys := New(ctx, vctx)
 				ps := slices.Collect(maps.Keys(tc))
 				return fstest.TestFS(fsys, ps...)

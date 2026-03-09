@@ -42,7 +42,7 @@ func (s *FS) Open(name string) (iofs.File, error) {
 	if s.vctx.Root == nil {
 		return nil, iofs.ErrNotExist
 	} else {
-		root = s.vctx.Root.Payload.Root
+		root = s.vctx.Root.Payload.Snap
 	}
 	ss := s.vctx.FSRO()
 	fsag := s.vctx.FS

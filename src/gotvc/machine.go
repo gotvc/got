@@ -38,22 +38,22 @@ func NewMachine[T Marshalable](parse Parser[T], cfg Config) *Machine[T] {
 	return &ag
 }
 
-// ForEach calls fn once for each Ref in the snapshot graph.
+// ForEach calls fn once for each Ref in the commit graph.
 func (m *Machine[T]) ForEach(ctx context.Context, s stores.Reading, xs []Ref, fn func(Ref, Vertex[T]) error) error {
 	visited := map[Ref]struct{}{}
 	refs := newRefQueue()
 	refs.push(xs...)
 	for refs.len() > 0 {
 		ref := refs.pop()
-		snap, err := m.GetSnapshot(ctx, s, ref)
+		vert, err := m.GetVertex(ctx, s, ref)
 		if err != nil {
 			return err
 		}
-		if err := fn(ref, *snap); err != nil {
+		if err := fn(ref, *vert); err != nil {
 			return err
 		}
 		visited[ref] = struct{}{}
-		for _, parentRef := range snap.Parents {
+		for _, parentRef := range vert.Parents {
 			if _, exists := visited[parentRef]; !exists {
 				refs.push(parentRef)
 			}

@@ -156,7 +156,7 @@ func (s *Site) Put(ps ...string) {
 	}
 }
 
-func (s *Site) Ls(se gotcore.SnapExpr, p string) (ret []string) {
+func (s *Site) Ls(se gotcore.CommitExpr, p string) (ret []string) {
 	err := s.Repo.Ls(testutil.Context(s.t), se, p, func(de gotfs.DirEnt) error {
 		ret = append(ret, de.Name)
 		return nil
@@ -165,7 +165,7 @@ func (s *Site) Ls(se gotcore.SnapExpr, p string) (ret []string) {
 	return ret
 }
 
-func (s *Site) Cat(se gotcore.SnapExpr, p string) []byte {
+func (s *Site) Cat(se gotcore.CommitExpr, p string) []byte {
 	buf := bytes.Buffer{}
 	err := s.Repo.Cat(testutil.Context(s.t), se, p, &buf)
 	require.NoError(s.t, err)

@@ -98,7 +98,7 @@ func (mtx *MarkTx) WO() [3]stores.Writing {
 	}
 }
 
-// Save saves the snapshot to the Mark
+// Save saves the commit to the Mark
 func (m *MarkTx) Save(ctx context.Context, ref gdat.Ref) error {
 	ss := m.stx.Stores()
 	if !ref.IsZero() {
@@ -111,21 +111,21 @@ func (m *MarkTx) Save(ctx context.Context, ref gdat.Ref) error {
 	return m.stx.SetTarget(ctx, m.name, ref)
 }
 
-// Load loads a snapshot from the Mark
+// Load loads a commit from the Mark
 func (b *MarkTx) Load(ctx context.Context, dst *gdat.Ref) (bool, error) {
 	return b.stx.GetTarget(ctx, b.name, dst)
 }
 
-func (mt *MarkTx) LoadSnap(ctx context.Context, dst *Snap) (bool, error) {
+func (mt *MarkTx) LoadCommit(ctx context.Context, dst *Commit) (bool, error) {
 	var ref gdat.Ref
 	if ok, err := mt.Load(ctx, &ref); err != nil {
 		return false, err
 	} else if ok {
-		snap, err := mt.GotVC().GetSnapshot(ctx, mt.VCRO(), ref)
+		comm, err := mt.GotVC().GetVertex(ctx, mt.VCRO(), ref)
 		if err != nil {
 			return false, err
 		}
-		*dst = *snap
+		*dst = *comm
 		return true, nil
 	} else {
 		return false, nil
@@ -147,15 +147,15 @@ func (m *MarkTx) Apply(ctx context.Context, fn func([3]stores.RW, gdat.Ref) (gda
 	return m.Save(ctx, yRef)
 }
 
-func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Snap, error)) error {
+func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Commit, error)) error {
 	m.init()
 	ss := m.stx.Stores()
-	var snap *Snap
+	var comm *Commit
 	var target gdat.Ref
 	if ok, err := m.stx.GetTarget(ctx, m.name, &target); err != nil {
 		return err
 	} else if ok {
-		snap, err = m.GotVC().GetSnapshot(ctx, ss[2], target)
+		comm, err = m.GotVC().GetVertex(ctx, ss[2], target)
 		if err != nil {
 			return err
 		}
@@ -164,7 +164,7 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Snap, err
 		VC:     m.GotVC(),
 		FS:     m.GotFS(),
 		Stores: ss,
-		Root:   snap,
+		Root:   comm,
 	}
 	y, err := fn(modctx)
 	if err != nil {
@@ -172,11 +172,11 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Snap, err
 	}
 	var yRef gdat.Ref
 	if y != nil {
-		ref, err := m.GotVC().PostSnapshot(ctx, m.VCRW(), *y)
+		ref, err := m.GotVC().PostVertex(ctx, m.VCRW(), *y)
 		if err != nil {
 			return err
 		}
-		ref, err = syncSnapRef(ctx, m.gotvc, m.gotfs, m.RO(), m.WO(), ref)
+		ref, err = syncCommitRef(ctx, m.gotvc, m.gotfs, m.RO(), m.WO(), ref)
 		if err != nil {
 			return err
 		}
@@ -190,44 +190,44 @@ type ModifyCtx struct {
 	VC     *VCMach
 	FS     *FSMach
 	Stores [3]stores.RW
-	Root   *Snap
+	Root   *Commit
 }
 
-// Sync syncs a snapshot into the store
-func (mctx *ModifyCtx) Sync(ctx context.Context, srcs [3]stores.Reading, root Snap) error {
+// Sync syncs a commit into the store
+func (mctx *ModifyCtx) Sync(ctx context.Context, srcs [3]stores.Reading, root Commit) error {
 	return mctx.VC.Sync(ctx, srcs[2], mctx.Stores[2], root, func(payload Payload) error {
 		return mctx.FS.Sync(ctx,
 			[2]stores.Reading{srcs[0], srcs[1]},
 			[2]stores.Writing{mctx.Stores[0], mctx.Stores[1]},
-			payload.Root,
+			payload.Snap,
 		)
 	})
 }
 
-func (b *MarkTx) History(ctx context.Context, fn func(ref gdat.Ref, snap Snap) error) error {
+func (b *MarkTx) History(ctx context.Context, fn func(ref gdat.Ref, comm Commit) error) error {
 	b.init()
-	var snap Snap
-	if ok, err := b.LoadSnap(ctx, &snap); err != nil {
+	var comm Commit
+	if ok, err := b.LoadCommit(ctx, &comm); err != nil {
 		return err
 	} else if !ok {
 		return nil
 	}
-	ref := b.gotvc.RefFromSnapshot(snap)
-	if err := fn(ref, snap); err != nil {
+	ref := b.gotvc.RefFromVertex(comm)
+	if err := fn(ref, comm); err != nil {
 		return err
 	}
-	return b.gotvc.ForEach(ctx, b.VCRO(), snap.Parents, fn)
+	return b.gotvc.ForEach(ctx, b.VCRO(), comm.Parents, fn)
 }
 
 func (b *MarkTx) LoadFS(ctx context.Context, dst *gotfs.Root) (bool, error) {
 	b.init()
-	var snap Snap
-	if ok, err := b.LoadSnap(ctx, &snap); err != nil {
+	var comm Commit
+	if ok, err := b.LoadCommit(ctx, &comm); err != nil {
 		return false, err
 	} else if !ok {
 		return false, nil
 	}
-	*dst = snap.Payload.Root
+	*dst = comm.Payload.Snap
 	return true, nil
 }
 
@@ -236,15 +236,15 @@ type ViewCtx struct {
 	FS     *FSMach
 	Stores [3]stores.Reading
 	Target gdat.Ref
-	Root   *Snap
+	Root   *Commit
 }
 
 func (vc *ViewCtx) FSRO() [2]stores.Reading {
 	return [2]stores.Reading{vc.Stores[0], vc.Stores[1]}
 }
 
-// ViewSnapshot calls fn with everything needed to read a Snapshot, its filesystem, and its ancestry.
-func ViewSnapshot(ctx context.Context, stx SpaceTx, se SnapExpr, fn func(vctx *ViewCtx) error) error {
+// ViewCommit calls fn with everything needed to read a Commitshot, its filesystem, and its ancestry.
+func ViewCommit(ctx context.Context, stx SpaceTx, se CommitExpr, fn func(vctx *ViewCtx) error) error {
 	ref, err := se.Resolve(ctx, stx)
 	if err != nil {
 		return err
@@ -253,7 +253,7 @@ func ViewSnapshot(ctx context.Context, stx SpaceTx, se SnapExpr, fn func(vctx *V
 	cfg := DefaultConfig(false)
 	fsmach := newGotFS(&cfg)
 	vcmach := newGotVC(&cfg)
-	snap, err := vcmach.GetSnapshot(ctx, ss[2], *ref)
+	comm, err := vcmach.GetVertex(ctx, ss[2], *ref)
 	if err != nil {
 		return err
 	}
@@ -262,7 +262,7 @@ func ViewSnapshot(ctx context.Context, stx SpaceTx, se SnapExpr, fn func(vctx *V
 		FS:     fsmach,
 		Stores: [3]stores.Reading{ss[0], ss[1], ss[2]},
 		Target: *ref,
-		Root:   snap,
+		Root:   comm,
 	}
 	return fn(&vctx)
 }
@@ -273,13 +273,13 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 		return fmt.Errorf("cannot sync volumes with different salts, must use force=true")
 	}
 	return dst.Apply(ctx, func(dsts [3]stores.RW, x gdat.Ref) (gdat.Ref, error) {
-		var goal *Snap
+		var goal *Commit
 		var goalRef gdat.Ref
 		if ok, err := src.Load(ctx, &goalRef); err != nil {
 			return gdat.Ref{}, err
 		} else if ok {
 			var err error
-			goal, err = src.GotVC().GetSnapshot(ctx, src.VCRO(), goalRef)
+			goal, err = src.GotVC().GetVertex(ctx, src.VCRO(), goalRef)
 			if err != nil {
 				return gdat.Ref{}, err
 			}
@@ -294,11 +294,11 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 		case goalRef.Equals(&x):
 		default:
 			vcmach := dst.GotVC()
-			prevSnap, err := vcmach.GetSnapshot(ctx, dst.VCRO(), x)
+			prevCommit, err := vcmach.GetVertex(ctx, dst.VCRO(), x)
 			if err != nil {
 				return gdat.Ref{}, err
 			}
-			hasAncestor, err := vcmach.IsDescendentOf(ctx, src.VCRO(), *goal, *prevSnap)
+			hasAncestor, err := vcmach.IsDescendentOf(ctx, src.VCRO(), *goal, *prevCommit)
 			if err != nil {
 				return gdat.Ref{}, err
 			}
@@ -306,7 +306,7 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 				return gdat.Ref{}, fmt.Errorf("cannot CAS, prev ref %v is not parent of next ref %v", x, goalRef)
 			}
 		}
-		ref, err := syncSnapRef(ctx, dst.GotVC(), dst.GotFS(), src.RO(), dst.WO(), goalRef)
+		ref, err := syncCommitRef(ctx, dst.GotVC(), dst.GotFS(), src.RO(), dst.WO(), goalRef)
 		if err != nil {
 			return gdat.Ref{}, err
 		}
@@ -314,32 +314,32 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 	})
 }
 
-func History(ctx context.Context, vcmach *VCMach, s stores.Reading, snapRef gdat.Ref, fn func(ref gdat.Ref, snap Snap) error) error {
-	snap, err := vcmach.GetSnapshot(ctx, s, snapRef)
+func History(ctx context.Context, vcmach *VCMach, s stores.Reading, commRef gdat.Ref, fn func(ref gdat.Ref, comm Commit) error) error {
+	comm, err := vcmach.GetVertex(ctx, s, commRef)
 	if err != nil {
 		return err
 	}
-	if err := fn(snapRef, *snap); err != nil {
+	if err := fn(commRef, *comm); err != nil {
 		return err
 	}
-	return vcmach.ForEach(ctx, s, snap.Parents, fn)
+	return vcmach.ForEach(ctx, s, comm.Parents, fn)
 }
 
-// syncSnapRef ensures that all content reachable from Ref is in the dst store.
+// syncCommitRef ensures that all content reachable from Ref is in the dst store.
 // blobs are copied from the source store as needed.
-func syncSnapRef(ctx context.Context, vcmach *VCMach, fsmach *gotfs.Machine, src [3]stores.Reading, dst [3]stores.Writing, ref gdat.Ref) (_ gdat.Ref, err error) {
+func syncCommitRef(ctx context.Context, vcmach *VCMach, fsmach *gotfs.Machine, src [3]stores.Reading, dst [3]stores.Writing, ref gdat.Ref) (_ gdat.Ref, err error) {
 	ctx, cf := metrics.Child(ctx, "syncing gotvc")
 	defer cf()
-	snap, err := vcmach.GetSnapshot(ctx, src[2], ref)
+	comm, err := vcmach.GetVertex(ctx, src[2], ref)
 	if err != nil {
 		return gdat.Ref{}, err
 	}
-	if err := vcmach.Sync(ctx, src[2], dst[2], *snap, func(payload Payload) error {
-		return fsmach.Sync(ctx, [2]stores.Reading{src[0], src[1]}, [2]stores.Writing{dst[0], dst[1]}, payload.Root)
+	if err := vcmach.Sync(ctx, src[2], dst[2], *comm, func(payload Payload) error {
+		return fsmach.Sync(ctx, [2]stores.Reading{src[0], src[1]}, [2]stores.Writing{dst[0], dst[1]}, payload.Snap)
 	}); err != nil {
 		return gdat.Ref{}, err
 	}
-	return vcmach.PostSnapshot(ctx, dst[2], *snap)
+	return vcmach.PostVertex(ctx, dst[2], *comm)
 }
 
 // NewGotFS creates a new gotfs.Machine suitable for writing to the mark
