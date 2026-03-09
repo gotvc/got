@@ -24,13 +24,13 @@ type Vertex[T Marshalable] struct {
 	// N is 0 if there are no parents.
 	// N is the max of the parents' N + 1.
 	N uint64
-	// CreatedAt is the time the snapshot was created.
+	// CreatedAt is the time the commit was created.
 	CreatedAt tai64.TAI64
 	Parents   []gdat.Ref
-	// Creator is the ID of the user who created the snapshot.
+	// Creator is the ID of the user who created the commit.
 	Creator inet256.ID
 
-	// Payload is the thing being snapshotted.
+	// Payload is the thing being committed.
 	Payload T
 }
 
@@ -136,12 +136,12 @@ func (a Vertex[T]) Equals(b Vertex[T]) bool {
 		parentsEqual
 }
 
-// VertexParams are the parameters required to create a new snapshot.
+// VertexParams are the parameters required to create a new commit.
 type VertexParams[T Marshalable] struct {
 	Parents   []Vertex[T]
 	Creator   inet256.ID
 	CreatedAt tai64.TAI64
-	// Payload is the thing being snapshot
+	// Payload is the thing being commit
 	Payload T
 }
 
@@ -200,7 +200,7 @@ func (ag *Machine[T]) GetVertex(ctx context.Context, s stores.Reading, ref Ref) 
 	return x, nil
 }
 
-// Squash turns multiple snapshots into one.
+// Squash turns multiple commits into one.
 // It preserves the latest version of the data, but destroys versioning granularity
 func (ag *Machine[T]) Squash(ctx context.Context, s stores.RW, x Vertex[T], n int) (*Vertex[T], error) {
 	if n < 1 {
@@ -242,9 +242,9 @@ func (ag *Machine[T]) RefFromVertex(snap Vertex[T]) Ref {
 	return ref
 }
 
-// Check ensures that snapshot is valid.
+// Check ensures that commit is valid.
 func (a *Machine[T]) Check(ctx context.Context, s stores.Reading, snap Vertex[T], checkRoot func(T) error) error {
-	logctx.Infof(ctx, "checking snapshot #%d", snap.N)
+	logctx.Infof(ctx, "checking commit #%d", snap.N)
 	if err := checkRoot(snap.Payload); err != nil {
 		return err
 	}

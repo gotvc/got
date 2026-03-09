@@ -118,7 +118,7 @@ func (r *Repo) ViewMark(ctx context.Context, fqm FQM, fn func(*gotcore.MarkTx) e
 }
 
 // MarkLoad loads the Commit that the mark points to.
-// If the mark is empty then the snapshot will be nil
+// If the mark is empty then the commit will be nil
 func (r *Repo) MarkLoad(ctx context.Context, fqm FQM) (*Commit, error) {
 	var exists bool
 	var snap gotcore.Commit

@@ -38,7 +38,7 @@ func NewMachine[T Marshalable](parse Parser[T], cfg Config) *Machine[T] {
 	return &ag
 }
 
-// ForEach calls fn once for each Ref in the snapshot graph.
+// ForEach calls fn once for each Ref in the commit graph.
 func (m *Machine[T]) ForEach(ctx context.Context, s stores.Reading, xs []Ref, fn func(Ref, Vertex[T]) error) error {
 	visited := map[Ref]struct{}{}
 	refs := newRefQueue()

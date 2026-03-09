@@ -19,7 +19,7 @@ const (
 // 1-Arity
 const (
 	op1ArityOffset = (1 << 30) | iota<<24
-	// Input refers to a previoius snapshot by index
+	// Input refers to a previoius commit by index
 	// (index) -> (Root)
 	// This Op reads from the entire input at the index.
 	OpCode_Input

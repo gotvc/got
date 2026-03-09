@@ -80,13 +80,13 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 	type testCase struct {
 		// Store is used to store any seed data needed for the test.
 		Store stores.RW
-		// Steps contains the set of Mark names, and the snapshots they point to.
+		// Steps contains the set of Mark names, and the commits they point to.
 		Steps []Step
 	}
 
 	cfg := DSConfig{}
 	s := stores.NewMem()
-	snap0 := makeSnap(t, cfg, s, nil, makeFS(t, s, map[string]string{
+	comm0 := makeCommit(t, cfg, s, nil, makeFS(t, s, map[string]string{
 		"a": "0",
 	}))
 	tcs := []testCase{
@@ -96,7 +96,7 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 			Steps: []Step{
 				{
 					Snaps: map[string]*Commit{
-						"a": snap0,
+						"a": comm0,
 					},
 					Force: false,
 				},
@@ -107,13 +107,13 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 			Steps: []Step{
 				{
 					Snaps: map[string]*Commit{
-						"a": snap0,
+						"a": comm0,
 					},
 					Force: false,
 				},
 				{
 					Snaps: map[string]*Commit{
-						"a": snap0,
+						"a": comm0,
 					},
 					Force: false,
 				}},
@@ -122,13 +122,13 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 			Steps: []Step{
 				{
 					Snaps: map[string]*Commit{
-						"a": snap0,
+						"a": comm0,
 					},
 					Force: false,
 				},
 				{
 					Snaps: map[string]*Commit{
-						"a": makeSnap(t, cfg, s, []Commit{*snap0}, makeFS(t, s, map[string]string{
+						"a": makeCommit(t, cfg, s, []Commit{*comm0}, makeFS(t, s, map[string]string{
 							"a": "1",
 						})),
 					},
@@ -243,7 +243,7 @@ func makeFS(t testing.TB, s stores.RW, files map[string]string) gotfs.Root {
 	return *root
 }
 
-func makeSnap(t testing.TB, cfg DSConfig, s stores.Writing, parents []Commit, fsroot gotfs.Root) *Commit {
+func makeCommit(t testing.TB, cfg DSConfig, s stores.Writing, parents []Commit, fsroot gotfs.Root) *Commit {
 	ctx := testutil.Context(t)
 	vcmach := gotvc.NewMachine(ParsePayload, gotvc.Config{Salt: cfg.Salt})
 	snap, err := vcmach.NewVertex(ctx, s, gotvc.VertexParams[Payload]{

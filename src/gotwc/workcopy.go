@@ -292,7 +292,7 @@ func (wc *WC) Export(ctx context.Context) error {
 		if ok, err := mtx.LoadFS(ctx, &root); err != nil {
 			return err
 		} else if !ok {
-			logctx.Warnf(ctx, "mark does not have a snapshot, nothing to export")
+			logctx.Warnf(ctx, "mark does not have a commit, nothing to export")
 			return nil
 		}
 		exp := porting.NewExporter(mtx.GotFS(), portDB, fsys, filter)
@@ -324,7 +324,7 @@ func (wc *WC) Clobber(ctx context.Context, p string) error {
 		if ok, err := mtx.LoadFS(ctx, &root); err != nil {
 			return err
 		} else if !ok {
-			logctx.Warnf(ctx, "mark has no snapshot, nothing to clobber")
+			logctx.Warnf(ctx, "mark has no commit, nothing to clobber")
 			return nil
 		}
 		return exp.Clobber(ctx, ss[1], ss[0], root, p)

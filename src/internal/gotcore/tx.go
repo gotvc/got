@@ -98,7 +98,7 @@ func (mtx *MarkTx) WO() [3]stores.Writing {
 	}
 }
 
-// Save saves the snapshot to the Mark
+// Save saves the commit to the Mark
 func (m *MarkTx) Save(ctx context.Context, ref gdat.Ref) error {
 	ss := m.stx.Stores()
 	if !ref.IsZero() {
@@ -111,7 +111,7 @@ func (m *MarkTx) Save(ctx context.Context, ref gdat.Ref) error {
 	return m.stx.SetTarget(ctx, m.name, ref)
 }
 
-// Load loads a snapshot from the Mark
+// Load loads a commit from the Mark
 func (b *MarkTx) Load(ctx context.Context, dst *gdat.Ref) (bool, error) {
 	return b.stx.GetTarget(ctx, b.name, dst)
 }
@@ -193,7 +193,7 @@ type ModifyCtx struct {
 	Root   *Commit
 }
 
-// Sync syncs a snapshot into the store
+// Sync syncs a commit into the store
 func (mctx *ModifyCtx) Sync(ctx context.Context, srcs [3]stores.Reading, root Commit) error {
 	return mctx.VC.Sync(ctx, srcs[2], mctx.Stores[2], root, func(payload Payload) error {
 		return mctx.FS.Sync(ctx,

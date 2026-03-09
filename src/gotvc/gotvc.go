@@ -68,7 +68,7 @@ func (m *Machine[T]) Sync(ctx context.Context, src stores.Reading, dst stores.Wr
 		if err := syncp(snap.Payload); err != nil {
 			return err
 		}
-		metrics.AddInt(ctx, "snapshots", 1, "snapshots")
+		metrics.AddInt(ctx, "commits", 1, "commits")
 		return nil
 	}
 	return sync(snap)

@@ -105,7 +105,7 @@ type SpaceTx interface {
 	// 1: GotFS metadata
 	// 2: GotVC
 	Stores() [3]stores.RW
-	// SetTarget changes the mark so it points to a different snapshot
+	// SetTarget changes the mark so it points to a different commit
 	SetTarget(ctx context.Context, name string, ref gdat.Ref) error
 	// GetTarget retrieves the Commit referenced by gdat.Ref
 	GetTarget(ctx context.Context, name string, dst *gdat.Ref) (bool, error)

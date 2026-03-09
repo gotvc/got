@@ -129,24 +129,24 @@ func TestExport(t *testing.T) {
 		{
 
 			InSnap: map[string]string{
-				"a.txt": "snapshotted",
-				"b.txt": "also snapshotted",
+				"a.txt": "committed",
+				"b.txt": "also committed",
 			},
 			InFS: map[string]string{}, // clear all
 		},
 		{
 			InSnap: map[string]string{
-				"a.txt": "snapshotted",
-				"b.txt": "also snapshotted",
+				"a.txt": "committed",
+				"b.txt": "also committed",
 			},
 			InFS: map[string]string{
-				"a.txt": "snapshotted",
+				"a.txt": "committed",
 				// remove b
 			},
 		},
 		{
 			InSnap: map[string]string{
-				"a.txt": "snapshotted",
+				"a.txt": "committed",
 			},
 			InFS: map[string]string{
 				"a.txt": "dirty",

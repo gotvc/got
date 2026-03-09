@@ -24,7 +24,7 @@ func (r *Repo) ViewFS(ctx context.Context, se gotcore.CommitExpr, fn func(fsmach
 		}
 		ss := st.Stores()
 		if ref.IsZero() {
-			return fmt.Errorf("no snapshot found at %v", se)
+			return fmt.Errorf("no commit found at %v", se)
 		}
 		snap, err := gotcore.GetCommit(ctx, ss[2], *ref)
 		if err != nil {

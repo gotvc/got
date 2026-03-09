@@ -10,12 +10,12 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 )
 
-// Commit is a commitment to a filesystem snapshot, ancestor Commits, and additional metadata.
+// Commit is a commitment to a filesystem commit, ancestor Commits, and additional metadata.
 type Commit = gotvc.Vertex[Payload]
 
 // Payload is the thing being committed to.
 type Payload struct {
-	// Snap is the snapshot of the filesystem.
+	// Snap is the commit of the filesystem.
 	Snap gotfs.Root
 	Aux  []byte
 }
@@ -52,7 +52,7 @@ func (p *Payload) Unmarshal(data []byte) error {
 	return nil
 }
 
-// GetCommit reads a snapshot from the store.
+// GetCommit reads a commit from the store.
 func GetCommit(ctx context.Context, s stores.Reading, ref gdat.Ref) (*Commit, error) {
 	vcmach := gotvc.NewMachine(ParsePayload, gotvc.Config{})
 	return vcmach.GetVertex(ctx, s, ref)

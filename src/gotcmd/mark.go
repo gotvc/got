@@ -185,12 +185,12 @@ var markLoadCmd = star.Command{
 		defer repo.Close()
 		space, _ := spaceNameOptParam.LoadOpt(c)
 		name := markNameParam.Load(c)
-		snap, err := repo.MarkLoad(ctx, gotrepo.FQM{Space: space, Name: name})
+		comm, err := repo.MarkLoad(ctx, gotrepo.FQM{Space: space, Name: name})
 		if err != nil {
 			return err
 		}
-		if snap != nil {
-			c.Printf("%x\n", snap.Marshal(nil))
+		if comm != nil {
+			c.Printf("%x\n", comm.Marshal(nil))
 		}
 		return nil
 	},
@@ -272,14 +272,14 @@ var markAsCmd = star.Command{
 			newfqn); err != nil {
 			return err
 		}
-		c.Printf("marked snapshot as %v", newfqn.Name)
+		c.Printf("marked commit as %v", newfqn.Name)
 		return nil
 	},
 }
 
 var historyCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "prints the snapshot log",
+		Short: "prints the commit log",
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
@@ -297,8 +297,8 @@ var historyCmd = star.Command{
 		eg := errgroup.Group{}
 		eg.Go(func() error {
 			bufw := bufio.NewWriter(pw)
-			err := repo.History(ctx, gotcore.CommitExpr_Mark{Name: bname}, func(ref gdat.Ref, snap gotrepo.Commit) error {
-				if err := printSnap(bufw, ref, snap); err != nil {
+			err := repo.History(ctx, gotcore.CommitExpr_Mark{Name: bname}, func(ref gdat.Ref, comm gotrepo.Commit) error {
+				if err := printcomm(bufw, ref, comm); err != nil {
 					return err
 				}
 				if err := bufw.WriteByte('\n'); err != nil {
@@ -319,20 +319,20 @@ var historyCmd = star.Command{
 	},
 }
 
-func printSnap(bufw *bufio.Writer, ref gdat.Ref, snap gotcore.Commit) error {
-	fmt.Fprintf(bufw, "#%04d\t%v\n", snap.N, ref.CID)
-	fmt.Fprintf(bufw, "FS: %v\n", snap.Payload.Snap.Ref.CID)
-	if len(snap.Parents) == 0 {
+func printcomm(bufw *bufio.Writer, ref gdat.Ref, comm gotcore.Commit) error {
+	fmt.Fprintf(bufw, "#%04d\t%v\n", comm.N, ref.CID)
+	fmt.Fprintf(bufw, "FS: %v\n", comm.Payload.Snap.Ref.CID)
+	if len(comm.Parents) == 0 {
 		fmt.Fprintf(bufw, "Parents: (none)\n")
 	} else {
 		fmt.Fprintf(bufw, "Parents:\n")
-		for _, parent := range snap.Parents {
+		for _, parent := range comm.Parents {
 			fmt.Fprintf(bufw, "  %v\n", parent.CID)
 		}
 	}
-	fmt.Fprintf(bufw, "Created At: %v\n", snap.CreatedAt.GoTime().Local().String())
-	fmt.Fprintf(bufw, "Created By: %v\n", snap.Creator)
-	bufw.Write([]byte(prettifyJSON(snap.Payload.Aux)))
+	fmt.Fprintf(bufw, "Created At: %v\n", comm.CreatedAt.GoTime().Local().String())
+	fmt.Fprintf(bufw, "Created By: %v\n", comm.Creator)
+	bufw.Write([]byte(prettifyJSON(comm.Payload.Aux)))
 	fmt.Fprintln(bufw)
 	return nil
 }

@@ -71,7 +71,7 @@ var lsCmd = star.Command{
 		Short: "lists the children of path in the current volume",
 	},
 	Flags: map[string]star.Flag{
-		"snap": snapExprOptParam,
+		"comm": commExprOptParam,
 	},
 	Pos: []star.Positional{pathParam},
 	F: func(c star.Context) error {
@@ -81,7 +81,7 @@ var lsCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		se, ok := snapExprOptParam.LoadOpt(c)
+		se, ok := commExprOptParam.LoadOpt(c)
 		if !ok {
 			mname, err := wc.GetHead()
 			if err != nil {
@@ -102,7 +102,7 @@ var catCmd = star.Command{
 		Short: "writes the contents of path in the current volume to stdout",
 	},
 	Flags: map[string]star.Flag{
-		"snap": snapExprOptParam,
+		"comm": commExprOptParam,
 	},
 	Pos: []star.Positional{pathParam},
 	F: func(c star.Context) error {
@@ -112,7 +112,7 @@ var catCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		se, ok := snapExprOptParam.LoadOpt(c)
+		se, ok := commExprOptParam.LoadOpt(c)
 		if !ok {
 			mname, err := wc.GetHead()
 			if err != nil {
@@ -125,10 +125,10 @@ var catCmd = star.Command{
 	},
 }
 
-var snapExprOptParam = star.Optional[gotrepo.CommitExpr]{
-	ID:       "snap",
+var commExprOptParam = star.Optional[gotrepo.CommitExpr]{
+	ID:       "comm",
 	Parse:    gotcore.ParseCommitExpr,
-	ShortDoc: "a snapshot expression",
+	ShortDoc: "a commit expression",
 }
 
 var fqmnOptParam = star.Optional[gotrepo.FQM]{
