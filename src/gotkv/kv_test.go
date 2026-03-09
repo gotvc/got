@@ -29,7 +29,7 @@ func TestAddPrefix(t *testing.T) {
 	require.NotNil(t, root)
 
 	prefix := []byte("abc")
-	root2 := AddPrefix(*root, prefix)
+	root2 := AddPrefix(root, prefix)
 
 	t.Logf("produced %d blobs", s.Len())
 

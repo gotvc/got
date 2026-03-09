@@ -8,21 +8,9 @@ import (
 	lru "github.com/hashicorp/golang-lru"
 )
 
-type Option = func(*Machine)
-
-func WithSalt(salt *[32]byte) Option {
-	if salt == nil {
-		panic("gdat.WithSalt called with nil")
-	}
-	return func(a *Machine) {
-		a.kf = SaltedConvergent(salt)
-	}
-}
-
-func WithCacheSize(n int) Option {
-	return func(a *Machine) {
-		a.cacheSize = n
-	}
+type Params struct {
+	Salt      [32]byte
+	CacheSize *int
 }
 
 type Machine struct {
@@ -33,13 +21,10 @@ type Machine struct {
 	pool      sync.Pool
 }
 
-func NewMachine(opts ...Option) *Machine {
+func NewMachine(p Params) *Machine {
 	o := &Machine{
 		kf:        Convergent,
 		cacheSize: 32,
-	}
-	for _, opt := range opts {
-		opt(o)
 	}
 	var err error
 	if o.cache, err = lru.NewWithEvict(o.cacheSize, o.onCacheEvict); err != nil {
@@ -51,12 +36,12 @@ func NewMachine(opts ...Option) *Machine {
 	return o
 }
 
-func (a *Machine) Post(ctx context.Context, s stores.Writing, data []byte) (*Ref, error) {
+func (a *Machine) Post(ctx context.Context, s stores.Writing, data []byte) (Ref, error) {
 	id, dek, err := a.postEncrypt(ctx, s, a.kf, data)
 	if err != nil {
-		return nil, err
+		return Ref{}, err
 	}
-	return &Ref{
+	return Ref{
 		CID: id,
 		DEK: *dek,
 	}, nil

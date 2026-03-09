@@ -242,7 +242,7 @@ func (tx *Tx) Commit(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	r := Root{Marks: *kvroot, BrokenSet: *bsroot}
+	r := Root{Marks: kvroot, BrokenSet: bsroot}
 	if err := saveRoot(ctx, tx.tx, r); err != nil {
 		return err
 	}

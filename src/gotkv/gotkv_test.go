@@ -26,7 +26,7 @@ func TestPutGet(t *testing.T) {
 	ag := newTestMachine(t)
 	key := []byte("key1")
 	value := []byte("value")
-	x, err := ag.Put(ctx, s, *x, key, value)
+	x, err := ag.Put(ctx, s, x, key, value)
 	require.NoError(t, err)
 	t.Log(x)
 	// ptree.DebugTree(ctx, ptree.ReadParams[Entry, Ref]{
@@ -35,7 +35,7 @@ func TestPutGet(t *testing.T) {
 	// 	NewDecoder:      newDecoder,
 	// 	NewIndexDecoder: newIndexDecoder,
 	// }, x.toPtree(), os.Stderr)
-	actualValue, err := ag.Get(ctx, s, *x, key)
+	actualValue, err := ag.Get(ctx, s, x, key)
 	require.NoError(t, err)
 	require.Equal(t, value, actualValue)
 }
@@ -53,7 +53,7 @@ func TestPutGetMany(t *testing.T) {
 	for i := 0; i < N; i++ {
 		key, value := makeKey(i), makeValue(i)
 		var err error
-		x, err = ag.Put(ctx, s, *x, key, value)
+		x, err = ag.Put(ctx, s, x, key, value)
 		if !bytes.Contains(x.First, []byte("-key")) {
 			t.Fatalf("on %d: %q", i, x.First)
 		}
@@ -62,13 +62,13 @@ func TestPutGetMany(t *testing.T) {
 	// ptree.DebugTree(s, *x)
 	for i := 0; i < N; i++ {
 		key, value := makeKey(i), makeValue(i)
-		actualValue, err := ag.Get(ctx, s, *x, key)
+		actualValue, err := ag.Get(ctx, s, x, key)
 		require.NoError(t, err)
 		require.Equal(t, string(value), string(actualValue))
 	}
 }
 
-func testSetup(t *testing.T) (context.Context, stores.RW, *Root) {
+func testSetup(t *testing.T) (context.Context, stores.RW, Root) {
 	ctx := testutil.Context(t)
 	ag := newTestMachine(t)
 	s := stores.NewMem()

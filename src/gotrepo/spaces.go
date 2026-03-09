@@ -108,6 +108,6 @@ func spaceFromHandle(bc blobcache.Service, volh blobcache.Handle, secret *gdat.D
 	return &gotns.Space{
 		Volume: vol,
 		KVMach: &kvmach,
-		DMach:  gdat.NewMachine(),
+		DMach:  gdat.NewMachine(gdat.Params{}),
 	}
 }

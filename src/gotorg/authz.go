@@ -31,7 +31,7 @@ func (m *Machine) AddRule(ctx context.Context, s stores.RW, state State, r *goto
 	if err != nil {
 		return nil, err
 	}
-	state.Rules = *kvr
+	state.Rules = kvr
 	return &state, nil
 }
 
@@ -42,7 +42,7 @@ func (m *Machine) DropRule(ctx context.Context, s stores.RW, state State, ruleID
 	if err != nil {
 		return State{}, err
 	}
-	state.Rules = *kvr
+	state.Rules = kvr
 	return state, nil
 }
 
@@ -192,7 +192,7 @@ func (m *Machine) PutObligation(ctx context.Context, s stores.RW, state State, o
 	if err != nil {
 		return nil, err
 	}
-	state.Obligations = *kvr
+	state.Obligations = kvr
 	return &state, nil
 }
 

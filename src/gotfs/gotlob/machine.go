@@ -90,11 +90,11 @@ func (a *Machine) SizeOf(ctx context.Context, ms stores.Reading, root Root, pref
 	return offset, nil
 }
 
-func (a *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (*Root, error) {
+func (a *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (Root, error) {
 	b := a.NewBuilder(ctx, ss[1], ss[0])
 	for _, seg := range segs {
 		if err := b.CopyFrom(ctx, seg.Root, seg.Span); err != nil {
-			return nil, err
+			return Root{}, err
 		}
 	}
 	return b.Finish(ctx)
@@ -105,7 +105,7 @@ func (ag *Machine) post(ctx context.Context, s stores.RW, data []byte) (*Extent,
 	if err != nil {
 		return nil, err
 	}
-	return &Extent{Offset: 0, Length: uint32(len(data)), Ref: *ref}, nil
+	return &Extent{Offset: 0, Length: uint32(len(data)), Ref: ref}, nil
 }
 
 func (ag *Machine) getExtentF(ctx context.Context, ds stores.Reading, ext *Extent, fn func([]byte) error) error {

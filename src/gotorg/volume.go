@@ -53,7 +53,7 @@ func (m *Machine) DropVolume(ctx context.Context, s stores.RW, state State, volO
 	if err != nil {
 		return nil, err
 	}
-	state.Volumes = *next
+	state.Volumes = next
 	return &state, nil
 }
 

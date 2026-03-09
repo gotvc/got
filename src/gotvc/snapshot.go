@@ -158,7 +158,7 @@ func (a *Machine[T]) NewSnapshot(ctx context.Context, s stores.Writing, sp Snaps
 		if n < parent.N+1 {
 			n = parent.N + 1
 		}
-		parentRefs[i] = *parentRef
+		parentRefs[i] = parentRef
 	}
 	sort.Slice(parentRefs, func(i, j int) bool {
 		a, b := parentRefs[i].CID, parentRefs[j].CID
@@ -180,7 +180,7 @@ func (mach *Machine[T]) NewZero(ctx context.Context, s stores.Writing, sp Snapsh
 }
 
 // PostSnapshot marshals the snapshot and posts it to the store
-func (ag *Machine[T]) PostSnapshot(ctx context.Context, s stores.Writing, x Vertex[T]) (*Ref, error) {
+func (ag *Machine[T]) PostSnapshot(ctx context.Context, s stores.Writing, x Vertex[T]) (Ref, error) {
 	if ag.readOnly {
 		panic("gotvc: operator is read-only. This is a bug.")
 	}
@@ -239,7 +239,7 @@ func (ag *Machine[T]) RefFromSnapshot(snap Vertex[T]) Ref {
 	if err != nil {
 		panic(err)
 	}
-	return *ref
+	return ref
 }
 
 // Check ensures that snapshot is valid.

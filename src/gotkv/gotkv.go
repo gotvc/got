@@ -34,6 +34,10 @@ type Root struct {
 	First []byte   `json:"first,omitempty"`
 }
 
+func (r Root) Equal(r2 Root) bool {
+	return r.Ref == r2.Ref && r.Depth == r2.Depth && bytes.Equal(r.First, r2.First)
+}
+
 func (r Root) Marshal(out []byte) []byte {
 	out = append(out, r.Ref.Marshal()...)
 	out = append(out, r.Depth)
@@ -50,12 +54,12 @@ func (r *Root) Unmarshal(data []byte) error {
 	return nil
 }
 
-func newRoot(x *ptree.Root[Entry, gdat.Ref]) *Root {
+func newRoot(x *ptree.Root[Entry, gdat.Ref]) Root {
 	if x == nil {
-		return nil
+		return Root{}
 	}
 	lb, _ := x.Span.LowerBound()
-	return &Root{
+	return Root{
 		Ref:   x.Ref,
 		Depth: x.Depth,
 		First: lb.Key,
@@ -88,7 +92,7 @@ func IsErrKeyNotFound(err error) bool {
 	return errors.Is(err, ErrKeyNotFound) || state.IsErrNotFound[[]byte](err)
 }
 
-var defaultReadOnlyMachine = &Machine{da: gdat.NewMachine()}
+var defaultReadOnlyMachine = &Machine{da: gdat.NewMachine(gdat.Params{})}
 
 // Get is a convenience function for performing Get without creating an Machine.
 func Get(ctx context.Context, s Getter, x Root, key []byte) ([]byte, error) {
@@ -159,7 +163,7 @@ type doer struct {
 }
 
 func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x ptree.Root[Entry, Ref], p doer) error {
-	if canSkip, err := p.CanSkip(*(newRoot(&x))); err != nil {
+	if canSkip, err := p.CanSkip(newRoot(&x)); err != nil {
 		return err
 	} else if canSkip {
 		return nil
@@ -193,7 +197,7 @@ func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x ptree.Root[Entry
 			return err
 		}
 	}
-	return p.NodeFn(*newRoot(&x))
+	return p.NodeFn(newRoot(&x))
 }
 
 type ptreeGetter struct {
@@ -219,7 +223,7 @@ func (s *ptreeStore) Post(ctx context.Context, data []byte) (Ref, error) {
 	if err != nil {
 		return Ref{}, err
 	}
-	return *ref, nil
+	return ref, nil
 }
 
 func (s *ptreeStore) Get(ctx context.Context, ref Ref, buf []byte) (int, error) {

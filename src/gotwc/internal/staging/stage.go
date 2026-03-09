@@ -12,8 +12,8 @@ import (
 	"go.brendoncarroll.net/stdctx/logctx"
 
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/gotfsvm"
 	"github.com/gotvc/got/src/gotkv"
-	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 )
@@ -92,7 +92,7 @@ func (tx *Tx) setup(ctx context.Context) error {
 				return err
 			}
 		}
-		kvroot = *r
+		kvroot = r
 	}
 	tx.kvtx = tx.gotkv.NewTx(s, kvroot)
 	return nil
@@ -288,60 +288,38 @@ func (tx *Tx) IsEmpty(ctx context.Context) (bool, error) {
 	}
 }
 
-func (tx *Tx) Apply(ctx context.Context, fsag *gotfs.Machine, ss [2]stores.RW, base *gotfs.Root) (*gotfs.Root, error) {
-	if base == nil {
-		var err error
-		base, err = fsag.NewEmpty(ctx, ss[1], 0o755)
-		if err != nil {
-			return nil, err
-		}
-	}
+func (tx *Tx) CreateFunction(ctx context.Context, fsag *gotfs.Machine, ss [2]stores.RW) (gotfsvm.Function, error) {
 	it, err := tx.Iterate(ctx, gotkv.TotalSpan())
 	if err != nil {
-		return nil, err
+		return gotfsvm.Function{}, err
 	}
-	var segs []gotfs.Segment
-	err = streams.ForEach(ctx, it, func(ent Entry) error {
-		fileOp := ent.Op
-		p := ent.Path
-		switch {
-		case fileOp.Put != nil:
-			var err error
-			base, err = fsag.MkdirAll(ctx, ss[1], *base, path.Dir(p))
-			if err != nil {
-				return err
+	vm := gotfsvm.New(fsag)
+	return vm.NewFunction(ctx, ss[1], func(fb *gotfsvm.FnBuilder) (gotfsvm.ExprT[gotfs.Root], error) {
+		baseExpr := fb.Input(0)
+		var segs []gotfs.Segment
+		err = streams.ForEach(ctx, it, func(ent Entry) error {
+			fileOp := ent.Op
+			p := ent.Path
+			switch {
+			case fileOp.Put != nil:
+				baseExpr = fb.MkdirAll(baseExpr, path.Dir(p), 0o755)
+				segs = append(segs, fsag.ShiftOut(gotfs.Root(*fileOp.Put).Segment(), p))
+			case fileOp.Delete != nil:
+				segs = append(segs, gotfs.Segment{
+					Span: gotfs.SpanForPath(p),
+				})
+			default:
+				logctx.Warnf(ctx, "empty op for path %q", p)
+				return nil
 			}
-			segs = append(segs, gotfs.Segment{
-				Span: gotfs.SpanForPath(p),
-				Contents: gotfs.Expr{
-					Root:      gotfs.Root(*fileOp.Put),
-					AddPrefix: p,
-				},
-			})
-		case fileOp.Delete != nil:
-			segs = append(segs, gotfs.Segment{
-				Span: gotfs.SpanForPath(p),
-			})
-		default:
-			logctx.Warnf(ctx, "empty op for path %q", p)
 			return nil
+		})
+		if err != nil {
+			return gotfsvm.ExprT[gotfs.Root]{}, err
 		}
-
-		return nil
+		concatExpr := fb.ChangesOnBase(baseExpr, segs)
+		return fb.Promote(concatExpr), nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	segs = gotfs.ChangesOnBase(*base, segs)
-	ctx, cf := metrics.Child(ctx, "splicing")
-	defer cf()
-	metrics.SetDenom(ctx, "segs", len(segs), "segs")
-	root, err := fsag.Splice(ctx, ss, segs)
-	if err != nil {
-		return nil, err
-	}
-	metrics.AddInt(ctx, "segs", len(segs), "segs")
-	return root, nil
 }
 
 func (tx *Tx) Store() stores.RW {

@@ -26,7 +26,7 @@ type Builder struct {
 
 	lastKey []byte
 	queue   []operation
-	root    *Root
+	root    Root
 	err     error
 }
 
@@ -147,14 +147,14 @@ func (b *Builder) CopyExtent(ctx context.Context, ext *Extent, isShort bool) err
 	return b.kvb.Put(ctx, k, MarshalExtent(ext))
 }
 
-func (b *Builder) Finish(ctx context.Context) (*Root, error) {
-	if b.root == nil && b.err == nil {
-		b.root, b.err = func() (*Root, error) {
+func (b *Builder) Finish(ctx context.Context) (Root, error) {
+	if b.root.Ref.IsZero() && b.err == nil {
+		b.root, b.err = func() (Root, error) {
 			if err := b.chunker.Flush(); err != nil {
-				return nil, err
+				return Root{}, err
 			}
 			if err := b.flushInline(ctx); err != nil {
-				return nil, err
+				return Root{}, err
 			}
 			return b.kvb.Finish(ctx)
 		}()
@@ -163,7 +163,7 @@ func (b *Builder) Finish(ctx context.Context) (*Root, error) {
 }
 
 func (b *Builder) IsFinished() bool {
-	return b.root != nil || b.err != nil
+	return !b.root.Ref.IsZero() || b.err != nil
 }
 
 func (b *Builder) handleChunk(data []byte) error {
@@ -357,7 +357,7 @@ func (b *Builder) setLastKey(k []byte) {
 }
 
 func (b *Builder) checkFinished() error {
-	if b.root != nil || b.err != nil {
+	if !b.root.Ref.IsZero() || b.err != nil {
 		return errors.New("gotlob: Builder has already finished")
 	}
 	return nil

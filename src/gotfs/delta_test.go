@@ -39,7 +39,7 @@ func TestDeltaRW(t *testing.T) {
 			delta, err := b.Finish(ctx)
 			require.NoError(t, err)
 
-			it := ag.NewDeltaIterator(s, s, *delta)
+			it := ag.NewDeltaIterator(s, s, delta)
 			actual, err := streams.Collect[DeltaEntry](ctx, it, 10)
 			require.NoError(t, err)
 			require.Equal(t, len(expected), len(actual))

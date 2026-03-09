@@ -74,7 +74,7 @@ func (mach *Machine) PutFile(ctx context.Context, ss [2]stores.RW, x Root, p str
 func (mach *Machine) SizeOfFile(ctx context.Context, s stores.Reading, x Root, p string) (uint64, error) {
 	p = cleanPath(p)
 	k := newInfoKey(p)
-	return mach.lob.SizeOf(ctx, s, *x.toGotKV(), k.Prefix(nil))
+	return mach.lob.SizeOf(ctx, s, x.toGotKV(), k.Prefix(nil))
 }
 
 // ReadFileAt fills `buf` with data in the file at `p` starting at offset `start`
@@ -96,7 +96,7 @@ func (mach *Machine) NewReader(ctx context.Context, ss [2]stores.Reading, x Root
 		return nil, err
 	}
 	k := newInfoKey(p)
-	return mach.lob.NewReader(ctx, ss[1], ss[0], *x.toGotKV(), k.Prefix(nil))
+	return mach.lob.NewReader(ctx, ss[1], ss[0], x.toGotKV(), k.Prefix(nil))
 }
 
 func (mach *Machine) ReadFile(ctx context.Context, ss [2]stores.Reading, x Root, p string, max int) ([]byte, error) {

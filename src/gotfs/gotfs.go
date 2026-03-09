@@ -59,8 +59,16 @@ func (r Root) ToGotKV() gotkv.Root {
 	}
 }
 
-func newRoot(x *gotkv.Root) *Root {
-	if x == nil {
+// Segment returns the root as a single segment.
+func (r Root) Segment() Segment {
+	return Segment{
+		Span:     SpanForPath(""),
+		Contents: r.ToGotKV(),
+	}
+}
+
+func newRoot(x gotkv.Root) *Root {
+	if x.Equal(gotkv.Root{}) {
 		return nil
 	}
 	var key Key
@@ -76,12 +84,12 @@ func newRoot(x *gotkv.Root) *Root {
 	}
 }
 
-func (r *Root) toGotKV() *gotkv.Root {
+func (r *Root) toGotKV() gotkv.Root {
 	if r == nil {
-		return nil
+		return gotkv.Root{}
 	}
 	r2 := r.ToGotKV()
-	return &r2
+	return r2
 }
 
 const MaxPathLen = gotkv.MaxKeySize - 9

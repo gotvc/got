@@ -30,7 +30,7 @@ func TestDiff(t *testing.T) {
 	right, err := rb.Finish(ctx)
 	require.NoError(t, err)
 
-	d := ag.NewDiffer(s, *left, *right, TotalSpan())
+	d := ag.NewDiffer(s, left, right, TotalSpan())
 	dents, err := streams.Collect[DEntry](ctx, d, 6)
 	require.NoError(t, err)
 	require.Equal(t, []DEntry{

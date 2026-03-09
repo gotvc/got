@@ -20,6 +20,10 @@ type Info struct {
 	Attrs map[string][]byte
 }
 
+func (info *Info) Marshal(out []byte) []byte {
+	return append(out, info.marshal()...)
+}
+
 func (info *Info) marshal() []byte {
 	if info == nil {
 		panic("info is nil")
@@ -49,6 +53,10 @@ func (info *Info) marshal() []byte {
 		panic(err)
 	}
 	return data
+}
+
+func (info *Info) Unmarshal(data []byte) error {
+	return info.unmarshal(data)
 }
 
 func (info *Info) unmarshal(data []byte) error {
@@ -109,7 +117,7 @@ func (mach *Machine) PutInfo(ctx context.Context, s stores.RW, x Root, p string,
 		}
 	}
 	k := newInfoKey(p)
-	root, err := mach.gotkv.Put(ctx, s, *x.toGotKV(), k.Marshal(nil), info.marshal())
+	root, err := mach.gotkv.Put(ctx, s, x.toGotKV(), k.Marshal(nil), info.marshal())
 	return newRoot(root), err
 }
 

@@ -58,11 +58,8 @@ func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, fin
 		return nil, err
 	}
 	changes = append(changes, gotfs.Segment{
-		Span: gotkv.TotalSpan(),
-		Contents: gotfs.Expr{
-			Root:      *emptyDir,
-			AddPrefix: "",
-		},
+		Span:     gotkv.TotalSpan(),
+		Contents: emptyDir.ToGotKV(),
 	})
 	dirents, err := posixfs.ReadDir(fsx, p)
 	if err != nil {
@@ -81,13 +78,7 @@ func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, fin
 			return nil, err
 		}
 		metrics.AddInt(ctx, "paths", 1, "paths")
-		changes = append(changes, gotfs.Segment{
-			Span: gotfs.SpanForPath(dirent.Name),
-			Contents: gotfs.Expr{
-				Root:      *pathRoot,
-				AddPrefix: dirent.Name,
-			},
-		})
+		changes = append(changes, pr.gotfs.ShiftOut(pathRoot.Segment(), dirent.Name))
 	}
 	root, err := pr.gotfs.Splice(ctx, [2]stores.RW{pr.ds, pr.ms}, changes)
 	if err != nil {
