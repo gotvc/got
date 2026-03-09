@@ -136,8 +136,8 @@ func (a Vertex[T]) Equals(b Vertex[T]) bool {
 		parentsEqual
 }
 
-// SnapshotParams are the parameters required to create a new snapshot.
-type SnapshotParams[T Marshalable] struct {
+// VertexParams are the parameters required to create a new snapshot.
+type VertexParams[T Marshalable] struct {
 	Parents   []Vertex[T]
 	Creator   inet256.ID
 	CreatedAt tai64.TAI64
@@ -145,13 +145,13 @@ type SnapshotParams[T Marshalable] struct {
 	Payload T
 }
 
-func (a *Machine[T]) NewSnapshot(ctx context.Context, s stores.Writing, sp SnapshotParams[T]) (*Vertex[T], error) {
+func (a *Machine[T]) NewVertex(ctx context.Context, s stores.Writing, sp VertexParams[T]) (*Vertex[T], error) {
 	var n uint64
 	maxCreatedAt := sp.CreatedAt
 	parentRefs := make([]Ref, len(sp.Parents))
 	for i, parent := range sp.Parents {
 		maxCreatedAt = max(maxCreatedAt, parent.CreatedAt)
-		parentRef, err := a.PostSnapshot(ctx, s, parent)
+		parentRef, err := a.PostVertex(ctx, s, parent)
 		if err != nil {
 			return nil, err
 		}
@@ -173,22 +173,22 @@ func (a *Machine[T]) NewSnapshot(ctx context.Context, s stores.Writing, sp Snaps
 	}, nil
 }
 
-// NewZero creates a new snapshot with no parent
-func (mach *Machine[T]) NewZero(ctx context.Context, s stores.Writing, sp SnapshotParams[T]) (*Vertex[T], error) {
+// Genesis creates a new Commit with no parent
+func (mach *Machine[T]) Genesis(ctx context.Context, s stores.Writing, sp VertexParams[T]) (*Vertex[T], error) {
 	sp.Parents = nil
-	return mach.NewSnapshot(ctx, s, sp)
+	return mach.NewVertex(ctx, s, sp)
 }
 
-// PostSnapshot marshals the snapshot and posts it to the store
-func (ag *Machine[T]) PostSnapshot(ctx context.Context, s stores.Writing, x Vertex[T]) (Ref, error) {
+// PostVertex marshals the Vertex and posts it to the store
+func (ag *Machine[T]) PostVertex(ctx context.Context, s stores.Writing, x Vertex[T]) (Ref, error) {
 	if ag.readOnly {
 		panic("gotvc: operator is read-only. This is a bug.")
 	}
 	return ag.da.Post(ctx, s, x.Marshal(nil))
 }
 
-// GetSnapshot retrieves the snapshot referenced by ref from the store.
-func (ag *Machine[T]) GetSnapshot(ctx context.Context, s stores.Reading, ref Ref) (*Vertex[T], error) {
+// GetVertex retrieves the Vertex referenced by ref from the store.
+func (ag *Machine[T]) GetVertex(ctx context.Context, s stores.Reading, ref Ref) (*Vertex[T], error) {
 	var x *Vertex[T]
 	if err := ag.da.GetF(ctx, s, ref, func(data []byte) error {
 		var err error
@@ -212,7 +212,7 @@ func (ag *Machine[T]) Squash(ctx context.Context, s stores.RW, x Vertex[T], n in
 	if len(x.Parents) > 1 {
 		return nil, fmt.Errorf("cannot rebase > 1 parents")
 	}
-	parent, err := ag.GetSnapshot(ctx, s, x.Parents[0])
+	parent, err := ag.GetVertex(ctx, s, x.Parents[0])
 	if err != nil {
 		return nil, err
 	}
@@ -231,11 +231,11 @@ func (ag *Machine[T]) Squash(ctx context.Context, s stores.RW, x Vertex[T], n in
 	return y, nil
 }
 
-// RefFromSnapshot computes a ref for snap if it was posted to s.
+// RefFromVertex computes a ref for snap if it was posted to s.
 // It only calls s.Hash and s.MaxSize; it does not mutate s.
-func (ag *Machine[T]) RefFromSnapshot(snap Vertex[T]) Ref {
+func (ag *Machine[T]) RefFromVertex(snap Vertex[T]) Ref {
 	s2 := stores.NewVoid()
-	ref, err := ag.PostSnapshot(context.TODO(), s2, snap)
+	ref, err := ag.PostVertex(context.TODO(), s2, snap)
 	if err != nil {
 		panic(err)
 	}
@@ -257,7 +257,7 @@ func (a *Machine[T]) Check(ctx context.Context, s stores.Reading, snap Vertex[T]
 		}
 	}
 	for _, parentRef := range snap.Parents {
-		parent, err := a.GetSnapshot(ctx, s, parentRef)
+		parent, err := a.GetVertex(ctx, s, parentRef)
 		if err != nil {
 			return err
 		}

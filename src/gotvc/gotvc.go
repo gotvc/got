@@ -23,7 +23,7 @@ func (mach *Machine[T]) isDescendentOf(ctx context.Context, m map[Ref]struct{}, 
 		if _, exists := m[parentRef]; exists {
 			continue
 		}
-		parent, err := mach.GetSnapshot(ctx, s, parentRef)
+		parent, err := mach.GetVertex(ctx, s, parentRef)
 		if err != nil {
 			return false, err
 		}
@@ -53,7 +53,7 @@ func (m *Machine[T]) Sync(ctx context.Context, src stores.Reading, dst stores.Wr
 			if exists, err := stores.ExistsUnit(ctx, dst, parentRef.CID); err != nil {
 				return err
 			} else if !exists {
-				parent, err := m2.GetSnapshot(ctx, src, parentRef)
+				parent, err := m2.GetVertex(ctx, src, parentRef)
 				if err != nil {
 					return err
 				}
@@ -83,7 +83,7 @@ func (mach *Machine[T]) Populate(ctx context.Context, s stores.Reading, start Ve
 		if err != nil {
 			return err
 		} else if !exists {
-			parent, err := mach.GetSnapshot(ctx, s, parentRef)
+			parent, err := mach.GetVertex(ctx, s, parentRef)
 			if err != nil {
 				return err
 			}

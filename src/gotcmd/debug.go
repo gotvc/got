@@ -24,7 +24,7 @@ var debugCmd = star.Command{
 		repo := wc.Repo()
 
 		p := debugTypeParam.Load(c)
-		se := &gotcore.SnapExpr_Mark{Space: "", Name: bname}
+		se := &gotcore.CommitExpr_Mark{Space: "", Name: bname}
 		switch p {
 		case "fs":
 			return repo.DebugFS(ctx, se, c.StdOut)

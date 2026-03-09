@@ -8,36 +8,36 @@ import (
 	"github.com/gotvc/got/src/gdat"
 )
 
-// SnapExpr is a sum type representing the different ways
-// to refer to a Snapshot in Got
+// CommitExpr is a sum type representing the different ways
+// to refer to a Commit in Got
 // So far, there are 2 primitive ways
 // - Exactly by Ref
 // - By Mark
 // And 1 higher-order way
 // - By an offset from the result of a previous expression
-type SnapExpr interface {
+type CommitExpr interface {
 	GetSpace() string
 	// Resolve returns a valid Ref, which points to a Snapshot.
 	Resolve(ctx context.Context, stx SpaceTx) (*gdat.Ref, error)
 	isSnapExpr()
 }
 
-func ParseSnapExpr(x string) (SnapExpr, error) {
-	if se, err := ParseSnap_Mark(x); err == nil {
+func ParseCommitExpr(x string) (CommitExpr, error) {
+	if se, err := ParseCommit_Mark(x); err == nil {
 		return se, nil
 	}
-	if se, err := ParseSnap_Exact(x); err == nil {
+	if se, err := ParseCommit_Exact(x); err == nil {
 		return se, nil
 	}
 	return nil, fmt.Errorf("could not parse Snapshot expression from %q", x)
 }
 
-type SnapExpr_Exact struct {
+type CommitExpr_Exact struct {
 	Space string
 	Ref   gdat.Ref
 }
 
-func ParseSnap_Exact(x string) (*SnapExpr_Exact, error) {
+func ParseCommit_Exact(x string) (*CommitExpr_Exact, error) {
 	var spaceName string
 	if i := strings.Index(x, ":"); i >= 0 {
 		spaceName = x[:i]
@@ -47,43 +47,43 @@ func ParseSnap_Exact(x string) (*SnapExpr_Exact, error) {
 	if err := ref.UnmarshalText([]byte(x)); err != nil {
 		return nil, err
 	}
-	return &SnapExpr_Exact{
+	return &CommitExpr_Exact{
 		Space: spaceName,
 		Ref:   ref,
 	}, nil
 }
 
-func (se *SnapExpr_Exact) isSnapExpr() {}
+func (se *CommitExpr_Exact) isSnapExpr() {}
 
-func (se *SnapExpr_Exact) GetSpace() string {
+func (se *CommitExpr_Exact) GetSpace() string {
 	return se.Space
 }
 
-func (se *SnapExpr_Exact) Resolve(ctx context.Context, tx SpaceTx) (*gdat.Ref, error) {
+func (se *CommitExpr_Exact) Resolve(ctx context.Context, tx SpaceTx) (*gdat.Ref, error) {
 	return &se.Ref, nil
 }
 
-type SnapExpr_Mark struct {
+type CommitExpr_Mark struct {
 	Space string
 	Name  string
 }
 
-func ParseSnap_Mark(x string) (*SnapExpr_Mark, error) {
+func ParseCommit_Mark(x string) (*CommitExpr_Mark, error) {
 	var space string
 	if i := strings.Index(x, ":"); i >= 0 {
 		space = x[:i]
 		x = x[i+1:]
 	}
-	return &SnapExpr_Mark{Space: space, Name: x}, nil
+	return &CommitExpr_Mark{Space: space, Name: x}, nil
 }
 
-func (se SnapExpr_Mark) isSnapExpr() {}
+func (se CommitExpr_Mark) isSnapExpr() {}
 
-func (se SnapExpr_Mark) GetSpace() string {
+func (se CommitExpr_Mark) GetSpace() string {
 	return se.Space
 }
 
-func (se SnapExpr_Mark) Resolve(ctx context.Context, tx SpaceTx) (*gdat.Ref, error) {
+func (se CommitExpr_Mark) Resolve(ctx context.Context, tx SpaceTx) (*gdat.Ref, error) {
 	var ref gdat.Ref
 	if ok, err := tx.GetTarget(ctx, se.Name, &ref); err != nil {
 		return nil, err
@@ -93,13 +93,13 @@ func (se SnapExpr_Mark) Resolve(ctx context.Context, tx SpaceTx) (*gdat.Ref, err
 	return &ref, nil
 }
 
-func (se SnapExpr_Mark) String() string {
+func (se CommitExpr_Mark) String() string {
 	return se.Space + ":" + se.Name
 }
 
-type SnapExpr_Offset struct {
-	X      SnapExpr
+type CommitExpr_Offset struct {
+	X      CommitExpr
 	Offset uint
 }
 
-func (se SnapExpr_Offset) isSnapExpr() {}
+func (se CommitExpr_Offset) isSnapExpr() {}

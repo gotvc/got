@@ -297,7 +297,7 @@ var historyCmd = star.Command{
 		eg := errgroup.Group{}
 		eg.Go(func() error {
 			bufw := bufio.NewWriter(pw)
-			err := repo.History(ctx, gotcore.SnapExpr_Mark{Name: bname}, func(ref gdat.Ref, snap gotrepo.Snap) error {
+			err := repo.History(ctx, gotcore.CommitExpr_Mark{Name: bname}, func(ref gdat.Ref, snap gotrepo.Commit) error {
 				if err := printSnap(bufw, ref, snap); err != nil {
 					return err
 				}
@@ -319,9 +319,9 @@ var historyCmd = star.Command{
 	},
 }
 
-func printSnap(bufw *bufio.Writer, ref gdat.Ref, snap gotcore.Snap) error {
+func printSnap(bufw *bufio.Writer, ref gdat.Ref, snap gotcore.Commit) error {
 	fmt.Fprintf(bufw, "#%04d\t%v\n", snap.N, ref.CID)
-	fmt.Fprintf(bufw, "FS: %v\n", snap.Payload.Root.Ref.CID)
+	fmt.Fprintf(bufw, "FS: %v\n", snap.Payload.Snap.Ref.CID)
 	if len(snap.Parents) == 0 {
 		fmt.Fprintf(bufw, "Parents: (none)\n")
 	} else {

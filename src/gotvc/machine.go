@@ -45,7 +45,7 @@ func (m *Machine[T]) ForEach(ctx context.Context, s stores.Reading, xs []Ref, fn
 	refs.push(xs...)
 	for refs.len() > 0 {
 		ref := refs.pop()
-		snap, err := m.GetSnapshot(ctx, s, ref)
+		snap, err := m.GetVertex(ctx, s, ref)
 		if err != nil {
 			return err
 		}

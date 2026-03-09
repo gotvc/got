@@ -73,7 +73,7 @@ func TestSpace(t *testing.T, newSpace func(t testing.TB) Space) {
 func TestSync(t *testing.T, setup func(testing.TB) Space) {
 	ctx := testutil.Context(t)
 	type Step struct {
-		Snaps map[string]*Snap
+		Snaps map[string]*Commit
 		Force bool
 		Err   error
 	}
@@ -95,7 +95,7 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 			Store: s,
 			Steps: []Step{
 				{
-					Snaps: map[string]*Snap{
+					Snaps: map[string]*Commit{
 						"a": snap0,
 					},
 					Force: false,
@@ -106,13 +106,13 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 			Store: s,
 			Steps: []Step{
 				{
-					Snaps: map[string]*Snap{
+					Snaps: map[string]*Commit{
 						"a": snap0,
 					},
 					Force: false,
 				},
 				{
-					Snaps: map[string]*Snap{
+					Snaps: map[string]*Commit{
 						"a": snap0,
 					},
 					Force: false,
@@ -121,14 +121,14 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 			Store: s,
 			Steps: []Step{
 				{
-					Snaps: map[string]*Snap{
+					Snaps: map[string]*Commit{
 						"a": snap0,
 					},
 					Force: false,
 				},
 				{
-					Snaps: map[string]*Snap{
-						"a": makeSnap(t, cfg, s, []Snap{*snap0}, makeFS(t, s, map[string]string{
+					Snaps: map[string]*Commit{
+						"a": makeSnap(t, cfg, s, []Commit{*snap0}, makeFS(t, s, map[string]string{
 							"a": "1",
 						})),
 					},
@@ -152,7 +152,7 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 						if err != nil {
 							return err
 						}
-						if err := mtx.Modify(ctx, func(mctx ModifyCtx) (*Snap, error) {
+						if err := mtx.Modify(ctx, func(mctx ModifyCtx) (*Commit, error) {
 							if v != nil {
 								srcStores := [3]stores.Reading{tc.Store, tc.Store, tc.Store}
 								if err := mctx.Sync(ctx, srcStores, *v); err != nil {
@@ -243,13 +243,13 @@ func makeFS(t testing.TB, s stores.RW, files map[string]string) gotfs.Root {
 	return *root
 }
 
-func makeSnap(t testing.TB, cfg DSConfig, s stores.Writing, parents []Snap, fsroot gotfs.Root) *Snap {
+func makeSnap(t testing.TB, cfg DSConfig, s stores.Writing, parents []Commit, fsroot gotfs.Root) *Commit {
 	ctx := testutil.Context(t)
 	vcmach := gotvc.NewMachine(ParsePayload, gotvc.Config{Salt: cfg.Salt})
-	snap, err := vcmach.NewSnapshot(ctx, s, gotvc.SnapshotParams[Payload]{
+	snap, err := vcmach.NewVertex(ctx, s, gotvc.VertexParams[Payload]{
 		Parents: parents,
 		Payload: Payload{
-			Root: fsroot,
+			Snap: fsroot,
 		},
 	})
 	require.NoError(t, err)

@@ -87,7 +87,7 @@ var lsCmd = star.Command{
 			if err != nil {
 				return err
 			}
-			se = &gotcore.SnapExpr_Mark{Name: mname}
+			se = &gotcore.CommitExpr_Mark{Name: mname}
 		}
 		p, _ := pathParam.LoadOpt(c)
 		return wc.Repo().Ls(ctx, se, p, func(ent gotfs.DirEnt) error {
@@ -118,16 +118,16 @@ var catCmd = star.Command{
 			if err != nil {
 				return err
 			}
-			se = &gotcore.SnapExpr_Mark{Name: mname}
+			se = &gotcore.CommitExpr_Mark{Name: mname}
 		}
 		p, _ := pathParam.LoadOpt(c)
 		return wc.Repo().Cat(ctx, se, p, c.StdOut)
 	},
 }
 
-var snapExprOptParam = star.Optional[gotrepo.SnapExpr]{
+var snapExprOptParam = star.Optional[gotrepo.CommitExpr]{
 	ID:       "snap",
-	Parse:    gotcore.ParseSnapExpr,
+	Parse:    gotcore.ParseCommitExpr,
 	ShortDoc: "a snapshot expression",
 }
 

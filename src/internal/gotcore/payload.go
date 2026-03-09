@@ -6,11 +6,12 @@ import (
 	"github.com/gotvc/got/src/internal/sbe"
 )
 
-type Snap = gotvc.Vertex[Payload]
+type Commit = gotvc.Vertex[Payload]
 
-// Payload is the thing being snapshotted.
+// Payload is the thing being committed to.
 type Payload struct {
-	Root gotfs.Root
+	// Snap is the snapshot of the filesystem.
+	Snap gotfs.Root
 	Aux  []byte
 }
 
@@ -23,7 +24,7 @@ func ParsePayload(data []byte) (Payload, error) {
 }
 
 func (p Payload) Marshal(out []byte) []byte {
-	out = p.Root.Marshal(out)
+	out = p.Snap.Marshal(out)
 	out = sbe.AppendLP(out, p.Aux)
 	return out
 }
@@ -37,7 +38,7 @@ func (p *Payload) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	p.Root = *root
+	p.Snap = *root
 	auxData, _, err := sbe.ReadLP(data)
 	if err != nil {
 		return err

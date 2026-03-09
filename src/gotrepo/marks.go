@@ -119,12 +119,12 @@ func (r *Repo) ViewMark(ctx context.Context, fqm FQM, fn func(*gotcore.MarkTx) e
 
 // MarkLoad loads the Snapshot that the mark points to.
 // If the mark is empty then the snapshot will be nil
-func (r *Repo) MarkLoad(ctx context.Context, fqm FQM) (*Snap, error) {
+func (r *Repo) MarkLoad(ctx context.Context, fqm FQM) (*Commit, error) {
 	var exists bool
-	var snap gotcore.Snap
+	var snap gotcore.Commit
 	if err := r.ViewMark(ctx, fqm, func(mt *gotcore.MarkTx) error {
 		var err error
-		exists, err = mt.LoadSnap(ctx, &snap)
+		exists, err = mt.LoadCommit(ctx, &snap)
 		return err
 	}); err != nil {
 		return nil, err
@@ -165,7 +165,7 @@ func (r *Repo) CloneMark(ctx context.Context, base, next FQM) error {
 }
 
 // Modify calls fn to modify the target of a Mark.
-func (r *Repo) Modify(ctx context.Context, fqm FQM, fn func(mc gotcore.ModifyCtx) (*Snap, error)) error {
+func (r *Repo) Modify(ctx context.Context, fqm FQM, fn func(mc gotcore.ModifyCtx) (*Commit, error)) error {
 	space, err := r.GetSpace(ctx, fqm.Space)
 	if err != nil {
 		return err

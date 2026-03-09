@@ -400,7 +400,7 @@ func (wc *WC) viewSnap(ctx context.Context, fn func(*gotcore.ViewCtx) error) err
 	if err != nil {
 		return nil
 	}
-	return wc.repo.ViewSnapshot(ctx, &gotcore.SnapExpr_Mark{Name: mname}, fn)
+	return wc.repo.ViewCommit(ctx, &gotcore.CommitExpr_Mark{Name: mname}, fn)
 }
 
 func (wc *WC) filter(spans []Span) func(p string) bool {

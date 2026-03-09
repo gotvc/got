@@ -112,10 +112,10 @@ type SpaceTx interface {
 	GetTarget(ctx context.Context, name string, dst *gdat.Ref) (bool, error)
 }
 
-// GetSnapshot reads a snapshot from the store.
-func GetSnapshot(ctx context.Context, s stores.Reading, ref gdat.Ref) (*Snap, error) {
+// GetCommit reads a snapshot from the store.
+func GetCommit(ctx context.Context, s stores.Reading, ref gdat.Ref) (*Commit, error) {
 	vcmach := gotvc.NewMachine(ParsePayload, gotvc.Config{})
-	return vcmach.GetSnapshot(ctx, s, ref)
+	return vcmach.GetVertex(ctx, s, ref)
 }
 
 func CreateIfNotExists(ctx context.Context, stx SpaceTx, k string, cfg Metadata) (*Info, error) {

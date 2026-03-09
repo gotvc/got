@@ -19,7 +19,7 @@ func TestMarshalSnapshot(t *testing.T) {
 	gfs := gotfs.NewMachine()
 	root, err := gfs.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
-	tcs := []Snap{
+	tcs := []Commit{
 		{
 			N:         1,
 			CreatedAt: tai64.Now().TAI64(),
@@ -30,7 +30,7 @@ func TestMarshalSnapshot(t *testing.T) {
 			},
 			Creator: inet256.ID{},
 			Payload: Payload{
-				Root: *root,
+				Snap: *root,
 				Aux:  []byte{},
 			},
 		},
@@ -39,7 +39,7 @@ func TestMarshalSnapshot(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			x := tc
 			data := x.Marshal(nil)
-			var y Snap
+			var y Commit
 			require.NoError(t, y.Unmarshal(data, ParsePayload))
 			require.Equal(t, x, y)
 		})

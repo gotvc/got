@@ -94,7 +94,7 @@ func (d *Driver) getRoot(ctx context.Context) (*gotfs.Root, [2]stores.Reading, e
 	if snap == nil {
 		return nil, [2]stores.Reading{}, iofs.ErrNotExist
 	}
-	return &snap.Payload.Root, d.vctx.FSRO(), nil
+	return &snap.Payload.Snap, d.vctx.FSRO(), nil
 }
 
 func newErrReadOnly() error {
