@@ -90,11 +90,11 @@ func (d *Driver) Rename(ctx *ftpserver.Context, oldpath, newpath string) error {
 }
 
 func (d *Driver) getRoot(ctx context.Context) (*gotfs.Root, [2]stores.Reading, error) {
-	snap := d.vctx.Root
-	if snap == nil {
+	comm := d.vctx.Root
+	if comm == nil {
 		return nil, [2]stores.Reading{}, iofs.ErrNotExist
 	}
-	return &snap.Payload.Snap, d.vctx.FSRO(), nil
+	return &comm.Payload.Snap, d.vctx.FSRO(), nil
 }
 
 func newErrReadOnly() error {

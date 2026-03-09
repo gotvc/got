@@ -231,11 +231,11 @@ func (ag *Machine[T]) Squash(ctx context.Context, s stores.RW, x Vertex[T], n in
 	return y, nil
 }
 
-// RefFromVertex computes a ref for snap if it was posted to s.
+// RefFromVertex computes a ref for vert if it was posted to s.
 // It only calls s.Hash and s.MaxSize; it does not mutate s.
-func (ag *Machine[T]) RefFromVertex(snap Vertex[T]) Ref {
+func (ag *Machine[T]) RefFromVertex(vert Vertex[T]) Ref {
 	s2 := stores.NewVoid()
-	ref, err := ag.PostVertex(context.TODO(), s2, snap)
+	ref, err := ag.PostVertex(context.TODO(), s2, vert)
 	if err != nil {
 		panic(err)
 	}
@@ -243,20 +243,20 @@ func (ag *Machine[T]) RefFromVertex(snap Vertex[T]) Ref {
 }
 
 // Check ensures that commit is valid.
-func (a *Machine[T]) Check(ctx context.Context, s stores.Reading, snap Vertex[T], checkRoot func(T) error) error {
-	logctx.Infof(ctx, "checking commit #%d", snap.N)
-	if err := checkRoot(snap.Payload); err != nil {
+func (a *Machine[T]) Check(ctx context.Context, s stores.Reading, vert Vertex[T], checkRoot func(T) error) error {
+	logctx.Infof(ctx, "checking commit #%d", vert.N)
+	if err := checkRoot(vert.Payload); err != nil {
 		return err
 	}
-	if len(snap.Parents) == 0 {
+	if len(vert.Parents) == 0 {
 		return nil
 	}
-	for i := 0; i < len(snap.Parents)-1; i++ {
-		if bytes.Compare(snap.Parents[i].CID[:], snap.Parents[i+1].CID[:]) < 0 {
+	for i := 0; i < len(vert.Parents)-1; i++ {
+		if bytes.Compare(vert.Parents[i].CID[:], vert.Parents[i+1].CID[:]) < 0 {
 			return fmt.Errorf("unsorted parents")
 		}
 	}
-	for _, parentRef := range snap.Parents {
+	for _, parentRef := range vert.Parents {
 		parent, err := a.GetVertex(ctx, s, parentRef)
 		if err != nil {
 			return err

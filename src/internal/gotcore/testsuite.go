@@ -246,12 +246,12 @@ func makeFS(t testing.TB, s stores.RW, files map[string]string) gotfs.Root {
 func makeCommit(t testing.TB, cfg DSConfig, s stores.Writing, parents []Commit, fsroot gotfs.Root) *Commit {
 	ctx := testutil.Context(t)
 	vcmach := gotvc.NewMachine(ParsePayload, gotvc.Config{Salt: cfg.Salt})
-	snap, err := vcmach.NewVertex(ctx, s, gotvc.VertexParams[Payload]{
+	comm, err := vcmach.NewVertex(ctx, s, gotvc.VertexParams[Payload]{
 		Parents: parents,
 		Payload: Payload{
 			Snap: fsroot,
 		},
 	})
 	require.NoError(t, err)
-	return snap
+	return comm
 }

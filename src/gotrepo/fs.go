@@ -26,13 +26,13 @@ func (r *Repo) ViewFS(ctx context.Context, se gotcore.CommitExpr, fn func(fsmach
 		if ref.IsZero() {
 			return fmt.Errorf("no commit found at %v", se)
 		}
-		snap, err := gotcore.GetCommit(ctx, ss[2], *ref)
+		comm, err := gotcore.GetCommit(ctx, ss[2], *ref)
 		if err != nil {
 			return err
 		}
 		fsmach := gotfs.NewMachine()
 		s := st.Stores()
-		return fn(fsmach, s[1], snap.Payload.Snap)
+		return fn(fsmach, s[1], comm.Payload.Snap)
 	})
 }
 

@@ -121,10 +121,10 @@ func (r *Repo) ViewMark(ctx context.Context, fqm FQM, fn func(*gotcore.MarkTx) e
 // If the mark is empty then the commit will be nil
 func (r *Repo) MarkLoad(ctx context.Context, fqm FQM) (*Commit, error) {
 	var exists bool
-	var snap gotcore.Commit
+	var comm gotcore.Commit
 	if err := r.ViewMark(ctx, fqm, func(mt *gotcore.MarkTx) error {
 		var err error
-		exists, err = mt.LoadCommit(ctx, &snap)
+		exists, err = mt.LoadCommit(ctx, &comm)
 		return err
 	}); err != nil {
 		return nil, err
@@ -132,7 +132,7 @@ func (r *Repo) MarkLoad(ctx context.Context, fqm FQM) (*Commit, error) {
 	if !exists {
 		return nil, nil
 	}
-	return &snap, nil
+	return &comm, nil
 }
 
 func (r *Repo) MoveMark(ctx context.Context, spaceName, from, to string) error {
