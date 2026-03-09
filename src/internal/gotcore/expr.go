@@ -17,7 +17,7 @@ import (
 // - By an offset from the result of a previous expression
 type CommitExpr interface {
 	GetSpace() string
-	// Resolve returns a valid Ref, which points to a Snapshot.
+	// Resolve returns a valid Ref, which points to a Commit.
 	Resolve(ctx context.Context, stx SpaceTx) (*gdat.Ref, error)
 	isSnapExpr()
 }
@@ -29,7 +29,7 @@ func ParseCommitExpr(x string) (CommitExpr, error) {
 	if se, err := ParseCommit_Exact(x); err == nil {
 		return se, nil
 	}
-	return nil, fmt.Errorf("could not parse Snapshot expression from %q", x)
+	return nil, fmt.Errorf("could not parse Commit expression from %q", x)
 }
 
 type CommitExpr_Exact struct {

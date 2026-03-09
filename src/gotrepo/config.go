@@ -21,7 +21,7 @@ type Config struct {
 
 	// Identities are named identities, which refer to files in the .got/iden directory
 	Identities map[string]inet256.ID `json:"identities"`
-	// Spaces contain named mutable references to Snapshots
+	// Spaces contain named mutable references (Bookmarks) to Commits
 	// They are most similar to git remotes.
 	Spaces map[string]SpaceSpec `json:"spaces"`
 	Fetch  []FetchConfig        `json:"fetch"`

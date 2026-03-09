@@ -204,7 +204,7 @@ func (mctx *ModifyCtx) Sync(ctx context.Context, srcs [3]stores.Reading, root Co
 	})
 }
 
-func (b *MarkTx) History(ctx context.Context, fn func(ref gdat.Ref, snap Commit) error) error {
+func (b *MarkTx) History(ctx context.Context, fn func(ref gdat.Ref, comm Commit) error) error {
 	b.init()
 	var snap Commit
 	if ok, err := b.LoadCommit(ctx, &snap); err != nil {
@@ -314,12 +314,12 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 	})
 }
 
-func History(ctx context.Context, vcmach *VCMach, s stores.Reading, snapRef gdat.Ref, fn func(ref gdat.Ref, snap Commit) error) error {
-	snap, err := vcmach.GetVertex(ctx, s, snapRef)
+func History(ctx context.Context, vcmach *VCMach, s stores.Reading, commRef gdat.Ref, fn func(ref gdat.Ref, snap Commit) error) error {
+	snap, err := vcmach.GetVertex(ctx, s, commRef)
 	if err != nil {
 		return err
 	}
-	if err := fn(snapRef, *snap); err != nil {
+	if err := fn(commRef, *snap); err != nil {
 		return err
 	}
 	return vcmach.ForEach(ctx, s, snap.Parents, fn)

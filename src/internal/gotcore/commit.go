@@ -1,11 +1,16 @@
 package gotcore
 
 import (
+	"context"
+
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/sbe"
+	"github.com/gotvc/got/src/internal/stores"
 )
 
+// Commit is a commitment to a filesystem snapshot, ancestor Commits, and additional metadata.
 type Commit = gotvc.Vertex[Payload]
 
 // Payload is the thing being committed to.
@@ -45,4 +50,10 @@ func (p *Payload) Unmarshal(data []byte) error {
 	}
 	p.Aux = auxData
 	return nil
+}
+
+// GetCommit reads a snapshot from the store.
+func GetCommit(ctx context.Context, s stores.Reading, ref gdat.Ref) (*Commit, error) {
+	vcmach := gotvc.NewMachine(ParsePayload, gotvc.Config{})
+	return vcmach.GetVertex(ctx, s, ref)
 }

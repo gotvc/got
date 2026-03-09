@@ -13,7 +13,7 @@ import (
 	"go.inet256.org/inet256/src/inet256"
 )
 
-func TestMarshalSnapshot(t *testing.T) {
+func TestMarshalCommit(t *testing.T) {
 	ctx := testutil.Context(t)
 	s := stores.NewMem()
 	gfs := gotfs.NewMachine()

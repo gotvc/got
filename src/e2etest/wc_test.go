@@ -14,46 +14,46 @@ import (
 func TestCheckout(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
-		// PrevSnap is committed to a mark called "prev"
-		PrevSnap map[string]string
-		// NextSnap is committed to a mark called "next"
-		NextSnap map[string]string
+		// PrevCommit is committed to a mark called "prev"
+		PrevCommit map[string]string
+		// NextCommit is committed to a mark called "next"
+		NextCommit map[string]string
 		// InFS (if not-nil) is what will be in the filesystem
 		// When checkout is called to go from prev -> next
-		// If InFS is nil, then PrevSnap is left unchanged before the call to checkout.
+		// If InFS is nil, then PrevCommit is left unchanged before the call to checkout.
 		InFS map[string]string
-		// Err is the expected err returned from checking out NextSnap
-		// when PrevSnap is checkout out currently
+		// Err is the expected err returned from checking out NextCommit
+		// when PrevCommit is checkout out currently
 		Err error
 	}
 	tcs := []testCase{
 		{
-			PrevSnap: map[string]string{
+			PrevCommit: map[string]string{
 				"a.txt": "file data a",
 			},
-			NextSnap: map[string]string{
+			NextCommit: map[string]string{
 				"a.txt": "file data a 2",
 				"b.txt": "file data a 2",
 			},
 		},
 		{
-			PrevSnap: map[string]string{
+			PrevCommit: map[string]string{
 				"a.txt": "file data a",
 				"b.txt": "file data b",
 				"c.txt": "file data c",
 			},
-			NextSnap: map[string]string{
+			NextCommit: map[string]string{
 				"a.txt": "file data a 2",
 				"c.txt": "file data c 2",
 			},
 		},
 		{
-			PrevSnap: map[string]string{
+			PrevCommit: map[string]string{
 				"a.txt": "file data a",
 				"b.txt": "file data b",
 				"c.txt": "file data c",
 			},
-			NextSnap: map[string]string{
+			NextCommit: map[string]string{
 				"a.txt": "file data a 2",
 				"c.txt": "file data c 2",
 			},
@@ -72,23 +72,23 @@ func TestCheckout(t *testing.T) {
 			// Commit some files to next
 			site.CreateMark(gotrepo.FQM{Name: "next"})
 			site.SetHead("next")
-			site.WriteFSMap(tc.NextSnap)
+			site.WriteFSMap(tc.NextCommit)
 			site.Put("")
 			site.Commit(gotwc.CommitParams{})
 			// clean them up
-			for p := range tc.NextSnap {
+			for p := range tc.NextCommit {
 				site.DeleteFile(p)
 			}
 
 			// Commit some different files to prev
 			site.CreateMark(gotrepo.FQM{Name: "prev"})
 			site.SetHead("prev")
-			site.WriteFSMap(tc.PrevSnap)
+			site.WriteFSMap(tc.PrevCommit)
 			site.Put("")
 			site.Commit(gotwc.CommitParams{})
 
 			if tc.InFS != nil {
-				for p := range tc.PrevSnap {
+				for p := range tc.PrevCommit {
 					if _, exists := tc.InFS[p]; !exists {
 						site.DeleteFile(p)
 					}
@@ -102,7 +102,7 @@ func TestCheckout(t *testing.T) {
 			if tc.Err == nil {
 				assert.NoError(t, err)
 				// Check that the checkout was successful
-				site.AssertFSEquals(tc.NextSnap)
+				site.AssertFSEquals(tc.NextCommit)
 			} else {
 				assert.ErrorIs(t, err, tc.Err)
 				// Check that the checkout did not happen.
@@ -116,7 +116,7 @@ func TestCheckout(t *testing.T) {
 func TestExport(t *testing.T) {
 	t.Parallel()
 	type testCase struct {
-		// InSnap is the data which will be the Snapshot to be exported.
+		// InSnap is the data which will be the Commit to be exported.
 		InSnap map[string]string
 		// InFS is the data which will be in the filesystem at the time Export is called.
 		InFS map[string]string

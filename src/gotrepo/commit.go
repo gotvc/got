@@ -11,7 +11,7 @@ import (
 
 type CommitExpr = gotcore.CommitExpr
 
-// ViewCommit calls fn to view a Snapshot in read-only mode
+// ViewCommit calls fn to view a Commit with a read-only transaction on the space.
 func (r *Repo) ViewCommit(ctx context.Context, se CommitExpr, fn func(*gotcore.ViewCtx) error) error {
 	space, err := r.GetSpace(ctx, se.GetSpace())
 	if err != nil {

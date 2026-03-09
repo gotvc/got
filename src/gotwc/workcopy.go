@@ -263,7 +263,7 @@ func (wc *WC) StageIsEmpty(ctx context.Context) (bool, error) {
 	return true, nil
 }
 
-// Export overwrites data in the filesystem with data from the Snapshot at HEAD.
+// Export overwrites data in the filesystem with data from the Commit at HEAD.
 // Only tracked paths are overwritten.
 func (wc *WC) Export(ctx context.Context) error {
 	if emptyStage, err := wc.StageIsEmpty(ctx); err != nil {
