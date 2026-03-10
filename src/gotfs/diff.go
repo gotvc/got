@@ -5,78 +5,86 @@ import (
 
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
+	"go.brendoncarroll.net/exp/maybe"
 	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/stdctx/logctx"
-	"go.uber.org/zap"
 )
 
+// DiffEntry is a single element of the difference between 2 filesystems.
+type DiffEntry struct {
+	Key Key
+
+	Left  maybe.Maybe[Value]
+	Right maybe.Maybe[Value]
+}
+
+// Differ iterates over the difference between 2 filesystems.
 type Differ struct {
-	diff *gotkv.Differ
+	kvdiff *gotkv.Differ
 
 	dent gotkv.DEntry
 }
 
 func (mach *Machine) NewDiffer(ms stores.Reading, left, right Root) *Differ {
+	span := gotkv.TotalSpan()
 	return &Differ{
-		diff: mach.gotkv.NewDiffer(ms, left.ToGotKV(), right.ToGotKV(), gotkv.TotalSpan()),
+		kvdiff: mach.gotkv.NewDiffer(ms, left.ToGotKV(), right.ToGotKV(), span),
 	}
 }
 
-func (d *Differ) Next(ctx context.Context, dsts []DeltaEntry) (int, error) {
+func (d *Differ) Next(ctx context.Context, dsts []DiffEntry) (int, error) {
 	dst := &dsts[0]
-	*dst = DeltaEntry{}
+	dst.Left.Ok = false
+	dst.Right.Ok = false
+	if err := streams.NextUnit(ctx, d.kvdiff, &d.dent); err != nil {
+		return 0, err
+	}
+	if err := dst.Key.Unmarshal(d.dent.Key); err != nil {
+		return 0, err
+	}
+	if d.dent.Left.Ok {
+		if err := dst.Left.X.unmarshal(dst.Key.IsInfo(), d.dent.Left.X); err != nil {
+			return 0, err
+		}
+		dst.Left.Ok = true
+	}
+	if d.dent.Right.Ok {
+		if err := dst.Right.X.unmarshal(dst.Key.IsInfo(), d.dent.Right.X); err != nil {
+			return 0, err
+		}
+		dst.Right.Ok = true
+	}
+	return 1, nil
+}
+
+type InfoDiff struct {
+	Path  string
+	Left  maybe.Maybe[Info]
+	Right maybe.Maybe[Info]
+}
+
+type InfoDiffer struct {
+	inner *Differ
+}
+
+func (it *InfoDiffer) Next(ctx context.Context, dst []InfoDiff) (int, error) {
 	for {
-		if err := streams.NextUnit(ctx, d.diff, &d.dent); err != nil {
+		de, err := streams.Next(ctx, it.inner)
+		if err != nil {
 			return 0, err
 		}
-		var key Key
-		if err := key.Unmarshal(d.dent.Key); err != nil {
-			return 0, err
+		if !de.Key.IsInfo() {
+			continue
 		}
-		// delete info
-		if key.IsInfo() {
-			dst.Path = key.Path()
-			if !d.dent.Right.Ok {
-				dst.Delete = &struct{}{}
-			} else {
-				info, err := parseInfo(d.dent.Right.X)
-				if err != nil {
-					return 0, err
-				}
-				dst.PutInfo = info
-			}
-			d.seekPast(ctx, key.Path())
-			return 1, nil
-		} else {
-			if err := unmarshalExtentKey(d.dent.Key, &key); err != nil {
-				return 0, err
-			}
-			p := key.Path()
-			endAt := key.EndAt()
-			if dst.Path == "" {
-				dst.Path = p
-				dst.PutContent = &PutContent{Begin: endAt}
-			} else if dst.Path != p {
-				return 1, nil
-			}
-			dst.PutContent.End = endAt
-			if d.dent.Right.Ok {
-				ext, err := parseExtent(d.dent.Right.X)
-				if err != nil {
-					return 0, err
-				}
-				dst.PutContent.Begin = min(dst.PutContent.Begin, endAt-uint64(ext.Length))
-				dst.PutContent.Extents = append(dst.PutContent.Extents, *ext)
-			} else if endAt == dst.PutContent.Begin {
-				endAt = 0
-			}
-		}
+		mf := func(x Value) Info { return x.Info }
+		dst[0].Path = de.Key.Path()
+		dst[0].Left = maybe.Map(de.Left, mf)
+		dst[0].Right = maybe.Map(de.Right, mf)
+		return 1, nil
 	}
 }
 
-func (d *Differ) seekPast(ctx context.Context, p string) {
-	prefix := newInfoKey(p).Prefix(nil)
-	if err := d.diff.Seek(ctx, gotkv.PrefixEnd(prefix)); err != nil && !streams.IsEOS(err) {
-		logctx.Error(ctx, "seeking", zap.Error(err))
+func (mach *Machine) NewInfoDiffer(s stores.Reading, left, right Root) InfoDiffer {
+	return InfoDiffer{
+		inner: mach.NewDiffer(s, left, right),
 	}
 }

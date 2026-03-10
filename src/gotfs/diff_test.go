@@ -8,19 +8,25 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
+	"go.brendoncarroll.net/exp/maybe"
 	"go.brendoncarroll.net/exp/streams"
 	"golang.org/x/exp/maps"
 	"golang.org/x/exp/slices"
 )
 
-func TestDiffer(t *testing.T) {
+type (
+	MemFS   = testutil.MemFS
+	MemFile = testutil.MemFile
+)
+
+func TestInfoDiffer(t *testing.T) {
 	ctx := testutil.Context(t)
 	ag := NewMachine()
 
 	tcs := []struct {
-		Left     memFS
-		Right    memFS
-		Expected []DeltaEntry
+		Left     MemFS
+		Right    MemFS
+		Expected []InfoDiff
 	}{
 		{
 			Left:     nil,
@@ -28,19 +34,19 @@ func TestDiffer(t *testing.T) {
 			Expected: nil,
 		},
 		{
-			Left: map[string]memFile{
+			Left: map[string]MemFile{
 				"a.txt": {Mode: 0o644},
 			},
-			Expected: []DeltaEntry{
-				{Path: "a.txt", Delete: &struct{}{}},
+			Expected: []InfoDiff{
+				{Path: "a.txt", Left: maybe.Just(Info{Mode: 0o644})},
 			},
 		},
 		{
-			Right: map[string]memFile{
+			Right: map[string]MemFile{
 				"a.txt": {Mode: 0o644},
 			},
-			Expected: []DeltaEntry{
-				{Path: "a.txt", PutInfo: &Info{Mode: 0o644}},
+			Expected: []InfoDiff{
+				{Path: "a.txt", Right: maybe.Just(Info{Mode: 0o644})},
 			},
 		},
 	}
@@ -53,25 +59,18 @@ func TestDiffer(t *testing.T) {
 			rb := ag.NewBuilder(ctx, s, s)
 			right := buildFS(t, rb, tc.Right)
 
-			d := ag.NewDiffer(s, left, right)
-			actual, err := streams.Collect[DeltaEntry](ctx, d, 100)
+			d := ag.NewInfoDiffer(s, left, right)
+			actual, err := streams.Collect[InfoDiff](ctx, &d, 100)
 			require.NoError(t, err)
 			require.Equal(t, len(tc.Expected), len(actual))
 			for i := range tc.Expected {
-				requireEqualDeltas(t, tc.Expected[i], actual[i])
+				require.Equal(t, tc.Expected[i].Path, actual[i].Path)
 			}
 		})
 	}
 }
 
-type memFile struct {
-	Mode uint32
-	Data []byte
-}
-
-type memFS = map[string]memFile
-
-func buildFS(t testing.TB, b *Builder, m memFS) Root {
+func buildFS(t testing.TB, b *Builder, m testutil.MemFS) Root {
 	ks := maps.Keys(m)
 	slices.Sort(ks)
 
