@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
@@ -39,9 +38,4 @@ func Dump(ctx context.Context, s stores.Reading, root Root, w io.Writer) error {
 		}
 	}
 	return bw.Flush()
-}
-
-// Equal returns true if a and b contain equivalent data.
-func Equal(a, b Root) bool {
-	return gdat.Equal(a.Ref, b.Ref) && a.Depth == b.Depth
 }

@@ -67,6 +67,11 @@ func (r Root) Segment() Segment {
 	}
 }
 
+// Equal returns true if a and b contain equivalent data.
+func Equal(a, b Root) bool {
+	return gdat.Equal(a.Ref, b.Ref) && a.Depth == b.Depth
+}
+
 func newRoot(x gotkv.Root) *Root {
 	if x.Equal(gotkv.Root{}) {
 		return nil
