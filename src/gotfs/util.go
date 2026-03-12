@@ -11,10 +11,10 @@ import (
 	"go.brendoncarroll.net/exp/streams"
 )
 
-func Dump(ctx context.Context, s stores.Reading, root Root, w io.Writer) error {
+func Dump(ctx context.Context, ms stores.Reading, root Root, w io.Writer) error {
 	bw := bufio.NewWriter(w)
 	ag := NewMachine()
-	it := ag.gotkv.NewIterator(s, root.toGotKV(), gotkv.TotalSpan())
+	it := ag.gotkv.NewIterator(ms, root.toGotKV(), gotkv.TotalSpan())
 	var ent gotkv.Entry
 	for err := streams.NextUnit(ctx, it, &ent); !streams.IsEOS(err); err = streams.NextUnit(ctx, it, &ent) {
 		if err != nil {

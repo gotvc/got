@@ -30,11 +30,12 @@ func NewExporter(gotfs *gotfs.Machine, db *DB, fsx posixfs.FS, filter func(p str
 }
 
 // ExportPaths checks what is at p in root, and then exports the directory or file to the filesystem.
-func (pr *Exporter) ExportPath(ctx context.Context, ms, ds stores.Reading, root gotfs.Root, p string) error {
-	gfinfo, err := pr.gotfs.GetInfo(ctx, ms, root, p)
+func (pr *Exporter) ExportPath(ctx context.Context, ss gotfs.RO, root gotfs.Root, p string) error {
+	gfinfo, err := pr.gotfs.GetInfo(ctx, ss.Metadata, root, p)
 	if err != nil {
 		return err
 	}
+	ms, ds := ss.Metadata, ss.Data
 	if gfinfo.Mode.IsDir() {
 		return pr.exportDir(ctx, ms, ds, root, p, gfinfo)
 	} else {
@@ -54,7 +55,8 @@ func (pr *Exporter) ExportFile(ctx context.Context, ms, ds stores.Reading, root 
 	return pr.exportFile(ctx, ms, ds, root, p, md)
 }
 
-func (pr *Exporter) Clobber(ctx context.Context, ms, ds stores.Reading, root gotfs.Root, p string) error {
+func (pr *Exporter) Clobber(ctx context.Context, ss gotfs.RO, root gotfs.Root, p string) error {
+	ms := ss.Metadata
 	md, err := pr.gotfs.GetInfo(ctx, ms, root, p)
 	if err != nil {
 		return err
@@ -62,7 +64,7 @@ func (pr *Exporter) Clobber(ctx context.Context, ms, ds stores.Reading, root got
 	if !md.Mode.IsRegular() {
 		return fmt.Errorf("clobber can only be called on a single regular file")
 	}
-	r, err := pr.gotfs.NewReader(ctx, [2]stores.Reading{ds, ms}, root, p)
+	r, err := pr.gotfs.NewReader(ctx, ss, root, p)
 	if err != nil {
 		return err
 	}
@@ -127,7 +129,7 @@ func (pr *Exporter) exportDir(ctx context.Context, ms, ds stores.Reading, root g
 	}
 	// list all the entries that should exist, and recursively call ExportPath
 	if err := pr.gotfs.ReadDir(ctx, ms, root, p, func(e gotfs.DirEnt) error {
-		return pr.ExportPath(ctx, ms, ds, root, e.Name)
+		return pr.ExportPath(ctx, gotfs.RO{Metadata: ms, Data: ds}, root, e.Name)
 	}); err != nil {
 		return err
 	}
@@ -176,7 +178,7 @@ func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.Reading, root 
 	if err != nil {
 		return err
 	}
-	r, err := pr.gotfs.NewReader(ctx, [2]stores.Reading{ds, ms}, root, p)
+	r, err := pr.gotfs.NewReader(ctx, gotfs.RO{ds, ms}, root, p)
 	if err != nil {
 		return err
 	}

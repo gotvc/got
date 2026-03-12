@@ -181,6 +181,7 @@ func TestExport(t *testing.T) {
 			conn, paramHash := newTestDB(t, ctx, cfg)
 			mach := gotcore.GotFS(cfg)
 			s := stores.NewMem()
+			ss := gotfs.RO{s, s}
 			db := NewDB(conn, paramHash)
 
 			for _, info := range tt.InDB {
@@ -189,7 +190,7 @@ func TestExport(t *testing.T) {
 			root := makeGotFS(t, mach, s, tt.InGot)
 
 			exp := NewExporter(mach, db, fsys, func(string) bool { return true })
-			err := exp.ExportPath(ctx, s, s, root, tt.ExportPath)
+			err := exp.ExportPath(ctx, ss, root, tt.ExportPath)
 			if tt.Err == nil {
 				require.NoError(t, err)
 				return

@@ -10,22 +10,22 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotvc/got/src/internal/stores"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestCreateFileFrom(t *testing.T) {
 	ctx, ag, s := setup(t)
+	ss := RW{s, s}
 	x, err := ag.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
 	require.NotNil(t, x)
 	fileData := "file contents\n"
-	x, err = ag.CreateFile(ctx, RW{s, s}, *x, "file.txt", strings.NewReader(fileData))
+	x, err = ag.CreateFile(ctx, ss, *x, "file.txt", strings.NewReader(fileData))
 	require.NoError(t, err)
 	require.NotNil(t, x)
 	buf := make([]byte, 128)
-	n, err := ag.ReadFileAt(ctx, [2]stores.Reading{s, s}, *x, "file.txt", 0, buf)
+	n, err := ag.ReadFileAt(ctx, ss.RO(), *x, "file.txt", 0, buf)
 	require.NoError(t, err)
 	require.Equal(t, fileData, string(buf[:n]))
 }
@@ -79,7 +79,7 @@ func TestLargeFiles(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, uint64(size), actualSize)
 		eg.Go(func() error {
-			r, err := ag.NewReader(ctx, [2]stores.Reading{s, s}, *root, p)
+			r, err := ag.NewReader(ctx, RO{s, s}, *root, p)
 			require.NoError(t, err)
 			n, err := io.Copy(io.Discard, r)
 			if err != nil {

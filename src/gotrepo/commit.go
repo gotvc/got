@@ -24,18 +24,18 @@ func (r *Repo) ViewCommit(ctx context.Context, se CommitExpr, fn func(*gotcore.V
 
 func (r *Repo) History(ctx context.Context, se CommitExpr, fn func(ref Ref, s Commit) error) error {
 	return r.ViewCommit(ctx, se, func(vctx *gotcore.ViewCtx) error {
-		return gotcore.History(ctx, vctx.VC, vctx.Stores[2], vctx.Target, fn)
+		return gotcore.History(ctx, vctx.VC, vctx.Stores.VC, vctx.Target, fn)
 	})
 }
 
 func (r *Repo) DebugFS(ctx context.Context, se gotcore.CommitExpr, w io.Writer) error {
 	return r.ViewCommit(ctx, se, func(vctx *gotcore.ViewCtx) error {
-		return gotfs.Dump(ctx, vctx.Stores[1], vctx.Root.Payload.Snap, w)
+		return gotfs.Dump(ctx, vctx.Stores.FS.Metadata, vctx.Root.Payload.Snap, w)
 	})
 }
 
 func (r *Repo) DebugKV(ctx context.Context, se gotcore.CommitExpr, w io.Writer) error {
 	return r.ViewCommit(ctx, se, func(vctx *gotcore.ViewCtx) error {
-		return gotkv.DebugTree(ctx, vctx.Stores[1], vctx.Root.Payload.Snap.ToGotKV(), w)
+		return gotkv.DebugTree(ctx, vctx.Stores.FS.Metadata, vctx.Root.Payload.Snap.ToGotKV(), w)
 	})
 }

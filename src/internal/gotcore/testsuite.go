@@ -155,7 +155,7 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 						}
 						if err := mtx.Modify(ctx, func(mctx ModifyCtx) (*Commit, error) {
 							if v != nil {
-								srcStores := [3]stores.Reading{tc.Store, tc.Store, tc.Store}
+								srcStores := RO{FS: gotfs.RO{tc.Store, tc.Store}, VC: tc.Store}
 								if err := mctx.Sync(ctx, srcStores, *v); err != nil {
 									return nil, err
 								}

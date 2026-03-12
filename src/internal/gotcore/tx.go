@@ -60,49 +60,38 @@ func (m *MarkTx) Config() DSConfig {
 	return m.info.Config
 }
 
-func (mtx *MarkTx) FSRO() [2]stores.Reading {
-	ss := mtx.RO()
-	return [2]stores.Reading{ss[0], ss[1]}
+func (mtx *MarkTx) FSRO() gotfs.RO {
+	return mtx.RO().FS
 }
 
-func (mtx *MarkTx) FSRW() [2]stores.RW {
+func (mtx *MarkTx) FSRW() gotfs.RW {
 	ss := mtx.stx.Stores()
-	return [2]stores.RW{ss[0], ss[1]}
+	return ss.FS
 }
 
 func (mtx *MarkTx) VCRO() stores.Reading {
 	ss := mtx.RO()
-	return ss[2]
+	return ss.VC
 }
 
 func (mtx *MarkTx) VCRW() stores.RW {
 	ss := mtx.stx.Stores()
-	return ss[2]
+	return ss.VC
 }
 
-func (mtx *MarkTx) RO() [3]stores.Reading {
-	ss := mtx.stx.Stores()
-	return [3]stores.Reading{
-		ss[0],
-		ss[1],
-		ss[2],
-	}
+func (mtx *MarkTx) RO() RO {
+	return mtx.stx.Stores().RO()
 }
 
-func (mtx *MarkTx) WO() [3]stores.Writing {
-	ss := mtx.stx.Stores()
-	return [3]stores.Writing{
-		ss[0],
-		ss[1],
-		ss[2],
-	}
+func (mtx *MarkTx) WO() WO {
+	return mtx.stx.Stores().WO()
 }
 
 // Save saves the commit to the Mark
 func (m *MarkTx) Save(ctx context.Context, ref gdat.Ref) error {
 	ss := m.stx.Stores()
 	if !ref.IsZero() {
-		if exists, err := stores.ExistsUnit(ctx, ss[2], ref.CID); err != nil {
+		if exists, err := stores.ExistsUnit(ctx, ss.VC, ref.CID); err != nil {
 			return err
 		} else if !exists {
 			return ErrRefIntegrity{Ref: ref, Store: "gotvc"}
@@ -134,7 +123,7 @@ func (mt *MarkTx) LoadCommit(ctx context.Context, dst *Commit) (bool, error) {
 
 // Apply calls fn with the Marks target Ref
 // If the mark does not yet have a target, then the ref will be 0.
-func (m *MarkTx) Apply(ctx context.Context, fn func([3]stores.RW, gdat.Ref) (gdat.Ref, error)) error {
+func (m *MarkTx) Apply(ctx context.Context, fn func(RW, gdat.Ref) (gdat.Ref, error)) error {
 	var yRef gdat.Ref
 	var xRef gdat.Ref
 	if _, err := m.Load(ctx, &xRef); err != nil {
@@ -155,7 +144,7 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Commit, e
 	if ok, err := m.stx.GetTarget(ctx, m.name, &target); err != nil {
 		return err
 	} else if ok {
-		comm, err = m.GotVC().GetVertex(ctx, ss[2], target)
+		comm, err = m.GotVC().GetVertex(ctx, ss.VC, target)
 		if err != nil {
 			return err
 		}
@@ -189,16 +178,16 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Commit, e
 type ModifyCtx struct {
 	VC     *VCMach
 	FS     *FSMach
-	Stores [3]stores.RW
+	Stores RW
 	Root   *Commit
 }
 
 // Sync syncs a commit into the store
-func (mctx *ModifyCtx) Sync(ctx context.Context, srcs [3]stores.Reading, root Commit) error {
-	return mctx.VC.Sync(ctx, srcs[2], mctx.Stores[2], root, func(payload Payload) error {
+func (mctx *ModifyCtx) Sync(ctx context.Context, srcs RO, root Commit) error {
+	return mctx.VC.Sync(ctx, srcs.VC, mctx.Stores.VC, root, func(payload Payload) error {
 		return mctx.FS.Sync(ctx,
-			gotfs.RO{srcs[0], srcs[1]},
-			gotfs.WO{mctx.Stores[0], mctx.Stores[1]},
+			srcs.FS,
+			mctx.Stores.FS.WO(),
 			payload.Snap,
 		)
 	})
@@ -234,13 +223,13 @@ func (b *MarkTx) LoadFS(ctx context.Context, dst *gotfs.Root) (bool, error) {
 type ViewCtx struct {
 	VC     *VCMach
 	FS     *FSMach
-	Stores [3]stores.Reading
+	Stores RO
 	Target gdat.Ref
 	Root   *Commit
 }
 
-func (vc *ViewCtx) FSRO() [2]stores.Reading {
-	return [2]stores.Reading{vc.Stores[0], vc.Stores[1]}
+func (vc *ViewCtx) FSRO() gotfs.RO {
+	return vc.Stores.FS
 }
 
 // ViewCommit calls fn with everything needed to read a Commitshot, its filesystem, and its ancestry.
@@ -253,14 +242,14 @@ func ViewCommit(ctx context.Context, stx SpaceTx, se CommitExpr, fn func(vctx *V
 	cfg := DefaultConfig(false)
 	fsmach := newGotFS(&cfg)
 	vcmach := newGotVC(&cfg)
-	comm, err := vcmach.GetVertex(ctx, ss[2], *ref)
+	comm, err := vcmach.GetVertex(ctx, ss.VC, *ref)
 	if err != nil {
 		return err
 	}
 	vctx := ViewCtx{
 		VC:     vcmach,
 		FS:     fsmach,
-		Stores: [3]stores.Reading{ss[0], ss[1], ss[2]},
+		Stores: ss.RO(),
 		Target: *ref,
 		Root:   comm,
 	}
@@ -272,7 +261,7 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 	if !force && src.info.Config.Salt != dst.info.Config.Salt {
 		return fmt.Errorf("cannot sync volumes with different salts, must use force=true")
 	}
-	return dst.Apply(ctx, func(dsts [3]stores.RW, x gdat.Ref) (gdat.Ref, error) {
+	return dst.Apply(ctx, func(dsts RW, x gdat.Ref) (gdat.Ref, error) {
 		var goal *Commit
 		var goalRef gdat.Ref
 		if ok, err := src.Load(ctx, &goalRef); err != nil {
@@ -327,19 +316,19 @@ func History(ctx context.Context, vcmach *VCMach, s stores.Reading, commRef gdat
 
 // syncCommitRef ensures that all content reachable from Ref is in the dst store.
 // blobs are copied from the source store as needed.
-func syncCommitRef(ctx context.Context, vcmach *VCMach, fsmach *gotfs.Machine, src [3]stores.Reading, dst [3]stores.Writing, ref gdat.Ref) (_ gdat.Ref, err error) {
+func syncCommitRef(ctx context.Context, vcmach *VCMach, fsmach *gotfs.Machine, src RO, dst WO, ref gdat.Ref) (_ gdat.Ref, err error) {
 	ctx, cf := metrics.Child(ctx, "syncing gotvc")
 	defer cf()
-	comm, err := vcmach.GetVertex(ctx, src[2], ref)
+	comm, err := vcmach.GetVertex(ctx, src.VC, ref)
 	if err != nil {
 		return gdat.Ref{}, err
 	}
-	if err := vcmach.Sync(ctx, src[2], dst[2], *comm, func(payload Payload) error {
-		return fsmach.Sync(ctx, gotfs.RO{src[0], src[1]}, gotfs.WO{dst[0], dst[1]}, payload.Snap)
+	if err := vcmach.Sync(ctx, src.VC, dst.VC, *comm, func(payload Payload) error {
+		return fsmach.Sync(ctx, src.FS, dst.FS, payload.Snap)
 	}); err != nil {
 		return gdat.Ref{}, err
 	}
-	return vcmach.PostVertex(ctx, dst[2], *comm)
+	return vcmach.PostVertex(ctx, dst.VC, *comm)
 }
 
 // NewGotFS creates a new gotfs.Machine suitable for writing to the mark

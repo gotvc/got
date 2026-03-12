@@ -5,9 +5,9 @@ import (
 	"iter"
 
 	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/gotcore"
-	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/tai64"
 )
@@ -130,11 +130,10 @@ func (s *SpaceTx) SetMetadata(ctx context.Context, name string, md gotcore.Metad
 	return s.tx.Put(ctx, name, *mstate)
 }
 
-func (s *SpaceTx) Stores() [3]stores.RW {
-	return [3]stores.RW{
-		s.tx.tx,
-		s.tx.tx,
-		s.tx.tx,
+func (s *SpaceTx) Stores() gotcore.RW {
+	return gotcore.RW{
+		VC: s.tx.tx,
+		FS: gotfs.RW{s.tx.tx, s.tx.tx},
 	}
 }
 
