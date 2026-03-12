@@ -74,6 +74,48 @@ func (m *Machine[T]) Sync(ctx context.Context, src stores.Reading, dst stores.Wr
 	return sync(vert)
 }
 
+// Map traverses the entire history DAG rooted at x, applies fn to each Vertex's Payload,
+// and returns a new Vertex with updated parent refs pointing to the transformed parents.
+func (mach *Machine[T]) Map(ctx context.Context, s stores.RW, x Vertex[T], fn func(T) (T, error)) (Vertex[T], error) {
+	cache := map[Ref]Ref{}
+	return mach.mapVertex(ctx, s, x, fn, cache)
+}
+
+func (mach *Machine[T]) mapVertex(ctx context.Context, s stores.RW, x Vertex[T], fn func(T) (T, error), cache map[Ref]Ref) (Vertex[T], error) {
+	newParents := make([]Ref, len(x.Parents))
+	for i, parentRef := range x.Parents {
+		if mapped, ok := cache[parentRef]; ok {
+			newParents[i] = mapped
+			continue
+		}
+		parent, err := mach.GetVertex(ctx, s, parentRef)
+		if err != nil {
+			return Vertex[T]{}, err
+		}
+		mappedParent, err := mach.mapVertex(ctx, s, *parent, fn, cache)
+		if err != nil {
+			return Vertex[T]{}, err
+		}
+		mappedRef, err := mach.PostVertex(ctx, s, mappedParent)
+		if err != nil {
+			return Vertex[T]{}, err
+		}
+		cache[parentRef] = mappedRef
+		newParents[i] = mappedRef
+	}
+	newPayload, err := fn(x.Payload)
+	if err != nil {
+		return Vertex[T]{}, err
+	}
+	return Vertex[T]{
+		N:         x.N,
+		CreatedAt: x.CreatedAt,
+		Parents:   newParents,
+		Creator:   x.Creator,
+		Payload:   newPayload,
+	}, nil
+}
+
 // Populate adds all the blobcache.CIDs reachable from start to set.
 // This will not include the CID for start itself, which has not yet been computed.
 func (mach *Machine[T]) Populate(ctx context.Context, s stores.Reading, start Vertex[T], set stores.Set, rootFn func(T) error) error {
