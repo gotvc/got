@@ -3,6 +3,7 @@ package gotfsfix
 import (
 	"context"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/gotvc/got/src/gotfs"
@@ -31,6 +32,9 @@ func FixDirs(ctx context.Context, fsmach *gotfs.Machine, ms stores.RW, root gotf
 			if err := ensureParents(ctx, &dirstack, b, p); err != nil {
 				return nil, err
 			}
+			if ent.Info.Mode.IsDir() {
+				dirstack = append(dirstack, path.Base(p))
+			}
 		}
 		if err := writeEntry(ctx, b, ent); err != nil {
 			return nil, err
@@ -42,7 +46,7 @@ func FixDirs(ctx context.Context, fsmach *gotfs.Machine, ms stores.RW, root gotf
 func writeEntry(ctx context.Context, b *gotkv.Builder, ent gotfs.Entry) error {
 	var value []byte
 	if ent.Key.IsInfo() {
-		value = ent.Key.Marshal(value)
+		value = ent.Info.Marshal(value)
 	} else {
 		value, _ = ent.Value.Extent.MarshalBinary()
 	}
@@ -86,20 +90,9 @@ func ensureParents(ctx context.Context, dirstack *[]string, b *gotkv.Builder, p 
 
 func putDirInfo(ctx context.Context, b *gotkv.Builder, p string) error {
 	info := gotfs.Info{Mode: 0o755 | os.ModeDir}
-	return b.Put(ctx, marshalInfoKey(p), info.Marshal(nil))
-}
-
-// marshalInfoKey produces the binary key for an info entry at path p.
-func marshalInfoKey(p string) []byte {
-	// Key format: \x00 + path with '/' replaced by \x00 + \x00 + 8 zero bytes (uint64 big-endian 0)
-	// For root path "", it is: \x00 + \x00 + 8 zero bytes
-	nullPath := strings.ReplaceAll(p, "/", "\x00")
-	var out []byte
-	if len(nullPath) > 0 {
-		out = append(out, 0)
-		out = append(out, nullPath...)
+	key, err := gotfs.NewInfoKey(p)
+	if err != nil {
+		return err
 	}
-	out = append(out, 0)
-	out = append(out, 0, 0, 0, 0, 0, 0, 0, 0) // uint64(0) big-endian
-	return out
+	return b.Put(ctx, key.Marshal(nil), info.Marshal(nil))
 }
