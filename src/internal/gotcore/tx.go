@@ -197,8 +197,8 @@ type ModifyCtx struct {
 func (mctx *ModifyCtx) Sync(ctx context.Context, srcs [3]stores.Reading, root Commit) error {
 	return mctx.VC.Sync(ctx, srcs[2], mctx.Stores[2], root, func(payload Payload) error {
 		return mctx.FS.Sync(ctx,
-			[2]stores.Reading{srcs[0], srcs[1]},
-			[2]stores.Writing{mctx.Stores[0], mctx.Stores[1]},
+			gotfs.RO{srcs[0], srcs[1]},
+			gotfs.WO{mctx.Stores[0], mctx.Stores[1]},
 			payload.Snap,
 		)
 	})
@@ -335,7 +335,7 @@ func syncCommitRef(ctx context.Context, vcmach *VCMach, fsmach *gotfs.Machine, s
 		return gdat.Ref{}, err
 	}
 	if err := vcmach.Sync(ctx, src[2], dst[2], *comm, func(payload Payload) error {
-		return fsmach.Sync(ctx, [2]stores.Reading{src[0], src[1]}, [2]stores.Writing{dst[0], dst[1]}, payload.Snap)
+		return fsmach.Sync(ctx, gotfs.RO{src[0], src[1]}, gotfs.WO{dst[0], dst[1]}, payload.Snap)
 	}); err != nil {
 		return gdat.Ref{}, err
 	}

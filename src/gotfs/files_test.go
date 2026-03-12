@@ -21,7 +21,7 @@ func TestCreateFileFrom(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, x)
 	fileData := "file contents\n"
-	x, err = ag.CreateFile(ctx, [2]stores.RW{s, s}, *x, "file.txt", strings.NewReader(fileData))
+	x, err = ag.CreateFile(ctx, RW{s, s}, *x, "file.txt", strings.NewReader(fileData))
 	require.NoError(t, err)
 	require.NotNil(t, x)
 	buf := make([]byte, 128)
@@ -35,7 +35,7 @@ func TestFileInfo(t *testing.T) {
 	x, err := ag.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
 	require.NotNil(t, x)
-	x, err = ag.CreateFile(ctx, [2]stores.RW{s, s}, *x, "file.txt", bytes.NewReader(nil))
+	x, err = ag.CreateFile(ctx, RW{s, s}, *x, "file.txt", bytes.NewReader(nil))
 	require.NoError(t, err)
 	md, err := ag.GetInfo(ctx, s, *x, "file.txt")
 	require.NoError(t, err)
@@ -45,7 +45,7 @@ func TestFileInfo(t *testing.T) {
 
 func TestLargeFiles(t *testing.T) {
 	ctx, ag, s := setup(t)
-	ss := [2]stores.RW{s, s}
+	ss := RW{s, s}
 	const N = 5
 	const size = 1e8
 	fileRoots := make([]Root, N)

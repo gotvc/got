@@ -54,9 +54,10 @@ func TestInfoDiffer(t *testing.T) {
 		tc := tc
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
 			s := stores.NewMem()
-			lb := ag.NewBuilder(ctx, s, s)
+			ss := RW{s, s}
+			lb := ag.NewBuilder(ctx, ss)
 			left := buildFS(t, lb, tc.Left)
-			rb := ag.NewBuilder(ctx, s, s)
+			rb := ag.NewBuilder(ctx, ss)
 			right := buildFS(t, rb, tc.Right)
 
 			d := ag.NewInfoDiffer(s, left, right)

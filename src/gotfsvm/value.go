@@ -127,6 +127,8 @@ func parseValue(data []byte) (Value, error) {
 // Value_Root is the root of a GotFS filesystem
 type Value_Root struct {
 	Root gotfs.Root
+
+	stores gotfs.RO
 }
 
 func (r *Value_Root) isValue() {}
@@ -134,6 +136,8 @@ func (r *Value_Root) isValue() {}
 // Value_Segment is a segment of a filesystem, not a valid filesystem on it's own.
 type Value_Segment struct {
 	Segment gotfs.Segment
+
+	stores gotfs.RO
 }
 
 func (r *Value_Segment) isValue() {}
@@ -141,6 +145,8 @@ func (r *Value_Segment) isValue() {}
 // Value_Extent is a reference to data
 type Value_Extent struct {
 	Extent gotfs.Extent
+
+	stores gotfs.RO
 }
 
 func (r *Value_Extent) isValue() {}

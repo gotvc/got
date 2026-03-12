@@ -129,7 +129,7 @@ func TestKeys(t *testing.T) {
 			slices.Sort(ps)
 
 			// build file system
-			b := mach.NewBuilder(ctx, s, s)
+			b := mach.NewBuilder(ctx, RW{s, s})
 			for _, p := range ps {
 				if dmode, ok := tc.Dirs[p]; ok {
 					require.NoError(t, b.Mkdir(p, dmode))
@@ -176,7 +176,7 @@ func BenchmarkWrite(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			rng := mrand.New(mrand.NewSource(0))
-			bu := ag.NewBuilder(ctx, s, s)
+			bu := ag.NewBuilder(ctx, RW{s, s})
 			if err := bu.BeginFile("", 0); err != nil {
 				b.Fatal(err)
 			}
@@ -200,7 +200,7 @@ func BenchmarkWrite(b *testing.B) {
 		b.ResetTimer()
 		for i := 0; i < b.N; i++ {
 			rng := mrand.New(mrand.NewSource(0))
-			bu := ag.NewBuilder(ctx, s, s)
+			bu := ag.NewBuilder(ctx, RW{s, s})
 			if err := bu.Mkdir("", 0); err != nil {
 				b.Fatal(err)
 			}

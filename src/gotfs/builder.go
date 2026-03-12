@@ -27,12 +27,12 @@ type Builder struct {
 	b        *gotlob.Builder
 }
 
-func (mach *Machine) NewBuilder(ctx context.Context, ms, ds stores.RW) *Builder {
+func (mach *Machine) NewBuilder(ctx context.Context, ss RW) *Builder {
 	b := &Builder{
 		a:   mach,
 		ctx: ctx,
-		ms:  ms,
-		b:   mach.lob.NewBuilder(ctx, ms, ds),
+		ms:  ss.Metadata,
+		b:   mach.lob.NewBuilder(ctx, ss.Metadata, ss.Data),
 	}
 	return b
 }

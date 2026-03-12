@@ -315,7 +315,7 @@ func makeGotFS(t testing.TB, fsmach *gotfs.Machine, s stores.RW, ents []FileEntr
 			root, err = fsmach.MkdirAll(ctx, s, *root, parent)
 			require.NoError(t, err)
 		}
-		root, err = fsmach.PutFile(ctx, [2]stores.RW{s, s}, *root, ent.Path, strings.NewReader(ent.Data))
+		root, err = fsmach.PutFile(ctx, gotfs.RW{s, s}, *root, ent.Path, strings.NewReader(ent.Data))
 		require.NoError(t, err)
 	}
 	return *root
