@@ -114,6 +114,11 @@ func (mach *Machine) MeanBlobSizeMetadata() int {
 	return mach.meanSizeMetadata
 }
 
+// MetadataKV returns the gotkv.Machine used for metadata
+func (mach *Machine) MetadataKV() *gotkv.Machine {
+	return &mach.gotkv
+}
+
 // Pick returns a new root containing everything under p, shifted to the root.
 func (mach *Machine) Pick(ctx context.Context, s stores.RW, root Root, p string) (*Root, error) {
 	p = cleanPath(p)

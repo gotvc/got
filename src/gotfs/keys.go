@@ -17,6 +17,13 @@ type Key struct {
 	endAt uint64
 }
 
+func NewInfoKey(p string) (Key, error) {
+	if err := checkPath(p); err != nil {
+		return Key{}, err
+	}
+	return newInfoKey(p), nil
+}
+
 func newInfoKey(p string) Key {
 	p = cleanPath(p)
 	pbuf := []byte(p)

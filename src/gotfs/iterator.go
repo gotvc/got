@@ -61,7 +61,7 @@ func (it *Iterator) Next(ctx context.Context, dst []Entry) (int, error) {
 			return 0, err
 		}
 	} else {
-		if err := dst[0].Info.Unmarshal(kvent.Value); err != nil {
+		if err := dst[0].Extent.UnmarshalBinary(kvent.Value); err != nil {
 			return 0, err
 		}
 	}

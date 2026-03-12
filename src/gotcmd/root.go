@@ -74,6 +74,7 @@ var rootCmd = star.NewGroupedDir(
 		}},
 		{Title: "MISCELLANEOUS", Commands: []string{
 			"bc",
+			"fix",
 			"version",
 		}},
 	}, map[string]star.Command{
@@ -114,6 +115,7 @@ var rootCmd = star.NewGroupedDir(
 		"serve":   serveCmd,
 		"slurp":   slurpCmd,
 		"debug":   debugCmd, // intentionally left out of the groups above.
+		"fix":     fixCmd,
 		"scrub":   scrubCmd,
 		"bc":      blobcacheCmd,
 		"version": versionCmd,
