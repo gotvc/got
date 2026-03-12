@@ -10,6 +10,7 @@ import (
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/stdctx/logctx"
 )
 
 // FixDirs rebuilds a filesystem, inserting any missing parent directories.
@@ -32,7 +33,7 @@ func FixDirs(ctx context.Context, fsmach *gotfs.Machine, ms stores.RW, root gotf
 			if err := ensureParents(ctx, &dirstack, b, p); err != nil {
 				return nil, err
 			}
-			if ent.Info.Mode.IsDir() {
+			if ent.Info.Mode.IsDir() && p != "" {
 				dirstack = append(dirstack, path.Base(p))
 			}
 		}
@@ -77,6 +78,7 @@ func ensureParents(ctx context.Context, dirstack *[]string, b *gotkv.Builder, p 
 	// Write any missing ancestor directories.
 	for i := matched; i < len(parts)-1; i++ {
 		ancestor := strings.Join(parts[:i+1], "/")
+		logctx.Infof(ctx, "inserting parent directory %s before %s", ancestor, p)
 		if err := putDirInfo(ctx, b, ancestor); err != nil {
 			return err
 		}
