@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
-	"log"
 
 	"github.com/gotvc/got/src/gotfsvm"
 	"github.com/gotvc/got/src/gotrepo"
@@ -333,12 +332,7 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 				fsroot = &mctx.Root.Payload.Snap
 			}
 
-			log.Println("ROOT", fsroot.Ref.CID, "EXISTS")
-			log.Println(stores.ExistsUnit(ctx, mctx.Stores.FS.Metadata, fsroot.Ref.CID))
-			buf := make([]byte, 1<<21)
-			log.Println(mctx.Stores.FS.Metadata.Get(ctx, fsroot.Ref.CID, buf))
-
-			fn, err := sctx.Stage.CreateFunction(ctx, mctx.FS, gotfs.RW{scratch, scratch})
+			fn, err := sctx.Stage.CreateFunction(ctx, mctx.FS, gotfs.RW{Metadata: scratch, Data: scratch})
 			if err != nil {
 				return nil, err
 			}
@@ -534,7 +528,6 @@ func apply(ctx context.Context, fsmach *gotfs.Machine, ss gotfs.RW, base *gotfs.
 		Root:   *base,
 	}})
 	if err != nil {
-		panic(err) // TODO: remove, this is where commit is failing.
 		return nil, err
 	}
 	return &root, nil

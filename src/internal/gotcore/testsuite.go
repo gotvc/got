@@ -86,7 +86,7 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 
 	cfg := DSConfig{}
 	s := stores.NewMem()
-	ss := gotfs.RW{s, s}
+	ss := gotfs.RW{Metadata: s, Data: s}
 	comm0 := makeCommit(t, cfg, s, nil, makeFS(t, ss, map[string]string{
 		"a": "0",
 	}))
@@ -155,7 +155,7 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 						}
 						if err := mtx.Modify(ctx, func(mctx ModifyCtx) (*Commit, error) {
 							if v != nil {
-								srcStores := RO{FS: gotfs.RO{tc.Store, tc.Store}, VC: tc.Store}
+								srcStores := RO{FS: gotfs.RO{Metadata: tc.Store, Data: tc.Store}, VC: tc.Store}
 								if err := mctx.Sync(ctx, srcStores, *v); err != nil {
 									return nil, err
 								}
