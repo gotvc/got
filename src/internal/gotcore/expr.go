@@ -18,7 +18,8 @@ import (
 type CommitExpr interface {
 	GetSpace() string
 	// Resolve returns a valid Ref, which points to a Commit.
-	Resolve(ctx context.Context, stx SpaceTx) (*gdat.Ref, error)
+	// Resolve returns the zero valued Ref when a mark does not have a Ref set.
+	Resolve(ctx context.Context, stx SpaceTx) (gdat.Ref, error)
 	isSnapExpr()
 }
 
@@ -59,8 +60,8 @@ func (se *CommitExpr_Exact) GetSpace() string {
 	return se.Space
 }
 
-func (se *CommitExpr_Exact) Resolve(ctx context.Context, tx SpaceTx) (*gdat.Ref, error) {
-	return &se.Ref, nil
+func (se *CommitExpr_Exact) Resolve(ctx context.Context, tx SpaceTx) (gdat.Ref, error) {
+	return se.Ref, nil
 }
 
 type CommitExpr_Mark struct {
@@ -83,14 +84,14 @@ func (se CommitExpr_Mark) GetSpace() string {
 	return se.Space
 }
 
-func (se CommitExpr_Mark) Resolve(ctx context.Context, tx SpaceTx) (*gdat.Ref, error) {
+func (se CommitExpr_Mark) Resolve(ctx context.Context, tx SpaceTx) (gdat.Ref, error) {
 	var ref gdat.Ref
 	if ok, err := tx.GetTarget(ctx, se.Name, &ref); err != nil {
-		return nil, err
+		return gdat.Ref{}, err
 	} else if !ok {
-		return nil, nil
+		return gdat.Ref{}, nil
 	}
-	return &ref, nil
+	return ref, nil
 }
 
 func (se CommitExpr_Mark) String() string {

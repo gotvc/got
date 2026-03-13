@@ -26,7 +26,7 @@ func (r *Repo) ViewFS(ctx context.Context, se gotcore.CommitExpr, fn func(fsmach
 		if ref.IsZero() {
 			return fmt.Errorf("no commit found at %v", se)
 		}
-		comm, err := gotcore.GetCommit(ctx, ss.VC, *ref)
+		comm, err := gotcore.GetCommit(ctx, ss.VC, ref)
 		if err != nil {
 			return err
 		}

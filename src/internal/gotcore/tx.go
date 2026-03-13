@@ -238,11 +238,14 @@ func ViewCommit(ctx context.Context, stx SpaceTx, se CommitExpr, fn func(vctx *V
 	if err != nil {
 		return err
 	}
+	if ref.IsZero() {
+		return fmt.Errorf("no commit found at %v", se)
+	}
 	ss := stx.Stores()
 	cfg := DefaultConfig(false)
 	fsmach := newGotFS(&cfg)
 	vcmach := newGotVC(&cfg)
-	comm, err := vcmach.GetVertex(ctx, ss.VC, *ref)
+	comm, err := vcmach.GetVertex(ctx, ss.VC, ref)
 	if err != nil {
 		return err
 	}
@@ -250,7 +253,7 @@ func ViewCommit(ctx context.Context, stx SpaceTx, se CommitExpr, fn func(vctx *V
 		VC:     vcmach,
 		FS:     fsmach,
 		Stores: ss.RO(),
-		Target: *ref,
+		Target: ref,
 		Root:   comm,
 	}
 	return fn(&vctx)
