@@ -101,12 +101,12 @@ func (rw RW) WO() WO {
 
 type RO struct {
 	FS gotfs.RO
-	VC stores.Reading
+	VC stores.RO
 }
 
 type WO struct {
 	FS gotfs.WO
-	VC stores.Writing
+	VC stores.WO
 }
 
 // SpaceTx is a transaction on a Space

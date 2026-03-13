@@ -24,7 +24,7 @@ type Differ struct {
 	dent gotkv.DEntry
 }
 
-func (mach *Machine) NewDiffer(ms stores.Reading, left, right Root) *Differ {
+func (mach *Machine) NewDiffer(ms stores.RO, left, right Root) *Differ {
 	span := gotkv.TotalSpan()
 	return &Differ{
 		kvdiff: mach.gotkv.NewDiffer(ms, left.ToGotKV(), right.ToGotKV(), span),
@@ -83,7 +83,7 @@ func (it *InfoDiffer) Next(ctx context.Context, dst []InfoDiff) (int, error) {
 	}
 }
 
-func (mach *Machine) NewInfoDiffer(s stores.Reading, left, right Root) InfoDiffer {
+func (mach *Machine) NewInfoDiffer(s stores.RO, left, right Root) InfoDiffer {
 	return InfoDiffer{
 		inner: mach.NewDiffer(s, left, right),
 	}

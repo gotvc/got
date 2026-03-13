@@ -13,12 +13,12 @@ type (
 )
 
 // IsDescendentOf returns true if any of x's parents are equal to a.
-func (mach *Machine[T]) IsDescendentOf(ctx context.Context, s stores.Reading, x, a Vertex[T]) (bool, error) {
+func (mach *Machine[T]) IsDescendentOf(ctx context.Context, s stores.RO, x, a Vertex[T]) (bool, error) {
 	m := map[Ref]struct{}{}
 	return mach.isDescendentOf(ctx, m, s, x, a)
 }
 
-func (mach *Machine[T]) isDescendentOf(ctx context.Context, m map[Ref]struct{}, s stores.Reading, x, a Vertex[T]) (bool, error) {
+func (mach *Machine[T]) isDescendentOf(ctx context.Context, m map[Ref]struct{}, s stores.RO, x, a Vertex[T]) (bool, error) {
 	for _, parentRef := range x.Parents {
 		if _, exists := m[parentRef]; exists {
 			continue
@@ -43,7 +43,7 @@ func (mach *Machine[T]) isDescendentOf(ctx context.Context, m map[Ref]struct{}, 
 }
 
 // Sync ensures dst has all of the data reachable from vert.
-func (m *Machine[T]) Sync(ctx context.Context, src stores.Reading, dst stores.Writing, vert Vertex[T], syncp func(T) error) error {
+func (m *Machine[T]) Sync(ctx context.Context, src stores.RO, dst stores.WO, vert Vertex[T], syncp func(T) error) error {
 	m2 := *m
 	m2.readOnly = true
 	var sync func(vert Vertex[T]) error
@@ -118,7 +118,7 @@ func (mach *Machine[T]) mapVertex(ctx context.Context, s stores.RW, x Vertex[T],
 
 // Populate adds all the blobcache.CIDs reachable from start to set.
 // This will not include the CID for start itself, which has not yet been computed.
-func (mach *Machine[T]) Populate(ctx context.Context, s stores.Reading, start Vertex[T], set stores.Set, rootFn func(T) error) error {
+func (mach *Machine[T]) Populate(ctx context.Context, s stores.RO, start Vertex[T], set stores.Set, rootFn func(T) error) error {
 	for _, parentRef := range start.Parents {
 		parentCID := parentRef.CID
 		exists, err := set.Exists(ctx, parentCID)

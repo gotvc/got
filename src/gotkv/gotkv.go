@@ -14,12 +14,11 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state"
-	"go.brendoncarroll.net/state/cadata"
 	"golang.org/x/sync/errgroup"
 )
 
 type (
-	Getter = stores.Reading
+	Getter = stores.RO
 	Store  = stores.RWD
 	ID     = blobcache.CID
 	Ref    = gdat.Ref
@@ -115,7 +114,7 @@ func CopyAll(ctx context.Context, b *Builder, it kvstreams.Iterator) error {
 }
 
 // Sync ensures dst has all the data reachable from x.
-func (a *Machine) Sync(ctx context.Context, src stores.Reading, dst stores.Writing, x Root, entryFn func(Entry) error) error {
+func (a *Machine) Sync(ctx context.Context, src stores.RO, dst stores.WO, x Root, entryFn func(Entry) error) error {
 	rp := ptree.ReadParams[Entry, Ref]{
 		Compare:         compareEntries,
 		Store:           &ptreeGetter{ag: a.da, s: src},
@@ -135,7 +134,7 @@ func (a *Machine) Sync(ctx context.Context, src stores.Reading, dst stores.Writi
 
 // Populate adds all blobs reachable from x to set.
 // If an item is in set all of the blobs reachable from it are also assumed to also be in set.
-func (a *Machine) Populate(ctx context.Context, s stores.Reading, x Root, set cadata.Set, entryFn func(ent Entry) error) error {
+func (a *Machine) Populate(ctx context.Context, s stores.RO, x Root, set stores.Set, entryFn func(ent Entry) error) error {
 	rp := ptree.ReadParams[Entry, Ref]{
 		Compare:    compareEntries,
 		Store:      &ptreeGetter{ag: a.da, s: s},
@@ -202,7 +201,7 @@ func do(ctx context.Context, rp ptree.ReadParams[Entry, Ref], x ptree.Root[Entry
 
 type ptreeGetter struct {
 	ag *gdat.Machine
-	s  stores.Reading
+	s  stores.RO
 }
 
 func (s *ptreeGetter) Get(ctx context.Context, ref Ref, buf []byte) (int, error) {
@@ -235,7 +234,7 @@ func (s *ptreeStore) MaxSize() int {
 }
 
 // DebugTree writes human-readable debug information about the tree to w.
-func DebugTree(ctx context.Context, s stores.Reading, root Root, w io.Writer) error {
+func DebugTree(ctx context.Context, s stores.RO, root Root, w io.Writer) error {
 	rp := ptree.ReadParams[Entry, Ref]{
 		Store:           &ptreeGetter{s: s, ag: defaultReadOnlyMachine.da},
 		Compare:         compareEntries,

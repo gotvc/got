@@ -9,13 +9,7 @@ import (
 	"github.com/gotvc/got/src/gotfs/gotlob"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
-	"go.brendoncarroll.net/state/cadata"
 )
-
-type GetPostExister interface {
-	cadata.Getter
-	cadata.PostExister
-}
 
 // Builder manages building a filesystem.
 type Builder struct {

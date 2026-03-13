@@ -78,7 +78,7 @@ func (a *Machine) CreateExtents(ctx context.Context, ds stores.RW, r io.Reader) 
 	return exts, nil
 }
 
-func (a *Machine) SizeOf(ctx context.Context, ms stores.Reading, root Root, prefix []byte) (uint64, error) {
+func (a *Machine) SizeOf(ctx context.Context, ms stores.RO, root Root, prefix []byte) (uint64, error) {
 	key, _, err := a.MaxExtent(ctx, ms, root, gotkv.PrefixSpan(prefix))
 	if err != nil {
 		return 0, err
@@ -108,7 +108,7 @@ func (ag *Machine) post(ctx context.Context, s stores.RW, data []byte) (*Extent,
 	return &Extent{Offset: 0, Length: uint32(len(data)), Ref: ref}, nil
 }
 
-func (ag *Machine) getExtentF(ctx context.Context, ds stores.Reading, ext *Extent, fn func([]byte) error) error {
+func (ag *Machine) getExtentF(ctx context.Context, ds stores.RO, ext *Extent, fn func([]byte) error) error {
 	return ag.gdat.GetF(ctx, ds, ext.Ref, func(data []byte) error {
 		if err := checkExtentBounds(ext, len(data)); err != nil {
 			return err
@@ -117,7 +117,7 @@ func (ag *Machine) getExtentF(ctx context.Context, ds stores.Reading, ext *Exten
 	})
 }
 
-func (ag *Machine) readExtent(ctx context.Context, buf []byte, ds stores.Reading, ext *Extent) (int, error) {
+func (ag *Machine) readExtent(ctx context.Context, buf []byte, ds stores.RO, ext *Extent) (int, error) {
 	n, err := ag.gdat.Read(ctx, ds, ext.Ref, buf)
 	if err != nil {
 		return 0, err
@@ -129,7 +129,7 @@ func (ag *Machine) readExtent(ctx context.Context, buf []byte, ds stores.Reading
 }
 
 // maxEntry finds the maximum extent entry in root within span.
-func (ag *Machine) MaxExtent(ctx context.Context, ms stores.Reading, root Root, span Span) ([]byte, *Extent, error) {
+func (ag *Machine) MaxExtent(ctx context.Context, ms stores.RO, root Root, span Span) ([]byte, *Extent, error) {
 	for {
 		ent, err := ag.gotkv.MaxEntry(ctx, ms, root, span)
 		if err != nil {
@@ -149,7 +149,7 @@ func (ag *Machine) MaxExtent(ctx context.Context, ms stores.Reading, root Root, 
 	}
 }
 
-func (ag *Machine) MinExtent(ctx context.Context, ms stores.Reading, root Root, span Span) ([]byte, *Extent, error) {
+func (ag *Machine) MinExtent(ctx context.Context, ms stores.RO, root Root, span Span) ([]byte, *Extent, error) {
 	it := ag.gotkv.NewIterator(ms, root, span)
 	var ent gotkv.Entry
 	for {

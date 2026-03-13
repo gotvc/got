@@ -298,10 +298,10 @@ func mkRW(ro gotfs.RO, rw gotfs.RW) gotfs.RW {
 
 func union(ros ...gotfs.RO) gotfs.RO {
 	return gotfs.RO{
-		Data: stores.Union(slices2.Map(ros, func(ss gotfs.RO) stores.Reading {
+		Data: stores.Union(slices2.Map(ros, func(ss gotfs.RO) stores.RO {
 			return ss.Data
 		})),
-		Metadata: stores.Union(slices2.Map(ros, func(ss gotfs.RO) stores.Reading {
+		Metadata: stores.Union(slices2.Map(ros, func(ss gotfs.RO) stores.RO {
 			return ss.Metadata
 		})),
 	}

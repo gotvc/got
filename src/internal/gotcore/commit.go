@@ -53,7 +53,7 @@ func (p *Payload) Unmarshal(data []byte) error {
 }
 
 // GetCommit reads a commit from the store.
-func GetCommit(ctx context.Context, s stores.Reading, ref gdat.Ref) (*Commit, error) {
+func GetCommit(ctx context.Context, s stores.RO, ref gdat.Ref) (*Commit, error) {
 	vcmach := gotvc.NewMachine(ParsePayload, gotvc.Config{})
 	return vcmach.GetVertex(ctx, s, ref)
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
@@ -500,7 +499,7 @@ func (wc *WC) cleanupStagingBlobs(ctx context.Context) error {
 		fop := ent.Op
 		if putOp := fop.Put; putOp != nil {
 			// TODO: need to implement set for Tx
-			var set cadata.Set
+			var set stores.Set
 			if err := fsmach.Populate(ctx, tx, *putOp, set, set); err != nil {
 				return nil
 			}

@@ -145,7 +145,7 @@ type VertexParams[T Marshalable] struct {
 	Payload T
 }
 
-func (a *Machine[T]) NewVertex(ctx context.Context, s stores.Writing, sp VertexParams[T]) (*Vertex[T], error) {
+func (a *Machine[T]) NewVertex(ctx context.Context, s stores.WO, sp VertexParams[T]) (*Vertex[T], error) {
 	var n uint64
 	maxCreatedAt := sp.CreatedAt
 	parentRefs := make([]Ref, len(sp.Parents))
@@ -174,13 +174,13 @@ func (a *Machine[T]) NewVertex(ctx context.Context, s stores.Writing, sp VertexP
 }
 
 // Genesis creates a new Commit with no parent
-func (mach *Machine[T]) Genesis(ctx context.Context, s stores.Writing, sp VertexParams[T]) (*Vertex[T], error) {
+func (mach *Machine[T]) Genesis(ctx context.Context, s stores.WO, sp VertexParams[T]) (*Vertex[T], error) {
 	sp.Parents = nil
 	return mach.NewVertex(ctx, s, sp)
 }
 
 // PostVertex marshals the Vertex and posts it to the store
-func (ag *Machine[T]) PostVertex(ctx context.Context, s stores.Writing, x Vertex[T]) (Ref, error) {
+func (ag *Machine[T]) PostVertex(ctx context.Context, s stores.WO, x Vertex[T]) (Ref, error) {
 	if ag.readOnly {
 		panic("gotvc: operator is read-only. This is a bug.")
 	}
@@ -188,7 +188,7 @@ func (ag *Machine[T]) PostVertex(ctx context.Context, s stores.Writing, x Vertex
 }
 
 // GetVertex retrieves the Vertex referenced by ref from the store.
-func (ag *Machine[T]) GetVertex(ctx context.Context, s stores.Reading, ref Ref) (*Vertex[T], error) {
+func (ag *Machine[T]) GetVertex(ctx context.Context, s stores.RO, ref Ref) (*Vertex[T], error) {
 	var x *Vertex[T]
 	if err := ag.da.GetF(ctx, s, ref, func(data []byte) error {
 		var err error
@@ -243,7 +243,7 @@ func (ag *Machine[T]) RefFromVertex(vert Vertex[T]) Ref {
 }
 
 // Check ensures that commit is valid.
-func (a *Machine[T]) Check(ctx context.Context, s stores.Reading, vert Vertex[T], checkRoot func(T) error) error {
+func (a *Machine[T]) Check(ctx context.Context, s stores.RO, vert Vertex[T], checkRoot func(T) error) error {
 	logctx.Infof(ctx, "checking commit #%d", vert.N)
 	if err := checkRoot(vert.Payload); err != nil {
 		return err

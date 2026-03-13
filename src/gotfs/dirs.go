@@ -77,7 +77,7 @@ func (mach *Machine) ensureDir(ctx context.Context, s stores.RW, x Root, p strin
 }
 
 // ReadDir calls fn for every child of the directory at p.
-func (mach *Machine) ReadDir(ctx context.Context, s stores.Reading, x Root, p string, fn func(e DirEnt) error) error {
+func (mach *Machine) ReadDir(ctx context.Context, s stores.RO, x Root, p string, fn func(e DirEnt) error) error {
 	p = cleanPath(p)
 	di, err := mach.newDirIterator(ctx, s, x, p)
 	if err != nil {
@@ -118,13 +118,13 @@ func SpanForPath(p string) gotkv.Span {
 }
 
 type dirIterator struct {
-	s    stores.Reading
+	s    stores.RO
 	x    Root
 	p    string
 	iter *gotkv.Iterator
 }
 
-func (mach *Machine) newDirIterator(ctx context.Context, s stores.Reading, x Root, p string) (*dirIterator, error) {
+func (mach *Machine) newDirIterator(ctx context.Context, s stores.RO, x Root, p string) (*dirIterator, error) {
 	_, err := mach.GetDirInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err

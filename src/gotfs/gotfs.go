@@ -123,14 +123,14 @@ func cleanName(p string) string {
 
 // RO are read only stores used by gotfs
 type RO struct {
-	Data     stores.Reading
-	Metadata stores.Reading
+	Data     stores.RO
+	Metadata stores.RO
 }
 
 // WO are read only stores used by gotfs
 type WO struct {
-	Data     stores.Writing
-	Metadata stores.Writing
+	Data     stores.WO
+	Metadata stores.WO
 }
 
 // RW are read-write stores used by gotfs

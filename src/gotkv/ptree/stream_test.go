@@ -10,7 +10,6 @@ import (
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 const (
@@ -44,7 +43,7 @@ func TestStreamRW(t *testing.T) {
 	var refs []blobcache.CID
 	var idxs []Index[Entry, blobcache.CID]
 
-	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
+	s := newStore(defaultMaxSize)
 	sw := NewStreamWriter(StreamWriterParams[Entry, blobcache.CID]{
 		Store:    s,
 		Compare:  compareEntries,
@@ -89,7 +88,7 @@ func TestStreamWriterChunkSize(t *testing.T) {
 	ctx := testutil.Context(t)
 	var refs []blobcache.CID
 
-	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
+	s := newStore(defaultMaxSize)
 	sw := NewStreamWriter(StreamWriterParams[Entry, blobcache.CID]{
 		Store:    s,
 		MeanSize: defaultAvgSize,
@@ -131,7 +130,7 @@ func TestStreamSeek(t *testing.T) {
 	var refs []blobcache.CID
 	var idxs []Index[Entry, blobcache.CID]
 
-	s := cadata.NewMem(cadata.DefaultHash, defaultMaxSize)
+	s := newStore(defaultMaxSize)
 	sw := NewStreamWriter(StreamWriterParams[Entry, blobcache.CID]{
 		Store:    s,
 		Compare:  compareEntries,
@@ -192,7 +191,7 @@ func valueFromInt(i int) []byte {
 func BenchmarkStreamWriter(b *testing.B) {
 	b.ReportAllocs()
 	ctx := testutil.Context(b)
-	s := cadata.NewVoid(cadata.DefaultHash, defaultMaxSize)
+	s := newStore(defaultMaxSize)
 	sw := NewStreamWriter(StreamWriterParams[Entry, blobcache.CID]{
 		Store:    s,
 		MeanSize: defaultAvgSize,

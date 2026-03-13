@@ -46,7 +46,7 @@ func (m *Machine) DropRule(ctx context.Context, s stores.RW, state State, ruleID
 	return state, nil
 }
 
-func (m *Machine) GetRule(ctx context.Context, s stores.Reading, state State, cid CID) (Rule, error) {
+func (m *Machine) GetRule(ctx context.Context, s stores.RO, state State, cid CID) (Rule, error) {
 	const MaxRuleSize = 1024
 	buf := make([]byte, MaxRuleSize)
 	n, err := s.Get(ctx, cid, buf)
@@ -63,7 +63,7 @@ func (m *Machine) GetRule(ctx context.Context, s stores.Reading, state State, ci
 }
 
 // ForEachRule calls fn for each rule.
-func (m *Machine) ForEachRule(ctx context.Context, s stores.Reading, state State, fn func(rule Rule) error) error {
+func (m *Machine) ForEachRule(ctx context.Context, s stores.RO, state State, fn func(rule Rule) error) error {
 	if err := m.gotkv.ForEach(ctx, s, state.Rules, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
 		k := ent.Key
 		if len(k) != 32 {
@@ -82,7 +82,7 @@ func (m *Machine) ForEachRule(ctx context.Context, s stores.Reading, state State
 }
 
 // CanDo returns true if the subject can perform the action on the object.
-func (m *Machine) CanDo(ctx context.Context, s stores.Reading, state State, actor inet256.ID, verb Verb, objType ObjectType, objName string) (bool, error) {
+func (m *Machine) CanDo(ctx context.Context, s stores.RO, state State, actor inet256.ID, verb Verb, objType ObjectType, objName string) (bool, error) {
 	var allowed bool
 	if err := m.gotkv.ForEach(ctx, s, state.Rules, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
 		var rule gotorgop.Rule
@@ -119,7 +119,7 @@ func (m *Machine) CanDo(ctx context.Context, s stores.Reading, state State, acto
 	return allowed, nil
 }
 
-func (m *Machine) CanAnyDo(ctx context.Context, s stores.Reading, state State, actors IDSet, verb Verb, objType ObjectType, objName string) (bool, error) {
+func (m *Machine) CanAnyDo(ctx context.Context, s stores.RO, state State, actors IDSet, verb Verb, objType ObjectType, objName string) (bool, error) {
 	for actor := range actors {
 		yes, err := m.CanDo(ctx, s, state, actor, verb, objType, objName)
 		if err != nil {
@@ -198,7 +198,7 @@ func (m *Machine) PutObligation(ctx context.Context, s stores.RW, state State, o
 
 // ForEachObligation iterates over all Obligations
 // If hos is non-nil, then only obligations for the corresponding secret will be emmitted.
-func (m *Machine) ForEachObligation(ctx context.Context, s stores.Reading, x State, hos *[32]byte, fn func(ob Obligation) error) error {
+func (m *Machine) ForEachObligation(ctx context.Context, s stores.RO, x State, hos *[32]byte, fn func(ob Obligation) error) error {
 	span := gotkv.TotalSpan()
 	if hos != nil {
 		span = gotkv.PrefixSpan(hos[:])
@@ -308,7 +308,7 @@ func (m *Machine) addInitialRules(ctx context.Context, s stores.RW, state State,
 //  3. Find a path from the the actor's ID to one of those groups.
 //  4. Use that path to perform a chain of KEM decryptions eventually resulting
 //     a secret value which reverses hash of secret.
-func (m *Machine) FindSecret(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, hos *[32]byte, minRatchet uint8) (*gotorgop.Secret, uint8, error) {
+func (m *Machine) FindSecret(ctx context.Context, s stores.RO, x State, actAs IdenPrivate, hos *[32]byte, minRatchet uint8) (*gotorgop.Secret, uint8, error) {
 	gids := map[GroupID]uint8{}
 	if err := m.ForEachObligation(ctx, s, x, hos, func(oblig Obligation) error {
 		if oblig.HashOfSecret == *hos && oblig.Ratchet >= minRatchet {

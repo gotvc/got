@@ -39,11 +39,11 @@ var _ streams.Iterator[Entry] = &Iterator{}
 // Iterate iterates over the metadata in a gotfs filesystem.
 type Iterator struct {
 	root Root
-	s    stores.Reading
+	s    stores.RO
 	mdit *gotkv.Iterator
 }
 
-func (m *Machine) NewIterator(s stores.Reading, root Root, span Span) Iterator {
+func (m *Machine) NewIterator(s stores.RO, root Root, span Span) Iterator {
 	it := m.gotkv.NewIterator(s, root.toGotKV(), span)
 	return Iterator{s: s, mdit: it}
 }

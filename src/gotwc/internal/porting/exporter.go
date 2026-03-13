@@ -43,7 +43,7 @@ func (pr *Exporter) ExportPath(ctx context.Context, ss gotfs.RO, root gotfs.Root
 	}
 }
 
-func (pr *Exporter) ExportFile(ctx context.Context, ms, ds stores.Reading, root gotfs.Root, p string) error {
+func (pr *Exporter) ExportFile(ctx context.Context, ms, ds stores.RO, root gotfs.Root, p string) error {
 	md, err := pr.gotfs.GetInfo(ctx, ms, root, p)
 	if err != nil {
 		return err
@@ -83,7 +83,7 @@ func (pr *Exporter) Clobber(ctx context.Context, ss gotfs.RO, root gotfs.Root, p
 }
 
 // exportDir exports a known dir in root
-func (pr *Exporter) exportDir(ctx context.Context, ms, ds stores.Reading, root gotfs.Root, p string, ginfo *gotfs.Info) error {
+func (pr *Exporter) exportDir(ctx context.Context, ms, ds stores.RO, root gotfs.Root, p string, ginfo *gotfs.Info) error {
 	finfo, err := pr.fsx.Stat(p)
 	switch {
 	case err != nil && !posixfs.IsErrNotExist(err):
@@ -148,7 +148,7 @@ func (pr *Exporter) exportDir(ctx context.Context, ms, ds stores.Reading, root g
 }
 
 // exportFile exports a known file in root
-func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.Reading, root gotfs.Root, p string, ginfo *gotfs.Info) error {
+func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.RO, root gotfs.Root, p string, ginfo *gotfs.Info) error {
 	// check if a file exists
 	finfo, err := stat(pr.fsx, p)
 	if err != nil && !posixfs.IsErrNotExist(err) {

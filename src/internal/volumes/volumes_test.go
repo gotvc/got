@@ -3,14 +3,14 @@ package volumes
 import (
 	"testing"
 
-	"github.com/gotvc/got/src/gdat"
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestChaCha20Poly1305(t *testing.T) {
 	ctx := testutil.Context(t)
-	inner := NewMemory(gdat.Hash, 1024)
+	inner := NewMemory(blobcache.HashAlgo_BLAKE2b_256, 1024)
 	secret := [32]byte{}
 	vol := NewChaCha20Poly1305(inner, &secret)
 

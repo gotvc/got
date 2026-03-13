@@ -6,7 +6,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 )
 
-var _ Writing = Void{}
+var _ WO = Void{}
 
 type Void struct {
 	hf      blobcache.HashFunc

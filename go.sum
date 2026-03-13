@@ -1,11 +1,7 @@
-blobcache.io/blobcache v0.4.0 h1:oEMACdENtFLWtmCOJBjzq+8ICR4jTy0NIY7IH4uLPvo=
-blobcache.io/blobcache v0.4.0/go.mod h1:HKmzz0R46QuLc2+ciIQeui55/Psr0d5isO+fLD4utfc=
-blobcache.io/blobcache v0.5.1-0.20260311152704-bc1dd7731779 h1:Biy0TvK0hftXODKFIcR6nJZTzczGqtTvlVApCS4GHbk=
-blobcache.io/blobcache v0.5.1-0.20260311152704-bc1dd7731779/go.mod h1:HKmzz0R46QuLc2+ciIQeui55/Psr0d5isO+fLD4utfc=
-blobcache.io/blobcache v0.5.1-0.20260313004939-67f9e150c2f9 h1:yxJIU3TxQLjj1jF/MO3KZ5/pVN93EWFhV+lMVwTvgFA=
-blobcache.io/blobcache v0.5.1-0.20260313004939-67f9e150c2f9/go.mod h1:HKmzz0R46QuLc2+ciIQeui55/Psr0d5isO+fLD4utfc=
-blobcache.io/glfs v0.0.0-20260119180351-4a7f3a2103a2 h1:sOVE7lGfpfMA99X0oIBbGFaGJXOgdyUIScv8HGCOF6g=
-blobcache.io/glfs v0.0.0-20260119180351-4a7f3a2103a2/go.mod h1:EA5BUCl0/IF3W84sNGiixgKHac+Y2rGIAmSJgBaaMjA=
+blobcache.io/blobcache v0.5.1 h1:yn9BqHG8d2DPWtQO1Fj9ML5LURoQzbFMDHWl/NgvE3A=
+blobcache.io/blobcache v0.5.1/go.mod h1:dNsFl4IKL5FXPVARiYM+5ucl5pZNZPOUQCOkLik/yY8=
+blobcache.io/glfs v0.0.0-20260313021227-407298e99fa7 h1:4IZMxPIdTBYJGEz0+Ryq1hHcd0EDm9eQ+shaDAdSGyU=
+blobcache.io/glfs v0.0.0-20260313021227-407298e99fa7/go.mod h1:yFuEsv/bQYND9Mc3LlK6j/ulWi5ELHhw3hzzCDThSmQ=
 capnproto.org/go/capnp/v3 v3.1.0-alpha.2 h1:93ISpqHf2/3WQlfrBP0tT8Dg/RQc3uq6DV36vN0ePWk=
 capnproto.org/go/capnp/v3 v3.1.0-alpha.2/go.mod h1:2vT5D2dtG8sJGEoEKU17e+j7shdaYp1Myl8X03B3hmc=
 filippo.io/edwards25519 v1.1.0 h1:FNf4tywRC1HmFuKW5xopWpigGjJKiJSV0Cqo0cJWDaA=

@@ -275,7 +275,7 @@ type fnBody struct {
 	dag  []I
 }
 
-func (m *Machine) loadFunction(ctx context.Context, s stores.Reading, ref gdat.Ref) (fnBody, error) {
+func (m *Machine) loadFunction(ctx context.Context, s stores.RO, ref gdat.Ref) (fnBody, error) {
 	var fb fnBody
 	if err := m.gdat.GetF(ctx, s, ref, func(data []byte) error {
 		if len(data) < dataTabHeaderSize {

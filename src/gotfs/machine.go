@@ -154,7 +154,7 @@ func (mach *Machine) deleteOutside(ctx context.Context, s stores.RW, root gotkv.
 	return x, err
 }
 
-func (mach *Machine) ForEach(ctx context.Context, s stores.Reading, root Root, p string, fn func(p string, md *Info) error) error {
+func (mach *Machine) ForEach(ctx context.Context, s stores.RO, root Root, p string, fn func(p string, md *Info) error) error {
 	p = cleanPath(p)
 	fn2 := func(ent gotkv.Entry) error {
 		var key Key
@@ -175,7 +175,7 @@ func (mach *Machine) ForEach(ctx context.Context, s stores.Reading, root Root, p
 }
 
 // ForEachLeaf calls fn with each regular file in root, beneath p.
-func (mach *Machine) ForEachLeaf(ctx context.Context, s stores.Reading, root Root, p string, fn func(p string, md *Info) error) error {
+func (mach *Machine) ForEachLeaf(ctx context.Context, s stores.RO, root Root, p string, fn func(p string, md *Info) error) error {
 	return mach.ForEach(ctx, s, root, p, func(p string, md *Info) error {
 		if os.FileMode(md.Mode).IsDir() {
 			return nil
@@ -223,11 +223,11 @@ func (mach *Machine) addPrefix(root Root, p string) gotkv.Root {
 
 // MaxInfo returns the maximum path and the corresponding Info for the path.
 // If no Info entry can be found MaxInfo returns ("", nil, nil)
-func (mach *Machine) MaxInfo(ctx context.Context, ms stores.Reading, root Root, span Span) (string, *Info, error) {
+func (mach *Machine) MaxInfo(ctx context.Context, ms stores.RO, root Root, span Span) (string, *Info, error) {
 	return mach.maxInfo(ctx, ms, root.ToGotKV(), span)
 }
 
-func (mach *Machine) maxInfo(ctx context.Context, ms stores.Reading, root gotkv.Root, span Span) (string, *Info, error) {
+func (mach *Machine) maxInfo(ctx context.Context, ms stores.RO, root gotkv.Root, span Span) (string, *Info, error) {
 	ent, err := mach.gotkv.MaxEntry(ctx, ms, root, span)
 	if err != nil {
 		return "", nil, err
@@ -260,7 +260,7 @@ func (mach *Machine) maxInfo(ctx context.Context, ms stores.Reading, root gotkv.
 
 var firstKey = newInfoKey("").Marshal(nil)
 
-func (mach *Machine) Check(ctx context.Context, ms stores.Reading, root Root, checkData func(ref gdat.Ref) error) error {
+func (mach *Machine) Check(ctx context.Context, ms stores.RO, root Root, checkData func(ref gdat.Ref) error) error {
 	var lastPath *string
 	var lastOffset *uint64
 	return mach.gotkv.ForEach(ctx, ms, root.toGotKV(), gotkv.Span{}, func(ent gotkv.Entry) error {
@@ -430,7 +430,7 @@ func (mach *Machine) Splice(ctx context.Context, ss RW, segs []Segment) (*Root, 
 	return Promote(ctx, seg)
 }
 
-func (mach *Machine) Exists(ctx context.Context, ms stores.Reading, root Root, p string) (bool, error) {
+func (mach *Machine) Exists(ctx context.Context, ms stores.RO, root Root, p string) (bool, error) {
 	_, err := mach.GetInfo(ctx, ms, root, p)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -442,7 +442,7 @@ func (mach *Machine) Exists(ctx context.Context, ms stores.Reading, root Root, p
 }
 
 // ExistsDir returns true if there is an INFO object at p which is a directory.
-func (mach *Machine) ExistsDir(ctx context.Context, ms stores.Reading, root Root, p string) (bool, error) {
+func (mach *Machine) ExistsDir(ctx context.Context, ms stores.RO, root Root, p string) (bool, error) {
 	info, err := mach.GetInfo(ctx, ms, root, p)
 	if err != nil {
 		if os.IsNotExist(err) {

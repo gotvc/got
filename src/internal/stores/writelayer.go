@@ -8,11 +8,11 @@ import (
 )
 
 type Overlay struct {
-	base    Reading
+	base    RO
 	writeTo RW
 }
 
-func NewOverlay(base Reading, writeTo RW) RW {
+func NewOverlay(base RO, writeTo RW) RW {
 	return Overlay{base: base, writeTo: writeTo}
 }
 

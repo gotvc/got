@@ -6,7 +6,8 @@ import (
 	"sync"
 
 	"blobcache.io/blobcache/src/blobcache"
-	"go.brendoncarroll.net/state/cadata"
+	"blobcache.io/blobcache/src/schema"
+	"github.com/gotvc/got/src/internal/stores"
 )
 
 var _ Volume = &Memory{}
@@ -14,13 +15,15 @@ var _ Volume = &Memory{}
 type Memory struct {
 	mu   sync.RWMutex
 	root []byte
-	s    cadata.Store
+	s    stores.RW
+	hf   blobcache.HashFunc
 }
 
-func NewMemory(hf cadata.HashFunc, maxSize int) *Memory {
+func NewMemory(ha blobcache.HashAlgo, maxSize int) *Memory {
 	return &Memory{
 		root: []byte{},
-		s:    cadata.NewMem(hf, maxSize),
+		s:    schema.NewMem(ha.HashFunc(), maxSize),
+		hf:   ha.HashFunc(),
 	}
 }
 
@@ -74,14 +77,7 @@ func (tx *MemoryTx) Post(ctx context.Context, data []byte) (cid blobcache.CID, e
 }
 
 func (tx *MemoryTx) Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error {
-	for i := range dst {
-		exists, err := tx.vol.s.Exists(ctx, cids[i])
-		if err != nil {
-			return err
-		}
-		dst[i] = exists
-	}
-	return nil
+	return tx.vol.s.Exists(ctx, cids, dst)
 }
 
 func (tx *MemoryTx) Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, error) {
@@ -93,5 +89,5 @@ func (tx *MemoryTx) MaxSize() int {
 }
 
 func (tx *MemoryTx) Hash(data []byte) blobcache.CID {
-	return tx.vol.s.Hash(data)
+	return tx.vol.hf(nil, data)
 }

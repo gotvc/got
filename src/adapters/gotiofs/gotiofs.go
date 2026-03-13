@@ -211,7 +211,7 @@ func (f *File) stat(p string) (*fileInfo, error) {
 	return finfo.(*fileInfo), nil
 }
 
-func Stat(ctx context.Context, fsag *gotfs.Machine, ms stores.Reading, root gotfs.Root, p string) (iofs.FileInfo, error) {
+func Stat(ctx context.Context, fsag *gotfs.Machine, ms stores.RO, root gotfs.Root, p string) (iofs.FileInfo, error) {
 	info, err := fsag.GetInfo(ctx, ms, root, p)
 	if err != nil {
 		return nil, convertError(err)

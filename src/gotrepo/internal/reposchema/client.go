@@ -200,7 +200,7 @@ func (c *Client) getRoot(ctx context.Context, txn *bcsdk.Tx) (gotkv.Root, error)
 }
 
 // getState returns the volume OID for a stage.
-func (c *Client) getStage(ctx context.Context, s stores.Reading, root gotkv.Root, wcid StageID) (*subvolEntry, error) {
+func (c *Client) getStage(ctx context.Context, s stores.RO, root gotkv.Root, wcid StageID) (*subvolEntry, error) {
 	val, err := c.GotKV.Get(ctx, s, root, stageKey(wcid))
 	if err != nil {
 		if gotkv.IsErrKeyNotFound(err) {
@@ -216,7 +216,7 @@ func (c *Client) putStage(ctx context.Context, s stores.RW, root gotkv.Root, wci
 }
 
 // getNS returns the Namespace Volume OID if it exists, or (nil, nil) if it doesn't.
-func (c *Client) getNS(ctx context.Context, s stores.Reading, root gotkv.Root) (*subvolEntry, error) {
+func (c *Client) getNS(ctx context.Context, s stores.RO, root gotkv.Root) (*subvolEntry, error) {
 	val, err := c.GotKV.Get(ctx, s, root, nsKey)
 	if err != nil {
 		if gotkv.IsErrKeyNotFound(err) {

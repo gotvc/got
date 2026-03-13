@@ -281,7 +281,7 @@ func (m *Machine) New(ctx context.Context, s stores.RW, admins []IdentityUnit) (
 }
 
 // ValidateState checks the state in isolation.
-func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State) error {
+func (m *Machine) ValidateState(ctx context.Context, src stores.RO, x State) error {
 	for i, kvr := range []gotkv.Root{
 		x.IDUnits,
 		x.Groups, x.GroupNames, x.Memberships,
@@ -299,13 +299,13 @@ func (m *Machine) ValidateState(ctx context.Context, src stores.Reading, x State
 
 // ValidateChange checks the change between two states.
 // Prev is assumed to be a known good, valid state.
-func (m *Machine) ValidateChange(ctx context.Context, src stores.Reading, prev, next State, delta Delta) error {
+func (m *Machine) ValidateChange(ctx context.Context, src stores.RO, prev, next State, delta Delta) error {
 	// TODO: first validate auth operations, ensure that all the differences are signed.
 	return nil
 }
 
 // validateOp validates an operation in isolation.
-func (m *Machine) validateOp(ctx context.Context, src stores.Reading, prev, next State, approvers func(inet256.ID) bool, op Op) error {
+func (m *Machine) validateOp(ctx context.Context, src stores.RO, prev, next State, approvers func(inet256.ID) bool, op Op) error {
 	switch op := op.(type) {
 	case *gotorgop.ChangeSet:
 		return m.validateChangeSet(ctx, src, prev, next, approvers, op)
@@ -314,7 +314,7 @@ func (m *Machine) validateOp(ctx context.Context, src stores.Reading, prev, next
 	}
 }
 
-func (m *Machine) validateChangeSet(ctx context.Context, src stores.Reading, prev, next State, approvers func(inet256.ID) bool, op *gotorgop.ChangeSet) error {
+func (m *Machine) validateChangeSet(ctx context.Context, src stores.RO, prev, next State, approvers func(inet256.ID) bool, op *gotorgop.ChangeSet) error {
 	for _, op2 := range op.Ops {
 		if err := m.validateOp(ctx, src, prev, next, approvers, op2); err != nil {
 			return err

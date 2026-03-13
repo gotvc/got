@@ -16,7 +16,7 @@ type DEntry struct {
 	Right maybe.Maybe[[]byte]
 }
 
-func (ag *Machine) NewDiffer(s stores.Reading, left, right Root, span Span) *Differ {
+func (ag *Machine) NewDiffer(s stores.RO, left, right Root, span Span) *Differ {
 	return &Differ{
 		left:  ag.NewIterator(s, left, span),
 		right: ag.NewIterator(s, right, span),

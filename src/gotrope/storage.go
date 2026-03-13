@@ -21,10 +21,10 @@ type WriteStorage[R any] interface {
 }
 
 type storage struct {
-	s stores.Reading
+	s stores.RO
 }
 
-func NewStorage(s stores.Reading) Storage[blobcache.CID] {
+func NewStorage(s stores.RO) Storage[blobcache.CID] {
 	return storage{s}
 }
 
@@ -49,7 +49,7 @@ func (s storage) MaxSize() int {
 
 type writeStore struct {
 	storage
-	s stores.Writing
+	s stores.WO
 }
 
 func NewWriteStorage(s stores.RW) WriteStorage[blobcache.CID] {

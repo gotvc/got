@@ -48,15 +48,19 @@ func NewMem() *schema.MemStore {
 	return schema.NewMem(blobcache.HashAlgo_BLAKE2b_256.HashFunc(), 1<<22)
 }
 
-// Reading is used for read-only operations.
-type Reading interface {
+func NewMemSize(s int) *schema.MemStore {
+	return schema.NewMem(blobcache.HashAlgo_BLAKE2b_256.HashFunc(), 1<<22)
+}
+
+// RO is used for read-only operations.
+type RO interface {
 	Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, error)
 	Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error
 	MaxSize() int
 }
 
-// Writing is used for additive copy-on-write operations.
-type Writing interface {
+// WO is used for additive copy-on-write operations.
+type WO interface {
 	Post(ctx context.Context, data []byte) (blobcache.CID, error)
 	Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error
 	MaxSize() int
@@ -64,13 +68,13 @@ type Writing interface {
 
 // Writing is used for read-write operations.
 type RW interface {
-	Reading
-	Writing
+	RO
+	WO
 }
 
 type RWD interface {
-	Reading
-	Writing
+	RO
+	WO
 	Delete(ctx context.Context, cids []blobcache.CID) error
 }
 
@@ -87,11 +91,11 @@ func ExistsUnit(ctx context.Context, s Exister, cid blobcache.CID) (bool, error)
 }
 
 type CopyFrom interface {
-	CopyFrom(ctx context.Context, src Reading, cids []blobcache.CID, success []bool) error
+	CopyFrom(ctx context.Context, src RO, cids []blobcache.CID, success []bool) error
 }
 
 // Copy copies a set of CIDs from src to dst.
-func Copy(ctx context.Context, src Reading, dst Writing, cids ...blobcache.CID) error {
+func Copy(ctx context.Context, src RO, dst WO, cids ...blobcache.CID) error {
 	success := make([]bool, len(cids))
 	if cf, ok := dst.(CopyFrom); ok {
 		if err := cf.CopyFrom(ctx, src, cids, success); err != nil {

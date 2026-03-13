@@ -11,7 +11,7 @@ import (
 	"go.brendoncarroll.net/exp/streams"
 )
 
-func Dump(ctx context.Context, ms stores.Reading, root Root, w io.Writer) error {
+func Dump(ctx context.Context, ms stores.RO, root Root, w io.Writer) error {
 	bw := bufio.NewWriter(w)
 	ag := NewMachine()
 	it := ag.gotkv.NewIterator(ms, root.toGotKV(), gotkv.TotalSpan())

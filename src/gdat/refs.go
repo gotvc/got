@@ -11,11 +11,10 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/stores"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 const (
-	Base64Alphabet = cadata.Base64Alphabet
+	Base64Alphabet = blobcache.Base64Alphabet
 	RefSize        = blobcache.CIDSize + DEKSize
 )
 
@@ -127,7 +126,7 @@ func Equal(a, b Ref) bool {
 }
 
 // Copy copies the data at ref from src to dst.
-func Copy(ctx context.Context, src stores.Reading, dst stores.Writing, ref *Ref) error {
+func Copy(ctx context.Context, src stores.RO, dst stores.WO, ref *Ref) error {
 	defer metrics.AddInt(ctx, "blob_copy", 1, "blobs")
 	return stores.Copy(ctx, src, dst, ref.CID)
 }

@@ -122,11 +122,11 @@ func (mach *Machine) PutInfo(ctx context.Context, s stores.RW, x Root, p string,
 }
 
 // GetInfo retrieves the metadata at p if it exists and errors otherwise
-func (mach *Machine) GetInfo(ctx context.Context, s stores.Reading, x Root, p string) (*Info, error) {
+func (mach *Machine) GetInfo(ctx context.Context, s stores.RO, x Root, p string) (*Info, error) {
 	return mach.getInfo(ctx, s, x.ToGotKV(), p)
 }
 
-func (mach *Machine) getInfo(ctx context.Context, s stores.Reading, x gotkv.Root, p string) (*Info, error) {
+func (mach *Machine) getInfo(ctx context.Context, s stores.RO, x gotkv.Root, p string) (*Info, error) {
 	p = cleanPath(p)
 	var md *Info
 	err := mach.gotkv.GetF(ctx, s, x, newInfoKey(p).Marshal(nil), func(data []byte) error {
@@ -144,7 +144,7 @@ func (mach *Machine) getInfo(ctx context.Context, s stores.Reading, x gotkv.Root
 }
 
 // GetDirInfo returns directory metadata at p if it exists, and errors otherwise
-func (mach *Machine) GetDirInfo(ctx context.Context, s stores.Reading, x Root, p string) (*Info, error) {
+func (mach *Machine) GetDirInfo(ctx context.Context, s stores.RO, x Root, p string) (*Info, error) {
 	md, err := mach.GetInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err
@@ -156,7 +156,7 @@ func (mach *Machine) GetDirInfo(ctx context.Context, s stores.Reading, x Root, p
 }
 
 // GetFileInfo returns the file metadata at p if it exists, and errors otherwise
-func (mach *Machine) GetFileInfo(ctx context.Context, s stores.Reading, x Root, p string) (*Info, error) {
+func (mach *Machine) GetFileInfo(ctx context.Context, s stores.RO, x Root, p string) (*Info, error) {
 	md, err := mach.GetInfo(ctx, s, x, p)
 	if err != nil {
 		return nil, err
@@ -167,7 +167,7 @@ func (mach *Machine) GetFileInfo(ctx context.Context, s stores.Reading, x Root, 
 	return md, nil
 }
 
-func (mach *Machine) checkNoEntry(ctx context.Context, s stores.Reading, x Root, p string) error {
+func (mach *Machine) checkNoEntry(ctx context.Context, s stores.RO, x Root, p string) error {
 	_, err := mach.GetInfo(ctx, s, x, p)
 	switch err {
 	case os.ErrNotExist:

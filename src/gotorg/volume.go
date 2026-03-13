@@ -40,7 +40,7 @@ func (m *Machine) AddVolume(ctx context.Context, s stores.RW, state State, entry
 
 // GetVolume looks up a volume in the volumes table.
 // If the volume is not found, nil is returned.
-func (m *Machine) GetVolume(ctx context.Context, s stores.Reading, state State, volOID blobcache.OID) (*VolumeEntry, error) {
+func (m *Machine) GetVolume(ctx context.Context, s stores.RO, state State, volOID blobcache.OID) (*VolumeEntry, error) {
 	val, err := m.gotkv.Get(ctx, s, state.Volumes, volOID[:])
 	if gotkv.IsErrKeyNotFound(err) {
 		return nil, nil
@@ -57,7 +57,7 @@ func (m *Machine) DropVolume(ctx context.Context, s stores.RW, state State, volO
 	return &state, nil
 }
 
-func (m *Machine) ForEachVolume(ctx context.Context, s stores.Reading, x State, fn func(entry VolumeEntry) error) error {
+func (m *Machine) ForEachVolume(ctx context.Context, s stores.RO, x State, fn func(entry VolumeEntry) error) error {
 	span := gotkv.TotalSpan()
 	return m.gotkv.ForEach(ctx, s, x.Volumes, span, func(ent gotkv.Entry) error {
 		entry, err := gotorgop.ParseVolumeEntry(ent.Key, ent.Value)
@@ -70,7 +70,7 @@ func (m *Machine) ForEachVolume(ctx context.Context, s stores.Reading, x State, 
 
 type VolumeConstructor = func(nsVol, innerVol volumes.Volume) *Volume
 
-func (m *Machine) Open(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, volid blobcache.OID, writeAccess bool) (*blobcache.LinkToken, VolumeConstructor, error) {
+func (m *Machine) Open(ctx context.Context, s stores.RO, x State, actAs IdenPrivate, volid blobcache.OID, writeAccess bool) (*blobcache.LinkToken, VolumeConstructor, error) {
 	vent, err := m.GetVolume(ctx, s, x, volid)
 	if err != nil {
 		return nil, nil, err
@@ -93,7 +93,7 @@ func (m *Machine) Open(ctx context.Context, s stores.Reading, x State, actAs Ide
 	return &lt, mkVol, nil
 }
 
-func (m *Machine) OpenAt(ctx context.Context, s stores.Reading, x State, actAs IdenPrivate, name string, writeAccess bool) (*blobcache.LinkToken, VolumeConstructor, error) {
+func (m *Machine) OpenAt(ctx context.Context, s stores.RO, x State, actAs IdenPrivate, name string, writeAccess bool) (*blobcache.LinkToken, VolumeConstructor, error) {
 	ent, err := m.GetAlias(ctx, s, x, name)
 	if err != nil {
 		return nil, nil, err

@@ -69,7 +69,7 @@ func (mtx *MarkTx) FSRW() gotfs.RW {
 	return ss.FS
 }
 
-func (mtx *MarkTx) VCRO() stores.Reading {
+func (mtx *MarkTx) VCRO() stores.RO {
 	ss := mtx.RO()
 	return ss.VC
 }
@@ -303,7 +303,7 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 	})
 }
 
-func History(ctx context.Context, vcmach *VCMach, s stores.Reading, commRef gdat.Ref, fn func(ref gdat.Ref, comm Commit) error) error {
+func History(ctx context.Context, vcmach *VCMach, s stores.RO, commRef gdat.Ref, fn func(ref gdat.Ref, comm Commit) error) error {
 	comm, err := vcmach.GetVertex(ctx, s, commRef)
 	if err != nil {
 		return err

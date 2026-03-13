@@ -36,7 +36,7 @@ func NewMachine(p Params) *Machine {
 	return o
 }
 
-func (a *Machine) Post(ctx context.Context, s stores.Writing, data []byte) (Ref, error) {
+func (a *Machine) Post(ctx context.Context, s stores.WO, data []byte) (Ref, error) {
 	id, dek, err := a.postEncrypt(ctx, s, a.kf, data)
 	if err != nil {
 		return Ref{}, err
@@ -47,7 +47,7 @@ func (a *Machine) Post(ctx context.Context, s stores.Writing, data []byte) (Ref,
 	}, nil
 }
 
-func (a *Machine) GetF(ctx context.Context, s stores.Reading, ref Ref, fn func(data []byte) error) error {
+func (a *Machine) GetF(ctx context.Context, s stores.RO, ref Ref, fn func(data []byte) error) error {
 	if data := a.checkCache(ref); data != nil {
 		return fn(data)
 	}
@@ -61,7 +61,7 @@ func (a *Machine) GetF(ctx context.Context, s stores.Reading, ref Ref, fn func(d
 	return fn(data)
 }
 
-func (a *Machine) Read(ctx context.Context, s stores.Reading, ref Ref, buf []byte) (int, error) {
+func (a *Machine) Read(ctx context.Context, s stores.RO, ref Ref, buf []byte) (int, error) {
 	return getDecrypt(ctx, s, ref.DEK, ref.CID, buf)
 }
 

@@ -6,7 +6,6 @@ import (
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 // Sync ensures dst has all the data reachable from root
@@ -26,7 +25,7 @@ func (mach *Machine) Sync(ctx context.Context, src RO, dst WO, root Root) error 
 }
 
 // Populate adds the ID for all the metadata blobs to mdSet and all the data blobs to dataSet
-func (mach *Machine) Populate(ctx context.Context, s stores.Reading, root Root, mdSet, dataSet cadata.Set) error {
+func (mach *Machine) Populate(ctx context.Context, s stores.RO, root Root, mdSet, dataSet stores.Set) error {
 	return mach.gotkv.Populate(ctx, s, root.toGotKV(), mdSet, func(ent gotkv.Entry) error {
 		if isExtentKey(ent.Key) {
 			ext, err := parseExtent(ent.Value)

@@ -6,9 +6,9 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 )
 
-var _ Reading = Union{}
+var _ RO = Union{}
 
-type Union []Reading
+type Union []RO
 
 func (u Union) Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, error) {
 	var lastErr error

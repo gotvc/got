@@ -6,7 +6,6 @@ import (
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/internal/stores"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 type TxParams = blobcache.TxParams
@@ -50,7 +49,7 @@ func Modify(ctx context.Context, vol Volume, fn func(dst stores.RW, x []byte) ([
 	return tx.Commit(ctx)
 }
 
-func View(ctx context.Context, vol Volume, fn func(src cadata.Getter, root []byte) error) error {
+func View(ctx context.Context, vol Volume, fn func(src stores.RO, root []byte) error) error {
 	tx, err := vol.BeginTx(ctx, TxParams{Modify: false})
 	if err != nil {
 		return err

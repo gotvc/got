@@ -35,7 +35,7 @@ func MemberGroup(gid GroupID) gotorgop.Member {
 
 // PutLeaf adds a leaf to the leaves table, overwriting whatever was there.
 // Any unreferenced leaves will be deleted.
-func (m *Machine) PutIDUnit(ctx context.Context, s stores.Writing, state State, leaf IdentityUnit) (*State, error) {
+func (m *Machine) PutIDUnit(ctx context.Context, s stores.WO, state State, leaf IdentityUnit) (*State, error) {
 	leafState, err := m.gotkv.Edit(ctx, s.(stores.RW), state.IDUnits, putLeaf(leaf))
 	if err != nil {
 		return nil, err
@@ -45,7 +45,7 @@ func (m *Machine) PutIDUnit(ctx context.Context, s stores.Writing, state State, 
 }
 
 // GetIDUnit retuns an identity unit by ID.
-func (m *Machine) GetIDUnit(ctx context.Context, s stores.Reading, state State, id inet256.ID) (*IdentityUnit, error) {
+func (m *Machine) GetIDUnit(ctx context.Context, s stores.RO, state State, id inet256.ID) (*IdentityUnit, error) {
 	val, err := m.gotkv.Get(ctx, s, state.IDUnits, id[:])
 	if err != nil {
 		if gotkv.IsErrKeyNotFound(err) {
@@ -74,7 +74,7 @@ func (m *Machine) DropIDUnit(ctx context.Context, s stores.RW, state State, id i
 	return &state, nil
 }
 
-func (m *Machine) ForEachIDUnit(ctx context.Context, s stores.Reading, state State, fn func(unit IdentityUnit) error) error {
+func (m *Machine) ForEachIDUnit(ctx context.Context, s stores.RO, state State, fn func(unit IdentityUnit) error) error {
 	span := gotkv.TotalSpan()
 	return m.gotkv.ForEach(ctx, s, state.IDUnits, span, func(ent gotkv.Entry) error {
 		unit, err := gotorgop.ParseIDUnit(ent.Key, ent.Value)
@@ -96,7 +96,7 @@ func (m *Machine) PutGroup(ctx context.Context, s stores.RW, state State, group 
 }
 
 // GetGroup returns a group by name.
-func (m *Machine) GetGroup(ctx context.Context, s stores.Reading, State State, groupID GroupID) (*Group, error) {
+func (m *Machine) GetGroup(ctx context.Context, s stores.RO, State State, groupID GroupID) (*Group, error) {
 	k := groupID[:]
 	val, err := m.gotkv.Get(ctx, s, State.Groups, k)
 	if err != nil {
@@ -109,7 +109,7 @@ func (m *Machine) GetGroup(ctx context.Context, s stores.Reading, State State, g
 }
 
 // ForEachGroup calls fn for each group in the namespace.
-func (m *Machine) ForEachGroup(ctx context.Context, s stores.Reading, state State, fn func(group gotorgop.Group) error) error {
+func (m *Machine) ForEachGroup(ctx context.Context, s stores.RO, state State, fn func(group gotorgop.Group) error) error {
 	span := gotkv.TotalSpan()
 	return m.gotkv.ForEach(ctx, s, state.Groups, span, func(ent gotkv.Entry) error {
 		group, err := gotorgop.ParseGroup(ent.Key, ent.Value)
@@ -133,7 +133,7 @@ func (m *Machine) PutGroupName(ctx context.Context, s stores.RW, state State, na
 	return &state, nil
 }
 
-func (m *Machine) GetGroupName(ctx context.Context, s stores.Reading, x State, name string) (*gotorgop.GroupID, error) {
+func (m *Machine) GetGroupName(ctx context.Context, s stores.RO, x State, name string) (*gotorgop.GroupID, error) {
 	var groupID *gotorgop.GroupID
 	if err := m.gotkv.GetF(ctx, s, x.GroupNames, []byte(name), func(val []byte) error {
 		id, err := gotorgop.ParseGroupID(val)
@@ -148,7 +148,7 @@ func (m *Machine) GetGroupName(ctx context.Context, s stores.Reading, x State, n
 	return groupID, nil
 }
 
-func (m *Machine) LookupGroup(ctx context.Context, s stores.Reading, state State, name string) (*Group, error) {
+func (m *Machine) LookupGroup(ctx context.Context, s stores.RO, state State, name string) (*Group, error) {
 	groupID, err := m.GetGroupName(ctx, s, state, name)
 	if err != nil {
 		return nil, err
@@ -156,7 +156,7 @@ func (m *Machine) LookupGroup(ctx context.Context, s stores.Reading, state State
 	return m.GetGroup(ctx, s, state, *groupID)
 }
 
-func (m *Machine) GetMembership(ctx context.Context, s stores.Reading, state State, group GroupID, mem Member) (*Membership, error) {
+func (m *Machine) GetMembership(ctx context.Context, s stores.RO, state State, group GroupID, mem Member) (*Membership, error) {
 	k := memberKey(nil, group, mem)
 	val, err := m.gotkv.Get(ctx, s, state.Memberships, k)
 	if err != nil {
@@ -167,7 +167,7 @@ func (m *Machine) GetMembership(ctx context.Context, s stores.Reading, state Sta
 
 // ForEachMembership calls fn for each membership
 // If gid is non-nil, then it will be used to filter by the containing group.
-func (m *Machine) ForEachMembership(ctx context.Context, s stores.Reading, state State, gid *GroupID, fn func(mem Membership) error) error {
+func (m *Machine) ForEachMembership(ctx context.Context, s stores.RO, state State, gid *GroupID, fn func(mem Membership) error) error {
 	span := gotkv.TotalSpan()
 	return m.gotkv.ForEach(ctx, s, state.Memberships, span, func(ent gotkv.Entry) error {
 		mem, err := ParseMembership(ent.Key, ent.Value)
@@ -241,7 +241,7 @@ func (m *Machine) RemoveMember(ctx context.Context, s stores.RW, state State, gi
 
 // ForEachInGroup calls fn recursively for each ID in the group.
 // This is a recursive method which explores the full transitive closure of the initial Group.
-func (m *Machine) ForEachUnitInGroup(ctx context.Context, s stores.Reading, state State, gid GroupID, fn func(inet256.ID) error) error {
+func (m *Machine) ForEachUnitInGroup(ctx context.Context, s stores.RO, state State, gid GroupID, fn func(inet256.ID) error) error {
 	return m.ForEachMembership(ctx, s, state, &gid, func(mem Membership) error {
 		switch {
 		case mem.Member.Unit != nil:
@@ -257,7 +257,7 @@ func (m *Machine) ForEachUnitInGroup(ctx context.Context, s stores.Reading, stat
 // This method answers the `contains?` query for the full transitive closure for the group.
 // For immediate memberhsip call GetMembership directly and check for (nil, nil);
 // that means the memberhip does not exist.
-func (m *Machine) GroupContains(ctx context.Context, s stores.Reading, state State, group GroupID, actor inet256.ID) (bool, error) {
+func (m *Machine) GroupContains(ctx context.Context, s stores.RO, state State, group GroupID, actor inet256.ID) (bool, error) {
 	var contains bool
 	stopEarly := errors.New("stop early")
 	if err := m.ForEachUnitInGroup(ctx, s, state, group, func(id inet256.ID) error {
@@ -277,7 +277,7 @@ func (m *Machine) GroupContains(ctx context.Context, s stores.Reading, state Sta
 // kemPriv is the KEM private key for the leaf to decrypt messages sent to it by group operations.
 // groupPath should go from the largest group to the smallest group.
 // If you need a groupPath, try `FindGroupPath` first.
-func (m *Machine) GetGroupSecret(ctx context.Context, s stores.Reading, state State, priv IdenPrivate, groupPath []GroupID) (*gotorgop.Secret, error) {
+func (m *Machine) GetGroupSecret(ctx context.Context, s stores.RO, state State, priv IdenPrivate, groupPath []GroupID) (*gotorgop.Secret, error) {
 	kemPriv := priv.KEMPrivateKey
 	var groupSecret *gotorgop.Secret
 
@@ -360,7 +360,7 @@ func (m *Machine) RekeyGroup(ctx context.Context, s stores.RW, state State, gid 
 
 // FindGroupPath finds a path of groups from priv to the target Group.
 // FindGroupPath returns (nil, nil) when no path could be found.
-func (m *Machine) FindGroupPath(ctx context.Context, s stores.Reading, x State, id inet256.ID, target GroupID) ([]GroupID, error) {
+func (m *Machine) FindGroupPath(ctx context.Context, s stores.RO, x State, id inet256.ID, target GroupID) ([]GroupID, error) {
 	initial := []GroupID{}
 	// List all the groups containing the unit
 	if err := m.ForEachGroup(ctx, s, x, func(g Group) error {

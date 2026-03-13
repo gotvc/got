@@ -7,7 +7,6 @@ import (
 	"math"
 
 	"blobcache.io/blobcache/src/blobcache"
-	"go.brendoncarroll.net/state/cadata"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/chacha20"
@@ -90,7 +89,7 @@ func (*DEK) String() string {
 	return "{ 32 byte DEK }"
 }
 
-func (a *Machine) postEncrypt(ctx context.Context, s stores.Writing, keyFunc KeyFunc, data []byte) (blobcache.CID, *DEK, error) {
+func (a *Machine) postEncrypt(ctx context.Context, s stores.WO, keyFunc KeyFunc, data []byte) (blobcache.CID, *DEK, error) {
 	dek := keyFunc(Hash(data))
 	ctext := a.acquire(s.MaxSize())
 	defer a.release(ctext)
@@ -102,13 +101,16 @@ func (a *Machine) postEncrypt(ctx context.Context, s stores.Writing, keyFunc Key
 	return id, &dek, nil
 }
 
-func getDecrypt(ctx context.Context, s stores.Reading, dek DEK, id blobcache.CID, buf []byte) (int, error) {
+func getDecrypt(ctx context.Context, s stores.RO, dek DEK, id blobcache.CID, buf []byte) (int, error) {
 	n, err := s.Get(ctx, id, buf)
 	if err != nil {
 		return 0, err
 	}
 	data := buf[:n]
-	if err := cadata.Check(Hash, id, data); err != nil {
+	hf := func(salt *blobcache.CID, data []byte) blobcache.CID {
+		return Hash(data)
+	}
+	if err := blobcache.CheckBlob(hf, nil, &id, data); err != nil {
 		logctx.Errorf(ctx, "len(data)=%d HAVE: %v WANT: %v", len(data), id, Hash(data))
 		return 0, err
 	}

@@ -69,7 +69,7 @@ func (c *Client) Do(ctx context.Context, volh blobcache.Handle, fn func(txb *Txn
 
 func (c *Client) LookupGroup(ctx context.Context, volh blobcache.Handle, name string) (*gotorgop.Group, error) {
 	var group *gotorgop.Group
-	if err := c.view(ctx, volh, func(s stores.Reading, state State) error {
+	if err := c.view(ctx, volh, func(s stores.RO, state State) error {
 		var err error
 		group, err = c.Machine.LookupGroup(ctx, s, state, name)
 		if err != nil {
@@ -84,7 +84,7 @@ func (c *Client) LookupGroup(ctx context.Context, volh blobcache.Handle, name st
 
 func (c *Client) GetIDUnit(ctx context.Context, volh blobcache.Handle, id inet256.ID) (*IdentityUnit, error) {
 	var idu *IdentityUnit
-	if err := c.view(ctx, volh, func(s stores.Reading, state State) error {
+	if err := c.view(ctx, volh, func(s stores.RO, state State) error {
 		var err error
 		idu, err = c.Machine.GetIDUnit(ctx, s, state, id)
 		if err != nil {
@@ -211,7 +211,7 @@ func (c *Client) OpenAt(ctx context.Context, nsh blobcache.Handle, name string, 
 	}
 	var ltok *blobcache.LinkToken
 	var mkVol VolumeConstructor
-	if err := c.view(ctx, nsh, func(s stores.Reading, x State) error {
+	if err := c.view(ctx, nsh, func(s stores.RO, x State) error {
 		var err error
 		ltok, mkVol, err = c.Machine.OpenAt(ctx, s, x, c.ActAs, name, false)
 		return err
@@ -281,7 +281,7 @@ func (c *Client) doTx(ctx context.Context, volh blobcache.Handle, leafPriv IdenP
 	return tx.Commit(ctx)
 }
 
-func (c *Client) view(ctx context.Context, volh blobcache.Handle, fn func(s stores.Reading, state State) error) error {
+func (c *Client) view(ctx context.Context, volh blobcache.Handle, fn func(s stores.RO, state State) error) error {
 	volh, err := c.adjustHandle(ctx, volh)
 	if err != nil {
 		return err

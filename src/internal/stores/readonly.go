@@ -19,6 +19,6 @@ func (ro readOnly) Delete(ctx context.Context, id CID) error {
 }
 
 // AssertReadOnly returns a new store backup by x, which will panic if it is modified.
-func AssertReadOnly(x RW) Reading {
+func AssertReadOnly(x RW) RO {
 	return readOnly{x}
 }

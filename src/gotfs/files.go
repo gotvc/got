@@ -71,7 +71,7 @@ func (mach *Machine) PutFile(ctx context.Context, ss RW, x Root, p string, r io.
 }
 
 // SizeOfFile returns the size of the file at p in bytes.
-func (mach *Machine) SizeOfFile(ctx context.Context, s stores.Reading, x Root, p string) (uint64, error) {
+func (mach *Machine) SizeOfFile(ctx context.Context, s stores.RO, x Root, p string) (uint64, error) {
 	p = cleanPath(p)
 	k := newInfoKey(p)
 	return mach.lob.SizeOf(ctx, s, x.toGotKV(), k.Prefix(nil))

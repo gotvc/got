@@ -244,7 +244,7 @@ func makeFS(t testing.TB, ss gotfs.RW, files map[string]string) gotfs.Root {
 	return *root
 }
 
-func makeCommit(t testing.TB, cfg DSConfig, s stores.Writing, parents []Commit, fsroot gotfs.Root) *Commit {
+func makeCommit(t testing.TB, cfg DSConfig, s stores.WO, parents []Commit, fsroot gotfs.Root) *Commit {
 	ctx := testutil.Context(t)
 	vcmach := gotvc.NewMachine(ParsePayload, gotvc.Config{Salt: cfg.Salt})
 	comm, err := vcmach.NewVertex(ctx, s, gotvc.VertexParams[Payload]{

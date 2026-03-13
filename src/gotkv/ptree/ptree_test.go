@@ -5,17 +5,18 @@ import (
 	"testing"
 
 	"blobcache.io/blobcache/src/blobcache"
+	"blobcache.io/blobcache/src/schema"
+	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state"
-	"go.brendoncarroll.net/state/cadata"
 )
 
 func TestBuilder(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
+	s := newStore(1 << 16)
 	b := newBuilder(t, s)
 
 	generateEntries(1e4, func(ent Entry) {
@@ -30,7 +31,7 @@ func TestBuilder(t *testing.T) {
 func TestBuildIterate(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
+	s := newStore(1 << 16)
 	b := newBuilder(t, s)
 
 	const N = 1e4
@@ -60,7 +61,7 @@ func TestBuildIterate(t *testing.T) {
 func TestIterateEmptySpan(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
-	s := cadata.NewMem(cadata.DefaultHash, cadata.DefaultMaxSize)
+	s := newStore(1 << 16)
 	b := newBuilder(t, s)
 
 	const N = 1e4
@@ -87,7 +88,7 @@ func TestCopy(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
 	maxSize := 1 << 16
-	s := cadata.NewMem(cadata.DefaultHash, maxSize)
+	s := newStore(maxSize)
 	b := newBuilder(t, s)
 
 	const N = 1e6
@@ -123,7 +124,7 @@ func TestCopySpan(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
 	maxSize := 1 << 16
-	s := cadata.NewMem(cadata.DefaultHash, maxSize)
+	s := newStore(maxSize)
 	b := newBuilder(t, s)
 
 	const N = 1e6
@@ -161,7 +162,7 @@ func TestCopyMultiple(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
 	maxSize := 1 << 16
-	s := cadata.NewMem(cadata.DefaultHash, maxSize)
+	s := newStore(maxSize)
 	b := newBuilder(t, s)
 
 	const N = 1e6
@@ -199,7 +200,7 @@ func TestSeek(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
 	maxSize := 1 << 16
-	s := cadata.NewMem(cadata.DefaultHash, maxSize)
+	s := newStore(maxSize)
 	b := newBuilder(t, s)
 
 	const N = 1e6
@@ -228,7 +229,7 @@ func TestSeekNonExist(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
 	maxSize := 1 << 16
-	s := cadata.NewMem(cadata.DefaultHash, maxSize)
+	s := newStore(maxSize)
 	b := newBuilder(t, s)
 
 	const N = 1e6
@@ -257,7 +258,7 @@ func TestEmpty(t *testing.T) {
 	t.Parallel()
 	ctx := testutil.Context(t)
 	maxSize := 1 << 16
-	s := cadata.NewMem(cadata.DefaultHash, maxSize)
+	s := newStore(maxSize)
 	b := newBuilder(t, s)
 
 	root, err := b.Finish(ctx)
@@ -270,7 +271,7 @@ func TestEmpty(t *testing.T) {
 	}
 }
 
-func newBuilder(t testing.TB, s cadata.Store) *Builder[Entry, blobcache.CID] {
+func newBuilder(t testing.TB, s stores.RW) *Builder[Entry, blobcache.CID] {
 	averageSize := 1 << 12
 	return NewBuilder(BuilderParams[Entry, blobcache.CID]{
 		Store:           s,
@@ -284,7 +285,7 @@ func newBuilder(t testing.TB, s cadata.Store) *Builder[Entry, blobcache.CID] {
 	})
 }
 
-func newIterator(t testing.TB, s cadata.Store, root Root[Entry, blobcache.CID], span state.Span[Entry]) *Iterator[Entry, blobcache.CID] {
+func newIterator(t testing.TB, s stores.RO, root Root[Entry, blobcache.CID], span state.Span[Entry]) *Iterator[Entry, blobcache.CID] {
 	return NewIterator(IteratorParams[Entry, blobcache.CID]{
 		Store:           s,
 		Compare:         compareEntries,
@@ -294,4 +295,8 @@ func newIterator(t testing.TB, s cadata.Store, root Root[Entry, blobcache.CID], 
 		Root:            root,
 		Span:            span,
 	})
+}
+
+func newStore(maxSize int) *schema.MemStore {
+	return schema.NewMem(blobcache.HashAlgo_BLAKE3_256.HashFunc(), maxSize)
 }

@@ -17,7 +17,7 @@ type (
 )
 
 // GetAlias looks up an entry in the branches table.
-func (m *Machine) GetAlias(ctx context.Context, s stores.Reading, state State, name string) (*gotorgop.VolumeAlias, error) {
+func (m *Machine) GetAlias(ctx context.Context, s stores.RO, state State, name string) (*gotorgop.VolumeAlias, error) {
 	val, err := m.gotkv.Get(ctx, s, state.VolumeNames, []byte(name))
 	if err != nil {
 		if gotkv.IsErrKeyNotFound(err) {
@@ -70,7 +70,7 @@ func putAlias(entry gotorgop.VolumeAlias) gotkv.Edit {
 	}
 }
 
-func (m *Machine) ListBranches(ctx context.Context, s stores.Reading, state State, span gotcore.Span, limit int) ([]gotorgop.VolumeAlias, error) {
+func (m *Machine) ListBranches(ctx context.Context, s stores.RO, state State, span gotcore.Span, limit int) ([]gotorgop.VolumeAlias, error) {
 	span2 := gotkv.TotalSpan()
 	if span.Begin != "" {
 		span2.Begin = []byte(span.Begin)
