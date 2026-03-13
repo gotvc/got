@@ -2,6 +2,7 @@ package e2etest
 
 import (
 	"fmt"
+	"path"
 	"testing"
 
 	"github.com/gotvc/got/src/gotrepo"
@@ -9,6 +10,7 @@ import (
 	"github.com/gotvc/got/src/gotwc"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestCheckout(t *testing.T) {
@@ -182,6 +184,67 @@ func TestExport(t *testing.T) {
 			} else {
 				assert.ErrorIs(t, err, tc.Err)
 				site.AssertFSEquals(tc.InFS)
+			}
+		})
+	}
+}
+
+type MF = testutil.MemFile
+
+func strFile(x string) MF {
+	return MF{Mode: 0o644, Data: []byte(x)}
+}
+
+func TestCommit(t *testing.T) {
+	type TestCase struct {
+		Commits []testutil.MemFS
+	}
+	tcs := []TestCase{
+		{
+			Commits: []testutil.MemFS{
+				{
+					"a.txt": strFile("aaaaa"),
+				},
+				{
+					"a.txt": strFile("aaaaa"),
+					"b.txt": strFile("bbbbb"),
+				},
+				{
+					"a.txt": strFile("aaaaa"),
+					"b.txt": strFile("bbbbb"),
+					"c.txt": strFile("ccccc"),
+				},
+			},
+		},
+		// {
+		// 	Commits: []testutil.MemFS{
+		// 		{
+		// 			"a.txt": strFile("a"),
+		// 		},
+		// 		{
+		// 			"a.txt":        strFile("a"),
+		// 			"subdir/b.txt": strFile("b.txt"),
+		// 		},
+		// 	},
+		// },
+	}
+
+	for i, tc := range tcs {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			s := gottests.NewSite(t)
+			s.CreateMark(gotrepo.FQM{Name: "master"})
+
+			for _, c := range tc.Commits {
+				// TODO: handle removing files, no test cases require that currently.
+				for p, mf := range c {
+					dir := path.Dir(p)
+					if dir != "." {
+						require.NoError(t, s.Root.MkdirAll(dir, 0o755))
+					}
+					require.NoError(t, s.Root.WriteFile(p, mf.Data, mf.Mode))
+					s.Add(p)
+				}
+				s.Commit(gotwc.CommitParams{})
 			}
 		})
 	}

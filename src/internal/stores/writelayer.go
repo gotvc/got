@@ -2,56 +2,64 @@ package stores
 
 import (
 	"context"
+	"errors"
 
 	"blobcache.io/blobcache/src/blobcache"
-	"go.brendoncarroll.net/state/cadata"
 )
 
-type writeLayer struct {
+type Overlay struct {
 	base    Reading
 	writeTo RW
 }
 
-func AddWriteLayer(base Reading, writeTo RW) RW {
-	return writeLayer{base: base, writeTo: writeTo}
+func NewOverlay(base Reading, writeTo RW) RW {
+	return Overlay{base: base, writeTo: writeTo}
 }
 
-func (wl writeLayer) Post(ctx context.Context, data []byte) (cadata.ID, error) {
+func (wl Overlay) Post(ctx context.Context, data []byte) (blobcache.CID, error) {
 	return wl.writeTo.Post(ctx, data)
 }
 
-func (wl writeLayer) Get(ctx context.Context, id cadata.ID, buf []byte) (int, error) {
+func (wl Overlay) Get(ctx context.Context, id blobcache.CID, buf []byte) (int, error) {
 	n, err := wl.writeTo.Get(ctx, id, buf)
 	if err == nil {
 		return n, err
 	}
-	if !cadata.IsNotFound(err) {
+	if !isNotFound(err) {
 		return 0, err
 	}
 	return wl.base.Get(ctx, id, buf)
 }
 
-func (wl writeLayer) Exists(ctx context.Context, ids []blobcache.CID, dst []bool) error {
+func (wl Overlay) Exists(ctx context.Context, ids []blobcache.CID, dst []bool) error {
 	dst2 := make([]bool, len(ids))
 	if err := wl.writeTo.Exists(ctx, ids, dst2); err != nil {
 		return err
 	}
 	for i := range dst {
-		dst[i] = dst2[i]
+		dst[i] = dst[i] || dst2[i]
+	}
+	for i := range dst2 {
+		dst2[i] = false
 	}
 	if err := wl.base.Exists(ctx, ids, dst2); err != nil {
 		return err
 	}
 	for i := range dst {
-		dst[i] = dst2[i]
+		dst[i] = dst[i] || dst2[i]
 	}
 	return nil
 }
 
-func (wl writeLayer) MaxSize() int {
+func (wl Overlay) MaxSize() int {
 	size := wl.base.MaxSize()
 	if size2 := wl.writeTo.MaxSize(); size2 < size {
 		size = size2
 	}
 	return size
+}
+
+func isNotFound(err error) bool {
+	e2 := &blobcache.ErrNotFound{}
+	return errors.As(err, &blobcache.ErrNotFound{}) || errors.As(err, &e2)
 }

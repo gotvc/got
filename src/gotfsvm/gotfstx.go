@@ -32,18 +32,19 @@ func (m *Machine) Apply(ctx context.Context, dst gotfs.RW, fn Function, inputs [
 	if err != nil {
 		return gotfs.Root{}, err
 	}
+	src := union(slices2.Map(inputs, func(in Input) gotfs.RO {
+		return in.Stores
+	})...)
 	ec := evalCtx{
 		Ctx:    ctx,
 		Inputs: inputs,
+		Src:    src,
 		Dst:    dst,
 		Job:    gotjob.New(ctx),
 		Fn:     body,
 	}
 	root, err := m.evalRoot(&ec, body.Output())
 	if err != nil {
-		return gotfs.Root{}, err
-	}
-	if err := m.gotfs.Sync(ctx, root.stores, dst.WO(), root.Root); err != nil {
 		return gotfs.Root{}, err
 	}
 	return root.Root, nil
@@ -59,6 +60,7 @@ type evalCtx struct {
 	Ctx    context.Context
 	Dst    gotfs.RW
 	Inputs []Input
+	Src    gotfs.RO
 	Job    gotjob.Ctx
 	Fn     fnBody
 }
@@ -93,10 +95,7 @@ func (m *Machine) eval(ectx *evalCtx, expr Vertex) (Value, error) {
 		if len(ectx.Inputs) <= int(idx) {
 			return nil, fmt.Errorf("input index out of bounds %d", idx)
 		}
-		return &Value_Root{
-			Root:   ectx.Inputs[idx].Root,
-			stores: ectx.Inputs[idx].Stores,
-		}, nil
+		return &Value_Root{Root: ectx.Inputs[idx].Root}, nil
 	case OpCode_SELECT:
 		rootVal, err := m.evalRoot(ectx, args[0])
 		if err != nil {
@@ -107,7 +106,7 @@ func (m *Machine) eval(ectx *evalCtx, expr Vertex) (Value, error) {
 			return nil, err
 		}
 		seg := gotfs.Segment{Span: span, Contents: rootVal.Root.ToGotKV()}
-		return &Value_Segment{seg, rootVal.stores}, nil
+		return &Value_Segment{seg}, nil
 	case OpCode_ShiftOut:
 		panic("ShiftOut not yet implemented")
 	case OpCode_ShiftIn:
@@ -121,12 +120,12 @@ func (m *Machine) eval(ectx *evalCtx, expr Vertex) (Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		ss := mkRW(rootVal.stores, ectx.Dst)
+		ss := mkRW(ectx.Src, ectx.Dst)
 		result, err := m.gotfs.Pick(ectx.Ctx, ss.Metadata, rootVal.Root, path)
 		if err != nil {
 			return nil, err
 		}
-		return &Value_Root{Root: *result, stores: ss.RO()}, nil
+		return &Value_Root{Root: *result}, nil
 	case OpCode_PLACE:
 		baseVal, err := m.evalRoot(ectx, args[0])
 		if err != nil {
@@ -140,12 +139,12 @@ func (m *Machine) eval(ectx *evalCtx, expr Vertex) (Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		ss := mkRW(union(baseVal.stores, mountVal.stores), ectx.Dst)
+		ss := mkRW(ectx.Src, ectx.Dst)
 		result, err := m.gotfs.Graft(ectx.Ctx, ss, baseVal.Root, path, mountVal.Root)
 		if err != nil {
 			return nil, err
 		}
-		return &Value_Root{Root: *result, stores: ss.RO()}, nil
+		return &Value_Root{Root: *result}, nil
 	case OpCode_MKDIRALL:
 		rootVal, err := m.evalRoot(ectx, args[0])
 		if err != nil {
@@ -159,22 +158,23 @@ func (m *Machine) eval(ectx *evalCtx, expr Vertex) (Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		ss := mkRW(rootVal.stores, ectx.Dst)
+		ss := mkRW(ectx.Src, ectx.Dst)
 		result, err := m.gotfs.MkdirAll(ctx, ss.Metadata, rootVal.Root, path)
 		if err != nil {
 			return nil, err
 		}
-		return &Value_Root{Root: *result, stores: ss.RO()}, nil
+		return &Value_Root{Root: *result}, nil
 	case OpCode_CONCAT:
 		segs, err := m.flattenConcat(ectx, nil, expr)
 		if err != nil {
 			return nil, err
 		}
-		seg, err := m.gotfs.Concat(ctx, ectx.Dst, slices.Values(segs))
+		ss := mkRW(ectx.Src, ectx.Dst)
+		seg, err := m.gotfs.Concat(ctx, ss, slices.Values(segs))
 		if err != nil {
 			return nil, err
 		}
-		return &Value_Segment{seg, ectx.Dst.RO()}, nil
+		return &Value_Segment{seg}, nil
 	case OpCode_PROMOTE:
 		segVal, err := m.evalSegment(ectx, args[0])
 		if err != nil {
@@ -182,10 +182,11 @@ func (m *Machine) eval(ectx *evalCtx, expr Vertex) (Value, error) {
 		}
 		seg := segVal.Segment
 		root := gotfs.Root{Ref: seg.Contents.Ref, Depth: seg.Contents.Depth}
-		if err := m.gotfs.Check(ctx, ectx.Dst.Metadata, root, func(ref gdat.Ref) error { return nil }); err != nil {
+		ss := mkRW(ectx.Src, ectx.Dst)
+		if err := m.gotfs.Check(ctx, ss.Metadata, root, func(ref gdat.Ref) error { return nil }); err != nil {
 			return nil, err
 		}
-		return &Value_Root{Root: root, stores: segVal.stores}, nil
+		return &Value_Root{Root: root}, nil
 
 	default:
 		return nil, fmt.Errorf("unrecognized op %v", oc)
@@ -290,8 +291,8 @@ func (m *Machine) flattenConcat(ectx *evalCtx, out []gotfs.Segment, expr Vertex)
 
 func mkRW(ro gotfs.RO, rw gotfs.RW) gotfs.RW {
 	return gotfs.RW{
-		Data:     stores.AddWriteLayer(ro.Data, rw.Data),
-		Metadata: stores.AddWriteLayer(ro.Metadata, rw.Metadata),
+		Data:     stores.NewOverlay(ro.Data, rw.Data),
+		Metadata: stores.NewOverlay(ro.Metadata, rw.Metadata),
 	}
 }
 

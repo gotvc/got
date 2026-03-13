@@ -294,7 +294,7 @@ func (tx *Tx) CreateFunction(ctx context.Context, fsag *gotfs.Machine, ss gotfs.
 		return gotfsvm.Function{}, err
 	}
 	vm := gotfsvm.New(fsag)
-	return vm.NewFunction(ctx, ss.Metadata, func(fb *gotfsvm.FnBuilder) (gotfsvm.ExprT[gotfs.Root], error) {
+	return vm.NewFunction(ctx, ss.Metadata, func(fb *gotfsvm.FnBuilder) (gotfsvm.Expr[gotfs.Root], error) {
 		baseExpr := fb.Input(0)
 		var segs []gotfs.Segment
 		err = streams.ForEach(ctx, it, func(ent Entry) error {
@@ -315,7 +315,7 @@ func (tx *Tx) CreateFunction(ctx context.Context, fsag *gotfs.Machine, ss gotfs.
 			return nil
 		})
 		if err != nil {
-			return gotfsvm.ExprT[gotfs.Root]{}, err
+			return gotfsvm.Expr[gotfs.Root]{}, err
 		}
 		concatExpr := fb.ChangesOnBase(baseExpr, segs)
 		return fb.Promote(concatExpr), nil

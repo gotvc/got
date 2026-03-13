@@ -17,8 +17,8 @@ func (u Union) Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, err
 		if err == nil {
 			return n, nil
 		}
-		if !blobcache.IsErrNotFound(err) {
-			return 0, err
+		if isNotFound(err) {
+			continue
 		}
 		lastErr = err
 	}

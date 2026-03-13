@@ -54,7 +54,7 @@ func (tx *Txn) Finish(ctx context.Context) (statetrace.Root[Root], error) {
 		cs.Sign(signer.SigPrivateKey)
 	}
 
-	s2 := stores.AddWriteLayer(tx.s, stores.NewMem())
+	s2 := stores.NewOverlay(tx.s, stores.NewMem())
 	if err := tx.m.ValidateChange(ctx, s2, tx.prev.State.Current, tx.curState, Delta(cs)); err != nil {
 		return statetrace.Root[Root]{}, err
 	}
