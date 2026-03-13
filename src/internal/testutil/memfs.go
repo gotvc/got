@@ -1,7 +1,9 @@
 package testutil
 
+import "io/fs"
+
 type MemFile struct {
-	Mode uint32
+	Mode fs.FileMode
 	Data []byte
 }
 

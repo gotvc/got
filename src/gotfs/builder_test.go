@@ -14,7 +14,7 @@ import (
 
 func TestBuilderMkdir(t *testing.T) {
 	ctx, ag, s := setup(t)
-	b := ag.NewBuilder(ctx, s, s)
+	b := ag.NewBuilder(ctx, RW{s, s})
 	require.Error(t, b.Mkdir("1", 0o755))
 	require.NoError(t, b.Mkdir("", 0o755))
 	var p string
@@ -26,7 +26,7 @@ func TestBuilderMkdir(t *testing.T) {
 
 func TestBuilderSmallFiles(t *testing.T) {
 	ctx, mach, s := setup(t)
-	b := mach.NewBuilder(ctx, s, s)
+	b := mach.NewBuilder(ctx, RW{s, s})
 	require.NoError(t, b.Mkdir("", 0o755))
 	const N = 1e5
 	for i := 0; i < N; i++ {

@@ -8,6 +8,7 @@ import (
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs/gotlob"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/stores"
 )
 
 type (
@@ -118,4 +119,30 @@ func cleanPath(p string) string {
 
 func cleanName(p string) string {
 	return strings.Trim(p, string(Sep))
+}
+
+// RO are read only stores used by gotfs
+type RO struct {
+	Data     stores.Reading
+	Metadata stores.Reading
+}
+
+// WO are read only stores used by gotfs
+type WO struct {
+	Data     stores.Writing
+	Metadata stores.Writing
+}
+
+// RW are read-write stores used by gotfs
+type RW struct {
+	Data     stores.RW
+	Metadata stores.RW
+}
+
+func (rw RW) RO() RO {
+	return RO{Data: rw.Data, Metadata: rw.Metadata}
+}
+
+func (rw RW) WO() WO {
+	return WO{Data: rw.Data, Metadata: rw.Metadata}
 }

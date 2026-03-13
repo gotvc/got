@@ -77,7 +77,7 @@ func fixDirs(ctx context.Context, src, dst *gotcore.MarkTx) error {
 	ss := dst.FSRW()
 
 	mapped, err := vcmach.Map(ctx, dst.VCRW(), comm, func(p gotcore.Payload) (gotcore.Payload, error) {
-		fixed, err := gotfsfix.FixDirs(ctx, fsmach, ss[1], p.Snap)
+		fixed, err := gotfsfix.FixDirs(ctx, fsmach, ss.Metadata, p.Snap)
 		if err != nil {
 			return p, err
 		}

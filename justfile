@@ -15,7 +15,7 @@ capnp:
 	cd ./src/gotfs/gotfscnp && ./build_cnp.sh
 
 build: capnp
-	rm ./build/out/*
+	- rm ./build/out/*
 	./build/go_exec.sh ./build/out/got ./cmd/got
 
 build-amd64-linux: capnp

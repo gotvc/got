@@ -51,7 +51,7 @@ func (fn *Function) Unmarshal(data []byte) error {
 }
 
 // NewFunction creates a new function from an expression.
-func (m *Machine) NewFunction(ctx context.Context, s stores.RW, fn func(*FnBuilder) (ExprT[gotfs.Root], error)) (Function, error) {
+func (m *Machine) NewFunction(ctx context.Context, s stores.RW, fn func(*FnBuilder) (Expr[gotfs.Root], error)) (Function, error) {
 	fb := m.NewBuilder(s)
 	out, err := fn(&fb)
 	if err != nil {
@@ -79,7 +79,7 @@ func (m *Machine) NewBuilder(s stores.RW) FnBuilder {
 	}
 }
 
-func (fb *FnBuilder) SetOutput(x ExprT[gotfs.Root]) {
+func (fb *FnBuilder) SetOutput(x Expr[gotfs.Root]) {
 	if x.i < Vertex(len(fb.fc.dag)-1) {
 		// TODO: passthrough OP to reference x.i
 		panic("TODO")
@@ -123,70 +123,70 @@ func (fb *FnBuilder) Flush(ctx context.Context) (Function, error) {
 	return Function{Arity: fb.numInputs, Ref: ref}, nil
 }
 
-// ExprT is a specification for a value to be computed.
+// Expr is a specification for a value to be computed.
 // The type of the value is known ahead of time.
-type ExprT[T any] struct {
+type Expr[T any] struct {
 	i Vertex
 }
 
-func (fb *FnBuilder) Nat(val uint32) ExprT[uint32] {
-	return ExprT[uint32]{
+func (fb *FnBuilder) Nat(val uint32) Expr[uint32] {
+	return Expr[uint32]{
 		fb.fc.append0(OpCode(OpCode_Nat | (0x00ff_ffff & val))),
 	}
 }
 
 // Input returns an Expr which will evaluate to the input.
-func (fb *FnBuilder) Input(i uint32) ExprT[gotfs.Root] {
+func (fb *FnBuilder) Input(i uint32) Expr[gotfs.Root] {
 	fb.numInputs = max(i+1, fb.numInputs)
 	n := fb.Nat(i)
-	return ExprT[gotfs.Root]{fb.fc.append1(OpCode_Input, n.i)}
+	return Expr[gotfs.Root]{fb.fc.append1(OpCode_Input, n.i)}
 }
 
-func (fb *FnBuilder) Root(root gotfs.Root) ExprT[gotfs.Root] {
+func (fb *FnBuilder) Root(root gotfs.Root) Expr[gotfs.Root] {
 	dataIdx := fb.fc.appendData(&Value_Root{Root: root})
 	n := fb.Nat(uint32(dataIdx))
-	return ExprT[gotfs.Root]{fb.fc.append1(OpCode_Data, n.i)}
+	return Expr[gotfs.Root]{fb.fc.append1(OpCode_Data, n.i)}
 }
 
 // Segment adds a Segment as data to the function.
-func (fb *FnBuilder) Segment(seg gotfs.Segment) ExprT[gotfs.Segment] {
+func (fb *FnBuilder) Segment(seg gotfs.Segment) Expr[gotfs.Segment] {
 	dataIdx := fb.fc.appendData(&Value_Segment{Segment: seg})
 	n := fb.Nat(uint32(dataIdx))
-	return ExprT[gotfs.Segment]{fb.fc.append1(OpCode_Data, n.i)}
+	return Expr[gotfs.Segment]{fb.fc.append1(OpCode_Data, n.i)}
 }
 
-func (fb *FnBuilder) Path(p string) ExprT[string] {
+func (fb *FnBuilder) Path(p string) Expr[string] {
 	v := Value_Path(p)
 	dataIdx := fb.fc.appendData(&v)
 	n := fb.Nat(uint32(dataIdx))
-	return ExprT[string]{fb.fc.append1(OpCode_Data, n.i)}
+	return Expr[string]{fb.fc.append1(OpCode_Data, n.i)}
 }
 
-func (fb *FnBuilder) FileMode(m fs.FileMode) ExprT[fs.FileMode] {
+func (fb *FnBuilder) FileMode(m fs.FileMode) Expr[fs.FileMode] {
 	dataIdx := fb.fc.appendData(Value_FileMode(m))
 	n := fb.Nat(uint32(dataIdx))
-	return ExprT[fs.FileMode]{fb.fc.append1(OpCode_Data, n.i)}
+	return Expr[fs.FileMode]{fb.fc.append1(OpCode_Data, n.i)}
 }
 
-func (fb *FnBuilder) Span(span gotfs.Span) ExprT[gotfs.Span] {
+func (fb *FnBuilder) Span(span gotfs.Span) Expr[gotfs.Span] {
 	dataIdx := fb.fc.appendData(&Value_Span{Span: span})
 	n := fb.Nat(uint32(dataIdx))
-	return ExprT[gotfs.Span]{fb.fc.append1(OpCode_Data, n.i)}
+	return Expr[gotfs.Span]{fb.fc.append1(OpCode_Data, n.i)}
 }
 
-func (fb *FnBuilder) Promote(x ExprT[gotfs.Segment]) ExprT[gotfs.Root] {
-	return ExprT[gotfs.Root]{fb.fc.append1(OpCode_PROMOTE, x.i)}
+func (fb *FnBuilder) Promote(x Expr[gotfs.Segment]) Expr[gotfs.Root] {
+	return Expr[gotfs.Root]{fb.fc.append1(OpCode_PROMOTE, x.i)}
 }
 
-func (fb *FnBuilder) Concat(xs ...ExprT[gotfs.Segment]) ExprT[gotfs.Segment] {
+func (fb *FnBuilder) Concat(xs ...Expr[gotfs.Segment]) Expr[gotfs.Segment] {
 	switch len(xs) {
 	case 0:
-		return ExprT[gotfs.Segment]{}
+		return Expr[gotfs.Segment]{}
 	case 1:
 		return xs[0]
 	case 2:
 		v := fb.fc.append2(OpCode_CONCAT, xs[0].i, xs[1].i)
-		return ExprT[gotfs.Segment]{v}
+		return Expr[gotfs.Segment]{v}
 	default:
 		l := fb.Concat(xs[:len(xs)/2]...)
 		r := fb.Concat(xs[len(xs)/2:]...)
@@ -194,8 +194,8 @@ func (fb *FnBuilder) Concat(xs ...ExprT[gotfs.Segment]) ExprT[gotfs.Segment] {
 	}
 }
 
-func (fb *FnBuilder) ChangesOnBase(base ExprT[gotfs.Root], changes []gotfs.Segment) ExprT[gotfs.Segment] {
-	var exprs []ExprT[gotfs.Segment]
+func (fb *FnBuilder) ChangesOnBase(base Expr[gotfs.Root], changes []gotfs.Segment) Expr[gotfs.Segment] {
+	var exprs []Expr[gotfs.Segment]
 	for i := range changes {
 		var baseSpan gotkv.Span
 		if i > 0 {
@@ -214,15 +214,15 @@ func (fb *FnBuilder) ChangesOnBase(base ExprT[gotfs.Root], changes []gotfs.Segme
 	return fb.Concat(exprs...)
 }
 
-func (fb *FnBuilder) Select(root ExprT[gotfs.Root], span gotkv.Span) ExprT[gotfs.Segment] {
+func (fb *FnBuilder) Select(root Expr[gotfs.Root], span gotkv.Span) Expr[gotfs.Segment] {
 	spanV := fb.Span(span)
-	return ExprT[gotfs.Segment]{fb.fc.append2(OpCode_SELECT, root.i, spanV.i)}
+	return Expr[gotfs.Segment]{fb.fc.append2(OpCode_SELECT, root.i, spanV.i)}
 }
 
-func (fb *FnBuilder) MkdirAll(base ExprT[gotfs.Root], p string, mode fs.FileMode) ExprT[gotfs.Root] {
+func (fb *FnBuilder) MkdirAll(base Expr[gotfs.Root], p string, mode fs.FileMode) Expr[gotfs.Root] {
 	pathV := fb.Path(p)
 	modeV := fb.FileMode(mode)
-	return ExprT[gotfs.Root]{fb.fc.append3(OpCode_MKDIRALL, base.i, pathV.i, modeV.i)}
+	return Expr[gotfs.Root]{fb.fc.append3(OpCode_MKDIRALL, base.i, pathV.i, modeV.i)}
 }
 
 // I is a single instruction, it represents a node in a computation DAG.

@@ -41,7 +41,7 @@ func TestRead(t *testing.T) {
 		}
 		return tw.Close()
 	}, func(r io.Reader) error {
-		b := fsag.NewBuilder(ctx, ms, ds)
+		b := fsag.NewBuilder(ctx, gotfs.RW{Data: ds, Metadata: ms})
 		tr := tar.NewReader(r)
 		if err := ReadTAR(ctx, b, tr); err != nil {
 			return err

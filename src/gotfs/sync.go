@@ -12,14 +12,14 @@ import (
 // Sync ensures dst has all the data reachable from root
 // dst and src should both be metadata stores.
 // copyData will be called to sync metadata
-func (mach *Machine) Sync(ctx context.Context, src [2]stores.Reading, dst [2]stores.Writing, root Root) error {
-	return mach.gotkv.Sync(ctx, src[1], dst[1], root.toGotKV(), func(ent gotkv.Entry) error {
+func (mach *Machine) Sync(ctx context.Context, src RO, dst WO, root Root) error {
+	return mach.gotkv.Sync(ctx, src.Metadata, dst.Metadata, root.toGotKV(), func(ent gotkv.Entry) error {
 		if isExtentKey(ent.Key) {
 			ext, err := parseExtent(ent.Value)
 			if err != nil {
 				return err
 			}
-			return gdat.Copy(ctx, src[0], dst[0], &ext.Ref)
+			return gdat.Copy(ctx, src.Data, dst.Data, &ext.Ref)
 		}
 		return nil
 	})

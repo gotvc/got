@@ -86,7 +86,8 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 
 	cfg := DSConfig{}
 	s := stores.NewMem()
-	comm0 := makeCommit(t, cfg, s, nil, makeFS(t, s, map[string]string{
+	ss := gotfs.RW{Metadata: s, Data: s}
+	comm0 := makeCommit(t, cfg, s, nil, makeFS(t, ss, map[string]string{
 		"a": "0",
 	}))
 	tcs := []testCase{
@@ -128,7 +129,7 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 				},
 				{
 					Snaps: map[string]*Commit{
-						"a": makeCommit(t, cfg, s, []Commit{*comm0}, makeFS(t, s, map[string]string{
+						"a": makeCommit(t, cfg, s, []Commit{*comm0}, makeFS(t, ss, map[string]string{
 							"a": "1",
 						})),
 					},
@@ -154,7 +155,7 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 						}
 						if err := mtx.Modify(ctx, func(mctx ModifyCtx) (*Commit, error) {
 							if v != nil {
-								srcStores := [3]stores.Reading{tc.Store, tc.Store, tc.Store}
+								srcStores := RO{FS: gotfs.RO{Metadata: tc.Store, Data: tc.Store}, VC: tc.Store}
 								if err := mctx.Sync(ctx, srcStores, *v); err != nil {
 									return nil, err
 								}
@@ -227,11 +228,11 @@ func doDelete(ctx context.Context, sp Space, name string) error {
 	})
 }
 
-func makeFS(t testing.TB, s stores.RW, files map[string]string) gotfs.Root {
+func makeFS(t testing.TB, ss gotfs.RW, files map[string]string) gotfs.Root {
 	ctx := testutil.Context(t)
 	fsmach := GotFS(DSConfig{})
 	ps := slices.Collect(maps.Keys(files))
-	b := fsmach.NewBuilder(ctx, s, s)
+	b := fsmach.NewBuilder(ctx, ss)
 	require.NoError(t, b.Mkdir("", 0o755))
 	for _, p := range ps {
 		require.NoError(t, b.BeginFile(p, 0o644))

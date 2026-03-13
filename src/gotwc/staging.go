@@ -327,18 +327,20 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 		}
 
 		if err := wc.modifyMark(ctx, func(mctx gotcore.ModifyCtx) (*gotcore.Commit, error) {
-			var root *gotfs.Root
+			var fsroot *gotfs.Root
 			if mctx.Root != nil {
-				root = &mctx.Root.Payload.Snap
+				fsroot = &mctx.Root.Payload.Snap
 			}
-			// TODO: this does not preserve the separate stores.
-			s := stores.AddWriteLayer(mctx.Stores[1], scratch)
-			ss := [2]stores.RW{s, s}
-			fn, err := sctx.Stage.CreateFunction(ctx, mctx.FS, ss)
+
+			fn, err := sctx.Stage.CreateFunction(ctx, mctx.FS, gotfs.RW{Metadata: scratch, Data: scratch})
 			if err != nil {
 				return nil, err
 			}
-			nextRoot, err := apply(ctx, mctx.FS, ss, root, fn)
+			ss := gotfs.RW{
+				Data:     stores.NewOverlay(mctx.Stores.FS.Data, scratch),
+				Metadata: stores.NewOverlay(mctx.Stores.FS.Metadata, scratch),
+			}
+			nextRoot, err := apply(ctx, mctx.FS, ss, fsroot, fn)
 			if err != nil {
 				return nil, err
 			}
@@ -359,7 +361,9 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			if err != nil {
 				return nil, err
 			}
-			nextSnap, err := mctx.VC.NewVertex(ctx, s, gotvc.VertexParams[gotcore.Payload]{
+
+			vcs := stores.NewOverlay(mctx.Stores.VC, scratch)
+			nextSnap, err := mctx.VC.NewVertex(ctx, vcs, gotvc.VertexParams[gotcore.Payload]{
 				Parents:   parents,
 				Creator:   params.Committer,
 				CreatedAt: params.CommittedAt,
@@ -368,7 +372,7 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 					Aux:  infoJSON,
 				},
 			})
-			if err := mctx.Sync(ctx, [3]stores.Reading{s, s, s}, *nextSnap); err != nil {
+			if err := mctx.Sync(ctx, gotcore.RO{VC: vcs, FS: ss.RO()}, *nextSnap); err != nil {
 				return nil, err
 			}
 			return nextSnap, nil
@@ -393,7 +397,7 @@ func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOpera
 	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
 		return wc.viewMark(ctx, func(mt *gotcore.MarkTx) error {
 			// NewEmpty makes a Post which will fail because this is a read-only transaction.
-			s := stores.AddWriteLayer(mt.FSRO()[1], stores.NewMem())
+			s := stores.NewOverlay(mt.FSRO().Metadata, stores.NewMem())
 			var root gotfs.Root
 			if ok, err := mt.LoadFS(ctx, &root); err != nil {
 				return err
@@ -510,17 +514,17 @@ func (wc *WC) cleanupStagingBlobs(ctx context.Context) error {
 
 // apply applies a function to a root to create a new function.
 // TODO: maybe move this into gotcore.
-func apply(ctx context.Context, fsmach *gotfs.Machine, ss [2]stores.RW, base *gotfs.Root, fn gotfsvm.Function) (*gotfs.Root, error) {
+func apply(ctx context.Context, fsmach *gotfs.Machine, ss gotfs.RW, base *gotfs.Root, fn gotfsvm.Function) (*gotfs.Root, error) {
 	if base == nil {
 		var err error
-		base, err = fsmach.NewEmpty(ctx, ss[1], 0o755)
+		base, err = fsmach.NewEmpty(ctx, ss.Metadata, 0o755)
 		if err != nil {
 			return nil, err
 		}
 	}
 	vm := gotfsvm.New(fsmach)
 	root, err := vm.Apply(ctx, ss, fn, []gotfsvm.Input{{
-		Stores: [2]stores.Reading{ss[0], ss[1]},
+		Stores: ss.RO(),
 		Root:   *base,
 	}})
 	if err != nil {

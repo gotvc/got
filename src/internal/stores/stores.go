@@ -1,62 +1,41 @@
 package stores
 
 import (
-	"bytes"
 	"context"
 
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
-	"go.brendoncarroll.net/state/cadata"
 	"golang.org/x/crypto/blake2b"
 )
 
 type (
-	Store = cadata.Store
-	ID    = blobcache.CID
-	Set   = cadata.Set
+	CID = blobcache.CID
 )
 
-var _ cadata.Set = MemSet{}
+type Set interface {
+	Exists(context.Context, CID) (bool, error)
+	Add(context.Context, CID) error
+}
 
-type MemSet map[ID]struct{}
+type MemSet map[CID]struct{}
 
-func (ms MemSet) Exists(ctx context.Context, id ID) (bool, error) {
+func (ms MemSet) Exists(ctx context.Context, id CID) (bool, error) {
 	_, exists := ms[id]
 	return exists, nil
 }
 
-func (ms MemSet) Add(ctx context.Context, id ID) error {
+func (ms MemSet) Add(ctx context.Context, id CID) error {
 	ms[id] = struct{}{}
 	return nil
 }
 
-func (ms MemSet) Delete(ctx context.Context, id ID) error {
+func (ms MemSet) Delete(ctx context.Context, id CID) error {
 	delete(ms, id)
 	return nil
 }
 
 func (ms MemSet) Count() int {
 	return len(ms)
-}
-
-func (ms MemSet) List(ctx context.Context, span cadata.Span, ids []blobcache.CID) (int, error) {
-	var n int
-	for id := range ms {
-		if n >= len(ids) {
-			break
-		}
-		c := span.Compare(id, func(a, b ID) int {
-			return bytes.Compare(a[:], b[:])
-		})
-		if c > 0 {
-			continue
-		} else if c < 0 {
-			break
-		}
-		ids[n] = id
-		n++
-	}
-	return n, nil
 }
 
 func Hash(x []byte) blobcache.CID {

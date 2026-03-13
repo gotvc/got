@@ -6,15 +6,15 @@ type readOnly struct {
 	RW
 }
 
-func (ro readOnly) Post(ctx context.Context, data []byte) (ID, error) {
+func (ro readOnly) Post(ctx context.Context, data []byte) (CID, error) {
 	panic("Post called on read only Store")
 }
 
-func (ro readOnly) Add(ctx context.Context, id ID) error {
+func (ro readOnly) Add(ctx context.Context, id CID) error {
 	panic("Add called on read only Store")
 }
 
-func (ro readOnly) Delete(ctx context.Context, id ID) error {
+func (ro readOnly) Delete(ctx context.Context, id CID) error {
 	panic("Delete called on read only Store")
 }
 

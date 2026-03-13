@@ -10,6 +10,7 @@ import (
 	"errors"
 
 	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/stores"
 	"golang.org/x/sync/errgroup"
 )
@@ -84,6 +85,30 @@ type Space interface {
 	Do(ctx context.Context, modify bool, fn func(SpaceTx) error) error
 }
 
+// RW are read-write stores
+type RW struct {
+	FS gotfs.RW
+	VC stores.RW
+}
+
+func (rw RW) RO() RO {
+	return RO{FS: rw.FS.RO(), VC: rw.VC}
+}
+
+func (rw RW) WO() WO {
+	return WO{FS: rw.FS.WO(), VC: rw.VC}
+}
+
+type RO struct {
+	FS gotfs.RO
+	VC stores.Reading
+}
+
+type WO struct {
+	FS gotfs.WO
+	VC stores.Writing
+}
+
 // SpaceTx is a transaction on a Space
 type SpaceTx interface {
 	// Create creates a new Mark at name in the Space.
@@ -104,7 +129,7 @@ type SpaceTx interface {
 	// 0: GotFS data stream
 	// 1: GotFS metadata
 	// 2: GotVC
-	Stores() [3]stores.RW
+	Stores() RW
 	// SetTarget changes the mark so it points to a different commit
 	SetTarget(ctx context.Context, name string, ref gdat.Ref) error
 	// GetTarget retrieves the Commit referenced by gdat.Ref

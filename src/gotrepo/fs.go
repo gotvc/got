@@ -12,7 +12,7 @@ import (
 	"go.brendoncarroll.net/stdctx/logctx"
 )
 
-func (r *Repo) ViewFS(ctx context.Context, se gotcore.CommitExpr, fn func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error) error {
+func (r *Repo) ViewFS(ctx context.Context, se gotcore.CommitExpr, fn func(fsmach *gotfs.Machine, s gotfs.RO, root gotfs.Root) error) error {
 	sp, err := r.GetSpace(ctx, se.GetSpace())
 	if err != nil {
 		return err
@@ -26,25 +26,25 @@ func (r *Repo) ViewFS(ctx context.Context, se gotcore.CommitExpr, fn func(fsmach
 		if ref.IsZero() {
 			return fmt.Errorf("no commit found at %v", se)
 		}
-		comm, err := gotcore.GetCommit(ctx, ss[2], *ref)
+		comm, err := gotcore.GetCommit(ctx, ss.VC, *ref)
 		if err != nil {
 			return err
 		}
 		fsmach := gotfs.NewMachine()
 		s := st.Stores()
-		return fn(fsmach, s[1], comm.Payload.Snap)
+		return fn(fsmach, s.FS.RO(), comm.Payload.Snap)
 	})
 }
 
 func (r *Repo) Ls(ctx context.Context, se gotcore.CommitExpr, p string, fn func(gotfs.DirEnt) error) error {
-	return r.ViewFS(ctx, se, func(mach *gotfs.Machine, stores stores.Reading, root gotfs.Root) error {
-		return mach.ReadDir(ctx, stores, root, p, fn)
+	return r.ViewFS(ctx, se, func(mach *gotfs.Machine, stores gotfs.RO, root gotfs.Root) error {
+		return mach.ReadDir(ctx, stores.Metadata, root, p, fn)
 	})
 }
 
 func (r *Repo) Cat(ctx context.Context, se gotcore.CommitExpr, p string, w io.Writer) error {
-	return r.ViewFS(ctx, se, func(mach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
-		fr, err := mach.NewReader(ctx, [2]stores.Reading{s, s}, root, p)
+	return r.ViewFS(ctx, se, func(mach *gotfs.Machine, s gotfs.RO, root gotfs.Root) error {
+		fr, err := mach.NewReader(ctx, s, root, p)
 		if err != nil {
 			return err
 		}
@@ -55,9 +55,9 @@ func (r *Repo) Cat(ctx context.Context, se gotcore.CommitExpr, p string, w io.Wr
 
 func (r *Repo) Stat(ctx context.Context, se gotcore.CommitExpr, p string) (*gotfs.Info, error) {
 	var info *gotfs.Info
-	err := r.ViewFS(ctx, se, func(fsmach *gotfs.Machine, s stores.Reading, root gotfs.Root) error {
+	err := r.ViewFS(ctx, se, func(fsmach *gotfs.Machine, s gotfs.RO, root gotfs.Root) error {
 		var err error
-		info, err = fsmach.GetInfo(ctx, s, root, p)
+		info, err = fsmach.GetInfo(ctx, s.Metadata, root, p)
 		return err
 	})
 	return info, err
@@ -81,9 +81,9 @@ func (r *Repo) CheckAll(ctx context.Context) error {
 			}
 
 			if err := gotcore.ViewCommit(ctx, st, se, func(vctx *gotcore.ViewCtx) error {
-				return vctx.VC.Check(ctx, vctx.Stores[2], *vctx.Root, func(payload gotcore.Payload) error {
-					return vctx.FS.Check(ctx, vctx.Stores[1], payload.Snap, func(ref gdat.Ref) error {
-						ok, err := stores.ExistsUnit(ctx, vctx.Stores[0], ref.CID)
+				return vctx.VC.Check(ctx, vctx.Stores.VC, *vctx.Root, func(payload gotcore.Payload) error {
+					return vctx.FS.Check(ctx, vctx.Stores.FS.Metadata, payload.Snap, func(ref gdat.Ref) error {
+						ok, err := stores.ExistsUnit(ctx, vctx.Stores.FS.Data, ref.CID)
 						if err != nil {
 							return err
 						}

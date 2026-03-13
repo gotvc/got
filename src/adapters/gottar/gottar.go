@@ -34,7 +34,7 @@ func WriteTAR(ctx context.Context, fsag *gotfs.Machine, ms, ds stores.Reading, r
 			return err
 		}
 		if mode.IsRegular() {
-			r, err := fsag.NewReader(ctx, [2]stores.Reading{ms, ds}, root, p)
+			r, err := fsag.NewReader(ctx, gotfs.RO{ms, ds}, root, p)
 			if err != nil {
 				return err
 			}

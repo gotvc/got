@@ -297,7 +297,7 @@ func (wc *WC) Export(ctx context.Context) error {
 		}
 		exp := porting.NewExporter(mtx.GotFS(), portDB, fsys, filter)
 		ss := mtx.FSRO()
-		return exp.ExportPath(ctx, ss[1], ss[0], root, "")
+		return exp.ExportPath(ctx, ss, root, "")
 	})
 }
 
@@ -327,7 +327,7 @@ func (wc *WC) Clobber(ctx context.Context, p string) error {
 			logctx.Warnf(ctx, "mark has no commit, nothing to clobber")
 			return nil
 		}
-		return exp.Clobber(ctx, ss[1], ss[0], root, p)
+		return exp.Clobber(ctx, ss, root, p)
 	})
 }
 

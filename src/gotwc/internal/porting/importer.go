@@ -80,7 +80,7 @@ func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, fin
 		metrics.AddInt(ctx, "paths", 1, "paths")
 		changes = append(changes, pr.gotfs.ShiftOut(pathRoot.Segment(), dirent.Name))
 	}
-	root, err := pr.gotfs.Splice(ctx, [2]stores.RW{pr.ds, pr.ms}, changes)
+	root, err := pr.gotfs.Splice(ctx, gotfs.RW{Data: pr.ds, Metadata: pr.ms}, changes)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 			return nil, err
 		}
 		defer f.Close()
-		root, err = pr.gotfs.FileFromReader(ctx, [2]stores.RW{pr.ds, pr.ms}, finfo.Mode, f)
+		root, err = pr.gotfs.FileFromReader(ctx, gotfs.RW{pr.ds, pr.ms}, finfo.Mode, f)
 		if err != nil {
 			return nil, err
 		}
@@ -188,7 +188,7 @@ func importFileConcurrent(ctx context.Context, fsag *gotfs.Machine, ms, ds store
 		}
 		rs[i] = io.LimitReader(f, end-start)
 	}
-	return fsag.FileFromReaders(ctx, [2]stores.RW{ds, ms}, stat.Mode(), rs)
+	return fsag.FileFromReaders(ctx, gotfs.RW{ds, ms}, stat.Mode(), rs)
 }
 
 func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {

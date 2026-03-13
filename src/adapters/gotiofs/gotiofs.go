@@ -46,7 +46,7 @@ func (s *FS) Open(name string) (iofs.File, error) {
 	}
 	ss := s.vctx.FSRO()
 	fsag := s.vctx.FS
-	if _, err := fsag.GetInfo(s.ctx, ss[1], root, name); err != nil {
+	if _, err := fsag.GetInfo(s.ctx, ss.Metadata, root, name); err != nil {
 		return nil, convertError(err)
 	}
 	return NewFile(s.ctx, fsag, ss, root, name), nil
@@ -60,7 +60,7 @@ var _ io.Seeker = &File{}
 type File struct {
 	ctx   context.Context
 	gotfs *gotfs.Machine
-	ss    [2]stores.Reading
+	ss    gotfs.RO
 	root  gotfs.Root
 	path  string
 
@@ -70,7 +70,7 @@ type File struct {
 	dirLoaded  bool
 }
 
-func NewFile(ctx context.Context, fsmach *gotfs.Machine, ss [2]stores.Reading, root gotfs.Root, p string) *File {
+func NewFile(ctx context.Context, fsmach *gotfs.Machine, ss gotfs.RO, root gotfs.Root, p string) *File {
 	return &File{
 		ctx:   ctx,
 		gotfs: fsmach,
@@ -101,7 +101,7 @@ func (f *File) ReadAt(buf []byte, off int64) (int, error) {
 	if off < 0 {
 		return 0, errors.New("negative offset")
 	}
-	size, err := f.gotfs.SizeOfFile(f.ctx, f.getStores()[1], f.root, f.path)
+	size, err := f.gotfs.SizeOfFile(f.ctx, f.getStores().Metadata, f.root, f.path)
 	if err != nil {
 		return 0, convertError(err)
 	}
@@ -123,7 +123,7 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 		return 0, err
 	}
 	if whence == io.SeekEnd {
-		size, err := f.gotfs.SizeOfFile(f.ctx, f.getStores()[1], f.root, f.path)
+		size, err := f.gotfs.SizeOfFile(f.ctx, f.getStores().Metadata, f.root, f.path)
 		if err != nil {
 			return 0, convertError(err)
 		}
@@ -139,7 +139,7 @@ func (f *File) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (f *File) Stat() (iofs.FileInfo, error) {
-	return Stat(f.ctx, f.gotfs, f.getStores()[1], f.root, f.path)
+	return Stat(f.ctx, f.gotfs, f.getStores().Metadata, f.root, f.path)
 }
 
 func (f *File) ReadDir(n int) ([]iofs.DirEntry, error) {
@@ -166,7 +166,7 @@ func (f *File) Close() error {
 	return nil
 }
 
-func (f *File) getStores() [2]stores.Reading {
+func (f *File) getStores() gotfs.RO {
 	return f.ss
 }
 
@@ -186,7 +186,7 @@ func (f *File) ensureDirEntries() error {
 		return nil
 	}
 	var entries []iofs.DirEntry
-	if err := f.gotfs.ReadDir(f.ctx, f.getStores()[1], f.root, f.path, func(e gotfs.DirEnt) error {
+	if err := f.gotfs.ReadDir(f.ctx, f.getStores().Metadata, f.root, f.path, func(e gotfs.DirEnt) error {
 		entries = append(entries, &dirEntry{
 			name: e.Name,
 			mode: e.Mode,
@@ -204,7 +204,7 @@ func (f *File) ensureDirEntries() error {
 }
 
 func (f *File) stat(p string) (*fileInfo, error) {
-	finfo, err := Stat(f.ctx, f.gotfs, f.getStores()[1], f.root, p)
+	finfo, err := Stat(f.ctx, f.gotfs, f.getStores().Metadata, f.root, p)
 	if err != nil {
 		return nil, err
 	}

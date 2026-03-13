@@ -10,7 +10,6 @@ import (
 	"github.com/gotvc/got/src/adapters/gotiofs"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/gotcore"
-	"github.com/gotvc/got/src/internal/stores"
 	ftpserver "goftp.io/server/v2"
 )
 
@@ -33,7 +32,7 @@ func (d *Driver) Stat(ctx *ftpserver.Context, p string) (iofs.FileInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	return gotiofs.Stat(d.ctx, d.vctx.FS, ss[1], *root, p)
+	return gotiofs.Stat(d.ctx, d.vctx.FS, ss.Metadata, *root, p)
 }
 
 func (d *Driver) GetFile(ctx *ftpserver.Context, p string, off int64) (int64, io.ReadCloser, error) {
@@ -41,7 +40,7 @@ func (d *Driver) GetFile(ctx *ftpserver.Context, p string, off int64) (int64, io
 	if err != nil {
 		return 0, nil, err
 	}
-	size, err := d.vctx.FS.SizeOfFile(d.ctx, ss[0], *root, p)
+	size, err := d.vctx.FS.SizeOfFile(d.ctx, ss.Metadata, *root, p)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -67,9 +66,9 @@ func (d *Driver) ListDir(ctx *ftpserver.Context, p string, fn func(iofs.FileInfo
 		return err
 	}
 	fsmach := d.vctx.FS
-	return fsmach.ReadDir(d.ctx, ss[1], *root, p, func(de gotfs.DirEnt) error {
+	return fsmach.ReadDir(d.ctx, ss.Metadata, *root, p, func(de gotfs.DirEnt) error {
 		p2 := path.Join(p, de.Name)
-		finfo, err := gotiofs.Stat(d.ctx, fsmach, ss[1], *root, p2)
+		finfo, err := gotiofs.Stat(d.ctx, fsmach, ss.Metadata, *root, p2)
 		if err != nil {
 			return err
 		}
@@ -89,10 +88,10 @@ func (d *Driver) Rename(ctx *ftpserver.Context, oldpath, newpath string) error {
 	return newErrReadOnly()
 }
 
-func (d *Driver) getRoot(ctx context.Context) (*gotfs.Root, [2]stores.Reading, error) {
+func (d *Driver) getRoot(ctx context.Context) (*gotfs.Root, gotfs.RO, error) {
 	comm := d.vctx.Root
 	if comm == nil {
-		return nil, [2]stores.Reading{}, iofs.ErrNotExist
+		return nil, gotfs.RO{}, iofs.ErrNotExist
 	}
 	return &comm.Payload.Snap, d.vctx.FSRO(), nil
 }

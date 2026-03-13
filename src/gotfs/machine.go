@@ -186,12 +186,12 @@ func (mach *Machine) ForEachLeaf(ctx context.Context, s stores.Reading, root Roo
 
 // Graft places branch at p in root.
 // If p == "" then branch is returned unaltered.
-func (mach *Machine) Graft(ctx context.Context, ss [2]stores.RW, root Root, p string, branch Root) (*Root, error) {
+func (mach *Machine) Graft(ctx context.Context, ss RW, root Root, p string, branch Root) (*Root, error) {
 	p = cleanPath(p)
 	if p == "" {
 		return &branch, nil
 	}
-	root2, err := mach.MkdirAll(ctx, ss[1], root, parentPath(p))
+	root2, err := mach.MkdirAll(ctx, ss.Metadata, root, parentPath(p))
 	if err != nil {
 		return nil, err
 	}
@@ -365,8 +365,8 @@ func (mach *Machine) ShiftOut(x Segment, p string) Segment {
 	}
 }
 
-func (mach *Machine) Concat(ctx context.Context, ss [2]stores.RW, segs iter.Seq[Segment]) (Segment, error) {
-	b := mach.NewBuilder(ctx, ss[1], ss[0])
+func (mach *Machine) Concat(ctx context.Context, ss RW, segs iter.Seq[Segment]) (Segment, error) {
+	b := mach.NewBuilder(ctx, ss)
 
 	var i int
 	var firstSeg, prevSeg Segment
@@ -379,7 +379,7 @@ func (mach *Machine) Concat(ctx context.Context, ss [2]stores.RW, segs iter.Seq[
 
 		var root gotkv.Root
 		if seg.Contents.Ref.IsZero() {
-			r, err := mach.gotkv.NewEmpty(ctx, ss[1])
+			r, err := mach.gotkv.NewEmpty(ctx, ss.Metadata)
 			if err != nil {
 				return Segment{}, err
 			}
@@ -422,7 +422,7 @@ func Promote(ctx context.Context, seg Segment) (*Root, error) {
 }
 
 // Splice is equivalent to Concat followed by Promote
-func (mach *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (*Root, error) {
+func (mach *Machine) Splice(ctx context.Context, ss RW, segs []Segment) (*Root, error) {
 	seg, err := mach.Concat(ctx, ss, slices.Values(segs))
 	if err != nil {
 		return nil, err

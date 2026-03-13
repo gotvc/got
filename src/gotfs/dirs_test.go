@@ -5,14 +5,13 @@ import (
 	"path"
 	"testing"
 
-	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
 
 func TestReadDir(t *testing.T) {
 	ctx, ag, s := setup(t)
-	ss := [2]stores.RW{s, s}
+	ss := RW{s, s}
 	x, err := ag.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
 	x, err = ag.Mkdir(ctx, s, *x, "dir0")
