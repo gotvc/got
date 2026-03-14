@@ -184,6 +184,15 @@ func (ag *Machine[T]) PostVertex(ctx context.Context, s stores.WO, x Vertex[T]) 
 	if ag.readOnly {
 		panic("gotvc: operator is read-only. This is a bug.")
 	}
+	for _, ref := range x.Parents {
+		yes, err := stores.ExistsUnit(ctx, s, ref.CID)
+		if err != nil {
+			return Ref{}, err
+		}
+		if !yes {
+			return Ref{}, fmt.Errorf("gotvc.PostVertex would create dangling ref %v", ref)
+		}
+	}
 	return ag.da.Post(ctx, s, x.Marshal(nil))
 }
 
