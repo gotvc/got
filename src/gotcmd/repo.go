@@ -197,3 +197,7 @@ func createRepoVol(ctx context.Context, svc blobcache.Service, volName string) (
 func createNSVol(ctx context.Context, svc blobcache.Service, volName string) (*blobcache.Handle, error) {
 	return createVol(ctx, svc, volName, gotns.DefaultVolumeSpec())
 }
+
+var cloneCmd = star.Command{
+	Metadata: star.Metadata{Short: "clones a repository using the URL and secret"},
+}
