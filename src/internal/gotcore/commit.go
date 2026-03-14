@@ -73,7 +73,7 @@ type CommitParams struct {
 }
 
 // CreateCommit creates a new Commit in the store.
-func CreateCommit(ctx context.Context, vcmach *gotvc.Machine[Payload], srw stores.RW, copa CommitParams) (Commit, error) {
+func CreateCommit(ctx context.Context, vcmach *VCMach, srw stores.RW, copa CommitParams) (Commit, error) {
 	if copa.CommittedAt == 0 {
 		copa.CommittedAt = tai64.Now().TAI64()
 	}
@@ -102,11 +102,11 @@ func CreateCommit(ctx context.Context, vcmach *gotvc.Machine[Payload], srw store
 }
 
 // PostCommit write a commit to the store.
-func PostCommit(ctx context.Context, vcmach *gotvc.Machine[Payload], srw stores.WO, comm Commit) (gdat.Ref, error) {
+func PostCommit(ctx context.Context, vcmach *VCMach, srw stores.WO, comm Commit) (gdat.Ref, error) {
 	return vcmach.PostVertex(ctx, srw, comm)
 }
 
-// Apply applies a function to a root to create a new function.
+// Apply applies a function to a root to create a new Root.
 func Apply(ctx context.Context, fsmach *gotfs.Machine, ss gotfs.RW, fn gotfsvm.Function, ins []gotfs.Root) (gotfs.Root, error) {
 	if len(ins) == 0 {
 		base, err := fsmach.NewEmpty(ctx, ss.Metadata, 0o755)

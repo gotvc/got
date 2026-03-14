@@ -81,7 +81,7 @@ func (r *Repo) makeLocalSpace(ctx context.Context) (Space, error) {
 	if err != nil {
 		return nil, err
 	}
-	return spaceFromHandle(r.bc, *volh, secret), nil
+	return spaceFromHandle(r.blobcache(), *volh, secret), nil
 }
 
 func (r *Repo) makeSpace(ctx context.Context, spec SpaceSpec) (Space, error) {
@@ -92,7 +92,7 @@ func (r *Repo) makeSpace(ctx context.Context, spec SpaceSpec) (Space, error) {
 		if err != nil {
 			return nil, err
 		}
-		return spaceFromHandle(r.bc, *volh, &bspec.Secret), nil
+		return spaceFromHandle(r.blobcache(), *volh, &bspec.Secret), nil
 	default:
 		return nil, fmt.Errorf("empty SpaceSpec")
 	}
