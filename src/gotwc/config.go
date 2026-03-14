@@ -16,7 +16,7 @@ type Config struct {
 	SaveTo string `json:"save_to"`
 	// Base are refs to the previous Commits
 	// They will be the parents when the transaction is committed.
-	Base []gdat.Ref `json:"base,omitempty"`
+	Base []gdat.Ref `json:"base"`
 
 	ActAs   string `json:"act_as"`
 	RepoDir string `json:"repo"`
