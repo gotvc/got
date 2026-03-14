@@ -49,8 +49,8 @@ func TestBuilderSmallFiles(t *testing.T) {
 	require.LessOrEqual(t, s.Len(), int(N))
 }
 
-func setup(t testing.TB) (context.Context, *Machine, *schema.MemStore) {
-	op := NewMachine()
+func setup(t testing.TB) (context.Context, Machine, *schema.MemStore) {
+	op := NewMachine(Params{})
 	s := stores.NewMem()
 	return testutil.Context(t), op, s
 }

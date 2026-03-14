@@ -13,7 +13,7 @@ import (
 
 func Dump(ctx context.Context, ms stores.RO, root Root, w io.Writer) error {
 	bw := bufio.NewWriter(w)
-	ag := NewMachine()
+	ag := NewMachine(Params{})
 	it := ag.gotkv.NewIterator(ms, root.toGotKV(), gotkv.TotalSpan())
 	var ent gotkv.Entry
 	for err := streams.NextUnit(ctx, it, &ent); !streams.IsEOS(err); err = streams.NextUnit(ctx, it, &ent) {

@@ -75,14 +75,14 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		stagingStore := stagetx.Store()
 		storePair := [2]stores.RW{stagingStore, stagingStore}
 		dirState := porting.NewDB(conn, paramHash)
-		imp := porting.NewImporter(fsmach, dirState, storePair)
-		exp := porting.NewExporter(fsmach, dirState, fsys, filter)
-
+		imp := porting.NewImporter(&fsmach, dirState, storePair)
+		exp := porting.NewExporter(&fsmach, dirState, fsys, filter)
+		vcmach := gotcore.GotVC(cfg)
 		if err := fn(stagingCtx{
 			Stage:    stagetx,
 			Store:    stagingStore,
-			GotFS:    gotcore.GotFS(cfg),
-			GotVC:    gotcore.GotVC(cfg),
+			GotFS:    &fsmach,
+			GotVC:    &vcmach,
 			FS:       fsys,
 			DB:       porting.NewDB(conn, paramHash),
 			Importer: imp,
@@ -116,14 +116,14 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 		}
 		portdb := porting.NewDB(conn, paramHash)
 		fsmach := gotcore.GotFS(info.Config)
-		exp := porting.NewExporter(fsmach, portdb, filtFS, filter)
+		exp := porting.NewExporter(&fsmach, portdb, filtFS, filter)
 		stagingStore, err := wc.repo.BeginStagingTx(ctx, wc.id, false)
 		if err != nil {
 			return err
 		}
 		defer stagingStore.Abort(ctx)
 		return fn(stagingCtx{
-			GotFS:    fsmach,
+			GotFS:    &fsmach,
 			Stage:    stagetx,
 			Store:    stagingStore,
 			Exporter: exp,
@@ -489,7 +489,7 @@ func (wc *WC) cleanupStagingBlobs(ctx context.Context) error {
 	defer tx.Abort(ctx)
 	kvmach := staging.DefaultGotKV()
 	stagetx := staging.New(&kvmach, tx, nil)
-	fsmach := gotfs.NewMachine()
+	fsmach := gotfs.NewMachine(gotfs.Params{})
 	if err := stagetx.ForEach(ctx, func(ent staging.Entry) error {
 		fop := ent.Op
 		if putOp := fop.Put; putOp != nil {

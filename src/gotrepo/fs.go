@@ -30,9 +30,9 @@ func (r *Repo) ViewFS(ctx context.Context, se gotcore.CommitExpr, fn func(fsmach
 		if err != nil {
 			return err
 		}
-		fsmach := gotfs.NewMachine()
+		fsmach := gotfs.NewMachine(gotfs.Params{})
 		s := st.Stores()
-		return fn(fsmach, s.FS.RO(), comm.Payload.Snap)
+		return fn(&fsmach, s.FS.RO(), comm.Payload.Snap)
 	})
 }
 

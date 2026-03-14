@@ -8,34 +8,32 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 )
 
-type Config struct {
-	Salt      [32]byte
-	CacheSize *int
+type Params[T any] struct {
+	Parse Parser[T]
+	// Data are the parameters used for storing data in the store.
+	Data gdat.Params
 }
 
 type Parser[T any] = func([]byte) (T, error)
 
 type Machine[T Marshalable] struct {
 	parse    Parser[T]
-	cfg      Config
+	cfg      Params[T]
 	readOnly bool
 	da       *gdat.Machine
 }
 
-func NewMachine[T Marshalable](parse Parser[T], cfg Config) *Machine[T] {
-	if cfg.CacheSize != nil {
+func NewMachine[T Marshalable](p Params[T]) Machine[T] {
+	if p.Data.CacheSize != nil {
 		defaultCacheSize := 256
-		cfg.CacheSize = &defaultCacheSize
+		p.Data.CacheSize = &defaultCacheSize
 	}
-	ag := Machine[T]{
-		parse: parse,
-		cfg:   cfg,
+	m := Machine[T]{
+		parse: p.Parse,
+		cfg:   p,
 	}
-	ag.da = gdat.NewMachine(gdat.Params{
-		Salt:      ag.cfg.Salt,
-		CacheSize: cfg.CacheSize,
-	})
-	return &ag
+	m.da = gdat.NewMachine(p.Data)
+	return m
 }
 
 // ForEach calls fn once for each Ref in the commit graph.

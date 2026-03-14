@@ -166,7 +166,7 @@ func TestKeys(t *testing.T) {
 
 func BenchmarkWrite(b *testing.B) {
 	s := stores.NewMem()
-	ag := NewMachine()
+	ag := NewMachine(Params{})
 
 	b.Run("1-1GB", func(b *testing.B) {
 		ctx := testutil.Context(b)

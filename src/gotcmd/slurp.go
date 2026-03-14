@@ -33,7 +33,7 @@ var slurpCmd = star.Command{
 
 		var root *gotfs.Root
 		if err := wc.DoWithStore(ctx, func(st stores.RW) error {
-			fsag := gotfs.NewMachine()
+			fsag := gotfs.NewMachine(gotfs.Params{})
 			var err error
 			root, err = fsag.FileFromReader(ctx, gotfs.RW{Metadata: st, Data: st}, 0o755, f)
 			if err != nil {
