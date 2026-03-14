@@ -30,7 +30,7 @@ func (mach *Machine[T]) isDescendentOf(ctx context.Context, m map[Ref]struct{}, 
 		if parent.Equals(a) {
 			return true, nil
 		}
-		yes, err := mach.isDescendentOf(ctx, m, s, *parent, a)
+		yes, err := mach.isDescendentOf(ctx, m, s, parent, a)
 		if err != nil {
 			return false, err
 		}
@@ -57,7 +57,7 @@ func (m *Machine[T]) Sync(ctx context.Context, src stores.RO, dst stores.WO, ver
 				if err != nil {
 					return err
 				}
-				if err := sync(*parent); err != nil {
+				if err := sync(parent); err != nil {
 					return err
 				}
 				if err := gdat.Copy(ctx, src, dst, &parentRef); err != nil {
@@ -92,7 +92,7 @@ func (mach *Machine[T]) mapVertex(ctx context.Context, s stores.RW, x Vertex[T],
 		if err != nil {
 			return Vertex[T]{}, err
 		}
-		mappedParent, err := mach.mapVertex(ctx, s, *parent, fn, cache)
+		mappedParent, err := mach.mapVertex(ctx, s, parent, fn, cache)
 		if err != nil {
 			return Vertex[T]{}, err
 		}
@@ -129,7 +129,7 @@ func (mach *Machine[T]) Populate(ctx context.Context, s stores.RO, start Vertex[
 			if err != nil {
 				return err
 			}
-			if err := mach.Populate(ctx, s, *parent, set, rootFn); err != nil {
+			if err := mach.Populate(ctx, s, parent, set, rootFn); err != nil {
 				return err
 			}
 			if err := set.Add(ctx, parentCID); err != nil {

@@ -70,7 +70,7 @@ var markListCmd = star.Command{
 		}
 		defer wc.Close()
 		repo := wc.Repo()
-		head, err := wc.GetHead()
+		head, err := wc.GetSaveTo()
 		if err != nil {
 			return err
 		}
@@ -185,11 +185,11 @@ var markLoadCmd = star.Command{
 		defer repo.Close()
 		space, _ := spaceNameOptParam.LoadOpt(c)
 		name := markNameParam.Load(c)
-		comm, err := repo.MarkLoad(ctx, gotrepo.FQM{Space: space, Name: name})
+		ref, comm, err := repo.MarkLoad(ctx, gotrepo.FQM{Space: space, Name: name})
 		if err != nil {
 			return err
 		}
-		if comm != nil {
+		if !ref.IsZero() {
 			c.Printf("%x\n", comm.Marshal(nil))
 		}
 		return nil
@@ -261,7 +261,7 @@ var markAsCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		head, err := wc.GetHead()
+		head, err := wc.GetSaveTo()
 		if err != nil {
 			return err
 		}
@@ -289,7 +289,7 @@ var historyCmd = star.Command{
 		}
 		defer wc.Close()
 		repo := wc.Repo()
-		bname, err := wc.GetHead()
+		bname, err := wc.GetSaveTo()
 		if err != nil {
 			return err
 		}
@@ -332,7 +332,7 @@ func printcomm(bufw *bufio.Writer, ref gdat.Ref, comm gotcore.Commit) error {
 	}
 	fmt.Fprintf(bufw, "Created At: %v\n", comm.CreatedAt.GoTime().Local().String())
 	fmt.Fprintf(bufw, "Created By: %v\n", comm.Creator)
-	bufw.Write([]byte(prettifyJSON(comm.Payload.Aux)))
+	bufw.Write([]byte(prettifyJSON(comm.Payload.Notes)))
 	fmt.Fprintln(bufw)
 	return nil
 }

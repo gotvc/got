@@ -40,7 +40,7 @@ func TestUnknownIteratorFiltersTracking(t *testing.T) {
 				require.NoError(t, wc.Track(ctx, PrefixSpan(prefix)))
 			}
 
-			head, err := wc.GetHead()
+			head, err := wc.GetSaveTo()
 			require.NoError(t, err)
 			info, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: head})
 			require.NoError(t, err)

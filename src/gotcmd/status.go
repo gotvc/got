@@ -23,7 +23,7 @@ var statusCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		name, err := wc.GetHead()
+		name, err := wc.GetSaveTo()
 		if err != nil {
 			return err
 		}
@@ -83,7 +83,7 @@ var lsCmd = star.Command{
 		defer wc.Close()
 		se, ok := commExprOptParam.LoadOpt(c)
 		if !ok {
-			mname, err := wc.GetHead()
+			mname, err := wc.GetSaveTo()
 			if err != nil {
 				return err
 			}
@@ -114,7 +114,7 @@ var catCmd = star.Command{
 		defer wc.Close()
 		se, ok := commExprOptParam.LoadOpt(c)
 		if !ok {
-			mname, err := wc.GetHead()
+			mname, err := wc.GetSaveTo()
 			if err != nil {
 				return err
 			}

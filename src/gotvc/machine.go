@@ -49,7 +49,7 @@ func (m *Machine[T]) ForEach(ctx context.Context, s stores.RO, xs []Ref, fn func
 		if err != nil {
 			return err
 		}
-		if err := fn(ref, *vert); err != nil {
+		if err := fn(ref, vert); err != nil {
 			return err
 		}
 		visited[ref] = struct{}{}

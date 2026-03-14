@@ -254,5 +254,5 @@ func makeCommit(t testing.TB, cfg DSConfig, s stores.WO, parents []Commit, fsroo
 		},
 	})
 	require.NoError(t, err)
-	return comm
+	return &comm
 }

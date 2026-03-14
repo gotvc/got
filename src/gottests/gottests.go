@@ -173,7 +173,7 @@ func (s *Site) Cat(se gotcore.CommitExpr, p string) []byte {
 }
 
 func (s *Site) GetHead() string {
-	head, err := s.WC.GetHead()
+	head, err := s.WC.GetSaveTo()
 	require.NoError(s.t, err)
 	return head
 }

@@ -24,11 +24,11 @@ func TestSetup(t *testing.T) {
 func TestSetGetHead(t *testing.T) {
 	ctx := testutil.Context(t)
 	wc := newTestWC(t, true)
-	name, err := wc.GetHead()
+	name, err := wc.GetSaveTo()
 	require.NoError(t, err)
 	require.Equal(t, nameMaster, name)
 	require.NoError(t, wc.SetHead(ctx, nameMaster))
-	name, err = wc.GetHead()
+	name, err = wc.GetSaveTo()
 	require.NoError(t, err)
 	require.Equal(t, nameMaster, name)
 }
@@ -184,7 +184,7 @@ func checkFileContent(t testing.TB, wc *WC, p string, r io.Reader) {
 }
 
 func getHead(t testing.TB, wc *WC) string {
-	name, err := wc.GetHead()
+	name, err := wc.GetSaveTo()
 	require.NoError(t, err)
 	return name
 }

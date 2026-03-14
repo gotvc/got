@@ -34,12 +34,12 @@ type Vertex[T Marshalable] struct {
 	Payload T
 }
 
-func ParseVertex[T Marshalable](data []byte, parser Parser[T]) (*Vertex[T], error) {
+func ParseVertex[T Marshalable](data []byte, parser Parser[T]) (Vertex[T], error) {
 	var a Vertex[T]
 	if err := a.Unmarshal(data, parser); err != nil {
-		return nil, err
+		return a, err
 	}
-	return &a, nil
+	return a, nil
 }
 
 func (a Vertex[T]) Marshal(out []byte) []byte {
@@ -145,7 +145,7 @@ type VertexParams[T Marshalable] struct {
 	Payload T
 }
 
-func (a *Machine[T]) NewVertex(ctx context.Context, s stores.WO, sp VertexParams[T]) (*Vertex[T], error) {
+func (a *Machine[T]) NewVertex(ctx context.Context, s stores.WO, sp VertexParams[T]) (Vertex[T], error) {
 	var n uint64
 	maxCreatedAt := sp.CreatedAt
 	parentRefs := make([]Ref, len(sp.Parents))
@@ -153,7 +153,7 @@ func (a *Machine[T]) NewVertex(ctx context.Context, s stores.WO, sp VertexParams
 		maxCreatedAt = max(maxCreatedAt, parent.CreatedAt)
 		parentRef, err := a.PostVertex(ctx, s, parent)
 		if err != nil {
-			return nil, err
+			return Vertex[T]{}, err
 		}
 		if n < parent.N+1 {
 			n = parent.N + 1
@@ -164,7 +164,7 @@ func (a *Machine[T]) NewVertex(ctx context.Context, s stores.WO, sp VertexParams
 		a, b := parentRefs[i].CID, parentRefs[j].CID
 		return a.Compare(b) < 0
 	})
-	return &Vertex[T]{
+	return Vertex[T]{
 		N:         n,
 		CreatedAt: maxCreatedAt,
 		Parents:   parentRefs,
@@ -174,7 +174,7 @@ func (a *Machine[T]) NewVertex(ctx context.Context, s stores.WO, sp VertexParams
 }
 
 // Genesis creates a new Commit with no parent
-func (mach *Machine[T]) Genesis(ctx context.Context, s stores.WO, sp VertexParams[T]) (*Vertex[T], error) {
+func (mach *Machine[T]) Genesis(ctx context.Context, s stores.WO, sp VertexParams[T]) (Vertex[T], error) {
 	sp.Parents = nil
 	return mach.NewVertex(ctx, s, sp)
 }
@@ -188,14 +188,14 @@ func (ag *Machine[T]) PostVertex(ctx context.Context, s stores.WO, x Vertex[T]) 
 }
 
 // GetVertex retrieves the Vertex referenced by ref from the store.
-func (ag *Machine[T]) GetVertex(ctx context.Context, s stores.RO, ref Ref) (*Vertex[T], error) {
-	var x *Vertex[T]
+func (ag *Machine[T]) GetVertex(ctx context.Context, s stores.RO, ref Ref) (Vertex[T], error) {
+	var x Vertex[T]
 	if err := ag.da.GetF(ctx, s, ref, func(data []byte) error {
 		var err error
 		x, err = ParseVertex[T](data, ag.parse)
 		return err
 	}); err != nil {
-		return nil, err
+		return Vertex[T]{}, err
 	}
 	return x, nil
 }
@@ -223,7 +223,7 @@ func (ag *Machine[T]) Squash(ctx context.Context, s stores.RW, x Vertex[T], n in
 			Parents: parent.Parents,
 		}, nil
 	}
-	y, err := ag.Squash(ctx, s, *parent, n-1)
+	y, err := ag.Squash(ctx, s, parent, n-1)
 	if err != nil {
 		return nil, err
 	}
@@ -261,7 +261,7 @@ func (a *Machine[T]) Check(ctx context.Context, s stores.RO, vert Vertex[T], che
 		if err != nil {
 			return err
 		}
-		if err := a.Check(ctx, s, *parent, checkRoot); err != nil {
+		if err := a.Check(ctx, s, parent, checkRoot); err != nil {
 			return err
 		}
 	}
