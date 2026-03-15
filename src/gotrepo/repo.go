@@ -173,7 +173,7 @@ func (r *Repo) Close() (retErr error) {
 			if !r.closeAll {
 				return nil
 			}
-			if lsvc, ok := r.localBlobcache(); ok {
+			if lsvc, ok := r.bc.(*bclocal.Service); ok {
 				logctx.Infof(ctx, "closing in-process blobcache")
 				return lsvc.Close()
 			}
@@ -197,20 +197,11 @@ func (r *Repo) Dir() string {
 }
 
 func (r *Repo) Serve(ctx context.Context, pc net.PacketConn) error {
-	svc, ok := r.localBlobcache()
+	svc, ok := r.bc.(*bclocal.Service)
 	if !ok {
 		return fmt.Errorf("Serve called on repo without in-process Blobcache: %T", r.bc)
 	}
 	return svc.Serve(ctx, pc)
-}
-
-func (r *Repo) localBlobcache() (*bclocal.Service, bool) {
-	bc := r.bc
-	if bi, ok := bc.(*bcIntercept); ok {
-		bc = bi.svc
-	}
-	lsvc, ok := bc.(*bclocal.Service)
-	return lsvc, ok
 }
 
 func (r *Repo) Endpoint() blobcache.Endpoint {
