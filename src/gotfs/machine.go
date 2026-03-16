@@ -61,13 +61,6 @@ func (p Params) GetMinSizeData() int {
 	return *p.MinBlobSizeData
 }
 
-func (p Params) GetMeanSizeData() int {
-	if p.MeanBlobSizeData == nil {
-		return DefaultMeanBlobSizeData
-	}
-	return *p.MeanBlobSizeData
-}
-
 func (p Params) GetMeanBlobSizeData() int {
 	if p.MeanBlobSizeData == nil {
 		return DefaultMeanBlobSizeData
@@ -132,7 +125,7 @@ func NewMachine(par Params) Machine {
 
 	lobOpts := []gotlob.Option{
 		gotlob.WithChunking(false, func(onChunk chunking.ChunkHandler) *chunking.ContentDefined {
-			return chunking.NewContentDefined(par.GetMinSizeData(), par.GetMeanSizeData(), par.GetMaxBlobSize(), m.chunkingSeed, onChunk)
+			return chunking.NewContentDefined(par.GetMinSizeData(), par.GetMeanBlobSizeData(), par.GetMaxBlobSize(), m.chunkingSeed, onChunk)
 		}),
 		gotlob.WithFilter(func(x []byte) bool {
 			return isExtentKey(x)
