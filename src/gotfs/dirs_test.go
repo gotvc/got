@@ -44,16 +44,16 @@ func TestReadDir(t *testing.T) {
 }
 
 func TestMkdirAll(t *testing.T) {
-	ctx, ag, s := setup(t)
-	x, err := ag.NewEmpty(ctx, s, 0o755)
+	ctx, mach, s := setup(t)
+	x, err := mach.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
-	x, err = ag.MkdirAll(ctx, s, *x, "path/to/the/dir")
+	x, err = mach.MkdirAll(ctx, s, *x, "path/to/the/dir")
 	require.NoError(t, err)
 
-	requireChildren(t, ag, s, *x, "", []string{"path"})
-	requireChildren(t, ag, s, *x, "path", []string{"to"})
-	requireChildren(t, ag, s, *x, "path/to", []string{"the"})
-	requireChildren(t, ag, s, *x, "path/to/the", []string{"dir"})
+	requireChildren(t, &mach, s, *x, "", []string{"path"})
+	requireChildren(t, &mach, s, *x, "path", []string{"to"})
+	requireChildren(t, &mach, s, *x, "path/to", []string{"the"})
+	requireChildren(t, &mach, s, *x, "path/to/the", []string{"dir"})
 }
 
 func requireChildren(t *testing.T, ag *Machine, s Store, x Root, p string, expected []string) {

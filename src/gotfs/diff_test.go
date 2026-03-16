@@ -21,7 +21,7 @@ type (
 
 func TestInfoDiffer(t *testing.T) {
 	ctx := testutil.Context(t)
-	ag := NewMachine()
+	ag := NewMachine(Params{})
 
 	tcs := []struct {
 		Left     MemFS

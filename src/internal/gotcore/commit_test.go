@@ -16,7 +16,7 @@ import (
 func TestMarshalCommit(t *testing.T) {
 	ctx := testutil.Context(t)
 	s := stores.NewMem()
-	gfs := gotfs.NewMachine()
+	gfs := gotfs.NewMachine(gotfs.Params{})
 	root, err := gfs.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
 	tcs := []Commit{
@@ -30,8 +30,8 @@ func TestMarshalCommit(t *testing.T) {
 			},
 			Creator: inet256.ID{},
 			Payload: Payload{
-				Snap: *root,
-				Aux:  []byte{},
+				Snap:  *root,
+				Notes: []byte{},
 			},
 		},
 	}

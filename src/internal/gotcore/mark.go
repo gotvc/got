@@ -80,9 +80,9 @@ func GetAnnotation(as []Annotation, key string) (ret []Annotation) {
 	return ret
 }
 
-// SnapInfo holds additional information about a commit.
+// CommitNotes holds additional information about a commit.
 // This is stored as json in the commit.
-type SnapInfo struct {
+type CommitNotes struct {
 	AuthoredAt tai64.TAI64  `json:"authored_at"`
 	Authors    []inet256.ID `json:"authors"`
 

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/stores"
@@ -246,7 +247,12 @@ func makeFS(t testing.TB, ss gotfs.RW, files map[string]string) gotfs.Root {
 
 func makeCommit(t testing.TB, cfg DSConfig, s stores.WO, parents []Commit, fsroot gotfs.Root) *Commit {
 	ctx := testutil.Context(t)
-	vcmach := gotvc.NewMachine(ParsePayload, gotvc.Config{Salt: cfg.Salt})
+	vcmach := gotvc.NewMachine(gotvc.Params[Payload]{
+		Parse: ParsePayload,
+		Data: gdat.Params{
+			Salt: cfg.Salt,
+		},
+	})
 	comm, err := vcmach.NewVertex(ctx, s, gotvc.VertexParams[Payload]{
 		Parents: parents,
 		Payload: Payload{
@@ -254,5 +260,5 @@ func makeCommit(t testing.TB, cfg DSConfig, s stores.WO, parents []Commit, fsroo
 		},
 	})
 	require.NoError(t, err)
-	return comm
+	return &comm
 }

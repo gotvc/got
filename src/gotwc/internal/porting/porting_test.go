@@ -187,9 +187,9 @@ func TestExport(t *testing.T) {
 			for _, info := range tt.InDB {
 				require.NoError(t, db.PutInfo(ctx, info))
 			}
-			root := makeGotFS(t, mach, s, tt.InGot)
+			root := makeGotFS(t, &mach, s, tt.InGot)
 
-			exp := NewExporter(mach, db, fsys, func(string) bool { return true })
+			exp := NewExporter(&mach, db, fsys, func(string) bool { return true })
 			err := exp.ExportPath(ctx, ss, root, tt.ExportPath)
 			if tt.Err == nil {
 				require.NoError(t, err)
@@ -248,7 +248,7 @@ func TestImportPath(t *testing.T) {
 			mach := gotcore.GotFS(cfg)
 			conn, paramHash := newTestDB(t, ctx, cfg)
 			db := NewDB(conn, paramHash)
-			imp := NewImporter(mach, db, [2]stores.RW{dst, dst})
+			imp := NewImporter(&mach, db, [2]stores.RW{dst, dst})
 
 			// prepare files on disk
 			dir := testutil.OpenRoot(t, t.TempDir())

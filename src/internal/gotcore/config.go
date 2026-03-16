@@ -86,10 +86,10 @@ func DefaultConfig(public bool) DSConfig {
 	}
 }
 
-func GotFS(cfg DSConfig) *gotfs.Machine {
+func GotFS(cfg DSConfig) gotfs.Machine {
 	return newGotFS(&cfg)
 }
 
-func GotVC(cfg DSConfig) *gotvc.Machine[Payload] {
+func GotVC(cfg DSConfig) gotvc.Machine[Payload] {
 	return newGotVC(&cfg)
 }

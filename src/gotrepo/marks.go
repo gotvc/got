@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/internal/gotcore"
 )
 
@@ -119,20 +120,22 @@ func (r *Repo) ViewMark(ctx context.Context, fqm FQM, fn func(*gotcore.MarkTx) e
 
 // MarkLoad loads the Commit that the mark points to.
 // If the mark is empty then the commit will be nil
-func (r *Repo) MarkLoad(ctx context.Context, fqm FQM) (*Commit, error) {
+func (r *Repo) MarkLoad(ctx context.Context, fqm FQM) (Ref, Commit, error) {
 	var exists bool
+	var ref gdat.Ref
 	var comm gotcore.Commit
 	if err := r.ViewMark(ctx, fqm, func(mt *gotcore.MarkTx) error {
 		var err error
+		exists, err = mt.Load(ctx, &ref)
 		exists, err = mt.LoadCommit(ctx, &comm)
 		return err
 	}); err != nil {
-		return nil, err
+		return ref, comm, err
 	}
 	if !exists {
-		return nil, nil
+		return ref, comm, nil
 	}
-	return &comm, nil
+	return ref, comm, nil
 }
 
 func (r *Repo) MoveMark(ctx context.Context, spaceName, from, to string) error {

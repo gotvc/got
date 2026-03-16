@@ -3,6 +3,7 @@ package gotcore
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
@@ -17,8 +18,9 @@ type MarkTx struct {
 	name string
 	info Info
 
-	gotvc *VCMach
-	gotfs *FSMach
+	initOnce sync.Once
+	gotvc    VCMach
+	gotfs    FSMach
 }
 
 func NewMarkTx(ctx context.Context, stx SpaceTx, name string) (*MarkTx, error) {
@@ -34,12 +36,10 @@ func NewMarkTx(ctx context.Context, stx SpaceTx, name string) (*MarkTx, error) {
 }
 
 func (b *MarkTx) init() {
-	if b.gotvc == nil {
+	b.initOnce.Do(func() {
 		b.gotvc = newGotVC(&b.info.Config)
-	}
-	if b.gotfs == nil {
 		b.gotfs = newGotFS(&b.info.Config)
-	}
+	})
 }
 
 func (b *MarkTx) Info() Info {
@@ -48,12 +48,12 @@ func (b *MarkTx) Info() Info {
 
 func (b *MarkTx) GotFS() *gotfs.Machine {
 	b.init()
-	return b.gotfs
+	return &b.gotfs
 }
 
 func (b *MarkTx) GotVC() *VCMach {
 	b.init()
-	return b.gotvc
+	return &b.gotvc
 }
 
 func (m *MarkTx) Config() DSConfig {
@@ -114,7 +114,7 @@ func (mt *MarkTx) LoadCommit(ctx context.Context, dst *Commit) (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		*dst = *comm
+		*dst = comm
 		return true, nil
 	} else {
 		return false, nil
@@ -139,7 +139,7 @@ func (m *MarkTx) Apply(ctx context.Context, fn func(RW, gdat.Ref) (gdat.Ref, err
 func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Commit, error)) error {
 	m.init()
 	ss := m.stx.Stores()
-	var comm *Commit
+	var comm Commit
 	var target gdat.Ref
 	if ok, err := m.stx.GetTarget(ctx, m.name, &target); err != nil {
 		return err
@@ -153,7 +153,8 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Commit, e
 		VC:     m.GotVC(),
 		FS:     m.GotFS(),
 		Stores: ss,
-		Root:   comm,
+		Target: target,
+		Root:   &comm,
 	}
 	y, err := fn(modctx)
 	if err != nil {
@@ -165,7 +166,7 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Commit, e
 		if err != nil {
 			return err
 		}
-		ref, err = syncCommitRef(ctx, m.gotvc, m.gotfs, m.RO(), m.WO(), ref)
+		ref, err = syncCommitRef(ctx, &m.gotvc, &m.gotfs, m.RO(), m.WO(), ref)
 		if err != nil {
 			return err
 		}
@@ -179,10 +180,11 @@ type ModifyCtx struct {
 	VC     *VCMach
 	FS     *FSMach
 	Stores RW
+	Target gdat.Ref
 	Root   *Commit
 }
 
-// Sync syncs a commit into the store
+// Sync syncs a commit into the Space's store
 func (mctx *ModifyCtx) Sync(ctx context.Context, srcs RO, root Commit) error {
 	return mctx.VC.Sync(ctx, srcs.VC, mctx.Stores.VC, root, func(payload Payload) error {
 		return mctx.FS.Sync(ctx,
@@ -250,11 +252,11 @@ func ViewCommit(ctx context.Context, stx SpaceTx, se CommitExpr, fn func(vctx *V
 		return err
 	}
 	vctx := ViewCtx{
-		VC:     vcmach,
-		FS:     fsmach,
+		VC:     &vcmach,
+		FS:     &fsmach,
 		Stores: ss.RO(),
 		Target: ref,
-		Root:   comm,
+		Root:   &comm,
 	}
 	return fn(&vctx)
 }
@@ -265,7 +267,7 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 		return fmt.Errorf("cannot sync volumes with different salts, must use force=true")
 	}
 	return dst.Apply(ctx, func(dsts RW, x gdat.Ref) (gdat.Ref, error) {
-		var goal *Commit
+		var goal Commit
 		var goalRef gdat.Ref
 		if ok, err := src.Load(ctx, &goalRef); err != nil {
 			return gdat.Ref{}, err
@@ -278,9 +280,9 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 		}
 
 		switch {
-		case goal == nil && x.IsZero():
+		case goalRef.IsZero() && x.IsZero():
 			return gdat.Ref{}, nil
-		case goal == nil && !force:
+		case goalRef.IsZero() && !force:
 			return gdat.Ref{}, fmt.Errorf("cannot clear volume without force=true")
 		case x.IsZero():
 		case goalRef.Equals(&x):
@@ -290,7 +292,7 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 			if err != nil {
 				return gdat.Ref{}, err
 			}
-			hasAncestor, err := vcmach.IsDescendentOf(ctx, src.VCRO(), *goal, *prevCommit)
+			hasAncestor, err := vcmach.IsDescendentOf(ctx, src.VCRO(), goal, prevCommit)
 			if err != nil {
 				return gdat.Ref{}, err
 			}
@@ -311,7 +313,7 @@ func History(ctx context.Context, vcmach *VCMach, s stores.RO, commRef gdat.Ref,
 	if err != nil {
 		return err
 	}
-	if err := fn(commRef, *comm); err != nil {
+	if err := fn(commRef, comm); err != nil {
 		return err
 	}
 	return vcmach.ForEach(ctx, s, comm.Parents, fn)
@@ -326,25 +328,27 @@ func syncCommitRef(ctx context.Context, vcmach *VCMach, fsmach *gotfs.Machine, s
 	if err != nil {
 		return gdat.Ref{}, err
 	}
-	if err := vcmach.Sync(ctx, src.VC, dst.VC, *comm, func(payload Payload) error {
+	if err := vcmach.Sync(ctx, src.VC, dst.VC, comm, func(payload Payload) error {
 		return fsmach.Sync(ctx, src.FS, dst.FS, payload.Snap)
 	}); err != nil {
 		return gdat.Ref{}, err
 	}
-	return vcmach.PostVertex(ctx, dst.VC, *comm)
+	return vcmach.PostVertex(ctx, dst.VC, comm)
 }
 
 // NewGotFS creates a new gotfs.Machine suitable for writing to the mark
-func newGotFS(b *DSConfig) *gotfs.Machine {
-	opts := append([]gotfs.Option{}, gotfs.WithSalt(deriveFSSalt(b)))
-	fsag := gotfs.NewMachine(opts...)
-	return fsag
+func newGotFS(b *DSConfig) gotfs.Machine {
+	p := gotfs.Params{
+		Salt: *deriveFSSalt(b),
+	}
+	return gotfs.NewMachine(p)
 }
 
 // NewGotVC creates a new gotvc.Machine suitable for writing to the mark
-func newGotVC(b *DSConfig) *VCMach {
-	return gotvc.NewMachine(ParsePayload, gotvc.Config{
-		Salt: *deriveVCSalt(b),
+func newGotVC(b *DSConfig) VCMach {
+	return gotvc.NewMachine(gotvc.Params[Payload]{
+		Parse: ParsePayload,
+		Data:  gdat.Params{Salt: *deriveVCSalt(b)},
 	})
 }
 

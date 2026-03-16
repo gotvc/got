@@ -149,13 +149,14 @@ type Env struct {
 
 // New creates a new repo once the environment is setup.
 func New(env Env, cfg Config) *Repo {
+	bc2 := &bcIntercept{svc: env.Blobcache, logger: newBCInfoLogger()}
 	return &Repo{
 		root:     env.Dir,
 		bc:       env.Blobcache,
 		config:   cfg,
 		closeAll: env.CloseAll,
 
-		repoc: reposchema.NewClient(env.Blobcache),
+		repoc: reposchema.NewClient(bc2),
 	}
 }
 
@@ -265,6 +266,10 @@ func (r *Repo) NSVolumeSpec(ctx context.Context) (*VolumeSpec, error) {
 	}, nil
 }
 
+func (r *Repo) blobcache() blobcache.Service {
+	return &bcIntercept{svc: r.bc, logger: newBCInfoLogger()}
+}
+
 // BeginStagingTx begins a new transaction for the staging area for the given WorkingCopy
 // It is up to the caller to commit or abort the transaction.
 func (r *Repo) BeginStagingTx(ctx context.Context, wcid WorkingCopyID, modify bool) (volumes.Tx, error) {
@@ -275,7 +280,7 @@ func (r *Repo) BeginStagingTx(ctx context.Context, wcid WorkingCopyID, modify bo
 	if err != nil {
 		return nil, err
 	}
-	var vol volumes.Volume = &volumes.Blobcache{Service: r.bc, Handle: *h}
+	var vol volumes.Volume = &volumes.Blobcache{Service: r.blobcache(), Handle: *h}
 	vol = volumes.NewChaCha20Poly1305(vol, (*[32]byte)(dek))
 	return vol.BeginTx(ctx, blobcache.TxParams{Modify: modify})
 }
@@ -286,7 +291,7 @@ func (r *Repo) GCStage(ctx context.Context, wcid WorkingCopyID) (volumes.Tx, err
 	if err != nil {
 		return nil, err
 	}
-	var vol volumes.Volume = &volumes.Blobcache{Service: r.bc, Handle: *h}
+	var vol volumes.Volume = &volumes.Blobcache{Service: r.blobcache(), Handle: *h}
 	vol = volumes.NewChaCha20Poly1305(vol, (*[32]byte)(dek))
 	return vol.BeginTx(ctx, blobcache.TxParams{
 		Modify:  true,

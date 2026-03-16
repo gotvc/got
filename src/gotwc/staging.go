@@ -2,11 +2,10 @@ package gotwc
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io/fs"
+	"slices"
 
-	"github.com/gotvc/got/src/gotfsvm"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"go.brendoncarroll.net/exp/streams"
@@ -17,7 +16,6 @@ import (
 	"zombiezen.com/go/sqlite/sqlitex"
 
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/gotwc/internal/porting"
 	"github.com/gotvc/got/src/gotwc/internal/staging"
 	"github.com/gotvc/got/src/internal/gotcore"
@@ -35,6 +33,7 @@ func (wc *WC) DoWithStore(ctx context.Context, fn func(dst stores.RW) error) err
 type stagingCtx struct {
 	Stage    *staging.Tx
 	GotFS    *gotfs.Machine
+	GotVC    *gotcore.VCMach
 	Store    stores.RW
 	FS       posixfs.FS
 	DB       *porting.DB
@@ -53,7 +52,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 	if err := func() (retErr error) {
 		defer sqlitex.Transaction(conn)(&retErr)
 
-		branchName, err := wc.GetHead()
+		branchName, err := wc.GetSaveTo()
 		if err != nil {
 			return err
 		}
@@ -76,13 +75,14 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		stagingStore := stagetx.Store()
 		storePair := [2]stores.RW{stagingStore, stagingStore}
 		dirState := porting.NewDB(conn, paramHash)
-		imp := porting.NewImporter(fsmach, dirState, storePair)
-		exp := porting.NewExporter(fsmach, dirState, fsys, filter)
-
+		imp := porting.NewImporter(&fsmach, dirState, storePair)
+		exp := porting.NewExporter(&fsmach, dirState, fsys, filter)
+		vcmach := gotcore.GotVC(cfg)
 		if err := fn(stagingCtx{
 			Stage:    stagetx,
 			Store:    stagingStore,
-			GotFS:    gotcore.GotFS(cfg),
+			GotFS:    &fsmach,
+			GotVC:    &vcmach,
 			FS:       fsys,
 			DB:       porting.NewDB(conn, paramHash),
 			Importer: imp,
@@ -100,7 +100,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 
 func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
 	return sqlutil.DoTxRO(ctx, wc.db, func(conn *sqlutil.Conn) error {
-		branchName, err := wc.GetHead()
+		branchName, err := wc.GetSaveTo()
 		info, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: branchName})
 		if err != nil {
 			return err
@@ -116,14 +116,14 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 		}
 		portdb := porting.NewDB(conn, paramHash)
 		fsmach := gotcore.GotFS(info.Config)
-		exp := porting.NewExporter(fsmach, portdb, filtFS, filter)
+		exp := porting.NewExporter(&fsmach, portdb, filtFS, filter)
 		stagingStore, err := wc.repo.BeginStagingTx(ctx, wc.id, false)
 		if err != nil {
 			return err
 		}
 		defer stagingStore.Abort(ctx)
 		return fn(stagingCtx{
-			GotFS:    fsmach,
+			GotFS:    &fsmach,
 			Stage:    stagetx,
 			Store:    stagingStore,
 			Exporter: exp,
@@ -133,7 +133,7 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 }
 
 func (wc *WC) viewMark(ctx context.Context, fn func(*gotcore.MarkTx) error) error {
-	name, err := wc.GetHead()
+	name, err := wc.GetSaveTo()
 	if err != nil {
 		return err
 	}
@@ -141,7 +141,7 @@ func (wc *WC) viewMark(ctx context.Context, fn func(*gotcore.MarkTx) error) erro
 }
 
 func (wc *WC) modifyMark(ctx context.Context, fn func(gotcore.ModifyCtx) (*gotcore.Commit, error)) error {
-	name, err := wc.GetHead()
+	name, err := wc.GetSaveTo()
 	if err != nil {
 		return err
 	}
@@ -292,6 +292,17 @@ type CommitParams struct {
 }
 
 func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
+	if params.Committer.IsZero() {
+		actAs, err := wc.GetActAs()
+		if err != nil {
+			return err
+		}
+		idu, err := wc.repo.GetIdentity(ctx, actAs)
+		if err != nil {
+			return err
+		}
+		params.Committer = idu.ID
+	}
 	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
 		if yes, err := sctx.Stage.IsEmpty(ctx); err != nil {
 			return err
@@ -304,77 +315,61 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 		scratch := sctx.Store
 		stage := sctx.Stage
 
-		if params.CommittedAt == 0 {
-			params.CommittedAt = tai64.Now().TAI64()
-		}
-		if params.Committer.IsZero() {
-			actAs, err := wc.GetActAs()
-			if err != nil {
-				return err
-			}
-			idu, err := wc.repo.GetIdentity(ctx, actAs)
-			if err != nil {
-				return err
-			}
-			params.Committer = idu.ID
-		}
-		if params.Authors == nil {
-			params.Authors = append(params.Authors, params.Committer)
-		}
-		if params.AuthoredAt == 0 {
-			params.AuthoredAt = params.CommittedAt
+		baseRefs, err := wc.GetBase()
+		if err != nil {
+			return err
 		}
 
+		fn, err := sctx.Stage.CreateFunction(ctx, sctx.GotFS, gotfs.RW{Metadata: scratch, Data: scratch})
+		if err != nil {
+			return err
+		}
 		if err := wc.modifyMark(ctx, func(mctx gotcore.ModifyCtx) (*gotcore.Commit, error) {
-			var fsroot *gotfs.Root
-			if mctx.Root != nil {
-				fsroot = &mctx.Root.Payload.Snap
+			// need to check if the config.Bases includes the current Commit, otherwise
+			// alert the user and abort.
+			if !mctx.Target.IsZero() && !slices.Contains(baseRefs, mctx.Target) {
+				baseRefs = append(baseRefs, mctx.Target)
 			}
-
-			fn, err := sctx.Stage.CreateFunction(ctx, mctx.FS, gotfs.RW{Metadata: scratch, Data: scratch})
-			if err != nil {
-				return nil, err
+			var bases []gotcore.Commit
+			for _, br := range baseRefs {
+				comm, err := gotcore.GetCommit(ctx, mctx.Stores.VC, br)
+				if err != nil {
+					return nil, err
+				}
+				bases = append(bases, comm)
 			}
 			ss := gotfs.RW{
 				Data:     stores.NewOverlay(mctx.Stores.FS.Data, scratch),
 				Metadata: stores.NewOverlay(mctx.Stores.FS.Metadata, scratch),
 			}
-			nextRoot, err := apply(ctx, mctx.FS, ss, fsroot, fn)
-			if err != nil {
-				return nil, err
+			var fsinputs []gotfs.Root
+			for _, base := range bases {
+				fsinputs = append(fsinputs, base.Payload.Snap)
 			}
-			var parents []gotcore.Commit
-			if mctx.Root != nil {
-				parents = []gotcore.Commit{*mctx.Root}
-			}
-
-			infoJSON, err := json.Marshal(struct {
-				Authors    []inet256.ID `json:"authors"`
-				AuthoredAt tai64.TAI64  `json:"authored_at"`
-				Message    string       `json:"message"`
-			}{
-				Authors:    params.Authors,
-				AuthoredAt: params.AuthoredAt,
-				Message:    params.Message,
-			})
+			nextSnap, err := gotcore.Apply(ctx, mctx.FS, ss, fn, fsinputs)
 			if err != nil {
 				return nil, err
 			}
 
 			vcs := stores.NewOverlay(mctx.Stores.VC, scratch)
-			nextSnap, err := mctx.VC.NewVertex(ctx, vcs, gotvc.VertexParams[gotcore.Payload]{
-				Parents:   parents,
-				Creator:   params.Committer,
-				CreatedAt: params.CommittedAt,
-				Payload: gotcore.Payload{
-					Snap: *nextRoot,
-					Aux:  infoJSON,
+			next, err := gotcore.CreateCommit(ctx, mctx.VC, vcs, gotcore.CommitParams{
+				Committer:   params.Committer,
+				CommittedAt: params.CommittedAt,
+				Base:        bases,
+				Snap:        nextSnap,
+				Notes: gotcore.CommitNotes{
+					Authors:    params.Authors,
+					AuthoredAt: params.AuthoredAt,
+					Message:    params.Message,
 				},
 			})
-			if err := mctx.Sync(ctx, gotcore.RO{VC: vcs, FS: ss.RO()}, *nextSnap); err != nil {
+			if err != nil {
 				return nil, err
 			}
-			return nextSnap, nil
+			if err := mctx.Sync(ctx, gotcore.RO{VC: vcs, FS: ss.RO()}, next); err != nil {
+				return nil, err
+			}
+			return &next, nil
 		}); err != nil {
 			return err
 		}
@@ -494,7 +489,7 @@ func (wc *WC) cleanupStagingBlobs(ctx context.Context) error {
 	defer tx.Abort(ctx)
 	kvmach := staging.DefaultGotKV()
 	stagetx := staging.New(&kvmach, tx, nil)
-	fsmach := gotfs.NewMachine()
+	fsmach := gotfs.NewMachine(gotfs.Params{})
 	if err := stagetx.ForEach(ctx, func(ent staging.Entry) error {
 		fop := ent.Op
 		if putOp := fop.Put; putOp != nil {
@@ -509,25 +504,4 @@ func (wc *WC) cleanupStagingBlobs(ctx context.Context) error {
 		return err
 	}
 	return tx.Commit(ctx)
-}
-
-// apply applies a function to a root to create a new function.
-// TODO: maybe move this into gotcore.
-func apply(ctx context.Context, fsmach *gotfs.Machine, ss gotfs.RW, base *gotfs.Root, fn gotfsvm.Function) (*gotfs.Root, error) {
-	if base == nil {
-		var err error
-		base, err = fsmach.NewEmpty(ctx, ss.Metadata, 0o755)
-		if err != nil {
-			return nil, err
-		}
-	}
-	vm := gotfsvm.New(fsmach)
-	root, err := vm.Apply(ctx, ss, fn, []gotfsvm.Input{{
-		Stores: ss.RO(),
-		Root:   *base,
-	}})
-	if err != nil {
-		return nil, err
-	}
-	return &root, nil
 }

@@ -17,7 +17,7 @@ var debugCmd = star.Command{
 			return err
 		}
 		defer wc.Close()
-		bname, err := wc.GetHead()
+		bname, err := wc.GetSaveTo()
 		if err != nil {
 			return err
 		}

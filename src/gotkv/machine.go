@@ -47,10 +47,11 @@ func (it *Iterator) Seek(ctx context.Context, gteq []byte) error {
 }
 
 type Params struct {
-	DataMach *gdat.Machine
-	MaxSize  int
-	MeanSize int
-	Seed     [16]byte
+	Salt      [32]byte
+	MaxSize   int
+	MeanSize  int
+	TreeSeed  [16]byte
+	CacheSize *int
 }
 
 // Machine holds common configuration for operations on gotkv instances.
@@ -65,14 +66,11 @@ type Machine struct {
 // NewMachine returns an operator which will create nodes with mean size `meanSize`
 // and maximum size `maxSize`.
 func NewMachine(p Params) Machine {
-	if p.DataMach == nil {
-		p.DataMach = gdat.NewMachine(gdat.Params{})
-	}
 	mach := Machine{
-		da:       p.DataMach,
+		da:       gdat.NewMachine(gdat.Params{Salt: p.Salt, CacheSize: p.CacheSize}),
 		meanSize: p.MeanSize,
 		maxSize:  p.MaxSize,
-		seed:     p.Seed,
+		seed:     p.TreeSeed,
 	}
 	if mach.meanSize <= 0 {
 		panic(fmt.Sprintf("gotkv.NewMachine: invalid average size %d", mach.meanSize))

@@ -54,7 +54,7 @@ var headCmd = star.Command{
 		defer wc.Close()
 		name, hasName := markNameOptParam.LoadOpt(c)
 		if !hasName {
-			name, err := wc.GetHead()
+			name, err := wc.GetSaveTo()
 			if err != nil {
 				return err
 			}

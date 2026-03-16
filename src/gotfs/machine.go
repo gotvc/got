@@ -24,99 +24,128 @@ const (
 	DefaultMinBlobSizeData      = 1 << 12
 	DefaultMeanBlobSizeData     = 1 << 20
 	DefaultMeanBlobSizeMetadata = 1 << 13
+
+	DefaultContentCacheSize  = 16
+	DefaultMetadataCacheSize = 16
 )
 
-type Option func(a *Machine)
+type Params struct {
+	Salt [32]byte
 
-func WithSalt(salt *[32]byte) Option {
-	return func(a *Machine) {
-		a.salt = salt
-	}
+	// MaxBlobSize is the maximum size of any blob posted by GotFS
+	MaxBlobSize *int
+	// MinSizeData is the minimum size of any content blob.
+	MinBlobSizeData *int
+	// MeanSizeData is the target mean size of all the content blobs.
+	MeanBlobSizeData *int
+	// MeanSizeMeta is the target meansize of all metadata blobs.
+	MeanBlobSizeMetadata *int
+
+	// ContentCacheSize is the number of blobs to keep in the content cache.
+	ContentCacheSize *int
+	// MetaCacheSize is the number of blobs to keep in the metadata cache.
+	MetaCacheSize *int
 }
 
-// WithMetaCacheSize sets the size of the cache for metadata
-func WithMetaCacheSize(n int) Option {
-	return func(a *Machine) {
-		a.metaCacheSize = n
+func (p Params) GetMaxBlobSize() int {
+	if p.MaxBlobSize == nil {
+		return DefaultMaxBlobSize
 	}
+	return *p.MaxBlobSize
 }
 
-// WithContentCacheSize sets the size of the cache for raw data
-func WithContentCacheSize(n int) Option {
-	return func(a *Machine) {
-		a.rawCacheSize = n
+func (p Params) GetMinSizeData() int {
+	if p.MinBlobSizeData == nil {
+		return DefaultMinBlobSizeData
 	}
+	return *p.MinBlobSizeData
+}
+
+func (p Params) GetMeanBlobSizeData() int {
+	if p.MeanBlobSizeData == nil {
+		return DefaultMeanBlobSizeData
+	}
+	return *p.MeanBlobSizeData
+}
+
+func (p Params) GetMeanBlobSizeMetadata() int {
+	if p.MeanBlobSizeMetadata == nil {
+		return DefaultMeanBlobSizeMetadata
+	}
+	return *p.MeanBlobSizeMetadata
+}
+
+func (p Params) GetContentCacheSize() int {
+	if p.ContentCacheSize == nil {
+		return DefaultContentCacheSize
+	}
+	return *p.ContentCacheSize
+}
+
+func (p Params) GetMetaCacheSize() int {
+	if p.MetaCacheSize == nil {
+		return DefaultMetadataCacheSize
+	}
+	return *p.MetaCacheSize
 }
 
 type Machine struct {
-	maxBlobSize                                 int
-	minSizeData, meanSizeData, meanSizeMetadata int
-	salt                                        *[32]byte
-	rawCacheSize, metaCacheSize                 int
+	p Params
 
-	rawOp        *gdat.Machine
-	gotkv        gotkv.Machine
+	// raw controls posting and getting raw data from the store.
+	raw          *gdat.Machine
+	gotkv        *gotkv.Machine
 	chunkingSeed *[32]byte
 	lob          gotlob.Machine
 }
 
-func NewMachine(opts ...Option) *Machine {
-	o := &Machine{
-		maxBlobSize:      DefaultMaxBlobSize,
-		minSizeData:      DefaultMinBlobSizeData,
-		meanSizeData:     DefaultMeanBlobSizeData,
-		meanSizeMetadata: DefaultMeanBlobSizeMetadata,
-		salt:             &[32]byte{},
-		rawCacheSize:     8,
-		metaCacheSize:    16,
-	}
-	for _, opt := range opts {
-		opt(o)
-	}
+func NewMachine(par Params) Machine {
+	m := Machine{p: par}
 
 	// data
 	var rawSalt [32]byte
-	gdat.DeriveKey(rawSalt[:], o.salt, []byte("raw"))
-	o.rawOp = gdat.NewMachine(gdat.Params{Salt: rawSalt, CacheSize: &o.rawCacheSize})
+	gdat.DeriveKey(rawSalt[:], &par.Salt, []byte("raw"))
+	m.raw = gdat.NewMachine(gdat.Params{Salt: rawSalt, CacheSize: par.ContentCacheSize})
 	var chunkingSeed [32]byte
-	gdat.DeriveKey(chunkingSeed[:], o.salt, []byte("chunking"))
-	o.chunkingSeed = &chunkingSeed
+	gdat.DeriveKey(chunkingSeed[:], &par.Salt, []byte("chunking"))
+	m.chunkingSeed = &chunkingSeed
 
 	// metadata
 	var metadataSalt [32]byte
-	gdat.DeriveKey(metadataSalt[:], o.salt, []byte("gotkv"))
-	metaOp := gdat.NewMachine(gdat.Params{Salt: metadataSalt, CacheSize: &o.metaCacheSize})
+	gdat.DeriveKey(metadataSalt[:], &par.Salt, []byte("gotkv"))
 	var treeSeed [16]byte
-	gdat.DeriveKey(treeSeed[:], o.salt, []byte("gotkv-seed"))
-	o.gotkv = gotkv.NewMachine(gotkv.Params{
-		DataMach: metaOp,
-		MeanSize: o.meanSizeMetadata,
-		MaxSize:  o.maxBlobSize,
-		Seed:     treeSeed,
+	gdat.DeriveKey(treeSeed[:], &par.Salt, []byte("gotkv-seed"))
+	kvmach := gotkv.NewMachine(gotkv.Params{
+		Salt:     metadataSalt,
+		MeanSize: par.GetMeanBlobSizeMetadata(),
+		MaxSize:  par.GetMaxBlobSize(),
+		TreeSeed: treeSeed,
 	})
+	m.gotkv = &kvmach
+
 	lobOpts := []gotlob.Option{
 		gotlob.WithChunking(false, func(onChunk chunking.ChunkHandler) *chunking.ContentDefined {
-			return chunking.NewContentDefined(o.minSizeData, o.meanSizeData, o.maxBlobSize, o.chunkingSeed, onChunk)
+			return chunking.NewContentDefined(par.GetMinSizeData(), par.GetMeanBlobSizeData(), par.GetMaxBlobSize(), m.chunkingSeed, onChunk)
 		}),
 		gotlob.WithFilter(func(x []byte) bool {
 			return isExtentKey(x)
 		}),
 	}
-	o.lob = gotlob.NewMachine(&o.gotkv, o.rawOp, lobOpts...)
-	return o
+	m.lob = gotlob.NewMachine(m.gotkv, m.raw, lobOpts...)
+	return m
 }
 
 func (mach *Machine) MeanBlobSizeData() int {
-	return mach.meanSizeData
+	return mach.p.GetMeanBlobSizeData()
 }
 
 func (mach *Machine) MeanBlobSizeMetadata() int {
-	return mach.meanSizeMetadata
+	return mach.p.GetMeanBlobSizeMetadata()
 }
 
 // MetadataKV returns the gotkv.Machine used for metadata
 func (mach *Machine) MetadataKV() *gotkv.Machine {
-	return &mach.gotkv
+	return mach.gotkv
 }
 
 // Pick returns a new root containing everything under p, shifted to the root.

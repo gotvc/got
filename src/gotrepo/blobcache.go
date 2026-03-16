@@ -44,7 +44,15 @@ type EnvClientBlobcache struct {
 	UseSchema bool `json:"use_schema,omitempty"`
 }
 
+func newBCInfoLogger() *zap.Logger {
+	cfg := zap.NewProductionConfig()
+	cfg.Level = zap.NewAtomicLevelAt(zap.PanicLevel)
+	l, _ := cfg.Build()
+	return l
+}
+
 func makeBlobcache(repo *os.Root, config Config, spec BlobcacheSpec, bgCtx context.Context) (blobcache.Service, error) {
+	var svc blobcache.Service
 	switch {
 	case spec.InProcess != nil:
 		if err := repo.MkdirAll(blobcacheDirPath, 0o755); err != nil {
@@ -73,12 +81,13 @@ func makeBlobcache(repo *os.Root, config Config, spec BlobcacheSpec, bgCtx conte
 		if err != nil {
 			return nil, err
 		}
-		return bc, nil
+		svc = bc
 	case spec.EnvClient != nil:
-		return bcclient.NewClientFromEnv(), nil
+		svc = bcclient.NewClientFromEnv()
 	default:
 		return nil, fmt.Errorf("empty blobcache spec: %v", spec)
 	}
+	return svc, nil
 }
 
 // BlobcachePeer returns the PeerID used by the local Blobcache.
@@ -93,11 +102,6 @@ func (r *Repo) BlobcachePeer() blobcache.PeerID {
 }
 
 func openLocalBlobcache(bgCtx context.Context, privKey ed25519.PrivateKey, stateDir string, pol *bcPolicy) (*bclocal.Service, error) {
-	// TODO: we should probably let the caller do this.
-	logger := zap.NewNop()
-	logger.Core().Enabled(zap.PanicLevel)
-	bgCtx = logctx.NewContext(bgCtx, logger)
-
 	return bclocal.New(bclocal.Env{
 		Background: bgCtx,
 		StateDir:   stateDir,
@@ -224,4 +228,139 @@ func (pol *bcPolicy) OpenFiat(peer blobcache.PeerID, target blobcache.OID) blobc
 		return roAct
 	}
 	return 0
+}
+
+var _ blobcache.Service = &bcIntercept{}
+
+type bcIntercept struct {
+	svc    blobcache.Service
+	logger *zap.Logger
+}
+
+func (b *bcIntercept) ctx(ctx context.Context) context.Context {
+	return logctx.NewContext(ctx, b.logger)
+}
+
+func (b *bcIntercept) Endpoint(ctx context.Context) (blobcache.Endpoint, error) {
+	return b.svc.Endpoint(b.ctx(ctx))
+}
+
+func (b *bcIntercept) Drop(ctx context.Context, h blobcache.Handle) error {
+	return b.svc.Drop(b.ctx(ctx), h)
+}
+
+func (b *bcIntercept) KeepAlive(ctx context.Context, hs []blobcache.Handle) error {
+	return b.svc.KeepAlive(b.ctx(ctx), hs)
+}
+
+func (b *bcIntercept) InspectHandle(ctx context.Context, h blobcache.Handle) (*blobcache.HandleInfo, error) {
+	return b.svc.InspectHandle(b.ctx(ctx), h)
+}
+
+func (b *bcIntercept) Share(ctx context.Context, h blobcache.Handle, to blobcache.PeerID, mask blobcache.ActionSet) (*blobcache.Handle, error) {
+	return b.svc.Share(b.ctx(ctx), h, to, mask)
+}
+
+func (b *bcIntercept) CreateVolume(ctx context.Context, host *blobcache.Endpoint, vspec blobcache.VolumeSpec) (*blobcache.Handle, error) {
+	return b.svc.CreateVolume(b.ctx(ctx), host, vspec)
+}
+
+func (b *bcIntercept) InspectVolume(ctx context.Context, h blobcache.Handle) (*blobcache.VolumeInfo, error) {
+	return b.svc.InspectVolume(b.ctx(ctx), h)
+}
+
+func (b *bcIntercept) OpenFiat(ctx context.Context, x blobcache.OID, mask blobcache.ActionSet) (*blobcache.Handle, error) {
+	return b.svc.OpenFiat(b.ctx(ctx), x, mask)
+}
+
+func (b *bcIntercept) OpenFrom(ctx context.Context, base blobcache.Handle, ltok blobcache.LinkToken, mask blobcache.ActionSet) (*blobcache.Handle, error) {
+	return b.svc.OpenFrom(b.ctx(ctx), base, ltok, mask)
+}
+
+func (b *bcIntercept) BeginTx(ctx context.Context, volh blobcache.Handle, txp blobcache.TxParams) (*blobcache.Handle, error) {
+	return b.svc.BeginTx(b.ctx(ctx), volh, txp)
+}
+
+func (b *bcIntercept) CloneVolume(ctx context.Context, caller *blobcache.PeerID, volh blobcache.Handle) (*blobcache.Handle, error) {
+	return b.svc.CloneVolume(b.ctx(ctx), caller, volh)
+}
+
+func (b *bcIntercept) InspectTx(ctx context.Context, tx blobcache.Handle) (*blobcache.TxInfo, error) {
+	return b.svc.InspectTx(b.ctx(ctx), tx)
+}
+
+func (b *bcIntercept) Commit(ctx context.Context, tx blobcache.Handle) error {
+	return b.svc.Commit(b.ctx(ctx), tx)
+}
+
+func (b *bcIntercept) Abort(ctx context.Context, tx blobcache.Handle) error {
+	return b.svc.Abort(b.ctx(ctx), tx)
+}
+
+func (b *bcIntercept) Load(ctx context.Context, tx blobcache.Handle, dst *[]byte) error {
+	return b.svc.Load(b.ctx(ctx), tx, dst)
+}
+
+func (b *bcIntercept) Save(ctx context.Context, tx blobcache.Handle, src []byte) error {
+	return b.svc.Save(b.ctx(ctx), tx, src)
+}
+
+func (b *bcIntercept) Post(ctx context.Context, tx blobcache.Handle, data []byte, opts blobcache.PostOpts) (blobcache.CID, error) {
+	return b.svc.Post(b.ctx(ctx), tx, data, opts)
+}
+
+func (b *bcIntercept) Get(ctx context.Context, tx blobcache.Handle, cid blobcache.CID, buf []byte, opts blobcache.GetOpts) (int, error) {
+	return b.svc.Get(b.ctx(ctx), tx, cid, buf, opts)
+}
+
+func (b *bcIntercept) Exists(ctx context.Context, tx blobcache.Handle, cids []blobcache.CID, dst []bool) error {
+	return b.svc.Exists(b.ctx(ctx), tx, cids, dst)
+}
+
+func (b *bcIntercept) Delete(ctx context.Context, tx blobcache.Handle, cids []blobcache.CID) error {
+	return b.svc.Delete(b.ctx(ctx), tx, cids)
+}
+
+func (b *bcIntercept) Copy(ctx context.Context, tx blobcache.Handle, srcTxns []blobcache.Handle, cids []blobcache.CID, success []bool) error {
+	return b.svc.Copy(b.ctx(ctx), tx, srcTxns, cids, success)
+}
+
+func (b *bcIntercept) Visit(ctx context.Context, tx blobcache.Handle, cids []blobcache.CID) error {
+	return b.svc.Visit(b.ctx(ctx), tx, cids)
+}
+
+func (b *bcIntercept) IsVisited(ctx context.Context, tx blobcache.Handle, cids []blobcache.CID, yesVisited []bool) error {
+	return b.svc.IsVisited(b.ctx(ctx), tx, cids, yesVisited)
+}
+
+func (b *bcIntercept) Link(ctx context.Context, tx blobcache.Handle, target blobcache.Handle, mask blobcache.ActionSet) (*blobcache.LinkToken, error) {
+	return b.svc.Link(b.ctx(ctx), tx, target, mask)
+}
+
+func (b *bcIntercept) Unlink(ctx context.Context, tx blobcache.Handle, ltoks []blobcache.LinkToken) error {
+	return b.svc.Unlink(b.ctx(ctx), tx, ltoks)
+}
+
+func (b *bcIntercept) VisitLinks(ctx context.Context, tx blobcache.Handle, targets []blobcache.LinkToken) error {
+	return b.svc.VisitLinks(b.ctx(ctx), tx, targets)
+}
+
+func (b *bcIntercept) CreateQueue(ctx context.Context, host *blobcache.Endpoint, qspec blobcache.QueueSpec) (*blobcache.Handle, error) {
+	return b.svc.CreateQueue(b.ctx(ctx), host, qspec)
+}
+
+func (b *bcIntercept) InspectQueue(ctx context.Context, qh blobcache.Handle) (blobcache.QueueInfo, error) {
+	return b.svc.InspectQueue(b.ctx(ctx), qh)
+}
+
+func (b *bcIntercept) Dequeue(ctx context.Context, q blobcache.Handle, buf []blobcache.Message, opts blobcache.DequeueOpts) (int, error) {
+	return b.svc.Dequeue(b.ctx(ctx), q, buf, opts)
+}
+
+func (b *bcIntercept) Enqueue(ctx context.Context, q blobcache.Handle, msgs []blobcache.Message) (*blobcache.InsertResp, error) {
+	return b.svc.Enqueue(b.ctx(ctx), q, msgs)
+}
+
+func (b *bcIntercept) SubToVolume(ctx context.Context, q blobcache.Handle, vol blobcache.Handle, spec blobcache.VolSubSpec) error {
+	return b.svc.SubToVolume(b.ctx(ctx), q, vol, spec)
 }

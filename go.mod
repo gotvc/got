@@ -1,6 +1,6 @@
 module github.com/gotvc/got
 
-go 1.25.0
+go 1.26.0
 
 require (
 	blobcache.io/blobcache v0.5.1

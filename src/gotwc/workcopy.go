@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/gotrepo"
@@ -158,12 +159,20 @@ func (wc *WC) Untrack(ctx context.Context, span Span) error {
 	})
 }
 
-func (wc *WC) GetHead() (string, error) {
+func (wc *WC) GetSaveTo() (string, error) {
 	cfg, err := LoadConfig(wc.root)
 	if err != nil {
 		return "", err
 	}
-	return cfg.Head, nil
+	return cfg.SaveTo, nil
+}
+
+func (wc *WC) GetBase() ([]gdat.Ref, error) {
+	cfg, err := LoadConfig(wc.root)
+	if err != nil {
+		return nil, err
+	}
+	return cfg.Base, nil
 }
 
 // SetHead sets HEAD to name
@@ -177,8 +186,12 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
+	baseRef, _, err := wc.repo.MarkLoad(ctx, gotrepo.FQM{Name: name})
+	if err != nil {
+		return err
+	}
 	if err := sqlutil.DoTx(ctx, wc.db, func(conn *sqlutil.Conn) error {
-		activeName, err := wc.GetHead()
+		activeName, err := wc.GetSaveTo()
 		if err != nil {
 			return err
 		}
@@ -210,13 +223,17 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 	}); err != nil {
 		return err
 	}
-
-	return wc.setHead(name)
+	var baseRefs []gdat.Ref
+	if !baseRef.IsZero() {
+		baseRefs = append(baseRefs, baseRef)
+	}
+	return wc.setHead(name, baseRefs)
 }
 
-func (wc *WC) setHead(branchName string) error {
+func (wc *WC) setHead(branchName string, base []gdat.Ref) error {
 	return EditConfig(wc.root, func(x Config) Config {
-		x.Head = branchName
+		x.SaveTo = branchName
+		x.Base = base
 		return x
 	})
 }
@@ -272,7 +289,7 @@ func (wc *WC) Export(ctx context.Context) error {
 		// we may be able to remove this
 		return fmt.Errorf("cannot export to filesystem, staging area must be empty (it's not)")
 	}
-	mname, err := wc.GetHead()
+	mname, err := wc.GetSaveTo()
 	if err != nil {
 		return nil
 	}
@@ -302,7 +319,7 @@ func (wc *WC) Export(ctx context.Context) error {
 }
 
 func (wc *WC) Clobber(ctx context.Context, p string) error {
-	mname, err := wc.GetHead()
+	mname, err := wc.GetSaveTo()
 	if err != nil {
 		return nil
 	}
@@ -343,7 +360,7 @@ func (wc *WC) Checkout(ctx context.Context, name string) error {
 // mark `next`.
 // Then the WC's head is set to next.
 func (wc *WC) Fork(ctx context.Context, next string) error {
-	head, err := wc.GetHead()
+	head, err := wc.GetSaveTo()
 	if err != nil {
 		return err
 	}
@@ -396,7 +413,7 @@ func (wc *WC) Cleanup(ctx context.Context) error {
 }
 
 func (wc *WC) viewSnap(ctx context.Context, fn func(*gotcore.ViewCtx) error) error {
-	mname, err := wc.GetHead()
+	mname, err := wc.GetSaveTo()
 	if err != nil {
 		return nil
 	}
