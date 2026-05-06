@@ -15,7 +15,7 @@ type Void struct {
 
 func NewVoid() Void {
 	return Void{
-		hf:      blobcache.HashAlgo_BLAKE2b_256.HashFunc(),
+		hf:      blobcache.HashAlgo_BLAKE2b_256.Hash,
 		maxSize: 1 << 22,
 	}
 }
@@ -32,7 +32,7 @@ func (v Void) Post(ctx context.Context, data []byte) (blobcache.CID, error) {
 }
 
 func (v Void) Hash(data []byte) blobcache.CID {
-	return v.hf(nil, data)
+	return v.hf(data)
 }
 
 func (v Void) MaxSize() int {

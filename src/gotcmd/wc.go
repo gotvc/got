@@ -114,12 +114,12 @@ var checkoutCmd = star.Command{
 	},
 }
 
-var localMarkNameParam = star.Required[string]{
-	ID:    "mark_name",
-	Parse: star.ParseString,
+var localMarkNameParam = &star.Required[string]{
+	PosName: "mark_name",
+	Parse:   star.ParseString,
 }
 
-var markNameOptParam = star.Optional[string]{
-	ID:    "mark_name",
-	Parse: star.ParseString,
+var markNameOptParam = &star.Optional[string]{
+	PosName: "mark_name",
+	Parse:   star.ParseString,
 }

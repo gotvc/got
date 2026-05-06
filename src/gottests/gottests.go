@@ -243,7 +243,7 @@ func (s *Site) AllPaths() iter.Seq[string] {
 	}
 }
 
-func ConfigAddTouch(peer blobcache.PeerID) func(cfg gotrepo.Config) gotrepo.Config {
+func ConfigAddTouch(peer blobcache.NodeID) func(cfg gotrepo.Config) gotrepo.Config {
 	return func(cfg gotrepo.Config) gotrepo.Config {
 		allowed := cfg.Blobcache.InProcess.CanTouch
 		allowed = append(allowed, peer)

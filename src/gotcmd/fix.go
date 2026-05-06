@@ -9,7 +9,8 @@ import (
 	"go.brendoncarroll.net/star"
 )
 
-var fixNameParam = star.Required[string]{
+var fixNameParam = &star.Required[string]{
+	PosName:  "fix",
 	ShortDoc: "the name of the fix to apply to the filesystem",
 	Parse:    star.ParseString,
 }

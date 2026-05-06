@@ -33,7 +33,7 @@ var serveCmd = star.Command{
 			return err
 		}
 		ep := blobcache.Endpoint{
-			Peer:   repo.BlobcachePeer(),
+			Node:   repo.BlobcachePeer(),
 			IPPort: pc.LocalAddr().(*net.UDPAddr).AddrPort(),
 		}
 		fmt.Fprintln(c.StdOut, "BLOBCACHE ENDPOINT:")
@@ -44,7 +44,7 @@ var serveCmd = star.Command{
 	},
 }
 
-var listenAddrParam = star.Required[string]{
-	ID:    "listen-address",
-	Parse: star.ParseString,
+var listenAddrParam = &star.Required[string]{
+	PosName: "listen-address",
+	Parse:   star.ParseString,
 }

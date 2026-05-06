@@ -135,8 +135,8 @@ var commitCmd = star.Command{
 	},
 }
 
-var pathsParam = star.Repeated[string]{
-	ID:       "paths",
+var pathsParam = &star.Repeated[string]{
+	PosName:  "paths",
 	ShortDoc: "one or more paths to add, remove, put, or discard",
 	Parse:    star.ParseString,
 }

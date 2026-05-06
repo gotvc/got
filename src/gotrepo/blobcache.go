@@ -93,10 +93,10 @@ func makeBlobcache(repo *os.Root, config Config, spec BlobcacheSpec, bgCtx conte
 // BlobcachePeer returns the PeerID used by the local Blobcache.
 // This depends on the ActAs parameter in the Blobcache config.
 // If the Blobcache is not local, then the zero value is returned
-func (r *Repo) BlobcachePeer() blobcache.PeerID {
+func (r *Repo) BlobcachePeer() blobcache.NodeID {
 	bcfg := r.config.Blobcache
 	if bcfg.InProcess == nil {
-		return blobcache.PeerID{}
+		return blobcache.NodeID{}
 	}
 	return r.config.Identities[bcfg.InProcess.ActAs]
 }
@@ -191,7 +191,7 @@ func (pol *bcPolicy) get(ctx context.Context) (canLook, canTouch []inet256.Addr)
 	return pol.canLook, pol.canTouch
 }
 
-func (pol *bcPolicy) CanConnect(x blobcache.PeerID) bool {
+func (pol *bcPolicy) CanConnect(x blobcache.NodeID) bool {
 	canLook, canTouch := pol.get(pol.bgCtx)
 	for _, list := range [][]inet256.Addr{canLook, canTouch} {
 		if slices.Contains(list, x) {
@@ -201,11 +201,11 @@ func (pol *bcPolicy) CanConnect(x blobcache.PeerID) bool {
 	return false
 }
 
-func (pol *bcPolicy) CanCreate(x blobcache.PeerID) bool {
+func (pol *bcPolicy) CanCreate(x blobcache.NodeID) bool {
 	return false
 }
 
-func (pol *bcPolicy) OpenFiat(peer blobcache.PeerID, target blobcache.OID) blobcache.ActionSet {
+func (pol *bcPolicy) OpenFiat(peer blobcache.NodeID, target blobcache.OID) blobcache.ActionSet {
 	if target == (blobcache.OID{}) {
 		// don't allow any access to the root
 		return 0
@@ -245,6 +245,10 @@ func (b *bcIntercept) Endpoint(ctx context.Context) (blobcache.Endpoint, error) 
 	return b.svc.Endpoint(b.ctx(ctx))
 }
 
+func (b *bcIntercept) Inspect(ctx context.Context, h blobcache.Handle) (blobcache.Info, error) {
+	return b.svc.Inspect(b.ctx(ctx), h)
+}
+
 func (b *bcIntercept) Drop(ctx context.Context, h blobcache.Handle) error {
 	return b.svc.Drop(b.ctx(ctx), h)
 }
@@ -257,8 +261,12 @@ func (b *bcIntercept) InspectHandle(ctx context.Context, h blobcache.Handle) (*b
 	return b.svc.InspectHandle(b.ctx(ctx), h)
 }
 
-func (b *bcIntercept) Share(ctx context.Context, h blobcache.Handle, to blobcache.PeerID, mask blobcache.ActionSet) (*blobcache.Handle, error) {
-	return b.svc.Share(b.ctx(ctx), h, to, mask)
+func (b *bcIntercept) ShareOut(ctx context.Context, h blobcache.Handle, to blobcache.NodeID, mask blobcache.ActionSet) (*blobcache.Handle, error) {
+	return b.svc.ShareOut(b.ctx(ctx), h, to, mask)
+}
+
+func (b *bcIntercept) ShareIn(ctx context.Context, host blobcache.NodeID, h blobcache.Handle) (blobcache.Handle, error) {
+	return b.svc.ShareIn(ctx, host, h)
 }
 
 func (b *bcIntercept) CreateVolume(ctx context.Context, host *blobcache.Endpoint, vspec blobcache.VolumeSpec) (*blobcache.Handle, error) {
@@ -279,10 +287,6 @@ func (b *bcIntercept) OpenFrom(ctx context.Context, base blobcache.Handle, ltok 
 
 func (b *bcIntercept) BeginTx(ctx context.Context, volh blobcache.Handle, txp blobcache.TxParams) (*blobcache.Handle, error) {
 	return b.svc.BeginTx(b.ctx(ctx), volh, txp)
-}
-
-func (b *bcIntercept) CloneVolume(ctx context.Context, caller *blobcache.PeerID, volh blobcache.Handle) (*blobcache.Handle, error) {
-	return b.svc.CloneVolume(b.ctx(ctx), caller, volh)
 }
 
 func (b *bcIntercept) InspectTx(ctx context.Context, tx blobcache.Handle) (*blobcache.TxInfo, error) {
@@ -337,11 +341,11 @@ func (b *bcIntercept) Link(ctx context.Context, tx blobcache.Handle, target blob
 	return b.svc.Link(b.ctx(ctx), tx, target, mask)
 }
 
-func (b *bcIntercept) Unlink(ctx context.Context, tx blobcache.Handle, ltoks []blobcache.LinkToken) error {
+func (b *bcIntercept) Unlink(ctx context.Context, tx blobcache.Handle, ltoks []blobcache.LinkTokenID) error {
 	return b.svc.Unlink(b.ctx(ctx), tx, ltoks)
 }
 
-func (b *bcIntercept) VisitLinks(ctx context.Context, tx blobcache.Handle, targets []blobcache.LinkToken) error {
+func (b *bcIntercept) VisitLinks(ctx context.Context, tx blobcache.Handle, targets []blobcache.LinkTokenID) error {
 	return b.svc.VisitLinks(b.ctx(ctx), tx, targets)
 }
 

@@ -42,14 +42,16 @@ func Hash(x []byte) blobcache.CID {
 	return blake2b.Sum256(x)
 }
 
+const HashAlgo = blobcache.HashAlgo_BLAKE2b_256
+
 const MaxSize = 1 << 21
 
 func NewMem() *schema.MemStore {
-	return schema.NewMem(blobcache.HashAlgo_BLAKE2b_256.HashFunc(), 1<<22)
+	return schema.NewMem(blobcache.HashAlgo_BLAKE2b_256.Hash, 1<<22)
 }
 
 func NewMemSize(s int) *schema.MemStore {
-	return schema.NewMem(blobcache.HashAlgo_BLAKE2b_256.HashFunc(), 1<<22)
+	return schema.NewMem(blobcache.HashAlgo_BLAKE2b_256.Hash, 1<<22)
 }
 
 // RO is used for read-only operations.

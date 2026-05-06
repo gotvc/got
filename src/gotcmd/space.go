@@ -84,8 +84,8 @@ var spaceSyncCmd = star.Command{
 	},
 }
 
-var addPrefixParam = star.Optional[string]{
-	ID:       "add-prefix",
+var addPrefixParam = &star.Optional[string]{
+	PosName:  "add-prefix",
 	ShortDoc: "add a prefix to the destination names",
 	Parse:    star.ParseString,
 }
@@ -116,7 +116,7 @@ var spaceCreateBcCmd = star.Command{
 		return repo.CreateSpace(c, spaceNameParam.Load(c), gotrepo.SpaceSpec{
 			Blobcache: &gotrepo.VolumeSpec{
 				URL: blobcache.URL{
-					Node: ep.Peer,
+					Node: ep.Node,
 					Base: h.OID,
 				},
 				Secret: randomSecret(),
@@ -159,8 +159,8 @@ var spaceAddBcCmd = star.Command{
 	},
 }
 
-var bcURLParam = star.Required[blobcache.URL]{
-	ID: "bc-url",
+var bcURLParam = &star.Required[blobcache.URL]{
+	PosName: "bc-url",
 	Parse: func(x string) (blobcache.URL, error) {
 		u, err := blobcache.ParseURL(x)
 		if err != nil {
@@ -170,8 +170,8 @@ var bcURLParam = star.Required[blobcache.URL]{
 	},
 }
 
-var secretParam = star.Required[[32]byte]{
-	ID: "secret",
+var secretParam = &star.Required[[32]byte]{
+	PosName: "secret",
 	Parse: func(s string) ([32]byte, error) {
 		data, err := hex.DecodeString(s)
 		if err != nil {
@@ -189,8 +189,8 @@ func randomSecret() (ret gdat.DEK) {
 	return ret
 }
 
-var spaceNameParam = star.Required[string]{
-	ID: "space-name",
+var spaceNameParam = &star.Required[string]{
+	PosName: "space-name",
 	Parse: func(x string) (string, error) {
 		if err := gotcore.CheckName(x); err != nil {
 			return "", err
@@ -239,12 +239,12 @@ var pushCmd = star.Command{
 	},
 }
 
-var srcSpaceParam = star.Required[string]{
-	ID:    "src_space",
-	Parse: star.ParseString,
+var srcSpaceParam = &star.Required[string]{
+	PosName: "src_space",
+	Parse:   star.ParseString,
 }
 
-var dstSpaceParam = star.Required[string]{
-	ID:    "dst_space",
-	Parse: star.ParseString,
+var dstSpaceParam = &star.Required[string]{
+	PosName: "dst_space",
+	Parse:   star.ParseString,
 }

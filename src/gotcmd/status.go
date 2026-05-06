@@ -125,21 +125,21 @@ var catCmd = star.Command{
 	},
 }
 
-var commExprOptParam = star.Optional[gotrepo.CommitExpr]{
-	ID:       "comm",
+var commExprOptParam = &star.Optional[gotrepo.CommitExpr]{
+	PosName:  "comm",
 	Parse:    gotcore.ParseCommitExpr,
 	ShortDoc: "a commit expression",
 }
 
-var fqmnOptParam = star.Optional[gotrepo.FQM]{
-	ID: "mark-fq",
+var fqmnOptParam = &star.Optional[gotrepo.FQM]{
+	PosName: "mark-fq",
 	Parse: func(s string) (gotrepo.FQM, error) {
 		return gotrepo.ParseFQName(s), nil
 	},
 	ShortDoc: "a fully qualified mark name",
 }
 
-var pathParam = star.Optional[string]{
-	ID:    "path",
-	Parse: star.ParseString,
+var pathParam = &star.Optional[string]{
+	PosName: "path",
+	Parse:   star.ParseString,
 }

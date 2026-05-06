@@ -62,15 +62,15 @@ var initCmd = star.Command{
 	},
 }
 
-var mkvolParam = star.Optional[string]{
-	ID:       "mkvol",
+var mkvolParam = &star.Optional[string]{
+	PosName:  "mkvol",
 	Parse:    star.ParseString,
 	ShortDoc: "the name to use when creating new a volume in a namespace",
 }
 
-var blobcacheParam = star.Optional[string]{
-	ID:    "blobcache",
-	Parse: star.ParseString,
+var blobcacheParam = &star.Optional[string]{
+	PosName: "blobcache",
+	Parse:   star.ParseString,
 }
 
 func configureBlobcache(c star.Context, cfg *gotrepo.Config) error {
@@ -109,8 +109,8 @@ func configureBlobcache(c star.Context, cfg *gotrepo.Config) error {
 	}
 }
 
-var volumeParam = star.Optional[blobcache.OID]{
-	ID: "volume",
+var volumeParam = &star.Optional[blobcache.OID]{
+	PosName: "volume",
 	Parse: func(s string) (blobcache.OID, error) {
 		return blobcache.ParseOID(s)
 	},
@@ -174,8 +174,8 @@ var mkrepoCmd = star.Command{
 	},
 }
 
-var volNameParam = star.Required[string]{
-	ID:       "vol-name",
+var volNameParam = &star.Required[string]{
+	PosName:  "vol-name",
 	Parse:    star.ParseString,
 	ShortDoc: "the name in the namespace to use for the new volume",
 }
