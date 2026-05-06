@@ -212,13 +212,24 @@ func (pol *bcPolicy) OpenFiat(peer blobcache.NodeID, target blobcache.OID) blobc
 	}
 
 	const roAct = blobcache.Action_ACK |
-		blobcache.Action_VOLUME_BEGIN_TX |
 		blobcache.Action_VOLUME_INSPECT |
-		blobcache.Action_TX_INSPECT |
-		blobcache.Action_TX_EXISTS
+		blobcache.Action_VOLUME_BEGIN_TX |
+		blobcache.Action_VOLUME_TX_INSPECT |
+		blobcache.Action_VOLUME_TX_LOAD |
+		blobcache.Action_VOLUME_TX_GET |
+		blobcache.Action_VOLUME_TX_EXISTS |
+		blobcache.Action_VOLUME_TX_COPY_FROM
 	const rwAct = roAct |
-		blobcache.Action_TX_POST |
-		blobcache.Action_TX_SAVE
+		blobcache.Action_VOLUME_LINK_TO |
+		blobcache.Action_VOLUME_TX_SAVE |
+		blobcache.Action_VOLUME_TX_POST |
+		blobcache.Action_VOLUME_TX_DELETE |
+		blobcache.Action_VOLUME_TX_COPY_TO |
+		blobcache.Action_VOLUME_TX_LINK_FROM |
+		blobcache.Action_VOLUME_TX_UNLINK_FROM |
+		blobcache.Action_VOLUME_TX_VISIT |
+		blobcache.Action_VOLUME_TX_IS_VISITED |
+		blobcache.Action_VOLUME_TX_VISIT_LINKS
 
 	canLook, canTouch := pol.get(pol.bgCtx)
 	if slices.Contains(canTouch, peer) {
