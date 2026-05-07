@@ -242,7 +242,7 @@ func (r *Repo) NSVolume(ctx context.Context) (blobcache.FQOID, error) {
 		return blobcache.FQOID{}, err
 	}
 	return blobcache.FQOID{
-		Peer: ep.Peer,
+		Node: ep.Node,
 		OID:  nsh.OID,
 	}, nil
 }
@@ -258,7 +258,7 @@ func (r *Repo) NSVolumeSpec(ctx context.Context) (*VolumeSpec, error) {
 	}
 	return &VolumeSpec{
 		URL: blobcache.URL{
-			Node:   ep.Peer,
+			Node:   ep.Node,
 			IPPort: &ep.IPPort,
 			Base:   nsh.OID,
 		},

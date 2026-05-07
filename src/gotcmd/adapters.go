@@ -85,14 +85,14 @@ var ftpCmd = star.Command{
 	},
 }
 
-var commExprParam = star.Required[gotcore.CommitExpr]{
-	ID:       "commit-expr",
+var commExprParam = &star.Required[gotcore.CommitExpr]{
+	PosName:  "commit-expr",
 	Parse:    gotcore.ParseCommitExpr,
 	ShortDoc: "a fully qualified mark name",
 }
 
-var addrParam = star.Optional[string]{
-	ID:       "addr",
+var addrParam = &star.Optional[string]{
+	PosName:  "addr",
 	ShortDoc: "the address to serve on",
 	Parse:    star.ParseString,
 }

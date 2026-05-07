@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 // Renderer renders metrics updates to a TTY.
@@ -112,7 +112,7 @@ func (m metricsModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m metricsModel) View() string {
+func (m metricsModel) View() tea.View {
 	// Render the tree into a buffer, then adapt it to the current viewport.
 	// Bubble Tea will handle repainting and resizes.
 	b := &bytes.Buffer{}
@@ -125,7 +125,7 @@ func (m metricsModel) View() string {
 	return fitToViewport(b.String(), m.width, m.height)
 }
 
-func fitToViewport(s string, width, height int) string {
+func fitToViewport(s string, width, height int) tea.View {
 	// Normalize newlines for stable line handling.
 	s = strings.ReplaceAll(s, "\r\n", "\n")
 	s = strings.TrimRight(s, "\n")
@@ -148,7 +148,7 @@ func fitToViewport(s string, width, height int) string {
 		}
 	}
 
-	return strings.Join(lines, "\n") + "\n"
+	return tea.NewView(strings.Join(lines, "\n") + "\n")
 }
 
 func truncateRunes(s string, width int) string {

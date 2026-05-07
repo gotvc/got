@@ -298,5 +298,5 @@ func newIterator(t testing.TB, s stores.RO, root Root[Entry, blobcache.CID], spa
 }
 
 func newStore(maxSize int) *schema.MemStore {
-	return schema.NewMem(blobcache.HashAlgo_BLAKE3_256.HashFunc(), maxSize)
+	return schema.NewMem(blobcache.HashAlgo_BLAKE3_256.Hash, maxSize)
 }

@@ -95,8 +95,8 @@ var markListCmd = star.Command{
 	},
 }
 
-var spaceNameOptParam = star.Optional[string]{
-	ID:       "space",
+var spaceNameOptParam = &star.Optional[string]{
+	PosName:  "space",
 	ShortDoc: "the name of the space to access (local space is the default)",
 	Parse:    star.ParseString,
 }
@@ -158,14 +158,14 @@ var markCpCmd = star.Command{
 	},
 }
 
-var srcMarkNameParam = star.Required[string]{
-	ID:    "src-mark",
-	Parse: star.ParseString,
+var srcMarkNameParam = &star.Required[string]{
+	PosName: "src-mark",
+	Parse:   star.ParseString,
 }
 
-var dstMarkNameParam = star.Required[string]{
-	ID:    "dst-mark",
-	Parse: star.ParseString,
+var dstMarkNameParam = &star.Required[string]{
+	PosName: "dst-mark",
+	Parse:   star.ParseString,
 }
 
 var markLoadCmd = star.Command{
@@ -337,20 +337,20 @@ func printcomm(bufw *bufio.Writer, ref gdat.Ref, comm gotcore.Commit) error {
 	return nil
 }
 
-var markNameParam = star.Required[string]{
-	ID:       "mark_name",
+var markNameParam = &star.Required[string]{
+	PosName:  "mark_name",
 	Parse:    star.ParseString,
 	ShortDoc: "the name of a mark",
 }
 
-var srcMarkParam = star.Required[gotrepo.FQM]{
-	ID:       "src-mark",
+var srcMarkParam = &star.Required[gotrepo.FQM]{
+	PosName:  "src-mark",
 	Parse:    parseFQName,
 	ShortDoc: "the source bookmark",
 }
 
-var dstMarkParam = star.Required[gotrepo.FQM]{
-	ID:       "dst-mark",
+var dstMarkParam = &star.Required[gotrepo.FQM]{
+	PosName:  "dst-mark",
 	Parse:    parseFQName,
 	ShortDoc: "the destination bookmark",
 }
@@ -399,14 +399,14 @@ var markSyncCmd = star.Command{
 	},
 }
 
-var newMarkNameParam = star.Required[string]{
-	ID:       "new_name",
+var newMarkNameParam = &star.Required[string]{
+	PosName:  "new_name",
 	Parse:    star.ParseString,
 	ShortDoc: "the name of the new bookmark",
 }
 
-var forceParam = star.Optional[bool]{
-	ID: "force",
+var forceParam = &star.Optional[bool]{
+	PosName: "force",
 	Parse: func(s string) (bool, error) {
 		if s == "" || s == "true" {
 			return true, nil

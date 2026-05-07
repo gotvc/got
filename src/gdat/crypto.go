@@ -18,6 +18,8 @@ func Hash(x []byte) blobcache.CID {
 	return stores.Hash(x)
 }
 
+const HashAlgo = stores.HashAlgo
+
 // DeriveKey uses the blake2b XOF to fill out.
 // The input to the XOF is additional and secret is used to key the XOF.
 func DeriveKey(out []byte, secret *[32]byte, additional []byte) {
@@ -107,10 +109,7 @@ func getDecrypt(ctx context.Context, s stores.RO, dek DEK, id blobcache.CID, buf
 		return 0, err
 	}
 	data := buf[:n]
-	hf := func(salt *blobcache.CID, data []byte) blobcache.CID {
-		return Hash(data)
-	}
-	if err := blobcache.CheckBlob(hf, nil, &id, data); err != nil {
+	if err := blobcache.CheckBlob(HashAlgo, nil, &id, data); err != nil {
 		logctx.Errorf(ctx, "len(data)=%d HAVE: %v WANT: %v", len(data), id, Hash(data))
 		return 0, err
 	}

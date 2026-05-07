@@ -53,7 +53,7 @@ var slurpCmd = star.Command{
 	},
 }
 
-var targetParam = star.Required[string]{
-	ID:    "target",
-	Parse: star.ParseString,
+var targetParam = &star.Required[string]{
+	PosName: "target",
+	Parse:   star.ParseString,
 }

@@ -40,6 +40,7 @@ var rootCmd = star.NewGroupedDir(
 	}, []star.Group{
 		{Title: "REPO", Commands: []string{
 			"init",
+			"repo",
 			"serve",
 			"scrub",
 			"iden",
@@ -111,6 +112,7 @@ var rootCmd = star.NewGroupedDir(
 
 		// misc
 		"iden":    idenCmd,
+		"repo":    repoCmd,
 		"org":     orgCmd,
 		"serve":   serveCmd,
 		"slurp":   slurpCmd,

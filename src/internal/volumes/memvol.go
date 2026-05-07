@@ -22,8 +22,8 @@ type Memory struct {
 func NewMemory(ha blobcache.HashAlgo, maxSize int) *Memory {
 	return &Memory{
 		root: []byte{},
-		s:    schema.NewMem(ha.HashFunc(), maxSize),
-		hf:   ha.HashFunc(),
+		s:    schema.NewMem(ha.Hash, maxSize),
+		hf:   ha.Hash,
 	}
 }
 
@@ -89,5 +89,5 @@ func (tx *MemoryTx) MaxSize() int {
 }
 
 func (tx *MemoryTx) Hash(data []byte) blobcache.CID {
-	return tx.vol.hf(nil, data)
+	return tx.vol.hf(data)
 }

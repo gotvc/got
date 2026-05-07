@@ -36,8 +36,8 @@ var debugCmd = star.Command{
 	},
 }
 
-var debugTypeParam = star.Required[string]{
-	ID:       "type",
+var debugTypeParam = &star.Required[string]{
+	PosName:  "type",
 	ShortDoc: "the type of debug to run",
 	Parse:    star.ParseString,
 }
