@@ -9,6 +9,7 @@ import (
 
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
+	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
 
 	"github.com/gotvc/got/src/gdat"
@@ -159,6 +160,73 @@ func (c *Client) ForEachStage(ctx context.Context, repoVol blobcache.OID, fn fun
 		}
 		return fn(&paramHash, volid)
 	})
+}
+
+// RepairRepoLinks refreshes all repo-schema link tokens in a single transaction.
+// If any referenced subvolume cannot be reopened, the transaction is aborted.
+func (c *Client) RepairRepoLinks(ctx context.Context, repoVol blobcache.OID) error {
+	rootH, err := c.rootHandle(ctx, repoVol)
+	if err != nil {
+		return err
+	}
+	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Modify: true})
+	if err != nil {
+		return err
+	}
+	defer txn.Abort(ctx)
+
+	root, err := c.getRoot(ctx, txn)
+	if err != nil {
+		return err
+	}
+
+	type entry struct {
+		Key []byte
+		SVE subvolEntry
+	}
+	var entries []entry
+
+	if sve, err := c.getNS(ctx, txn, root); err != nil {
+		return err
+	} else if sve != nil {
+		entries = append(entries, entry{Key: nsKey, SVE: *sve})
+	}
+
+	span := gotkv.PrefixSpan([]byte("stage/"))
+	if err := c.GotKV.ForEach(ctx, txn, root, span, func(ent gotkv.Entry) error {
+		sve, err := parseSubvolEntry(ent.Value)
+		if err != nil {
+			return err
+		}
+		key := append([]byte(nil), ent.Key...)
+		entries = append(entries, entry{Key: key, SVE: *sve})
+		return nil
+	}); err != nil {
+		return err
+	}
+
+	for i := range entries {
+		old := entries[i].SVE
+		logctx.Infof(ctx, "replacing repo link key=%q target=%v", string(entries[i].Key), old.Token.Target)
+		target, err := c.Service.OpenFiat(ctx, old.Token.Target, old.Token.Rights)
+		if err != nil {
+			return err
+		}
+		ltok, err := txn.Link(ctx, *target, old.Token.Rights)
+		if err != nil {
+			return err
+		}
+		old.Token = *ltok
+		root, err = c.GotKV.Put(ctx, txn, root, entries[i].Key, old.Marshal(nil))
+		if err != nil {
+			return err
+		}
+	}
+
+	if err := txn.Save(ctx, root.Marshal(nil)); err != nil {
+		return err
+	}
+	return txn.Commit(ctx)
 }
 
 // createSubVolume creates a new volume and calls txn.AllowLink so it can be persisted indefinitely

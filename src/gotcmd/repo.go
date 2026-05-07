@@ -16,6 +16,12 @@ import (
 	"go.brendoncarroll.net/star"
 )
 
+var repoCmd = star.NewDir(star.Metadata{
+	Short: "repo maintenance commands",
+}, map[string]star.Command{
+	"repair-links": repairLinksCmd,
+})
+
 var initCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "initializes a repository in the current directory",
@@ -132,6 +138,24 @@ var scrubCmd = star.Command{
 			return err
 		}
 		c.Printf("everything is OK\n")
+		return nil
+	},
+}
+
+var repairLinksCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "repairs repo volume link tokens",
+	},
+	F: func(c star.Context) error {
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		if err := gotrepo.RepairRepoLinks(c.Context, repo); err != nil {
+			return err
+		}
+		c.Printf("repaired repo links\n")
 		return nil
 	},
 }
