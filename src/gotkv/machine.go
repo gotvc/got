@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/gotkv/ptree"
@@ -47,11 +48,12 @@ func (it *Iterator) Seek(ctx context.Context, gteq []byte) error {
 }
 
 type Params struct {
-	Salt      [32]byte
-	MaxSize   int
-	MeanSize  int
-	TreeSeed  [16]byte
-	CacheSize *int
+	Salt          [32]byte
+	MaxSize       int
+	MeanSize      int
+	TreeSeed      [16]byte
+	CacheSize     *int
+	KeyedHashFunc blobcache.KeyedHashFunc
 }
 
 // Machine holds common configuration for operations on gotkv instances.
@@ -67,7 +69,11 @@ type Machine struct {
 // and maximum size `maxSize`.
 func NewMachine(p Params) Machine {
 	mach := Machine{
-		da:       gdat.NewMachine(gdat.Params{Salt: p.Salt, CacheSize: p.CacheSize}),
+		da: gdat.NewMachine(gdat.Params{
+			Salt:          p.Salt,
+			CacheSize:     p.CacheSize,
+			KeyedHashFunc: p.KeyedHashFunc,
+		}),
 		meanSize: p.MeanSize,
 		maxSize:  p.MaxSize,
 		seed:     p.TreeSeed,

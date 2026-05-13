@@ -4,9 +4,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
-	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotvc"
+	"github.com/gotvc/got/src/internal/stores"
 )
 
 // DSConfig holds all data structure parameters
@@ -26,7 +26,7 @@ func (cfg DSConfig) Marshal(out []byte) []byte {
 }
 
 func (cfg DSConfig) Hash() [32]byte {
-	return gdat.Hash(cfg.Marshal(nil))
+	return stores.Hash(cfg.Marshal(nil))
 }
 
 // Config contains all parameters.

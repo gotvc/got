@@ -5,7 +5,6 @@ import (
 	"regexp"
 
 	"blobcache.io/blobcache/src/blobcache"
-	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 )
@@ -47,7 +46,7 @@ type Rule struct {
 }
 
 func (r Rule) ID() RuleID {
-	return gdat.Hash(r.Marshal(nil))
+	return stores.Hash(r.Marshal(nil))
 }
 
 func (r *Rule) Unmarshal(data []byte) error {

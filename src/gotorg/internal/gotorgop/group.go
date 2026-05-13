@@ -7,8 +7,8 @@ import (
 
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/cloudflare/circl/kem"
-	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/internal/sbe"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.inet256.org/inet256/src/inet256"
 )
 
@@ -22,7 +22,7 @@ func ComputeGroupID(nonce [16]byte, initOwners IDSet) GroupID {
 	var data []byte
 	data = append(data, nonce[:]...)
 	data = append(data, initOwners.Marshal(nil)...)
-	return gdat.Hash(data)
+	return stores.Hash(data)
 }
 
 func ParseGroupID(x []byte) (GroupID, error) {

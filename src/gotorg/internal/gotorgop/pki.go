@@ -12,6 +12,7 @@ import (
 	"github.com/cloudflare/circl/sign/mldsa/mldsa87"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/internal/sbe"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.inet256.org/inet256/src/inet256"
 )
 
@@ -31,7 +32,7 @@ func (s Secret) DeriveSym() [32]byte {
 
 func (s Secret) Ratchet(n int) Secret {
 	for range n {
-		s = Secret(gdat.Hash(s[:]))
+		s = Secret(stores.Hash(s[:]))
 	}
 	return s
 }

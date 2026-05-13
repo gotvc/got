@@ -7,18 +7,11 @@ import (
 	"math"
 
 	"blobcache.io/blobcache/src/blobcache"
-	"go.brendoncarroll.net/stdctx/logctx"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/chacha20"
 
 	"github.com/gotvc/got/src/internal/stores"
 )
-
-func Hash(x []byte) blobcache.CID {
-	return stores.Hash(x)
-}
-
-const HashAlgo = stores.HashAlgo
 
 // DeriveKey uses the blake2b XOF to fill out.
 // The input to the XOF is additional and secret is used to key the XOF.
@@ -56,24 +49,6 @@ func DeriveStream(secret *[32]byte, additional []byte) io.Reader {
 	return xof
 }
 
-// KeyFunc produces a key for a given blob
-type KeyFunc func(ptextHash blobcache.CID) DEK
-
-// SaltedConvergent uses salt to generate convergent keys for each blob.
-func SaltedConvergent(salt *[32]byte) KeyFunc {
-	salt = cloneSalt(salt)
-	return func(ptextHash blobcache.CID) DEK {
-		dek := DEK{}
-		DeriveKey(dek[:], salt, ptextHash[:])
-		return dek
-	}
-}
-
-// Convergent generates a DEK depending only on ptextHash
-func Convergent(ptextHash blobcache.CID) DEK {
-	return DEK(ptextHash)
-}
-
 const DEKSize = 32
 
 type DEK [DEKSize]byte
@@ -91,10 +66,11 @@ func (*DEK) String() string {
 	return "{ 32 byte DEK }"
 }
 
-func (a *Machine) postEncrypt(ctx context.Context, s stores.WO, keyFunc KeyFunc, data []byte) (blobcache.CID, *DEK, error) {
-	dek := keyFunc(Hash(data))
-	ctext := a.acquire(s.MaxSize())
-	defer a.release(ctext)
+func (m *Machine) postEncrypt(ctx context.Context, s stores.WO, data []byte) (blobcache.CID, *DEK, error) {
+	h := m.khf(nil, data)
+	dek := DEK(m.khf(&m.salt, h[:]))
+	ctext := m.acquire(s.MaxSize())
+	defer m.release(ctext)
 	n := cryptoXOR(dek, ctext, data)
 	id, err := s.Post(ctx, ctext[:n])
 	if err != nil {
@@ -103,16 +79,13 @@ func (a *Machine) postEncrypt(ctx context.Context, s stores.WO, keyFunc KeyFunc,
 	return id, &dek, nil
 }
 
-func getDecrypt(ctx context.Context, s stores.RO, dek DEK, id blobcache.CID, buf []byte) (int, error) {
+func (m *Machine) getDecrypt(ctx context.Context, s stores.RO, dek DEK, id blobcache.CID, buf []byte) (int, error) {
 	n, err := s.Get(ctx, id, buf)
 	if err != nil {
 		return 0, err
 	}
 	data := buf[:n]
-	if err := blobcache.CheckBlob(HashAlgo, nil, &id, data); err != nil {
-		logctx.Errorf(ctx, "len(data)=%d HAVE: %v WANT: %v", len(data), id, Hash(data))
-		return 0, err
-	}
+	// We can assume blobcache checked the blob for us.
 	cryptoXOR(dek, data, data)
 	return n, nil
 }
@@ -125,9 +98,4 @@ func cryptoXOR(key DEK, dst, src []byte) int {
 	}
 	cipher.XORKeyStream(dst, src)
 	return len(src)
-}
-
-func cloneSalt(x *[32]byte) *[32]byte {
-	y := *x
-	return &y
 }
