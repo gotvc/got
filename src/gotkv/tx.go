@@ -102,6 +102,7 @@ func getFromSlice(ents []Entry, key []byte, val *[]byte) (bool, error) {
 }
 
 func (tx *Tx) Delete(ctx context.Context, key []byte) error {
+	key = slices.Clone(key)
 	tx.edits = append(tx.edits, Edit{
 		Span:    SingleKeySpan(key),
 		Entries: nil,
