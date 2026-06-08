@@ -28,16 +28,10 @@ func (u Union) Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, err
 	return 0, blobcache.ErrNotFound{}
 }
 
-func (u Union) Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error {
-	dst2 := make([]bool, len(cids))
+func (u Union) Exists(ctx context.Context, cids []blobcache.CID, dst *blobcache.BitMap) error {
 	for _, r := range u {
-		if err := r.Exists(ctx, cids, dst2); err != nil {
+		if err := r.Exists(ctx, cids, dst); err != nil {
 			return err
-		}
-		for i := range dst {
-			if dst2[i] {
-				dst[i] = true
-			}
 		}
 	}
 	return nil

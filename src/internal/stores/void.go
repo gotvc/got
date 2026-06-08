@@ -20,10 +20,7 @@ func NewVoid() Void {
 	}
 }
 
-func (v Void) Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error {
-	for i := range dst {
-		dst[i] = false
-	}
+func (v Void) Exists(ctx context.Context, cids []blobcache.CID, dst *blobcache.BitMap) error {
 	return nil
 }
 

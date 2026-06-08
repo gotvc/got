@@ -23,7 +23,7 @@ type Tx interface {
 	Save(ctx context.Context, src []byte) error
 
 	Post(ctx context.Context, data []byte) (blobcache.CID, error)
-	Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error
+	Exists(ctx context.Context, cids []blobcache.CID, dst *blobcache.BitMap) error
 	Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, error)
 	MaxSize() int
 	Hash(data []byte) blobcache.CID

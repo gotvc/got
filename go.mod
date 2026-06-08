@@ -3,7 +3,7 @@ module github.com/gotvc/got
 go 1.26.0
 
 require (
-	blobcache.io/blobcache v0.7.0
+	blobcache.io/blobcache v0.7.1-0.20260608013212-37f389bfe681
 	capnproto.org/go/capnp/v3 v3.1.0-alpha.2
 	charm.land/bubbletea/v2 v2.0.2
 	github.com/cloudflare/circl v1.6.1
@@ -26,7 +26,7 @@ require (
 )
 
 require (
-	blobcache.io/glfs v0.0.0-20260313021227-407298e99fa7 // indirect
+	blobcache.io/glfs v0.0.0-20260606153950-599b6585abc8 // indirect
 	charm.land/lipgloss/v2 v2.0.0 // indirect
 	github.com/DataDog/zstd v1.4.5 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect

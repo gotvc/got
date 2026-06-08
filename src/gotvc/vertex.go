@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 
+	"blobcache.io/blobcache/src/bcsdk"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
 	"go.inet256.org/inet256/src/inet256"
@@ -185,7 +186,7 @@ func (ag *Machine[T]) PostVertex(ctx context.Context, s stores.WO, x Vertex[T]) 
 		panic("gotvc: operator is read-only. This is a bug.")
 	}
 	for _, ref := range x.Parents {
-		yes, err := stores.ExistsUnit(ctx, s, ref.CID)
+		yes, err := bcsdk.ExistsUnit(ctx, s, ref.CID)
 		if err != nil {
 			return Ref{}, err
 		}

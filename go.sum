@@ -1,7 +1,7 @@
-blobcache.io/blobcache v0.7.0 h1:FQ8GkgFUJMZ/SW+QBoa/gzeKWackaJOlz6MrQEnKFi8=
-blobcache.io/blobcache v0.7.0/go.mod h1:ChCuHmI/3rEYRGz5tHGpzqcq+LVluV9GOIQ1skCxaFU=
-blobcache.io/glfs v0.0.0-20260313021227-407298e99fa7 h1:4IZMxPIdTBYJGEz0+Ryq1hHcd0EDm9eQ+shaDAdSGyU=
-blobcache.io/glfs v0.0.0-20260313021227-407298e99fa7/go.mod h1:yFuEsv/bQYND9Mc3LlK6j/ulWi5ELHhw3hzzCDThSmQ=
+blobcache.io/blobcache v0.7.1-0.20260608013212-37f389bfe681 h1:ExUSPlybeXpG0xCLFOFvjx9NVlKB9w6LQ56e4d3+KFI=
+blobcache.io/blobcache v0.7.1-0.20260608013212-37f389bfe681/go.mod h1:O/TcnF7BGLizwJmOhTQpHk0IKY5zVObcN1SM8g6h7lE=
+blobcache.io/glfs v0.0.0-20260606153950-599b6585abc8 h1:wS42eNh4dk/UmPjYGysQy+TCbcebn/TxqoiQ6pjgaVw=
+blobcache.io/glfs v0.0.0-20260606153950-599b6585abc8/go.mod h1:OCei1R79O+Lj/o0eoHFQCaYBhGwDrWWyZXq/cZuyQZ8=
 capnproto.org/go/capnp/v3 v3.1.0-alpha.2 h1:93ISpqHf2/3WQlfrBP0tT8Dg/RQc3uq6DV36vN0ePWk=
 capnproto.org/go/capnp/v3 v3.1.0-alpha.2/go.mod h1:2vT5D2dtG8sJGEoEKU17e+j7shdaYp1Myl8X03B3hmc=
 charm.land/bubbletea/v2 v2.0.2 h1:4CRtRnuZOdFDTWSff9r8QFt/9+z6Emubz3aDMnf/dx0=

@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"io"
 
+	"blobcache.io/blobcache/src/bcsdk"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/gotcore"
-	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/stdctx/logctx"
 )
 
@@ -83,7 +83,7 @@ func (r *Repo) CheckAll(ctx context.Context) error {
 			if err := gotcore.ViewCommit(ctx, st, se, func(vctx *gotcore.ViewCtx) error {
 				return vctx.VC.Check(ctx, vctx.Stores.VC, *vctx.Root, func(payload gotcore.Payload) error {
 					return vctx.FS.Check(ctx, vctx.Stores.FS.Metadata, payload.Snap, func(ref gdat.Ref) error {
-						ok, err := stores.ExistsUnit(ctx, vctx.Stores.FS.Data, ref.CID)
+						ok, err := bcsdk.ExistsUnit(ctx, vctx.Stores.FS.Data, ref.CID)
 						if err != nil {
 							return err
 						}

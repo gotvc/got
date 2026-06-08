@@ -31,22 +31,12 @@ func (wl Overlay) Get(ctx context.Context, id blobcache.CID, buf []byte) (int, e
 	return wl.base.Get(ctx, id, buf)
 }
 
-func (wl Overlay) Exists(ctx context.Context, ids []blobcache.CID, dst []bool) error {
-	dst2 := make([]bool, len(ids))
-	if err := wl.writeTo.Exists(ctx, ids, dst2); err != nil {
+func (wl Overlay) Exists(ctx context.Context, ids []blobcache.CID, dst *blobcache.BitMap) error {
+	if err := wl.writeTo.Exists(ctx, ids, dst); err != nil {
 		return err
 	}
-	for i := range dst {
-		dst[i] = dst[i] || dst2[i]
-	}
-	for i := range dst2 {
-		dst2[i] = false
-	}
-	if err := wl.base.Exists(ctx, ids, dst2); err != nil {
+	if err := wl.base.Exists(ctx, ids, dst); err != nil {
 		return err
-	}
-	for i := range dst {
-		dst[i] = dst[i] || dst2[i]
 	}
 	return nil
 }

@@ -3,6 +3,7 @@ package gotvc
 import (
 	"context"
 
+	"blobcache.io/blobcache/src/bcsdk"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/stores"
@@ -50,7 +51,7 @@ func (m *Machine[T]) Sync(ctx context.Context, src stores.RO, dst stores.WO, ver
 	sync = func(vert Vertex[T]) error {
 		for _, parentRef := range vert.Parents {
 			// Skip if the parent is already copieda.
-			if exists, err := stores.ExistsUnit(ctx, dst, parentRef.CID); err != nil {
+			if exists, err := bcsdk.ExistsUnit(ctx, dst, parentRef.CID); err != nil {
 				return err
 			} else if !exists {
 				parent, err := m2.GetVertex(ctx, src, parentRef)

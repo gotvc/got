@@ -328,7 +328,7 @@ func (b *bcIntercept) Get(ctx context.Context, tx blobcache.Handle, cid blobcach
 	return b.svc.Get(b.ctx(ctx), tx, cid, buf, opts)
 }
 
-func (b *bcIntercept) Exists(ctx context.Context, tx blobcache.Handle, cids []blobcache.CID, dst []bool) error {
+func (b *bcIntercept) Exists(ctx context.Context, tx blobcache.Handle, cids []blobcache.CID, dst *blobcache.BitMap) error {
 	return b.svc.Exists(b.ctx(ctx), tx, cids, dst)
 }
 
@@ -344,7 +344,7 @@ func (b *bcIntercept) Visit(ctx context.Context, tx blobcache.Handle, cids []blo
 	return b.svc.Visit(b.ctx(ctx), tx, cids)
 }
 
-func (b *bcIntercept) IsVisited(ctx context.Context, tx blobcache.Handle, cids []blobcache.CID, yesVisited []bool) error {
+func (b *bcIntercept) IsVisited(ctx context.Context, tx blobcache.Handle, cids []blobcache.CID, yesVisited *blobcache.BitMap) error {
 	return b.svc.IsVisited(b.ctx(ctx), tx, cids, yesVisited)
 }
 

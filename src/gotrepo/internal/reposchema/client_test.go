@@ -12,7 +12,6 @@ import (
 	"blobcache.io/blobcache/src/schema"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotorg"
-	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -60,7 +59,7 @@ func TestClient(t *testing.T) {
 	require.NoError(t, err)
 	defer txn.Abort(ctx)
 	for _, cid := range cids {
-		yes, err := stores.ExistsUnit(ctx, txn, cid)
+		yes, err := bcsdk.ExistsUnit(ctx, txn, cid)
 		require.NoError(t, err)
 		require.True(t, yes)
 	}

@@ -8,6 +8,7 @@ import (
 	"iter"
 	"time"
 
+	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
@@ -167,7 +168,7 @@ func (tx *Tx) Put(ctx context.Context, name string, b MarkState) error {
 		return err
 	}
 	if !b.Target.IsZero() {
-		if yes, err := stores.ExistsUnit(ctx, tx.tx, b.Target.CID); err != nil {
+		if yes, err := bcsdk.ExistsUnit(ctx, tx.tx, b.Target.CID); err != nil {
 			return err
 		} else if !yes {
 			return fmt.Errorf("mark target not found: %v", b.Target.CID)

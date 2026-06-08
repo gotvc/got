@@ -108,7 +108,7 @@ func (tx *SignedTx) Post(ctx context.Context, data []byte) (blobcache.CID, error
 	return tx.inner.Post(ctx, data)
 }
 
-func (tx *SignedTx) Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error {
+func (tx *SignedTx) Exists(ctx context.Context, cids []blobcache.CID, dst *blobcache.BitMap) error {
 	return tx.inner.Exists(ctx, cids, dst)
 }
 

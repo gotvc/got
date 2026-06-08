@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 
+	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
@@ -123,7 +124,7 @@ func (a *Machine) Sync(ctx context.Context, src stores.RO, dst stores.WO, x Root
 	}
 	return do(ctx, rp, x.toPtree(), doer{
 		CanSkip: func(r Root) (bool, error) {
-			return stores.ExistsUnit(ctx, dst, r.Ref.CID)
+			return bcsdk.ExistsUnit(ctx, dst, r.Ref.CID)
 		},
 		EntryFn: entryFn,
 		NodeFn: func(r Root) error {

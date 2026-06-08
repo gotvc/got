@@ -76,7 +76,7 @@ func (tx *MemoryTx) Post(ctx context.Context, data []byte) (cid blobcache.CID, e
 	return tx.vol.s.Post(ctx, data)
 }
 
-func (tx *MemoryTx) Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error {
+func (tx *MemoryTx) Exists(ctx context.Context, cids []blobcache.CID, dst *blobcache.BitMap) error {
 	return tx.vol.s.Exists(ctx, cids, dst)
 }
 

@@ -3,6 +3,7 @@ package stores
 import (
 	"context"
 
+	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
 	"golang.org/x/crypto/blake2b"
@@ -56,15 +57,15 @@ func NewMemSize(s int) *schema.MemStore {
 
 // RO is used for read-only operations.
 type RO interface {
+	bcsdk.Exists
 	Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, error)
-	Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error
 	MaxSize() int
 }
 
 // WO is used for additive copy-on-write operations.
 type WO interface {
+	bcsdk.Exists
 	Post(ctx context.Context, data []byte) (blobcache.CID, error)
-	Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error
 	MaxSize() int
 }
 
@@ -78,18 +79,6 @@ type RWD interface {
 	RO
 	WO
 	Delete(ctx context.Context, cids []blobcache.CID) error
-}
-
-type Exister interface {
-	Exists(ctx context.Context, cids []blobcache.CID, dst []bool) error
-}
-
-func ExistsUnit(ctx context.Context, s Exister, cid blobcache.CID) (bool, error) {
-	var dst [1]bool
-	if err := s.Exists(ctx, []blobcache.CID{cid}, dst[:]); err != nil {
-		return false, err
-	}
-	return dst[0], nil
 }
 
 type CopyFrom interface {

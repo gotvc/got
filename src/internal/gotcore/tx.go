@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 
+	"blobcache.io/blobcache/src/bcsdk"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotvc"
@@ -91,7 +92,7 @@ func (mtx *MarkTx) WO() WO {
 func (m *MarkTx) Save(ctx context.Context, ref gdat.Ref) error {
 	ss := m.stx.Stores()
 	if !ref.IsZero() {
-		if exists, err := stores.ExistsUnit(ctx, ss.VC, ref.CID); err != nil {
+		if exists, err := bcsdk.ExistsUnit(ctx, ss.VC, ref.CID); err != nil {
 			return err
 		} else if !exists {
 			return ErrRefIntegrity{Ref: ref, Store: "gotvc"}
