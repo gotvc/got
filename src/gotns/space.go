@@ -137,22 +137,21 @@ func (s *SpaceTx) Stores() gotcore.RW {
 	}
 }
 
-func (s *SpaceTx) GetTarget(ctx context.Context, name string, dst *gdat.Ref) (bool, error) {
+func (s *SpaceTx) GetTarget(ctx context.Context, name string) (gdat.Ref, error) {
 	mstate, err := s.tx.Get(ctx, name)
 	if err != nil {
-		return false, err
+		return gdat.Ref{}, err
 	}
 	if mstate == nil {
-		return false, gotcore.ErrNotExist
+		return gdat.Ref{}, gotcore.ErrNotExist
 	}
-	if mstate.Target.IsZero() {
-		return false, nil
-	}
-	*dst = mstate.Target
-	return true, nil
+	return mstate.Target, nil
 }
 
 func (s *SpaceTx) SetTarget(ctx context.Context, name string, ref gdat.Ref) error {
+	if ref.CID.IsZero() {
+		ref = gdat.Ref{}
+	}
 	mstate, err := s.tx.Get(ctx, name)
 	if err != nil {
 		return err

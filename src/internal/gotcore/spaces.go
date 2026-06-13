@@ -134,7 +134,8 @@ type SpaceTx interface {
 	// SetTarget changes the mark so it points to a different commit
 	SetTarget(ctx context.Context, name string, ref gdat.Ref) error
 	// GetTarget retrieves the Commit referenced by gdat.Ref
-	GetTarget(ctx context.Context, name string, dst *gdat.Ref) (bool, error)
+	// If the name has no ref, then the zero value, and nil should be returned.
+	GetTarget(ctx context.Context, name string) (gdat.Ref, error)
 }
 
 func CreateIfNotExists(ctx context.Context, stx SpaceTx, k string, cfg Metadata) (*Info, error) {
@@ -170,11 +171,9 @@ func CloneMark(ctx context.Context, st SpaceTx, from, to string) error {
 	if _, err := st.Create(ctx, to, baseInfo.AsMetadata()); err != nil {
 		return err
 	}
-	var ref gdat.Ref
-	if ok, err := st.GetTarget(ctx, from, &ref); err != nil {
+	ref, err := st.GetTarget(ctx, from)
+	if err != nil {
 		return err
-	} else if !ok {
-		ref = gdat.Ref{}
 	}
 	return st.SetTarget(ctx, to, ref)
 }

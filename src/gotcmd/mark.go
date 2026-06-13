@@ -200,10 +200,7 @@ var markInspectCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "prints any metadata for a bookmark",
 	},
-	Flags: map[string]star.Flag{
-		"space": spaceNameOptParam,
-	},
-	Pos: []star.Positional{markNameParam},
+	Pos: []star.Positional{fqmParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
 		repo, err := openRepo()
@@ -211,9 +208,7 @@ var markInspectCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		name := markNameParam.Load(c)
-		space, _ := spaceNameOptParam.LoadOpt(c)
-		fqm := gotrepo.FQM{Space: space, Name: name}
+		fqm := fqmParam.Load(c)
 		return repo.ViewMark(ctx, fqm, func(mt *gotcore.MarkTx) error {
 			return prettyPrintJSON(c.StdOut, mt.Info())
 		})
@@ -281,9 +276,7 @@ var historyCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "prints the commit log",
 	},
-	Flags: map[string]star.Flag{
-		"mark": fqmnOptParam,
-	},
+	Pos: []star.Positional{fqmnOptParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
 		wc, err := openWC()
@@ -343,6 +336,14 @@ func printcomm(bufw *bufio.Writer, ref gdat.Ref, comm gotcore.Commit) error {
 	bufw.Write([]byte(prettifyJSON(comm.Payload.Notes)))
 	fmt.Fprintln(bufw)
 	return nil
+}
+
+var fqmParam = &star.Required[gotrepo.FQM]{
+	PosName: "fqm",
+	Parse: func(s string) (gotrepo.FQM, error) {
+		return gotrepo.ParseFQName(s), nil
+	},
+	ShortDoc: "fully qualified mark name",
 }
 
 var markNameParam = &star.Required[string]{

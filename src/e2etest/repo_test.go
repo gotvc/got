@@ -97,6 +97,39 @@ func TestClone(t *testing.T) {
 	require.Contains(t, s2.ListMarks(""), "remote/origin/master")
 }
 
+func TestPullTwice(t *testing.T) {
+	ctx := testutil.Context(t)
+	s1 := gottests.NewSite(t)
+	s2 := gottests.NewSite(t)
+	go s1.Repo.Serve(ctx, testutil.PacketConn(t))
+	go s2.Repo.Serve(ctx, testutil.PacketConn(t))
+
+	s2.CreateMark(localMaster)
+	s2.CreateFile("f.txt", []byte("1\n"))
+	s2.Add("f.txt")
+	s2.Commit(gotwc.CommitParams{})
+	s2.CreateFile("f.txt", []byte("2\n"))
+	s2.Add("f.txt")
+	s2.Commit(gotwc.CommitParams{})
+
+	s2.ConfigureRepo(func(cfg gotrepo.Config) gotrepo.Config {
+		cfg.Blobcache.InProcess.CanTouch = append(cfg.Blobcache.InProcess.CanTouch, s1.Repo.BlobcachePeer())
+		return cfg
+	})
+	s2Spec, err := s2.Repo.NSVolumeSpec(ctx)
+	require.NoError(t, err)
+	require.NoError(t, s1.Repo.Configure(func(cfg gotrepo.Config) gotrepo.Config {
+		cfg.Spaces["s2"] = gotrepo.SpaceSpec{Blobcache: s2Spec}
+		cfg.AddPull(gotrepo.PullConfig{From: "s2", AddPrefix: "s2/"})
+		return cfg
+	}))
+
+	require.NoError(t, s1.Repo.Pull(ctx, nil))
+	err = s1.Repo.Pull(ctx, nil)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "cannot CAS")
+}
+
 func getOne[K comparable, V any](m map[K]V) K {
 	for k := range m {
 		return k

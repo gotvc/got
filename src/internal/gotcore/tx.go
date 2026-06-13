@@ -102,32 +102,30 @@ func (m *MarkTx) Save(ctx context.Context, ref gdat.Ref) error {
 }
 
 // Load loads a commit from the Mark
-func (b *MarkTx) Load(ctx context.Context, dst *gdat.Ref) (bool, error) {
-	return b.stx.GetTarget(ctx, b.name, dst)
+func (b *MarkTx) Load(ctx context.Context) (gdat.Ref, error) {
+	return b.stx.GetTarget(ctx, b.name)
 }
 
 func (mt *MarkTx) LoadCommit(ctx context.Context, dst *Commit) (bool, error) {
-	var ref gdat.Ref
-	if ok, err := mt.Load(ctx, &ref); err != nil {
+	if ref, err := mt.Load(ctx); err != nil {
 		return false, err
-	} else if ok {
+	} else if ref.IsZero() {
+		return false, nil
+	} else {
 		comm, err := mt.GotVC().GetVertex(ctx, mt.VCRO(), ref)
 		if err != nil {
 			return false, err
 		}
 		*dst = comm
 		return true, nil
-	} else {
-		return false, nil
 	}
 }
 
 // Apply calls fn with the Marks target Ref
 // If the mark does not yet have a target, then the ref will be 0.
 func (m *MarkTx) Apply(ctx context.Context, fn func(RW, gdat.Ref) (gdat.Ref, error)) error {
-	var yRef gdat.Ref
-	var xRef gdat.Ref
-	if _, err := m.Load(ctx, &xRef); err != nil {
+	xRef, err := m.Load(ctx)
+	if err != nil {
 		return err
 	}
 	yRef, err := fn(m.stx.Stores(), xRef)
@@ -141,10 +139,10 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Commit, e
 	m.init()
 	ss := m.stx.Stores()
 	var comm Commit
-	var target gdat.Ref
-	if ok, err := m.stx.GetTarget(ctx, m.name, &target); err != nil {
+	target, err := m.stx.GetTarget(ctx, m.name)
+	if err != nil {
 		return err
-	} else if ok {
+	} else if !target.IsZero() {
 		comm, err = m.GotVC().GetVertex(ctx, ss.VC, target)
 		if err != nil {
 			return err
@@ -173,6 +171,7 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Commit, e
 		}
 		yRef = ref
 	}
+	// if y == nil, the yRef will still be the zero ref here
 	return m.Save(ctx, yRef)
 }
 
@@ -268,16 +267,9 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 		return fmt.Errorf("cannot sync volumes with different salts, must use force=true")
 	}
 	return dst.Apply(ctx, func(dsts RW, x gdat.Ref) (gdat.Ref, error) {
-		var goal Commit
-		var goalRef gdat.Ref
-		if ok, err := src.Load(ctx, &goalRef); err != nil {
+		goalRef, err := src.Load(ctx)
+		if err != nil {
 			return gdat.Ref{}, err
-		} else if ok {
-			var err error
-			goal, err = src.GotVC().GetVertex(ctx, src.VCRO(), goalRef)
-			if err != nil {
-				return gdat.Ref{}, err
-			}
 		}
 
 		switch {
@@ -293,6 +285,10 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 			if err != nil {
 				return gdat.Ref{}, err
 			}
+			goal, err := src.GotVC().GetVertex(ctx, src.VCRO(), goalRef)
+			if err != nil {
+				return gdat.Ref{}, err
+			}
 			hasAncestor, err := vcmach.IsDescendentOf(ctx, src.VCRO(), goal, prevCommit)
 			if err != nil {
 				return gdat.Ref{}, err
@@ -304,6 +300,9 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 		ref, err := syncCommitRef(ctx, dst.GotVC(), dst.GotFS(), src.RO(), dst.WO(), goalRef)
 		if err != nil {
 			return gdat.Ref{}, err
+		}
+		if ref != goalRef {
+			panic(fmt.Sprintf("syncCommitRef produced a different ref HAVE: %v WANT: %v", ref, goalRef))
 		}
 		return ref, nil
 	})

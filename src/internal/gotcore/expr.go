@@ -85,11 +85,9 @@ func (se CommitExpr_Mark) GetSpace() string {
 }
 
 func (se CommitExpr_Mark) Resolve(ctx context.Context, tx SpaceTx) (gdat.Ref, error) {
-	var ref gdat.Ref
-	if ok, err := tx.GetTarget(ctx, se.Name, &ref); err != nil {
+	ref, err := tx.GetTarget(ctx, se.Name)
+	if err != nil {
 		return gdat.Ref{}, err
-	} else if !ok {
-		return gdat.Ref{}, nil
 	}
 	return ref, nil
 }
