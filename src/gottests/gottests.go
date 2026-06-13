@@ -91,7 +91,12 @@ func (s *Site) CheckAll() {
 
 func (s *Site) Pull() {
 	ctx := testutil.Context(s.t)
-	require.NoError(s.t, s.Repo.Pull(ctx))
+	require.NoError(s.t, s.Repo.Pull(ctx, nil))
+}
+
+func (s *Site) Push() {
+	ctx := testutil.Context(s.t)
+	require.NoError(s.t, s.Repo.Push(ctx, nil))
 }
 
 func (s *Site) CreateFile(p string, data []byte) {

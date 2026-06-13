@@ -80,7 +80,8 @@ var spaceSyncCmd = star.Command{
 			Dst:     dstSpaceParam.Load(c),
 			MapName: m,
 		}
-		return repo.SyncSpaces(ctx, task)
+		_, err = repo.SyncSpaces(ctx, task)
+		return err
 	},
 }
 
@@ -211,7 +212,9 @@ var pullCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		if err := repo.Pull(ctx); err != nil {
+		if err := repo.Pull(ctx, func(sr gotrepo.SyncResult) {
+			printSyncResult(&c, sr)
+		}); err != nil {
 			return err
 		}
 		c.Printf("pull completed successfully\n")
@@ -231,12 +234,29 @@ var pushCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		if err := repo.Push(ctx); err != nil {
+		if err := repo.Push(ctx, func(sr gotrepo.SyncResult) {
+			printSyncResult(&c, sr)
+		}); err != nil {
 			return err
 		}
 		c.Printf("push completed successfully\n")
 		return nil
 	},
+}
+
+func printSyncResult(c *star.Context, sr gotrepo.SyncResult) error {
+	c.Printf("%s -> %s\n", sr.Src, sr.Dst)
+	for _, res := range sr.Items {
+		switch {
+		case res.WasDeleted():
+			c.Printf("  %s (deleted)\n", res.Dst)
+		case res.WasCreated():
+			c.Printf("  %s -> %s (created)\n", res.Src, res.Dst)
+		default:
+			c.Printf("  %s -> %s\n", res.Src, res.Dst)
+		}
+	}
+	return nil
 }
 
 var srcSpaceParam = &star.Required[string]{

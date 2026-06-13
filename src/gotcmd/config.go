@@ -122,7 +122,7 @@ func printRepoConfig(c *star.Context, repoCfg gotrepo.Config) error {
 
 	if len(repoCfg.Spaces) > 0 {
 		c.Printf("  SPACES:\n")
-		c.Printf("    %-30s %-19s %-19s\n", "NAME", "NODE", "OID")
+		c.Printf("  | %-30s %-19s %-19s\n", "NAME", "NODE", "OID")
 		for name, spec := range repoCfg.Spaces {
 			if spec.Blobcache != nil {
 				c.Printf("  | %-30s %16s... %16s...\n",
@@ -135,21 +135,25 @@ func printRepoConfig(c *star.Context, repoCfg gotrepo.Config) error {
 	}
 
 	c.Printf("  PULL TASKS:\n")
-	c.Printf("  |>%-20s %-20s %-20s %-20s\n", "FROM", "FILTER", "CUT_PREFIX", "ADD_PREFIX")
+	c.Printf("  | %-20s %-20s %-20s %-20s\n", "FROM", "FILTER", "CUT_PREFIX", "ADD_PREFIX")
 	for _, pc := range repoCfg.Pull {
 		var filter string
 		if pc.Filter != nil {
 			filter = pc.Filter.String()
+		} else {
+			filter = "(none)"
 		}
 		c.Printf("  | %-20s %-20s %-20s %-20s\n", pc.From, filter, pc.CutPrefix, pc.AddPrefix)
 	}
 
 	c.Printf("  PUSH TASKS:\n")
-	c.Printf("  |>%-20s %-20s %-20s %-20s\n", "TO", "FILTER", "CUT_PREFIX", "ADD_PREFIX")
+	c.Printf("  | %-20s %-20s %-20s %-20s\n", "TO", "FILTER", "CUT_PREFIX", "ADD_PREFIX")
 	for _, pc := range repoCfg.Push {
 		var filter string
 		if pc.Filter != nil {
 			filter = pc.Filter.String()
+		} else {
+			filter = "(none)"
 		}
 		c.Printf("  | %-20s %-20s %-20s %-20s\n", pc.To, filter, pc.CutPrefix, pc.AddPrefix)
 	}
@@ -166,7 +170,7 @@ func printBlobcacheConfig(c *star.Context, x gotrepo.BlobcacheSpec, indent strin
 		c.Printf(indent+"ENV: %v=%v\n", bcclient.EnvBlobcacheAPI, v)
 	case x.InProcess != nil:
 		ipcfg := x.InProcess
-		c.Printf(indent + "IN PROCESS\n")
+		c.Printf("%s IN PROCESS\n", indent)
 		c.Printf(indent+"ACT AS: \n", ipcfg.ActAs)
 	default:
 		c.Printf("  (EMPTY BLOBCACHE CONFIG)\n")

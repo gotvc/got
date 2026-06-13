@@ -52,7 +52,7 @@ type PullConfig struct {
 	// From is the name of the space to pull from.
 	From string `json:"from"`
 	// Filter is a regexp for which marks to fetch from the source space.
-	Filter *regexp.Regexp `json:"filter"`
+	Filter *regexp.Regexp `json:"filter,omitempty"`
 	// CutPrefix is the prefix to remove from the name
 	// The zero value does not change the name at all.
 	CutPrefix string `json:"cut_prefix"`
@@ -65,7 +65,7 @@ type PullConfig struct {
 // PushConfig configures a distribution task.
 type PushConfig struct {
 	// Filter is a regexp for which marks to fetch from the local space.
-	Filter *regexp.Regexp `json:"filter"`
+	Filter *regexp.Regexp `json:"filter,omitempty"`
 	// CutPrefix is the prefix to remove from the name
 	// The zero value does not change the name at all.
 	CutPrefix string `json:"cut_prefix"`

@@ -53,14 +53,14 @@ type SyncSpacesTask struct {
 }
 
 // SyncSpaces executes a SyncSpaceTask
-func (r *Repo) SyncSpaces(ctx context.Context, task SyncSpacesTask) error {
+func (r *Repo) SyncSpaces(ctx context.Context, task SyncSpacesTask) ([]gotcore.SyncResult, error) {
 	srcSpace, err := r.GetSpace(ctx, task.Src)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	dstSpace, err := r.GetSpace(ctx, task.Dst)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	return gotcore.SyncSpaces(ctx, gotcore.SyncSpacesTask{
 		Src:     srcSpace,
@@ -70,7 +70,15 @@ func (r *Repo) SyncSpaces(ctx context.Context, task SyncSpacesTask) error {
 	})
 }
 
-func (r *Repo) doSyncTasks(jc *gotjob.Ctx, tasks []SyncSpacesTask) error {
+type SyncResult struct {
+	// Src is the source space
+	// Dst is the destination space
+	Src, Dst string
+	// Items is each overwritten mark
+	Items []gotcore.SyncResult
+}
+
+func (r *Repo) doSyncTasks(jc *gotjob.Ctx, tasks []SyncSpacesTask, onDone func(SyncResult)) error {
 	for _, task := range tasks {
 		srcSpace, err := r.GetSpace(jc.Context, task.Src)
 		if err != nil {
@@ -81,26 +89,38 @@ func (r *Repo) doSyncTasks(jc *gotjob.Ctx, tasks []SyncSpacesTask) error {
 			return err
 		}
 		jc2 := jc.Child(fmt.Sprintf("sync-space %q -> %q", task.Src, task.Dst))
-		if err := gotcore.SyncSpaces(jc2.Context, gotcore.SyncSpacesTask{
+		res, err := gotcore.SyncSpaces(jc2.Context, gotcore.SyncSpacesTask{
 			Src:     srcSpace,
 			Dst:     dstSpace,
 			Filter:  task.Filter,
 			MapName: task.MapName,
-		}); err != nil {
+		})
+		if err != nil {
 			return err
+		}
+		if onDone != nil {
+			onDone(SyncResult{
+				Src:   task.Src,
+				Dst:   task.Dst,
+				Items: res,
+			})
 		}
 	}
 	return jc.Wait()
 }
 
-func (r *Repo) Pull(ctx context.Context) error {
+// Pull executes all pull tasks as defined in the configuration
+// Pull tasks write to the repo's local namespace.
+func (r *Repo) Pull(ctx context.Context, onDone func(SyncResult)) error {
 	var tasks []SyncSpacesTask
 	for _, fcfg := range r.config.Pull {
+		var filter func(string) bool
+		if fcfg.Filter != nil {
+			filter = fcfg.Filter.MatchString
+		}
 		tasks = append(tasks, SyncSpacesTask{
-			Src: fcfg.From,
-			Filter: func(x string) bool {
-				return fcfg.Filter.MatchString(x)
-			},
+			Src:    fcfg.From,
+			Filter: filter,
 			MapName: func(name string) string {
 				name = strings.TrimPrefix(name, fcfg.CutPrefix)
 				name = fcfg.AddPrefix + name
@@ -110,18 +130,20 @@ func (r *Repo) Pull(ctx context.Context) error {
 		})
 	}
 	jc := gotjob.New(ctx)
-	return r.doSyncTasks(&jc, tasks)
+	return r.doSyncTasks(&jc, tasks, onDone)
 }
 
 // Push is the opposite of Pull.
-func (r *Repo) Push(ctx context.Context) error {
+func (r *Repo) Push(ctx context.Context, onDone func(SyncResult)) error {
 	var tasks []SyncSpacesTask
 	for _, fcfg := range r.config.Push {
+		var filter func(string) bool
+		if fcfg.Filter != nil {
+			filter = fcfg.Filter.MatchString
+		}
 		tasks = append(tasks, SyncSpacesTask{
-			Src: "", // local space
-			Filter: func(x string) bool {
-				return fcfg.Filter.MatchString(x)
-			},
+			Src:    "", // local space
+			Filter: filter,
 			MapName: func(name string) string {
 				// this is the reverse of what we do in Pull
 				name = strings.TrimPrefix(name, fcfg.AddPrefix)
@@ -132,5 +154,5 @@ func (r *Repo) Push(ctx context.Context) error {
 		})
 	}
 	jc := gotjob.New(ctx)
-	return r.doSyncTasks(&jc, tasks)
+	return r.doSyncTasks(&jc, tasks, onDone)
 }

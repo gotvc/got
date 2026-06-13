@@ -281,6 +281,9 @@ var historyCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "prints the commit log",
 	},
+	Flags: map[string]star.Flag{
+		"mark": fqmnOptParam,
+	},
 	F: func(c star.Context) error {
 		ctx := c.Context
 		wc, err := openWC()
@@ -293,11 +296,16 @@ var historyCmd = star.Command{
 		if err != nil {
 			return err
 		}
+		fqm, ok := fqmnOptParam.LoadOpt(c)
+		if !ok {
+			fqm = gotrepo.FQM{Name: bname}
+		}
+		markExpr := gotcore.CommitExpr_Mark{Space: fqm.Space, Name: fqm.Name}
 		pr, pw := io.Pipe()
 		eg := errgroup.Group{}
 		eg.Go(func() error {
 			bufw := bufio.NewWriter(pw)
-			err := repo.History(ctx, gotcore.CommitExpr_Mark{Name: bname}, func(ref gdat.Ref, comm gotrepo.Commit) error {
+			err := repo.History(ctx, markExpr, func(ref gdat.Ref, comm gotrepo.Commit) error {
 				if err := printcomm(bufw, ref, comm); err != nil {
 					return err
 				}
