@@ -199,9 +199,9 @@ var spaceNameParam = &star.Required[string]{
 	},
 }
 
-var fetchCmd = star.Command{
+var pullCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "fetches marks from spaces according to the config",
+		Short: "pulls marks from spaces according to the config",
 	},
 	Pos: []star.Positional{},
 	F: func(c star.Context) error {
@@ -211,17 +211,17 @@ var fetchCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		if err := repo.Fetch(ctx); err != nil {
+		if err := repo.Pull(ctx); err != nil {
 			return err
 		}
-		c.Printf("All fetch tasks completed successfully\n")
+		c.Printf("pull completed successfully\n")
 		return nil
 	},
 }
 
 var pushCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "distributes marks to spaces according to the config",
+		Short: "pushes marks to spaces according to the config",
 	},
 	Pos: []star.Positional{},
 	F: func(c star.Context) error {
@@ -231,10 +231,10 @@ var pushCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		if err := repo.Distribute(ctx); err != nil {
+		if err := repo.Push(ctx); err != nil {
 			return err
 		}
-		c.Printf("All distribute tasks completed successfully\n")
+		c.Printf("push completed successfully\n")
 		return nil
 	},
 }

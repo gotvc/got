@@ -93,9 +93,9 @@ func (r *Repo) doSyncTasks(jc *gotjob.Ctx, tasks []SyncSpacesTask) error {
 	return jc.Wait()
 }
 
-func (r *Repo) Fetch(ctx context.Context) error {
+func (r *Repo) Pull(ctx context.Context) error {
 	var tasks []SyncSpacesTask
-	for _, fcfg := range r.config.Fetch {
+	for _, fcfg := range r.config.Pull {
 		tasks = append(tasks, SyncSpacesTask{
 			Src: fcfg.From,
 			Filter: func(x string) bool {
@@ -113,17 +113,17 @@ func (r *Repo) Fetch(ctx context.Context) error {
 	return r.doSyncTasks(&jc, tasks)
 }
 
-// Distribute is the opposite of Fetch.
-func (r *Repo) Distribute(ctx context.Context) error {
+// Push is the opposite of Pull.
+func (r *Repo) Push(ctx context.Context) error {
 	var tasks []SyncSpacesTask
-	for _, fcfg := range r.config.Dist {
+	for _, fcfg := range r.config.Push {
 		tasks = append(tasks, SyncSpacesTask{
 			Src: "", // local space
 			Filter: func(x string) bool {
 				return fcfg.Filter.MatchString(x)
 			},
 			MapName: func(name string) string {
-				// this is the reverse of what we do in Fetch
+				// this is the reverse of what we do in Pull
 				name = strings.TrimPrefix(name, fcfg.AddPrefix)
 				name = fcfg.CutPrefix + name
 				return name

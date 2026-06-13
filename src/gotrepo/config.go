@@ -24,8 +24,8 @@ type Config struct {
 	// Spaces contain named mutable references (Bookmarks) to Commits
 	// They are most similar to git remotes.
 	Spaces map[string]SpaceSpec `json:"spaces"`
-	Fetch  []FetchConfig        `json:"fetch"`
-	Dist   []DistConfig         `json:"dist"`
+	Pull   []PullConfig         `json:"pull"`
+	Push   []PushConfig         `json:"push"`
 }
 
 func (c *Config) Validate() error {
@@ -42,15 +42,14 @@ func (c *Config) PutSpace(name string, spec SpaceSpec) *Config {
 	return c
 }
 
-func (c *Config) AddFetch(fc FetchConfig) *Config {
-	c.Fetch = append(c.Fetch, fc)
+func (c *Config) AddPull(fc PullConfig) *Config {
+	c.Pull = append(c.Pull, fc)
 	return c
 }
 
-// FetchConfig configures a fetch task.
-type FetchConfig struct {
+// PullConfig configures a pull task.
+type PullConfig struct {
 	// From is the name of the space to pull from.
-	// The destination space is always assumed to be the local space.
 	From string `json:"from"`
 	// Filter is a regexp for which marks to fetch from the source space.
 	Filter *regexp.Regexp `json:"filter"`
@@ -61,16 +60,11 @@ type FetchConfig struct {
 	// before inserting into the local space.
 	// The zero value does not change the name at all.
 	AddPrefix string `json:"add_prefix"`
-	// Delete is the regexp for which marks to delete from the destination space.
-	// Only names starting with AddPrefix in the destination space are considered.
-	// The regexp should match the entire name including the prefix.
-	Delete *regexp.Regexp `json:"delete"`
 }
 
-// DistConfig configures a distribution  task.
-type DistConfig struct {
-	// Filter is a regexp for which marks to fetch from the source space.
-	// In the case of distribution, the is always the local space.
+// PushConfig configures a distribution task.
+type PushConfig struct {
+	// Filter is a regexp for which marks to fetch from the local space.
 	Filter *regexp.Regexp `json:"filter"`
 	// CutPrefix is the prefix to remove from the name
 	// The zero value does not change the name at all.
@@ -81,10 +75,6 @@ type DistConfig struct {
 	AddPrefix string `json:"add_prefix"`
 	// To is the name of the space to write to.
 	To string `json:"to"`
-	// Delete is the regexp for which marks to delete from the destination space.
-	// Only names starting with AddPrefix in the destination space are considered.
-	// The regexp should match the entire name including the prefix.
-	Delete *regexp.Regexp `json:"delete"`
 }
 
 func DefaultConfig() Config {
@@ -120,11 +110,11 @@ func EditConfig(repo *os.Root, fn func(x Config) Config) error {
 			x.Spaces = map[string]SpaceSpec{}
 		}
 		// slices
-		if x.Fetch == nil {
-			x.Fetch = []FetchConfig{}
+		if x.Pull == nil {
+			x.Pull = []PullConfig{}
 		}
-		if x.Dist == nil {
-			x.Dist = []DistConfig{}
+		if x.Push == nil {
+			x.Push = []PushConfig{}
 		}
 		return fn(x)
 	})
