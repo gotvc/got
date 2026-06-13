@@ -128,7 +128,7 @@ func (a *Machine) Sync(ctx context.Context, src stores.RO, dst stores.WO, x Root
 		},
 		EntryFn: entryFn,
 		NodeFn: func(r Root) error {
-			return gdat.Copy(ctx, src, dst, &r.Ref)
+			return gdat.Copy(ctx, src, dst, r.Ref)
 		},
 	})
 }

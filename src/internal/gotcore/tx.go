@@ -165,8 +165,7 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Commit, e
 		if err != nil {
 			return err
 		}
-		ref, err = syncCommitRef(ctx, &m.gotvc, &m.gotfs, m.RO(), m.WO(), ref)
-		if err != nil {
+		if err = syncCommitRef(ctx, &m.gotvc, &m.gotfs, m.RO(), m.WO(), ref); err != nil {
 			return err
 		}
 		yRef = ref
@@ -297,14 +296,10 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 				return gdat.Ref{}, fmt.Errorf("cannot CAS, prev ref %v is not parent of next ref %v", x, goalRef)
 			}
 		}
-		ref, err := syncCommitRef(ctx, dst.GotVC(), dst.GotFS(), src.RO(), dst.WO(), goalRef)
-		if err != nil {
+		if err := syncCommitRef(ctx, dst.GotVC(), dst.GotFS(), src.RO(), dst.WO(), goalRef); err != nil {
 			return gdat.Ref{}, err
 		}
-		if ref != goalRef {
-			panic(fmt.Sprintf("syncCommitRef produced a different ref HAVE: %v WANT: %v", ref, goalRef))
-		}
-		return ref, nil
+		return goalRef, nil
 	})
 }
 
@@ -321,19 +316,19 @@ func History(ctx context.Context, vcmach *VCMach, s stores.RO, commRef gdat.Ref,
 
 // syncCommitRef ensures that all content reachable from Ref is in the dst store.
 // blobs are copied from the source store as needed.
-func syncCommitRef(ctx context.Context, vcmach *VCMach, fsmach *gotfs.Machine, src RO, dst WO, ref gdat.Ref) (_ gdat.Ref, err error) {
+func syncCommitRef(ctx context.Context, vcmach *VCMach, fsmach *gotfs.Machine, src RO, dst WO, ref gdat.Ref) (err error) {
 	ctx, cf := metrics.Child(ctx, "syncing gotvc")
 	defer cf()
 	comm, err := vcmach.GetVertex(ctx, src.VC, ref)
 	if err != nil {
-		return gdat.Ref{}, err
+		return err
 	}
 	if err := vcmach.Sync(ctx, src.VC, dst.VC, comm, func(payload Payload) error {
 		return fsmach.Sync(ctx, src.FS, dst.FS, payload.Snap)
 	}); err != nil {
-		return gdat.Ref{}, err
+		return err
 	}
-	return vcmach.PostVertex(ctx, dst.VC, comm)
+	return gdat.Copy(ctx, src.VC, dst.VC, ref)
 }
 
 // NewGotFS creates a new gotfs.Machine suitable for writing to the mark
