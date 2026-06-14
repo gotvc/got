@@ -65,13 +65,17 @@ type PullConfig struct {
 // PushConfig configures a distribution task.
 type PushConfig struct {
 	// Filter is a regexp for which marks to fetch from the local space.
+	// If this is nil, then all names are matched.
+	// This is the first operation applied
 	Filter *regexp.Regexp `json:"filter,omitempty"`
 	// CutPrefix is the prefix to remove from the name
 	// The zero value does not change the name at all.
+	// This is the second operation applied
 	CutPrefix string `json:"cut_prefix"`
 	// AddPrefix is the prefix to add to the name
-	// before inserting into the local space.
+	// before inserting into the remote space.
 	// The zero value does not change the name at all.
+	// This is the third operation applied
 	AddPrefix string `json:"add_prefix"`
 	// To is the name of the space to write to.
 	To string `json:"to"`

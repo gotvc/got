@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 
 	bcclient "blobcache.io/blobcache/client/go"
 	"github.com/gotvc/got/src/gotrepo"
@@ -31,6 +32,9 @@ var configCmd = star.Command{
 
 var configSubCmds = map[string]star.Command{
 	"add-pull": configAddPullCmd,
+	"add-push": configAddPushCmd,
+	"rm-pull":  configRmPullCmd,
+	"rm-push":  configRmPushCmd,
 }
 
 var configAddPullCmd = star.Command{
@@ -59,33 +63,127 @@ var configSpaceNameParam = &star.Required[string]{
 	Parse:   star.ParseString,
 }
 
+var configAddPushCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "adds a push task for a space",
+	},
+	Pos: []star.Positional{configSpaceNameParam},
+	Flags: map[string]star.Flag{
+		"add-prefix": configAddPrefixParam,
+	},
+	F: func(c star.Context) error {
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		spaceName := configSpaceNameParam.Load(c)
+		return repo.Configure(func(x gotrepo.Config) gotrepo.Config {
+			pc := gotrepo.PushConfig{
+				To: spaceName,
+			}
+			if prefix, ok := configAddPrefixParam.LoadOpt(c); ok {
+				pc.AddPrefix = prefix
+			}
+			x.Push = append(x.Push, pc)
+			return x
+		})
+	},
+}
+
+var configAddPrefixParam = &star.Optional[string]{
+	PosName:  "add-prefix",
+	ShortDoc: "prefix to add to mark names before pushing",
+	Parse:    star.ParseString,
+}
+
+var configRmPullCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "removes a pull task by index",
+	},
+	Pos: []star.Positional{configIndexParam},
+	F: func(c star.Context) error {
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		i := configIndexParam.Load(c)
+		return repo.Configure(func(x gotrepo.Config) gotrepo.Config {
+			if i < 0 || i >= len(x.Pull) {
+				return x
+			}
+			x.Pull = append(x.Pull[:i], x.Pull[i+1:]...)
+			return x
+		})
+	},
+}
+
+var configRmPushCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "removes a push task by index",
+	},
+	Pos: []star.Positional{configIndexParam},
+	F: func(c star.Context) error {
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		i := configIndexParam.Load(c)
+		return repo.Configure(func(x gotrepo.Config) gotrepo.Config {
+			if i < 0 || i >= len(x.Push) {
+				return x
+			}
+			x.Push = append(x.Push[:i], x.Push[i+1:]...)
+			return x
+		})
+	},
+}
+
+var configIndexParam = &star.Required[int]{
+	PosName:  "index",
+	ShortDoc: "the index of the task to remove",
+	Parse: func(s string) (int, error) {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return 0, fmt.Errorf("invalid index: %q", s)
+		}
+		return i, nil
+	},
+}
+
 func printConfig(c star.Context) error {
 	workDir, err := os.OpenRoot(".")
 	if err != nil {
 		return err
 	}
 	defer workDir.Close()
+	dirpath, _ := filepath.Abs(workDir.Name())
+
+	wcCfg, err := gotwc.LoadConfig(workDir)
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err == nil {
+		c.Printf("\nWORKING COPY @ %s\n", dirpath)
+		if err := printWCConfig(&c, *wcCfg); err != nil {
+			return err
+		}
+	}
+
 	repoCfg, err := gotrepo.LoadConfig(workDir)
 	if err != nil {
 		return err
 	}
-
-	repoDir, _ := filepath.Abs(workDir.Name())
-	c.Printf("REPO @ %s\n", repoDir)
+	c.Printf("REPO @ %s\n", dirpath)
 	if err := printRepoConfig(&c, *repoCfg); err != nil {
 		return err
 	}
+	return nil
+}
 
-	wcCfg, err := gotwc.LoadConfig(workDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-
-	wcDir, _ := filepath.Abs(workDir.Name())
-	c.Printf("\nWORKING COPY @ %s\n", wcDir)
+func printWCConfig(c *star.Context, wcCfg gotwc.Config) error {
 	c.Printf("  ID: %s\n", wcCfg.ID)
 	c.Printf("  HEAD: %s\n", wcCfg.SaveTo)
 	c.Printf("  ACT AS: %s\n", wcCfg.ActAs)
@@ -102,7 +200,6 @@ func printConfig(c star.Context) error {
 			c.Printf("    %s\n", p)
 		}
 	}
-
 	return nil
 }
 

@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"slices"
+	"strings"
 
 	bcclient "blobcache.io/blobcache/client/go"
 	"blobcache.io/blobcache/src/bcsdk"
@@ -212,12 +214,22 @@ var pullCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
+		var hadErrors bool
 		if err := repo.Pull(ctx, func(sr gotrepo.SyncResult) {
+			for _, item := range sr.Items {
+				if item.Err != nil {
+					hadErrors = true
+				}
+			}
 			printSyncResult(&c, sr)
 		}); err != nil {
 			return err
 		}
-		c.Printf("pull completed successfully\n")
+		if !hadErrors {
+			c.Printf("pull completed successfully\n")
+		} else {
+			c.Printf("pull completed with partial success.")
+		}
 		return nil
 	},
 }
@@ -234,18 +246,31 @@ var pushCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
+		var hadErrors bool
 		if err := repo.Push(ctx, func(sr gotrepo.SyncResult) {
+			for _, item := range sr.Items {
+				if item.Err != nil {
+					hadErrors = true
+				}
+			}
 			printSyncResult(&c, sr)
 		}); err != nil {
 			return err
 		}
-		c.Printf("push completed successfully\n")
+		if !hadErrors {
+			c.Printf("push completed successfully\n")
+		} else {
+			c.Printf("push completed with partial success.")
+		}
 		return nil
 	},
 }
 
 func printSyncResult(c *star.Context, sr gotrepo.SyncResult) error {
 	c.Printf("%s -> %s\n", sr.Src, sr.Dst)
+	slices.SortFunc(sr.Items, func(a, b gotcore.SyncResult) int {
+		return strings.Compare(a.Dst, b.Dst)
+	})
 	for _, res := range sr.Items {
 		switch {
 		case res.WasDeleted():
@@ -256,6 +281,7 @@ func printSyncResult(c *star.Context, sr gotrepo.SyncResult) error {
 			c.Printf("  %s -> %s\n", res.Src, res.Dst)
 		}
 	}
+	c.Printf("\n")
 	return nil
 }
 

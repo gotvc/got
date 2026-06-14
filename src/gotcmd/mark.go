@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/gotvc/got/src/gdat"
@@ -22,6 +23,7 @@ var markCmd = star.NewDir(
 		"create":  markCreateCmd,
 		"list":    markListCmd,
 		"del":     markDeleteCmd,
+		"delp":    markDeletePrefixCmd,
 		"inspect": markInspectCmd,
 		"as":      markAsCmd,
 		"cp":      markCpCmd,
@@ -119,6 +121,41 @@ var markDeleteCmd = star.Command{
 		name := markNameParam.Load(c)
 		spaceName, _ := spaceNameOptParam.LoadOpt(c)
 		return repo.DeleteMark(ctx, gotrepo.FQM{Space: spaceName, Name: name})
+	},
+}
+
+var markDeletePrefixCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "deletes all bookmarks with a name prefix",
+	},
+	Flags: map[string]star.Flag{
+		"space": spaceNameOptParam,
+	},
+	Pos: []star.Positional{markNamePrefixParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		prefix := markNamePrefixParam.Load(c)
+		spaceName, _ := spaceNameOptParam.LoadOpt(c)
+		toDelete := []string{}
+		if err := repo.ForEachMark(ctx, spaceName, func(name string) error {
+			if strings.HasPrefix(name, prefix) {
+				toDelete = append(toDelete, name)
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		for _, name := range toDelete {
+			if err := repo.DeleteMark(ctx, gotrepo.FQM{Space: spaceName, Name: name}); err != nil {
+				return err
+			}
+		}
+		return nil
 	},
 }
 
@@ -350,6 +387,12 @@ var markNameParam = &star.Required[string]{
 	PosName:  "mark_name",
 	Parse:    star.ParseString,
 	ShortDoc: "the name of a mark",
+}
+
+var markNamePrefixParam = &star.Required[string]{
+	PosName:  "name-prefix",
+	Parse:    star.ParseString,
+	ShortDoc: "prefix for mark names",
 }
 
 var srcMarkParam = &star.Required[gotrepo.FQM]{
