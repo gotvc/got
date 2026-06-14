@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/gotvc/got/src/gdat"
@@ -22,6 +23,7 @@ var markCmd = star.NewDir(
 		"create":  markCreateCmd,
 		"list":    markListCmd,
 		"del":     markDeleteCmd,
+		"delp":    markDeletePrefixCmd,
 		"inspect": markInspectCmd,
 		"as":      markAsCmd,
 		"cp":      markCpCmd,
@@ -122,6 +124,41 @@ var markDeleteCmd = star.Command{
 	},
 }
 
+var markDeletePrefixCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "deletes all bookmarks with a name prefix",
+	},
+	Flags: map[string]star.Flag{
+		"space": spaceNameOptParam,
+	},
+	Pos: []star.Positional{markNamePrefixParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		repo, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer repo.Close()
+		prefix := markNamePrefixParam.Load(c)
+		spaceName, _ := spaceNameOptParam.LoadOpt(c)
+		toDelete := []string{}
+		if err := repo.ForEachMark(ctx, spaceName, func(name string) error {
+			if strings.HasPrefix(name, prefix) {
+				toDelete = append(toDelete, name)
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+		for _, name := range toDelete {
+			if err := repo.DeleteMark(ctx, gotrepo.FQM{Space: spaceName, Name: name}); err != nil {
+				return err
+			}
+		}
+		return nil
+	},
+}
+
 var markMvCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "moves a mark from one name to another within a space",
@@ -200,10 +237,7 @@ var markInspectCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "prints any metadata for a bookmark",
 	},
-	Flags: map[string]star.Flag{
-		"space": spaceNameOptParam,
-	},
-	Pos: []star.Positional{markNameParam},
+	Pos: []star.Positional{fqmParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
 		repo, err := openRepo()
@@ -211,9 +245,7 @@ var markInspectCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		name := markNameParam.Load(c)
-		space, _ := spaceNameOptParam.LoadOpt(c)
-		fqm := gotrepo.FQM{Space: space, Name: name}
+		fqm := fqmParam.Load(c)
 		return repo.ViewMark(ctx, fqm, func(mt *gotcore.MarkTx) error {
 			return prettyPrintJSON(c.StdOut, mt.Info())
 		})
@@ -281,6 +313,7 @@ var historyCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "prints the commit log",
 	},
+	Pos: []star.Positional{fqmnOptParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
 		wc, err := openWC()
@@ -293,11 +326,16 @@ var historyCmd = star.Command{
 		if err != nil {
 			return err
 		}
+		fqm, ok := fqmnOptParam.LoadOpt(c)
+		if !ok {
+			fqm = gotrepo.FQM{Name: bname}
+		}
+		markExpr := gotcore.CommitExpr_Mark{Space: fqm.Space, Name: fqm.Name}
 		pr, pw := io.Pipe()
 		eg := errgroup.Group{}
 		eg.Go(func() error {
 			bufw := bufio.NewWriter(pw)
-			err := repo.History(ctx, gotcore.CommitExpr_Mark{Name: bname}, func(ref gdat.Ref, comm gotrepo.Commit) error {
+			err := repo.History(ctx, markExpr, func(ref gdat.Ref, comm gotrepo.Commit) error {
 				if err := printcomm(bufw, ref, comm); err != nil {
 					return err
 				}
@@ -337,10 +375,24 @@ func printcomm(bufw *bufio.Writer, ref gdat.Ref, comm gotcore.Commit) error {
 	return nil
 }
 
+var fqmParam = &star.Required[gotrepo.FQM]{
+	PosName: "fqm",
+	Parse: func(s string) (gotrepo.FQM, error) {
+		return gotrepo.ParseFQName(s), nil
+	},
+	ShortDoc: "fully qualified mark name",
+}
+
 var markNameParam = &star.Required[string]{
 	PosName:  "mark_name",
 	Parse:    star.ParseString,
 	ShortDoc: "the name of a mark",
+}
+
+var markNamePrefixParam = &star.Required[string]{
+	PosName:  "name-prefix",
+	Parse:    star.ParseString,
+	ShortDoc: "prefix for mark names",
 }
 
 var srcMarkParam = &star.Required[gotrepo.FQM]{

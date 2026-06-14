@@ -119,21 +119,22 @@ func (r *Repo) ViewMark(ctx context.Context, fqm FQM, fn func(*gotcore.MarkTx) e
 }
 
 // MarkLoad loads the Commit that the mark points to.
-// If the mark is empty then the commit will be nil
+// If the mark is empty then the Ref will be zeroed.
 func (r *Repo) MarkLoad(ctx context.Context, fqm FQM) (Ref, Commit, error) {
-	var exists bool
 	var ref gdat.Ref
 	var comm gotcore.Commit
 	if err := r.ViewMark(ctx, fqm, func(mt *gotcore.MarkTx) error {
-		var err error
-		exists, err = mt.Load(ctx, &ref)
-		exists, err = mt.LoadCommit(ctx, &comm)
-		return err
+		ref, err := mt.Load(ctx)
+		if err != nil {
+			return err
+		}
+		if !ref.IsZero() {
+			_, err = mt.LoadCommit(ctx, &comm)
+			return err
+		}
+		return nil
 	}); err != nil {
 		return ref, comm, err
-	}
-	if !exists {
-		return ref, comm, nil
 	}
 	return ref, comm, nil
 }

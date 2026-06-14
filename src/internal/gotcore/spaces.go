@@ -6,6 +6,7 @@ import (
 	"iter"
 	"regexp"
 	"runtime"
+	"sync"
 
 	"errors"
 
@@ -133,7 +134,8 @@ type SpaceTx interface {
 	// SetTarget changes the mark so it points to a different commit
 	SetTarget(ctx context.Context, name string, ref gdat.Ref) error
 	// GetTarget retrieves the Commit referenced by gdat.Ref
-	GetTarget(ctx context.Context, name string, dst *gdat.Ref) (bool, error)
+	// If the name has no ref, then the zero value, and nil should be returned.
+	GetTarget(ctx context.Context, name string) (gdat.Ref, error)
 }
 
 func CreateIfNotExists(ctx context.Context, stx SpaceTx, k string, cfg Metadata) (*Info, error) {
@@ -169,11 +171,9 @@ func CloneMark(ctx context.Context, st SpaceTx, from, to string) error {
 	if _, err := st.Create(ctx, to, baseInfo.AsMetadata()); err != nil {
 		return err
 	}
-	var ref gdat.Ref
-	if ok, err := st.GetTarget(ctx, from, &ref); err != nil {
+	ref, err := st.GetTarget(ctx, from)
+	if err != nil {
 		return err
-	} else if !ok {
-		ref = gdat.Ref{}
 	}
 	return st.SetTarget(ctx, to, ref)
 }
@@ -190,11 +190,59 @@ type SyncSpacesTask struct {
 	// If nil, then all marks are copied.
 	Filter func(string) bool
 	// MapName is applied to go from names in the Src space, to name in the Dst space.
+	// If nil, then the mark names in the src are taken as is.
 	MapName func(string) string
+	// AllowPartial allows some marks to be synced and some to error.
+	// A false value (the default) will abort the whole transaction, when 1 sync fail.
+	AllowPartial bool
 }
 
-func SyncSpaces(ctx context.Context, task SyncSpacesTask) error {
-	return task.Src.Do(ctx, false, func(src SpaceTx) error {
+type SyncResult struct {
+	// Dst is the name of the Mark in the destination space
+	Dst string
+	// Src is the name of the Mark in the source space
+	// If empty, then this was deleted in the dest.
+	Src string
+	// Created is set if the Mark did not exist in the destination space
+	Created bool
+	// Err is nil if the sync was successful, non-nil if there was a problem
+	Err error
+}
+
+func (sr SyncResult) IsOK() bool {
+	return sr.Err != nil
+}
+
+func (sr SyncResult) WasDeleted() bool {
+	return sr.Src == ""
+}
+
+func (sr SyncResult) WasCreated() bool {
+	return sr.Created
+}
+
+type SyncErr struct {
+	Src, Dst string
+	Err      error
+}
+
+func (e *SyncErr) Error() string {
+	return fmt.Sprintf("while syncing %s -> %s: %v", e.Src, e.Dst, e.Err)
+}
+
+func SyncSpaces(ctx context.Context, task SyncSpacesTask) ([]SyncResult, error) {
+	var mu sync.Mutex
+	var ret []SyncResult
+	var hadSuccess bool
+	appendResult := func(x SyncResult) {
+		mu.Lock()
+		defer mu.Unlock()
+		ret = append(ret, x)
+		if x.Err == nil {
+			hadSuccess = true
+		}
+	}
+	err := task.Src.Do(ctx, false, func(src SpaceTx) error {
 		return task.Dst.Do(ctx, true, func(dst SpaceTx) error {
 			nameMap := make(map[string]string)
 			for srcName := range src.All(ctx) {
@@ -217,18 +265,38 @@ func SyncSpaces(ctx context.Context, task SyncSpacesTask) error {
 					return err
 				}
 				md := srcMark.info.AsMetadata()
+				res := SyncResult{Dst: dstName, Src: srcName}
 				if _, err := dst.Create(ctx, dstName, md); err != nil && !IsExists(err) {
 					return err
+				} else if err == nil {
+					res.Created = true
 				}
 				dstMark, err := NewMarkTx(ctx, dst, dstName)
 				if err != nil {
 					return err
 				}
 				eg.Go(func() error {
-					return Sync(ctx, srcMark, dstMark, false)
+					if err := func() error {
+						return Sync(ctx, srcMark, dstMark, false)
+					}(); err != nil {
+						if !task.AllowPartial {
+							return &SyncErr{Src: srcName, Dst: dstName, Err: err}
+						} else {
+							res.Err = err
+						}
+					}
+					appendResult(res)
+					return nil
 				})
 			}
 			return eg.Wait()
 		})
 	})
+	if err != nil {
+		return nil, err
+	}
+	if len(ret) > 0 && !hadSuccess {
+		return ret, fmt.Errorf("all syncs had errors")
+	}
+	return ret, nil
 }

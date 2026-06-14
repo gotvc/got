@@ -61,7 +61,7 @@ func (m *Machine[T]) Sync(ctx context.Context, src stores.RO, dst stores.WO, ver
 				if err := sync(parent); err != nil {
 					return err
 				}
-				if err := gdat.Copy(ctx, src, dst, &parentRef); err != nil {
+				if err := gdat.Copy(ctx, src, dst, parentRef); err != nil {
 					return err
 				}
 			}

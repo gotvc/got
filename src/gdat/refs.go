@@ -126,7 +126,7 @@ func Equal(a, b Ref) bool {
 }
 
 // Copy copies the data at ref from src to dst.
-func Copy(ctx context.Context, src stores.RO, dst stores.WO, ref *Ref) error {
+func Copy(ctx context.Context, src stores.RO, dst stores.WO, ref Ref) error {
 	defer metrics.AddInt(ctx, "blob_copy", 1, "blobs")
 	return stores.Copy(ctx, src, dst, ref.CID)
 }

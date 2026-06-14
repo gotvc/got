@@ -53,14 +53,14 @@ type SyncSpacesTask struct {
 }
 
 // SyncSpaces executes a SyncSpaceTask
-func (r *Repo) SyncSpaces(ctx context.Context, task SyncSpacesTask) error {
+func (r *Repo) SyncSpaces(ctx context.Context, task SyncSpacesTask) ([]gotcore.SyncResult, error) {
 	srcSpace, err := r.GetSpace(ctx, task.Src)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	dstSpace, err := r.GetSpace(ctx, task.Dst)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	return gotcore.SyncSpaces(ctx, gotcore.SyncSpacesTask{
 		Src:     srcSpace,
@@ -70,7 +70,15 @@ func (r *Repo) SyncSpaces(ctx context.Context, task SyncSpacesTask) error {
 	})
 }
 
-func (r *Repo) doSyncTasks(jc *gotjob.Ctx, tasks []SyncSpacesTask) error {
+type SyncResult struct {
+	// Src is the source space
+	// Dst is the destination space
+	Src, Dst string
+	// Items is each overwritten mark
+	Items []gotcore.SyncResult
+}
+
+func (r *Repo) doSyncTasks(jc *gotjob.Ctx, tasks []SyncSpacesTask, onDone func(SyncResult)) error {
 	for _, task := range tasks {
 		srcSpace, err := r.GetSpace(jc.Context, task.Src)
 		if err != nil {
@@ -81,26 +89,44 @@ func (r *Repo) doSyncTasks(jc *gotjob.Ctx, tasks []SyncSpacesTask) error {
 			return err
 		}
 		jc2 := jc.Child(fmt.Sprintf("sync-space %q -> %q", task.Src, task.Dst))
-		if err := gotcore.SyncSpaces(jc2.Context, gotcore.SyncSpacesTask{
+		res, err := gotcore.SyncSpaces(jc2.Context, gotcore.SyncSpacesTask{
 			Src:     srcSpace,
 			Dst:     dstSpace,
 			Filter:  task.Filter,
 			MapName: task.MapName,
-		}); err != nil {
+		})
+		if err != nil {
 			return err
+		}
+		if onDone != nil {
+			onDone(SyncResult{
+				Src:   task.Src,
+				Dst:   task.Dst,
+				Items: res,
+			})
 		}
 	}
 	return jc.Wait()
 }
 
-func (r *Repo) Fetch(ctx context.Context) error {
+// Pull executes all pull tasks as defined in the configuration
+// Pull tasks write to the repo's local namespace.
+func (r *Repo) Pull(ctx context.Context, onDone func(SyncResult)) error {
 	var tasks []SyncSpacesTask
-	for _, fcfg := range r.config.Fetch {
+	for _, fcfg := range r.config.Pull {
+		var filter func(string) bool
+		if fcfg.Filter != nil {
+			filter = fcfg.Filter.MatchString
+		}
+		excludePrefixes := pullExcludedPrefixes(r.config.Push, fcfg.From)
+		if len(excludePrefixes) > 0 || filter != nil {
+			filter = chainFilters(filter, func(name string) bool {
+				return !hasPrefixIn(excludePrefixes, name)
+			})
+		}
 		tasks = append(tasks, SyncSpacesTask{
-			Src: fcfg.From,
-			Filter: func(x string) bool {
-				return fcfg.Filter.MatchString(x)
-			},
+			Src:    fcfg.From,
+			Filter: filter,
 			MapName: func(name string) string {
 				name = strings.TrimPrefix(name, fcfg.CutPrefix)
 				name = fcfg.AddPrefix + name
@@ -110,27 +136,87 @@ func (r *Repo) Fetch(ctx context.Context) error {
 		})
 	}
 	jc := gotjob.New(ctx)
-	return r.doSyncTasks(&jc, tasks)
+	return r.doSyncTasks(&jc, tasks, onDone)
 }
 
-// Distribute is the opposite of Fetch.
-func (r *Repo) Distribute(ctx context.Context) error {
+// Push is the opposite of Pull.
+func (r *Repo) Push(ctx context.Context, onDone func(SyncResult)) error {
 	var tasks []SyncSpacesTask
-	for _, fcfg := range r.config.Dist {
+	for _, fcfg := range r.config.Push {
+		var filter func(string) bool
+		if fcfg.Filter != nil {
+			filter = fcfg.Filter.MatchString
+		}
+		excludePrefixes := pushExcludedPrefixes(r.config.Pull, fcfg.To)
+		if len(excludePrefixes) > 0 || filter != nil {
+			filter = chainFilters(filter, func(name string) bool {
+				return !hasPrefixIn(excludePrefixes, name)
+			})
+		}
 		tasks = append(tasks, SyncSpacesTask{
-			Src: "", // local space
-			Filter: func(x string) bool {
-				return fcfg.Filter.MatchString(x)
-			},
+			Src:    "", // local space
+			Filter: filter,
 			MapName: func(name string) string {
-				// this is the reverse of what we do in Fetch
-				name = strings.TrimPrefix(name, fcfg.AddPrefix)
-				name = fcfg.CutPrefix + name
+				name = strings.TrimPrefix(name, fcfg.CutPrefix)
+				name = fcfg.AddPrefix + name
 				return name
 			},
 			Dst: fcfg.To,
 		})
 	}
 	jc := gotjob.New(ctx)
-	return r.doSyncTasks(&jc, tasks)
+	return r.doSyncTasks(&jc, tasks, onDone)
+}
+
+func hasPrefixIn(prefixes []string, x string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(x, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// pullExcludes returns the set of excluded prefixes for pull
+func pullExcludedPrefixes(pcs []PushConfig, from string) (ret []string) {
+	for _, pc := range pcs {
+		if pc.To != from {
+			continue
+		}
+		if pc.AddPrefix == "" {
+			continue
+		}
+		// AddPrefix will be the prefix in the remote store, since it was
+		// added on Pull
+		ret = append(ret, pc.AddPrefix)
+	}
+	return ret
+}
+
+// pushExcludes returns the set of excluded prefixes for pull
+func pushExcludedPrefixes(pcs []PullConfig, to string) (ret []string) {
+	for _, pc := range pcs {
+		if pc.From != to {
+			continue
+		}
+		if pc.AddPrefix == "" {
+			continue
+		}
+		// AddPrefix will be the prefix in the local store, since it was
+		// added on Pull
+		ret = append(ret, pc.AddPrefix)
+	}
+	return ret
+}
+
+func chainFilters(a, b func(string) bool) func(string) bool {
+	return func(name string) bool {
+		if a != nil && !a(name) {
+			return false
+		}
+		if b != nil && !b(name) {
+			return false
+		}
+		return true
+	}
 }

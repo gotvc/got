@@ -73,7 +73,7 @@ func (s *Site) Clone() Site {
 	vspec, err := s.Repo.NSVolumeSpec(ctx)
 	require.NoError(s.t, err)
 	repoCfg.PutSpace("origin", gotrepo.SpaceSpec{Blobcache: vspec})
-	repoCfg.AddFetch(gotrepo.FetchConfig{
+	repoCfg.AddPull(gotrepo.PullConfig{
 		From:      "origin",
 		Filter:    regexp.MustCompile(".*"),
 		AddPrefix: "remote/origin/",
@@ -89,9 +89,14 @@ func (s *Site) CheckAll() {
 	require.NoError(s.t, s.Repo.CheckAll(ctx))
 }
 
-func (s *Site) Fetch() {
+func (s *Site) Pull() {
 	ctx := testutil.Context(s.t)
-	require.NoError(s.t, s.Repo.Fetch(ctx))
+	require.NoError(s.t, s.Repo.Pull(ctx, nil))
+}
+
+func (s *Site) Push() {
+	ctx := testutil.Context(s.t)
+	require.NoError(s.t, s.Repo.Push(ctx, nil))
 }
 
 func (s *Site) CreateFile(p string, data []byte) {

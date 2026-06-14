@@ -18,7 +18,7 @@ func (mach *Machine) Sync(ctx context.Context, src RO, dst WO, root Root) error 
 			if err != nil {
 				return err
 			}
-			return gdat.Copy(ctx, src.Data, dst.Data, &ext.Ref)
+			return gdat.Copy(ctx, src.Data, dst.Data, ext.Ref)
 		}
 		return nil
 	})

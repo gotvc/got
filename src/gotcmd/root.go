@@ -41,6 +41,7 @@ var rootCmd = star.NewGroupedDir(
 		{Title: "REPO", Commands: []string{
 			"init",
 			"repo",
+			"config",
 			"serve",
 			"scrub",
 			"iden",
@@ -67,7 +68,7 @@ var rootCmd = star.NewGroupedDir(
 		{Title: "SPACES", Commands: []string{
 			"space",
 			"push",
-			"fetch",
+			"pull",
 		}},
 		{Title: "ADAPTERS", Commands: []string{
 			"http",
@@ -80,6 +81,7 @@ var rootCmd = star.NewGroupedDir(
 		}},
 	}, map[string]star.Command{
 		"init":   initCmd,
+		"config": configCmd,
 		"status": statusCmd,
 
 		// staging area commands
@@ -107,7 +109,7 @@ var rootCmd = star.NewGroupedDir(
 		"log":     historyCmd,
 
 		"space": spaceCmd,
-		"fetch": fetchCmd,
+		"pull":  pullCmd,
 		"push":  pushCmd,
 
 		// misc

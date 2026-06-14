@@ -4,6 +4,8 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"slices"
+	"strings"
 
 	bcclient "blobcache.io/blobcache/client/go"
 	"blobcache.io/blobcache/src/bcsdk"
@@ -80,7 +82,8 @@ var spaceSyncCmd = star.Command{
 			Dst:     dstSpaceParam.Load(c),
 			MapName: m,
 		}
-		return repo.SyncSpaces(ctx, task)
+		_, err = repo.SyncSpaces(ctx, task)
+		return err
 	},
 }
 
@@ -199,9 +202,9 @@ var spaceNameParam = &star.Required[string]{
 	},
 }
 
-var fetchCmd = star.Command{
+var pullCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "fetches marks from spaces according to the config",
+		Short: "pulls marks from spaces according to the config",
 	},
 	Pos: []star.Positional{},
 	F: func(c star.Context) error {
@@ -211,17 +214,29 @@ var fetchCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		if err := repo.Fetch(ctx); err != nil {
+		var hadErrors bool
+		if err := repo.Pull(ctx, func(sr gotrepo.SyncResult) {
+			for _, item := range sr.Items {
+				if item.Err != nil {
+					hadErrors = true
+				}
+			}
+			printSyncResult(&c, sr)
+		}); err != nil {
 			return err
 		}
-		c.Printf("All fetch tasks completed successfully\n")
+		if !hadErrors {
+			c.Printf("pull completed successfully\n")
+		} else {
+			c.Printf("pull completed with partial success.")
+		}
 		return nil
 	},
 }
 
 var pushCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "distributes marks to spaces according to the config",
+		Short: "pushes marks to spaces according to the config",
 	},
 	Pos: []star.Positional{},
 	F: func(c star.Context) error {
@@ -231,12 +246,43 @@ var pushCmd = star.Command{
 			return err
 		}
 		defer repo.Close()
-		if err := repo.Distribute(ctx); err != nil {
+		var hadErrors bool
+		if err := repo.Push(ctx, func(sr gotrepo.SyncResult) {
+			for _, item := range sr.Items {
+				if item.Err != nil {
+					hadErrors = true
+				}
+			}
+			printSyncResult(&c, sr)
+		}); err != nil {
 			return err
 		}
-		c.Printf("All distribute tasks completed successfully\n")
+		if !hadErrors {
+			c.Printf("push completed successfully\n")
+		} else {
+			c.Printf("push completed with partial success.")
+		}
 		return nil
 	},
+}
+
+func printSyncResult(c *star.Context, sr gotrepo.SyncResult) error {
+	c.Printf("%s -> %s\n", sr.Src, sr.Dst)
+	slices.SortFunc(sr.Items, func(a, b gotcore.SyncResult) int {
+		return strings.Compare(a.Dst, b.Dst)
+	})
+	for _, res := range sr.Items {
+		switch {
+		case res.WasDeleted():
+			c.Printf("  %s (deleted)\n", res.Dst)
+		case res.WasCreated():
+			c.Printf("  %s -> %s (created)\n", res.Src, res.Dst)
+		default:
+			c.Printf("  %s -> %s\n", res.Src, res.Dst)
+		}
+	}
+	c.Printf("\n")
+	return nil
 }
 
 var srcSpaceParam = &star.Required[string]{

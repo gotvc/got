@@ -168,7 +168,8 @@ func TestSync(t *testing.T, setup func(testing.TB) Space) {
 					}
 					return nil
 				}))
-				require.NoError(t, SyncSpaces(ctx, SyncSpacesTask{Src: src, Dst: dst}))
+				_, err := SyncSpaces(ctx, SyncSpacesTask{Src: src, Dst: dst})
+				require.NoError(t, err)
 				require.NoError(t, dst.Do(ctx, false, func(st SpaceTx) error {
 					for name, err := range st.All(ctx) {
 						if err != nil {

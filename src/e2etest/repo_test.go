@@ -90,8 +90,8 @@ func TestClone(t *testing.T) {
 	go s1.Repo.Serve(ctx, testutil.PacketConn(t))
 	go s2.Repo.Serve(ctx, testutil.PacketConn(t))
 
-	s1.Fetch()
-	s2.Fetch()
+	s1.Pull()
+	s2.Pull()
 
 	require.Contains(t, s1.ListMarks(""), "remote/origin/master")
 	require.Contains(t, s2.ListMarks(""), "remote/origin/master")

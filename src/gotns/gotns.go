@@ -235,6 +235,9 @@ func (tx *Tx) Commit(ctx context.Context) error {
 	if tx.tx == nil {
 		return fmt.Errorf("tx is already done")
 	}
+	if err := tx.loadKV(ctx); err != nil {
+		return err
+	}
 	kvroot, err := tx.kvtx.Flush(ctx)
 	if err != nil {
 		return err
