@@ -266,9 +266,7 @@ func printBlobcacheConfig(c *star.Context, x gotrepo.BlobcacheSpec, indent strin
 		}
 		c.Printf(indent+"ENV: %v=%v\n", bcclient.EnvBlobcacheAPI, v)
 	case x.InProcess != nil:
-		ipcfg := x.InProcess
 		c.Printf("%s IN PROCESS\n", indent)
-		c.Printf(indent+"ACT AS: \n", ipcfg.ActAs)
 	default:
 		c.Printf("  (EMPTY BLOBCACHE CONFIG)\n")
 	}

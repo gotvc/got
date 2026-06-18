@@ -2,6 +2,7 @@ package gotrepo
 
 import (
 	"context"
+	"crypto/rand"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
 	"github.com/cloudflare/circl/sign/ed25519"
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo/internal/reposchema"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.inet256.org/inet256/src/inet256"
@@ -34,7 +36,6 @@ type BlobcacheSpec struct {
 }
 
 type InProcessBlobcache struct {
-	ActAs    string       `json:"act_as"`
 	CanLook  []inet256.ID `json:"can_look"`
 	CanTouch []inet256.ID `json:"can_touch"`
 }
@@ -58,26 +59,8 @@ func makeBlobcache(repo *os.Root, config Config, spec BlobcacheSpec, bgCtx conte
 		if err := repo.MkdirAll(blobcacheDirPath, 0o755); err != nil {
 			return nil, err
 		}
-		localID, ok := config.Identities[spec.InProcess.ActAs]
-		if !ok {
-			return nil, fmt.Errorf("cannot find identity %q to use for Blobcache", spec.InProcess.ActAs)
-		}
-		idens, err := openIdenStore(repo)
-		if err != nil {
-			return nil, err
-		}
-		defer idens.Close()
-		idp, err := idens.Get(localID)
-		if err != nil {
-			return nil, err
-		}
-		sigPriv, ok := idp.SigPrivateKey.(ed25519.PrivateKey)
-		if !ok {
-			return nil, fmt.Errorf("blobcache requires an identity with an Ed25519 signing key")
-		}
 		pol := newBCPolicy(repo, bgCtx)
-		bcPath := filepath.Join(repo.Name(), blobcacheDirPath)
-		bc, err := openLocalBlobcache(bgCtx, sigPriv, bcPath, pol)
+		bc, err := openLocalBlobcache(bgCtx, repo, pol)
 		if err != nil {
 			return nil, err
 		}
@@ -98,10 +81,20 @@ func (r *Repo) BlobcachePeer() blobcache.NodeID {
 	if bcfg.InProcess == nil {
 		return blobcache.NodeID{}
 	}
-	return r.config.Identities[bcfg.InProcess.ActAs]
+	privKey, err := ensureBlobcachePrivateKey(r.root)
+	if err != nil {
+		panic(err)
+	}
+	pubKey := inet256.PublicFromPrivate(privKey)
+	return pki.NewID(pubKey)
 }
 
-func openLocalBlobcache(bgCtx context.Context, privKey ed25519.PrivateKey, stateDir string, pol *bcPolicy) (*bclocal.Service, error) {
+func openLocalBlobcache(bgCtx context.Context, repoDir *os.Root, pol *bcPolicy) (*bclocal.Service, error) {
+	stateDir := filepath.Join(repoDir.Name(), blobcacheDirPath)
+	privKey, err := ensureBlobcachePrivateKey(repoDir)
+	if err != nil {
+		return nil, err
+	}
 	return bclocal.New(bclocal.Env{
 		Background: bgCtx,
 		StateDir:   stateDir,
@@ -137,6 +130,45 @@ func RepoVolumeSpec(useSchema bool) blobcache.VolumeSpec {
 		}
 	}
 	return spec
+}
+
+func ensureBlobcachePrivateKey(repoDir *os.Root) (ed25519.PrivateKey, error) {
+	privSeed, err := ensureBlobcachePrivateSeed(repoDir)
+	if err != nil {
+		return nil, err
+	}
+	// derive an ed25519 key
+	var keySeed [32]byte
+	gdat.DeriveKey(keySeed[:], (*[32]byte)(&privSeed), []byte("ed25519"))
+	privKey := ed25519.NewKeyFromSeed(keySeed[:])
+	return privKey, nil
+}
+
+// ensureBlobcachePrivateSeed retreives or creates the blobcache secret
+func ensureBlobcachePrivateSeed(repoDir *os.Root) ([32]byte, error) {
+	// check if it already exists
+	data, err := repoDir.ReadFile(blobcachePrivatePath)
+	if err != nil && !os.IsNotExist(err) {
+		return [32]byte{}, err
+	}
+	if len(data) > 0 && len(data) != 32 {
+		return [32]byte{}, fmt.Errorf("invalid blobcache private seed len=%d", len(data))
+	} else if len(data) == 32 {
+		return [32]byte(data), nil
+	}
+	// exclusively create the file.
+	f, err := repoDir.OpenFile(blobcachePrivatePath, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	defer f.Close()
+	var secret [32]byte
+	rand.Read(secret[:])
+	_, err = f.WriteAt(secret[:], 0)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	return secret, f.Sync()
 }
 
 var _ bclocal.Policy = &bcPolicy{}

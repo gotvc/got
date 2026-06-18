@@ -86,7 +86,6 @@ func DefaultConfig() Config {
 		Spaces: map[string]SpaceSpec{},
 		Blobcache: BlobcacheSpec{
 			InProcess: &InProcessBlobcache{
-				ActAs:    DefaultIden,
 				CanLook:  []inet256.ID{},
 				CanTouch: []inet256.ID{},
 			},

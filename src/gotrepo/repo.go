@@ -32,8 +32,9 @@ const (
 	gotPrefix  = ".got"
 	configPath = ".got/config"
 
-	blobcacheDirPath = ".got/blobcache"
-	idenPath         = ".got/iden"
+	blobcacheDirPath     = ".got/blobcache"
+	blobcachePrivatePath = blobcacheDirPath + "/PRIVATE"
+	idenPath             = ".got/iden"
 )
 
 type (
