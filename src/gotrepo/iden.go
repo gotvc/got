@@ -3,23 +3,25 @@ package gotrepo
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 
 	"github.com/gotvc/got/src/gotorg"
+	"github.com/gotvc/got/src/gotrepo/internal/reposchema"
+	"go.brendoncarroll.net/stdctx/logctx"
 	"go.inet256.org/inet256/src/inet256"
+	"go.uber.org/zap"
 )
 
 const DefaultIden = "default"
 
 func (r *Repo) Identities(ctx context.Context) (map[string]gotorg.IdentityUnit, error) {
-	s, err := r.openIdenStore()
-	if err != nil {
+	if err := r.syncOldIdentities(ctx); err != nil {
 		return nil, err
 	}
-	defer s.Close()
 	ret := make(map[string]gotorg.IdentityUnit)
 	for name, id := range r.config.Identities {
-		idp, err := s.Get(id)
+		idp, err := r.repoc.GetIdentity(ctx, r.config.RepoVolume, id)
 		if err != nil {
 			return nil, err
 		}
@@ -28,35 +30,32 @@ func (r *Repo) Identities(ctx context.Context) (map[string]gotorg.IdentityUnit, 
 	return ret, nil
 }
 
-// Create
 func (r *Repo) CreateIdentity(ctx context.Context, name string) (*inet256.ID, error) {
+	if err := r.syncOldIdentities(ctx); err != nil {
+		return nil, err
+	}
 	if _, exists := r.config.Identities[name]; exists {
 		return nil, fmt.Errorf("cannot create, there is already an identity called %v", name)
 	}
-	s, err := r.openIdenStore()
-	if err != nil {
-		return nil, err
-	}
-	defer s.Close()
 	idp := gotorg.GenerateIden()
-	if _, err := s.Add(idp); err != nil {
+	id, err := r.repoc.PostIdentity(ctx, r.config.RepoVolume, idp)
+	if err != nil {
 		return nil, err
 	}
 	if err := EditConfig(r.root, func(x Config) Config {
 		if x.Identities == nil {
 			x.Identities = make(map[string]inet256.ID)
 		}
-		x.Identities[name] = idp.GetID()
+		x.Identities[name] = id
 		return x
 	}); err != nil {
 		return nil, err
 	}
-	idu := idp.Public()
-	return &idu.ID, r.reloadConfig()
+	return &id, r.reloadConfig()
 }
 
 func (r *Repo) GetIdentity(ctx context.Context, name string) (*gotorg.IdentityUnit, error) {
-	idp, err := r.getPrivate(name)
+	idp, err := r.getPrivate(ctx, name)
 	if err != nil {
 		return nil, err
 	}
@@ -64,17 +63,39 @@ func (r *Repo) GetIdentity(ctx context.Context, name string) (*gotorg.IdentityUn
 	return &idenUnit, nil
 }
 
-func (r *Repo) getPrivate(name string) (*gotorg.IdenPrivate, error) {
+func (r *Repo) getPrivate(ctx context.Context, name string) (*gotorg.IdenPrivate, error) {
+	if err := r.syncOldIdentities(ctx); err != nil {
+		return nil, err
+	}
 	id, exists := r.config.Identities[name]
 	if !exists {
 		return nil, fmt.Errorf("unknown identity %s", name)
 	}
+	return r.repoc.GetIdentity(ctx, r.config.RepoVolume, id)
+}
+
+// syncOldIdentities copies identies from the filesystem identity store
+// into the repo's Blobcache volume
+func (r *Repo) syncOldIdentities(ctx context.Context) error {
 	s, err := r.openIdenStore()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer s.Close()
-	return s.Get(id)
+	ids, err := s.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, id := range ids {
+		idp, err := s.Get(id)
+		if err != nil {
+			return err
+		}
+		if _, err := r.repoc.PostIdentity(ctx, r.config.RepoVolume, *idp); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (r *Repo) openIdenStore() (*idenStore, error) {
@@ -101,7 +122,7 @@ func (s *idenStore) Close() error {
 }
 
 func (s *idenStore) Add(idp gotorg.IdenPrivate) (inet256.ID, error) {
-	data, err := marshalIden(idp)
+	data, err := reposchema.MarshalIden(idp)
 	if err != nil {
 		return inet256.ID{}, err
 	}
@@ -118,39 +139,24 @@ func (s *idenStore) Get(id inet256.Addr) (*gotorg.IdenPrivate, error) {
 	if err != nil {
 		return nil, err
 	}
-	return parseIden(data)
+	return reposchema.ParseIden(data)
 }
 
-func marshalIden(idp gotorg.IdenPrivate) ([]byte, error) {
-	sigPrivData, err := pki.MarshalPrivateKey(nil, idp.SigPrivateKey)
+func (s *idenStore) List(ctx context.Context) (ret []inet256.ID, _ error) {
+	ents, err := fs.ReadDir(s.root.FS(), ".")
 	if err != nil {
-		return nil, err
+		return ret, nil
 	}
-	kemPrivData := gotorg.MarshalKEMPrivateKey(nil, gotorg.KEM_MLKEM1024, idp.KEMPrivateKey)
-	ret := fmt.Appendf(nil, "SIG %x\nKEM %x\n", sigPrivData, kemPrivData)
+	for _, ent := range ents {
+		if ent.IsDir() {
+			continue
+		}
+		var id inet256.ID
+		if err := id.UnmarshalText([]byte(ent.Name())); err != nil {
+			logctx.Error(ctx, "parsing iden filepath", zap.Error(err))
+			continue
+		}
+		ret = append(ret, id)
+	}
 	return ret, nil
 }
-
-func parseIden(data []byte) (*gotorg.IdenPrivate, error) {
-	x := string(data)
-	var sigPrivData []byte
-	var kemPrivData []byte
-	_, err := fmt.Sscanf(x, "SIG %x\nKEM %x\n", &sigPrivData, &kemPrivData)
-	if err != nil {
-		return nil, err
-	}
-	sigPriv, err := pki.ParsePrivateKey(sigPrivData)
-	if err != nil {
-		return nil, err
-	}
-	kemPriv, err := gotorg.ParseKEMPrivateKey(kemPrivData)
-	if err != nil {
-		return nil, err
-	}
-	return &gotorg.IdenPrivate{
-		SigPrivateKey: sigPriv,
-		KEMPrivateKey: kemPriv,
-	}, nil
-}
-
-var pki = gotorg.PKI()

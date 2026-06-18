@@ -10,10 +10,12 @@ import (
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"blobcache.io/blobcache/src/schema"
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
+	"go.inet256.org/inet256/src/inet256"
 )
 
 func TestClient(t *testing.T) {
@@ -125,11 +127,66 @@ func TestRepairRepoLinksFailAtomic(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestIdentityRoundTrip(t *testing.T) {
+	ctx := testutil.Context(t)
+	bc := newBlobcache(t)
+	client := NewClient(bc)
+	repoVol := blobcache.OID{}
+
+	idp := gotorg.GenerateIden()
+	id, err := client.PostIdentity(ctx, repoVol, idp)
+	require.NoError(t, err)
+	require.Equal(t, idp.GetID(), id)
+
+	idp2, err := client.GetIdentity(ctx, repoVol, id)
+	require.NoError(t, err)
+	require.Equal(t, id, idp2.GetID())
+
+	before, err := MarshalIden(idp)
+	require.NoError(t, err)
+	after, err := MarshalIden(*idp2)
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+
+	refData := readRootValue(t, ctx, &client, repoVol, idenKey(id))
+	ref, err := gdat.ParseRef(refData)
+	require.NoError(t, err)
+	require.False(t, ref.IsZero())
+}
+
+func TestGetIdentityNotFound(t *testing.T) {
+	ctx := testutil.Context(t)
+	bc := newBlobcache(t)
+	client := NewClient(bc)
+	repoVol := blobcache.OID{}
+
+	_, err := client.GetIdentity(ctx, repoVol, randomID(t))
+	require.Error(t, err)
+}
+
+func TestPostIdentityIdempotent(t *testing.T) {
+	ctx := testutil.Context(t)
+	bc := newBlobcache(t)
+	client := NewClient(bc)
+	repoVol := blobcache.OID{}
+
+	idp := gotorg.GenerateIden()
+	id, err := client.PostIdentity(ctx, repoVol, idp)
+	require.NoError(t, err)
+	before := readRootValue(t, ctx, &client, repoVol, idenKey(id))
+
+	id2, err := client.PostIdentity(ctx, repoVol, idp)
+	require.NoError(t, err)
+	require.Equal(t, id, id2)
+	after := readRootValue(t, ctx, &client, repoVol, idenKey(id))
+	require.Equal(t, before, after)
+}
+
 func breakAllRepoLinks(t testing.TB, ctx context.Context, c *Client, repoVol blobcache.OID) {
 	t.Helper()
 	rootH, err := c.rootHandle(ctx, repoVol)
 	require.NoError(t, err)
-	tx, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Modify: true})
+	tx, err := bcsdk.BeginTx(ctx, c.bcsvc, *rootH, blobcache.TxParams{Modify: true})
 	require.NoError(t, err)
 	defer tx.Abort(ctx)
 
@@ -144,7 +201,7 @@ func breakAllRepoLinks(t testing.TB, ctx context.Context, c *Client, repoVol blo
 	}
 
 	span := gotkv.PrefixSpan([]byte("stage/"))
-	err = c.GotKV.ForEach(ctx, tx, root, span, func(ent gotkv.Entry) error {
+	err = c.gotkv.ForEach(ctx, tx, root, span, func(ent gotkv.Entry) error {
 		sve, err := parseSubvolEntry(ent.Value)
 		if err != nil {
 			return err
@@ -166,20 +223,20 @@ func tamperStageTarget(t testing.TB, ctx context.Context, c *Client, repoVol blo
 	t.Helper()
 	rootH, err := c.rootHandle(ctx, repoVol)
 	require.NoError(t, err)
-	tx, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Modify: true})
+	tx, err := bcsdk.BeginTx(ctx, c.bcsvc, *rootH, blobcache.TxParams{Modify: true})
 	require.NoError(t, err)
 	defer tx.Abort(ctx)
 
 	root, err := c.getRoot(ctx, tx)
 	require.NoError(t, err)
 
-	val, err := c.GotKV.Get(ctx, tx, root, stageKey(wcid))
+	val, err := c.gotkv.Get(ctx, tx, root, stageKey(wcid))
 	require.NoError(t, err)
 	sve, err := parseSubvolEntry(val)
 	require.NoError(t, err)
 	sve.Token.Target = target
 
-	root, err = c.GotKV.Put(ctx, tx, root, stageKey(wcid), sve.Marshal(nil))
+	root, err = c.gotkv.Put(ctx, tx, root, stageKey(wcid), sve.Marshal(nil))
 	require.NoError(t, err)
 	require.NoError(t, tx.Save(ctx, root.Marshal(nil)))
 	require.NoError(t, tx.Commit(ctx))
@@ -189,20 +246,43 @@ func readSubvolEntry(t testing.TB, ctx context.Context, c *Client, repoVol blobc
 	t.Helper()
 	rootH, err := c.rootHandle(ctx, repoVol)
 	require.NoError(t, err)
-	tx, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Modify: false})
+	tx, err := bcsdk.BeginTx(ctx, c.bcsvc, *rootH, blobcache.TxParams{Modify: false})
 	require.NoError(t, err)
 	defer tx.Abort(ctx)
 
 	root, err := c.getRoot(ctx, tx)
 	require.NoError(t, err)
-	val, err := c.GotKV.Get(ctx, tx, root, key)
+	val, err := c.gotkv.Get(ctx, tx, root, key)
 	require.NoError(t, err)
 	sve, err := parseSubvolEntry(val)
 	require.NoError(t, err)
 	return *sve
 }
 
+func readRootValue(t testing.TB, ctx context.Context, c *Client, repoVol blobcache.OID, key []byte) []byte {
+	t.Helper()
+	rootH, err := c.rootHandle(ctx, repoVol)
+	require.NoError(t, err)
+	tx, err := bcsdk.BeginTx(ctx, c.bcsvc, *rootH, blobcache.TxParams{Modify: false})
+	require.NoError(t, err)
+	defer tx.Abort(ctx)
+
+	root, err := c.getRoot(ctx, tx)
+	require.NoError(t, err)
+	val, err := c.gotkv.Get(ctx, tx, root, key)
+	require.NoError(t, err)
+	return val
+}
+
 func randomOID(t testing.TB) (ret blobcache.OID) {
+	t.Helper()
+	if _, err := rand.Read(ret[:]); err != nil {
+		t.Fatal(err)
+	}
+	return ret
+}
+
+func randomID(t testing.TB) (ret inet256.ID) {
 	t.Helper()
 	if _, err := rand.Read(ret[:]); err != nil {
 		t.Fatal(err)

@@ -85,31 +85,8 @@ func Open(root *os.Root) (_ *Repo, retErr error) {
 	if err != nil {
 		return nil, err
 	}
-	// setup identity store
 	if err := root.MkdirAll(idenPath, 0o755); err != nil && !os.IsExist(err) {
 		return nil, err
-	}
-	if len(config.Identities) < 1 {
-		idens, err := openIdenStore(root)
-		if err != nil {
-			return nil, err
-		}
-		defer idens.Close()
-		idp := gotorg.GenerateIden()
-		id, err := idens.Add(idp)
-		if err != nil {
-			return nil, err
-		}
-		if err := EditConfig(root, func(x Config) Config {
-			x.Identities[DefaultIden] = id
-			return x
-		}); err != nil {
-			return nil, err
-		}
-		config, err = LoadConfig(root)
-		if err != nil {
-			return nil, err
-		}
 	}
 	// background context
 	bgCtx := context.Background()
@@ -134,6 +111,11 @@ func Open(root *os.Root) (_ *Repo, retErr error) {
 		CloseAll:   true,
 	}
 	r := New(env, *config)
+	if len(config.Identities) < 1 {
+		if _, err := r.CreateIdentity(bgCtx, DefaultIden); err != nil {
+			return nil, err
+		}
+	}
 	r.cf = cf
 	return r, nil
 }
@@ -219,7 +201,7 @@ func (r *Repo) Cleanup(ctx context.Context) error {
 }
 
 func (r *Repo) OrgClient(actAs string) (gotorg.Client, error) {
-	idp, err := r.getPrivate(actAs)
+	idp, err := r.getPrivate(context.TODO(), actAs)
 	if err != nil {
 		return gotorg.Client{}, err
 	}

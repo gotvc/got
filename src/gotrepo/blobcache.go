@@ -17,6 +17,7 @@ import (
 	"blobcache.io/blobcache/src/schema"
 	"github.com/cloudflare/circl/sign/ed25519"
 	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo/internal/reposchema"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.inet256.org/inet256/src/inet256"
@@ -44,6 +45,8 @@ type InProcessBlobcache struct {
 type EnvClientBlobcache struct {
 	UseSchema bool `json:"use_schema,omitempty"`
 }
+
+var pki = gotorg.PKI()
 
 func newBCInfoLogger() *zap.Logger {
 	cfg := zap.NewProductionConfig()
