@@ -204,12 +204,11 @@ type SyncResult struct {
 	// If empty, then this was deleted in the dest.
 	Src string
 
-	// Created is set if the Mark did not exist in the destination space
-	Created bool
-	// Updated is set if the Mark was updated
-	Updated bool
 	// Err is nil if the sync was successful, non-nil if there was a problem
 	Err error
+	// Created is set if the mark was created
+	Created    bool
+	Prev, Next gdat.Ref
 }
 
 func (sr SyncResult) IsOK() bool {
@@ -225,7 +224,7 @@ func (sr SyncResult) WasCreated() bool {
 }
 
 func (sr SyncResult) WasUpdated() bool {
-	return sr.IsOK() && sr.Updated
+	return sr.IsOK() && !sr.Prev.Equals(&sr.Next)
 }
 
 type SyncErr struct {
@@ -284,14 +283,17 @@ func SyncSpaces(ctx context.Context, task SyncSpacesTask) ([]SyncResult, error) 
 				}
 				eg.Go(func() error {
 					if err := func() error {
-						var err error
-						res.Updated, err = Sync(ctx, srcMark, dstMark, false)
-						return err
+						change, err := Sync(ctx, srcMark, dstMark, false)
+						if err != nil {
+							return err
+						}
+						res.Prev = change.Prev
+						res.Next = change.Next
+						return nil
 					}(); err != nil {
 						if !task.AllowPartial {
 							return &SyncErr{Src: srcName, Dst: dstName, Err: err}
 						} else {
-							res.Updated = false
 							res.Err = err
 						}
 					}

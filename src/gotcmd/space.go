@@ -274,24 +274,29 @@ func printSyncResult(c *star.Context, sr gotrepo.SyncResult) error {
 		return strings.Compare(a.Dst, b.Dst)
 	})
 	c.Printf("%s -> %s\n", sr.Src, sr.Dst)
-	const fmtStr = "%-30s -> %-30s %s\n"
+	const fmtStr = "%-30s -> %-30s %s... %s\n"
 	var count int
+	var errCount int
 	for _, res := range sr.Items {
+		next := res.Next.CID.String()[:8]
 		switch {
 		case !res.IsOK():
-			c.Printf(fmtStr, res.Src, res.Dst, "ERROR: "+res.Err.Error())
+			c.Printf(fmtStr, res.Src, res.Dst, next, "ERROR: "+res.Err.Error())
+			errCount++
 		case res.WasDeleted():
-			c.Printf(fmtStr, res.Src, res.Dst, "(deleted)")
+			c.Printf(fmtStr, res.Src, res.Dst, next, "(deleted)")
 			count++
 		case res.WasCreated():
-			c.Printf(fmtStr, res.Src, res.Dst, "(created)")
+			c.Printf(fmtStr, res.Src, res.Dst, next, "(created)")
 			count++
 		case res.WasUpdated():
-			c.Printf(fmtStr, res.Src, res.Dst, "(updated)")
+			c.Printf(fmtStr, res.Src, res.Dst, next, "(updated)")
 			count++
 		}
 	}
-	c.Printf("Nothing to do.\n")
+	if count == 0 && errCount == 0 {
+		c.Printf("Nothing to do.\n")
+	}
 	c.Printf("\n")
 	return nil
 }

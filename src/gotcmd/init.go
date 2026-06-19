@@ -86,14 +86,14 @@ func configureBlobcache(c star.Context, cfg *gotwc.Config) error {
 		}
 		apiVal := os.Getenv(bcclient.EnvBlobcacheAPI)
 		c.Printf("using blobcache client at %v\n", apiVal)
-		cfg.Blobcache = gotbc.BlobcacheSpec{
-			EnvClient: &gotbc.EnvClientBlobcache{},
+		cfg.Blobcache = gotbc.Config{
+			EnvClient: &gotbc.EnvClientSpec{},
 		}
 		cfg.Repo = volOID
 		return nil
 	case "", "in-process":
 		cfg.Blobcache = gotwc.BlobcacheSpec{
-			InProcess: &gotbc.InProcessBlobcache{},
+			InProcess: &gotbc.InProcessSpec{},
 		}
 		cfg.Repo = blobcache.OID{} // in-process puts repo at root OID
 		return nil

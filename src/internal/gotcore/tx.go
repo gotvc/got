@@ -260,14 +260,21 @@ func ViewCommit(ctx context.Context, stx SpaceTx, se CommitExpr, fn func(vctx *V
 	return fn(&vctx)
 }
 
+// MarkDelta represents the a change to a Mark.
+type MarkDelta struct {
+	Prev, Next gdat.Ref
+}
+
 // SyncVolumes syncs the contents of src to dst.
 // It returns true if dst was changed.
-func Sync(ctx context.Context, src, dst *MarkTx, force bool) (bool, error) {
+func Sync(ctx context.Context, src, dst *MarkTx, force bool) (MarkDelta, error) {
 	if !force && src.info.Config.Salt != dst.info.Config.Salt {
-		return false, fmt.Errorf("cannot sync volumes with different salts, must use force=true")
+		return MarkDelta{}, fmt.Errorf("cannot sync volumes with different salts, must use force=true")
 	}
-	var changed bool
-	err := dst.Apply(ctx, func(dsts RW, x gdat.Ref) (gdat.Ref, error) {
+	var mdelta MarkDelta
+	err := dst.Apply(ctx, func(dsts RW, x gdat.Ref) (ret gdat.Ref, _ error) {
+		mdelta.Prev = x
+		defer func() { mdelta.Next = ret }()
 		goalRef, err := src.Load(ctx)
 		if err != nil {
 			return gdat.Ref{}, err
@@ -279,7 +286,6 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) (bool, error) {
 		case goalRef.IsZero() && !force:
 			return gdat.Ref{}, fmt.Errorf("cannot clear volume without force=true")
 		case x.IsZero():
-			changed = true
 		case goalRef.Equals(&x):
 			return x, nil
 		default:
@@ -303,10 +309,10 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) (bool, error) {
 		if err := syncCommitRef(ctx, dst.GotVC(), dst.GotFS(), src.RO(), dst.WO(), goalRef); err != nil {
 			return gdat.Ref{}, err
 		}
-		changed = true
+		mdelta.Next = goalRef
 		return goalRef, nil
 	})
-	return changed, err
+	return mdelta, err
 }
 
 func History(ctx context.Context, vcmach *VCMach, s stores.RO, commRef gdat.Ref, fn func(ref gdat.Ref, comm Commit) error) error {

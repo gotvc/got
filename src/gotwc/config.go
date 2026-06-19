@@ -32,12 +32,12 @@ type Config struct {
 	Tracking []string `json:"tracking"`
 }
 
-type BlobcacheSpec = gotbc.BlobcacheSpec
+type BlobcacheSpec = gotbc.Config
 
 func DefaultConfig() Config {
 	return Config{
-		Blobcache: gotbc.BlobcacheSpec{
-			InProcess: &gotbc.InProcessBlobcache{},
+		Blobcache: gotbc.Config{
+			InProcess: &gotbc.InProcessSpec{},
 		},
 		ID:       gotrepo.NewWorkingCopyID(),
 		SaveTo:   nameMaster,

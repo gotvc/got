@@ -29,18 +29,18 @@ const (
 	privateSeedPath = "PRIVATE"
 )
 
-// BlobcacheSpec describes how to access a Blobcache Service.
-type BlobcacheSpec struct {
+// Config describes how to access a Blobcache Service.
+type Config struct {
 	// InProcess uses an in-process Blobcache service.
 	// The state will be stored in the .got/blobcache directory.
 	// This is the default.
 	// The state can get quite large for large datasets, so it is recommended to use the system's Blobcache.
-	InProcess *InProcessBlobcache `json:"in_process,omitempty"`
+	InProcess *InProcessSpec `json:"in_process,omitempty"`
 	// Client uses the Client Blobcache service, as configured through BLOBCACHE_API
-	EnvClient *EnvClientBlobcache `json:"env_client,omitempty"`
+	EnvClient *EnvClientSpec `json:"env_client,omitempty"`
 }
 
-type InProcessBlobcache struct {
+type InProcessSpec struct {
 	// Path is the path to the directory containing .got/blobcache
 	// If empty then the current got root directory is used.
 	Path     string       `json:"path"`
@@ -49,7 +49,7 @@ type InProcessBlobcache struct {
 }
 
 // EnvBlobcache configures blobcache to create a client using the environment variable
-type EnvClientBlobcache struct {
+type EnvClientSpec struct {
 	UseSchema bool `json:"use_schema,omitempty"`
 }
 
@@ -74,7 +74,7 @@ func newBCLogger() *zap.Logger {
 
 // OpenBlobcache returns a blobcache client according to the spec.
 // dir should be the directory containing the .got directory.
-func OpenBlobcache(wcDir *os.Root, spec BlobcacheSpec, bgCtx context.Context) (blobcache.Service, error) {
+func OpenBlobcache(wcDir *os.Root, spec Config, bgCtx context.Context) (blobcache.Service, error) {
 	var svc blobcache.Service
 	switch {
 	case spec.InProcess != nil:

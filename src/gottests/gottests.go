@@ -39,10 +39,7 @@ type Site struct {
 // NewSite creates a new tempdir in the test, calls gotwc.Init with the default config
 // then opens the WC and fills the remaining fields in the site
 func NewSite(t testing.TB) Site {
-	return newSite(t, gotrepo.DefaultConfig())
-}
-
-func newSite(t testing.TB, repoConfig gotrepo.Config) Site {
+	repoConfig := gotrepo.DefaultConfig()
 	ctx := t.Context()
 	dirpath := t.TempDir()
 	root := testutil.OpenRoot(t, dirpath)
