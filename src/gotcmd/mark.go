@@ -45,11 +45,11 @@ var markCreateCmd = star.Command{
 	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		branchName := markNameParam.Load(c)
 		spaceName, _ := spaceNameOptParam.LoadOpt(c)
 		_, err = repo.CreateMark(ctx, gotrepo.FQM{Space: spaceName, Name: branchName}, gotcore.DefaultConfig(false), nil)
@@ -113,11 +113,11 @@ var markDeleteCmd = star.Command{
 	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		name := markNameParam.Load(c)
 		spaceName, _ := spaceNameOptParam.LoadOpt(c)
 		return repo.DeleteMark(ctx, gotrepo.FQM{Space: spaceName, Name: name})
@@ -134,11 +134,11 @@ var markDeletePrefixCmd = star.Command{
 	Pos: []star.Positional{markNamePrefixParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		prefix := markNamePrefixParam.Load(c)
 		spaceName, _ := spaceNameOptParam.LoadOpt(c)
 		toDelete := []string{}
@@ -169,11 +169,11 @@ var markMvCmd = star.Command{
 	Pos: []star.Positional{srcMarkNameParam, dstMarkNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		space, _ := spaceNameOptParam.LoadOpt(c)
 		return repo.MoveMark(ctx, space, srcMarkNameParam.Load(c), dstMarkNameParam.Load(c))
 	},
@@ -186,11 +186,11 @@ var markCpCmd = star.Command{
 	Pos: []star.Positional{srcMarkParam, dstMarkParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		return repo.CloneMark(ctx, srcMarkParam.Load(c), dstMarkParam.Load(c))
 	},
 }
@@ -215,11 +215,11 @@ var markLoadCmd = star.Command{
 	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		space, _ := spaceNameOptParam.LoadOpt(c)
 		name := markNameParam.Load(c)
 		ref, comm, err := repo.MarkLoad(ctx, gotrepo.FQM{Space: space, Name: name})
@@ -240,11 +240,11 @@ var markInspectCmd = star.Command{
 	Pos: []star.Positional{fqmParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		fqm := fqmParam.Load(c)
 		return repo.ViewMark(ctx, fqm, func(mt *gotcore.MarkTx) error {
 			return prettyPrintJSON(c.StdOut, mt.Info())
@@ -259,11 +259,11 @@ var markCpSaltCmd = star.Command{
 	Pos: []star.Positional{srcMarkParam, dstMarkParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		src := srcMarkParam.Load(c)
 		dst := dstMarkParam.Load(c)
 		srcInfo, err := repo.InspectMark(ctx, src)
@@ -437,11 +437,11 @@ var markSyncCmd = star.Command{
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		r := metrics.NewTTYRenderer(metrics.FromContext(ctx), c.StdIn, c.StdOut)
 		defer r.Close()
 		src := srcMarkParam.Load(c)

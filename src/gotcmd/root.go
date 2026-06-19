@@ -41,7 +41,6 @@ var rootCmd = star.NewGroupedDir(
 		{Title: "REPO", Commands: []string{
 			"init",
 			"repo",
-			"config",
 			"serve",
 			"scrub",
 			"iden",
@@ -59,7 +58,7 @@ var rootCmd = star.NewGroupedDir(
 			"fork",
 			"checkout",
 		}},
-		{Title: "MARKS", Commands: []string{
+		{Title: "BOOKMARKS", Commands: []string{
 			"mark",
 			"history",
 			"cat",
@@ -75,6 +74,7 @@ var rootCmd = star.NewGroupedDir(
 			"ftp",
 		}},
 		{Title: "MISCELLANEOUS", Commands: []string{
+			"config",
 			"bc",
 			"fix",
 			"version",
@@ -126,12 +126,12 @@ var rootCmd = star.NewGroupedDir(
 	},
 )
 
-func openRepo() (*gotrepo.Repo, error) {
-	r, err := os.OpenRoot(".")
+func openRepo() (*gotrepo.Repo, func() error, error) {
+	wc, err := openWC()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return gotrepo.Open(r)
+	return wc.Repo(), wc.Close, nil
 }
 
 func openWC() (*gotwc.WC, error) {

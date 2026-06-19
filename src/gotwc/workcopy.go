@@ -160,6 +160,7 @@ func (wc *WC) Blobcache() blobcache.Service {
 func (wc *WC) Configure(ctx context.Context, fn func(Config) Config) error {
 	var cfg2 Config
 	if err := EditConfig(wc.root, func(x Config) Config {
+		x = fn(x)
 		cfg2 = x
 		return x
 	}); err != nil {

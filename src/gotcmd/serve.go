@@ -3,8 +3,12 @@ package gotcmd
 import (
 	"fmt"
 	"net"
+	"os"
 
+	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/blobcache"
+	"github.com/gotvc/got/src/gotwc"
+	"github.com/gotvc/got/src/internal/gotbc"
 	"go.brendoncarroll.net/star"
 )
 
@@ -15,14 +19,23 @@ var serveCmd = star.Command{
 	Pos: []star.Positional{listenAddrParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		root, err := os.OpenRoot(".")
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
-		if cfg := repo.Config(); cfg.Blobcache.InProcess == nil {
-			return fmt.Errorf("serve requires a repository with a local blobcache")
+		cfg, err := gotwc.LoadConfig(root)
+		if err != nil {
+			return err
 		}
+		if cfg.Blobcache.InProcess == nil {
+			return fmt.Errorf("serve requires a local blobcache")
+		}
+		bcSvc, err := gotbc.OpenBlobcache(root, cfg.Blobcache, c)
+		if err != nil {
+			return err
+		}
+		bc := bcSvc.(*bclocal.Service)
+
 		laddrStr := listenAddrParam.Load(c)
 		laddr, err := net.ResolveUDPAddr("udp", laddrStr)
 		if err != nil {
@@ -33,14 +46,14 @@ var serveCmd = star.Command{
 			return err
 		}
 		ep := blobcache.Endpoint{
-			Node:   repo.BlobcachePeer(),
+			Node:   bc.LocalID(),
 			IPPort: pc.LocalAddr().(*net.UDPAddr).AddrPort(),
 		}
 		fmt.Fprintln(c.StdOut, "BLOBCACHE ENDPOINT:")
 		fmt.Fprintf(c.StdOut, "%v\n\n", ep)
 		defer pc.Close()
 		fmt.Fprintln(c.StdOut, "serving...")
-		return repo.Serve(ctx, pc)
+		return bc.Serve(ctx, pc)
 	},
 }
 

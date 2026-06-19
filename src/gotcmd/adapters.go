@@ -23,11 +23,11 @@ var httpCmd = star.Command{
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		return repo.ViewCommit(ctx, commExprParam.Load(c), func(vctx *gotcore.ViewCtx) error {
 			fs := gotiofs.New(ctx, vctx)
 			h := http.FileServer(http.FS(fs))
@@ -56,11 +56,11 @@ var ftpCmd = star.Command{
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		addr, _ := addrParam.LoadOpt(c)
 		if addr == "" {
 			addr = "127.0.0.1:6006"

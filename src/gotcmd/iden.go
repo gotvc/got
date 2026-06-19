@@ -18,10 +18,11 @@ var idenListCmd = star.Command{
 		Short: "list the identities available in the repo",
 	},
 	F: func(c star.Context) error {
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
+		defer close()
 		idens, err := repo.Identities(c)
 		if err != nil {
 			return err

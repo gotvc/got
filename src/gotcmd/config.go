@@ -43,13 +43,13 @@ var configAddPullCmd = star.Command{
 	},
 	Pos: []star.Positional{configSpaceNameParam},
 	F: func(c star.Context) error {
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		spaceName := configSpaceNameParam.Load(c)
-		return repo.Configure(func(x gotrepo.Config) gotrepo.Config {
+		return repo.Configure(c, func(x gotrepo.Config) gotrepo.Config {
 			return *x.AddPull(gotrepo.PullConfig{
 				From:      spaceName,
 				AddPrefix: spaceName + "/",
@@ -72,13 +72,13 @@ var configAddPushCmd = star.Command{
 		"add-prefix": configAddPrefixParam,
 	},
 	F: func(c star.Context) error {
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		spaceName := configSpaceNameParam.Load(c)
-		return repo.Configure(func(x gotrepo.Config) gotrepo.Config {
+		return repo.Configure(c, func(x gotrepo.Config) gotrepo.Config {
 			pc := gotrepo.PushConfig{
 				To: spaceName,
 			}
@@ -103,13 +103,13 @@ var configRmPullCmd = star.Command{
 	},
 	Pos: []star.Positional{configIndexParam},
 	F: func(c star.Context) error {
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		i := configIndexParam.Load(c)
-		return repo.Configure(func(x gotrepo.Config) gotrepo.Config {
+		return repo.Configure(c, func(x gotrepo.Config) gotrepo.Config {
 			if i < 0 || i >= len(x.Pull) {
 				return x
 			}
@@ -125,13 +125,13 @@ var configRmPushCmd = star.Command{
 	},
 	Pos: []star.Positional{configIndexParam},
 	F: func(c star.Context) error {
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		i := configIndexParam.Load(c)
-		return repo.Configure(func(x gotrepo.Config) gotrepo.Config {
+		return repo.Configure(c, func(x gotrepo.Config) gotrepo.Config {
 			if i < 0 || i >= len(x.Push) {
 				return x
 			}
@@ -173,13 +173,15 @@ func printConfig(c star.Context) error {
 	}
 
 	repoCfg, err := gotrepo.LoadConfig(workDir)
-	if err != nil {
+	if err != nil && !os.IsNotExist(err) {
 		return err
+	} else if err == nil {
+		c.Printf("REPO @ %v\n", wcCfg.Repo)
+		if err := printRepoConfig(&c, *repoCfg); err != nil {
+			return err
+		}
 	}
-	c.Printf("REPO @ %s\n", dirpath)
-	if err := printRepoConfig(&c, *repoCfg); err != nil {
-		return err
-	}
+
 	return nil
 }
 
@@ -187,7 +189,7 @@ func printWCConfig(c *star.Context, wcCfg gotwc.Config) error {
 	c.Printf("  ID: %s\n", wcCfg.ID)
 	c.Printf("  HEAD: %s\n", wcCfg.SaveTo)
 	c.Printf("  ACT AS: %s\n", wcCfg.ActAs)
-	c.Printf("  REPO DIR: %s\n", wcCfg.RepoDir)
+	c.Printf("  REPO: %v\n", wcCfg.Repo)
 	if len(wcCfg.Base) > 0 {
 		c.Printf("  BASE:\n")
 		for _, ref := range wcCfg.Base {
@@ -200,16 +202,14 @@ func printWCConfig(c *star.Context, wcCfg gotwc.Config) error {
 			c.Printf("    %s\n", p)
 		}
 	}
+	c.Printf("  BLOBCACHE:\n")
+	if err := printBlobcacheConfig(c, wcCfg.Blobcache, "    "); err != nil {
+		return err
+	}
 	return nil
 }
 
 func printRepoConfig(c *star.Context, repoCfg gotrepo.Config) error {
-	c.Printf("  REPO VOLUME: %s\n", repoCfg.RepoVolume)
-	c.Printf("  BLOBCACHE:\n")
-	if err := printBlobcacheConfig(c, repoCfg.Blobcache, "    "); err != nil {
-		return err
-	}
-
 	if len(repoCfg.Identities) > 0 {
 		c.Printf("  IDENTITIES:\n")
 		for name, id := range repoCfg.Identities {
@@ -257,7 +257,7 @@ func printRepoConfig(c *star.Context, repoCfg gotrepo.Config) error {
 	return nil
 }
 
-func printBlobcacheConfig(c *star.Context, x gotrepo.BlobcacheSpec, indent string) error {
+func printBlobcacheConfig(c *star.Context, x gotwc.BlobcacheSpec, indent string) error {
 	switch {
 	case x.EnvClient != nil:
 		v, ok := os.LookupEnv(bcclient.EnvBlobcacheAPI)
