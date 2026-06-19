@@ -270,18 +270,21 @@ var pushCmd = star.Command{
 }
 
 func printSyncResult(c *star.Context, sr gotrepo.SyncResult) error {
-	c.Printf("%s -> %s\n", sr.Src, sr.Dst)
 	slices.SortFunc(sr.Items, func(a, b gotcore.SyncResult) int {
 		return strings.Compare(a.Dst, b.Dst)
 	})
+	c.Printf("%s -> %s\n", sr.Src, sr.Dst)
+	const fmtStr = "%-30s -> %-30s %s\n"
 	for _, res := range sr.Items {
 		switch {
 		case res.WasDeleted():
-			c.Printf("  %s (deleted)\n", res.Dst)
+			c.Printf(fmtStr, res.Dst, "(deleted)")
 		case res.WasCreated():
-			c.Printf("  %s -> %s (created)\n", res.Src, res.Dst)
+			c.Printf(fmtStr, res.Src, res.Dst, "(created)")
+		case res.WasUpdated():
+			c.Printf(fmtStr, res.Src, res.Dst, "(updated)")
 		default:
-			c.Printf("  %s -> %s\n", res.Src, res.Dst)
+			// c.Printf("%-30s -> %s (unchanged)\n", res.Src, res.Dst)
 		}
 	}
 	c.Printf("\n")

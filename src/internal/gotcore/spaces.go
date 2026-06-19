@@ -203,8 +203,11 @@ type SyncResult struct {
 	// Src is the name of the Mark in the source space
 	// If empty, then this was deleted in the dest.
 	Src string
+
 	// Created is set if the Mark did not exist in the destination space
 	Created bool
+	// Updated is set if the Mark was updated
+	Updated bool
 	// Err is nil if the sync was successful, non-nil if there was a problem
 	Err error
 }
@@ -214,11 +217,15 @@ func (sr SyncResult) IsOK() bool {
 }
 
 func (sr SyncResult) WasDeleted() bool {
-	return sr.Src == ""
+	return sr.IsOK() && sr.Src == ""
 }
 
 func (sr SyncResult) WasCreated() bool {
-	return sr.Created
+	return sr.IsOK() && sr.Created
+}
+
+func (sr SyncResult) WasUpdated() bool {
+	return sr.IsOK() && sr.Updated
 }
 
 type SyncErr struct {
@@ -277,11 +284,14 @@ func SyncSpaces(ctx context.Context, task SyncSpacesTask) ([]SyncResult, error) 
 				}
 				eg.Go(func() error {
 					if err := func() error {
-						return Sync(ctx, srcMark, dstMark, false)
+						var err error
+						res.Updated, err = Sync(ctx, srcMark, dstMark, false)
+						return err
 					}(); err != nil {
 						if !task.AllowPartial {
 							return &SyncErr{Src: srcName, Dst: dstName, Err: err}
 						} else {
+							res.Updated = false
 							res.Err = err
 						}
 					}

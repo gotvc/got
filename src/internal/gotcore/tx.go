@@ -261,11 +261,12 @@ func ViewCommit(ctx context.Context, stx SpaceTx, se CommitExpr, fn func(vctx *V
 }
 
 // SyncVolumes syncs the contents of src to dst.
-func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
+func Sync(ctx context.Context, src, dst *MarkTx, force bool) (bool, error) {
 	if !force && src.info.Config.Salt != dst.info.Config.Salt {
-		return fmt.Errorf("cannot sync volumes with different salts, must use force=true")
+		return false, fmt.Errorf("cannot sync volumes with different salts, must use force=true")
 	}
-	return dst.Apply(ctx, func(dsts RW, x gdat.Ref) (gdat.Ref, error) {
+	var changed bool
+	return changed, dst.Apply(ctx, func(dsts RW, x gdat.Ref) (gdat.Ref, error) {
 		goalRef, err := src.Load(ctx)
 		if err != nil {
 			return gdat.Ref{}, err
@@ -277,6 +278,7 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 		case goalRef.IsZero() && !force:
 			return gdat.Ref{}, fmt.Errorf("cannot clear volume without force=true")
 		case x.IsZero():
+			changed = true
 		case goalRef.Equals(&x):
 		default:
 			vcmach := dst.GotVC()
@@ -299,6 +301,7 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) error {
 		if err := syncCommitRef(ctx, dst.GotVC(), dst.GotFS(), src.RO(), dst.WO(), goalRef); err != nil {
 			return gdat.Ref{}, err
 		}
+		changed = true
 		return goalRef, nil
 	})
 }

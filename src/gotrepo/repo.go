@@ -94,6 +94,9 @@ func Open(ctx context.Context, bc blobcache.Service, volid blobcache.OID, dir *o
 			return nil, err
 		}
 	}
+	if err := r.reloadConfig(ctx); err != nil {
+		return nil, err
+	}
 	return r, nil
 }
 
