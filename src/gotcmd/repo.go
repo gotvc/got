@@ -4,15 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os"
+	"strconv"
 
 	bcclient "blobcache.io/blobcache/client/go"
 	"blobcache.io/blobcache/src/blobcache"
 	_ "blobcache.io/blobcache/src/blobcachecmd"
+	"blobcache.io/blobcache/src/schema/bcns"
 	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/gotrepo"
-	"github.com/gotvc/got/src/gotwc"
-	"github.com/gotvc/got/src/internal/gotcore"
 	"go.brendoncarroll.net/star"
 )
 
@@ -20,107 +19,78 @@ var repoCmd = star.NewDir(star.Metadata{
 	Short: "repo maintenance commands",
 }, map[string]star.Command{
 	"repair-links": repairLinksCmd,
+	"init":         repoInitCmd,
+	"create":       repoCreateCmd,
+	"add-push":     repoAddPushCmd,
+	"add-pull":     repoAddPullCmd,
+	"rm-push":      repoRmPushCmd,
+	"rm-pull":      repoRmPullCmd,
 })
 
-var initCmd = star.Command{
+var repoInitCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "initializes a repository in the current directory",
+		Short: "initialize a Repo in an existing Blobcache Volume.  Does not create a working copy.",
 	},
-	Flags: map[string]star.Flag{
-		"blobcache": blobcacheParam,
-		"mkvol":     mkvolParam,
-		"volume":    volumeParam,
-	},
+	Pos: []star.Positional{volNameParam},
 	F: func(c star.Context) error {
-		config := gotrepo.DefaultConfig()
-		volume, volumeSet := volumeParam.LoadOpt(c)
-		if volumeSet {
-			config.RepoVolume = volume
-		}
-		// configure blobcache
-		if err := configureBlobcache(c, &config); err != nil {
-			return err
-		}
-		root, err := os.OpenRoot(".")
+		ctx := c.Context
+		bc := bcclient.NewClientFromEnv()
+		nsVol, nsc, err := bcclient.OpenNSRoot(ctx, bc)
 		if err != nil {
 			return err
 		}
-		defer root.Close()
-		// setup repo
-		if err := gotrepo.Init(root, config); err != nil {
-			return err
-		}
-		repo, err := gotrepo.Open(root)
+		volh, err := bcns.Lookup(ctx, nsc, *nsVol, volNameParam.Load(c))
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
-		// create the first branch
-		if _, err := repo.CreateMark(c, gotrepo.FQM{Name: "master"}, gotcore.DefaultConfig(false), nil); err != nil {
+		if err := gotrepo.Init(ctx, bc, *volh, gotrepo.DefaultConfig()); err != nil {
 			return err
 		}
-		// setup a working copy in the same directory
-		if err := gotwc.Init(repo, root, gotwc.DefaultConfig()); err != nil {
-			return err
-		}
-		c.Printf("successfully initialized got repo in current directory\n")
+		c.Printf("repo initialized successfully")
 		return nil
 	},
 }
 
-var mkvolParam = &star.Optional[string]{
-	PosName:  "mkvol",
+var repoCreateCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "create a new Volume and initialize a Repo in it.",
+	},
+	Pos: []star.Positional{volNameParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		svc := bcclient.NewClientFromEnv()
+		ep, err := svc.Endpoint(ctx)
+		if err != nil {
+			return err
+		}
+		volName := volNameParam.Load(c)
+		volh, err := createRepoVol(ctx, svc, volName)
+		if err != nil {
+			return err
+		}
+		spec := gotrepo.RepoVolumeSpec(false)
+		specJSON, err := json.Marshal(spec)
+		if err != nil {
+			return err
+		}
+		c.Printf("Successfully created a new volume in the ns root\n")
+		c.Printf("NODE: %v", ep.Node)
+		c.Printf("HANDLE: %v\n", *volh)
+		c.Printf("INFO: %s\n", prettifyJSON(specJSON))
+
+		c.Printf("initializing volume...\n")
+		if err := gotrepo.Init(ctx, svc, *volh, gotrepo.DefaultConfig()); err != nil {
+			return err
+		}
+		c.Printf("successfully initialized Repo in %v", volh.OID)
+		return nil
+	},
+}
+
+var volNameParam = &star.Required[string]{
+	PosName:  "vol-name",
 	Parse:    star.ParseString,
-	ShortDoc: "the name to use when creating new a volume in a namespace",
-}
-
-var blobcacheParam = &star.Optional[string]{
-	PosName: "blobcache",
-	Parse:   star.ParseString,
-}
-
-func configureBlobcache(c star.Context, cfg *gotrepo.Config) error {
-	configStr, _ := blobcacheParam.LoadOpt(c)
-	switch configStr {
-	case "env-client":
-		volOID, volOk := volumeParam.LoadOpt(c)
-		newVolName, mkvolOk := mkvolParam.LoadOpt(c)
-		if mkvolOk == volOk {
-			return fmt.Errorf("must provide one of --volume <oid> or --mkvol <name>")
-		}
-		if mkvolOk {
-			bc := bcclient.NewClientFromEnv()
-			volh, err := createRepoVol(c, bc, newVolName)
-			if err != nil {
-				return err
-			}
-			c.Printf("created new Blobcache Volume at %v\n", newVolName)
-			volOID = volh.OID
-		}
-		apiVal := os.Getenv(bcclient.EnvBlobcacheAPI)
-		c.Printf("using blobcache client at %v\n", apiVal)
-		cfg.Blobcache = gotrepo.BlobcacheSpec{
-			EnvClient: &gotrepo.EnvClientBlobcache{},
-		}
-		cfg.RepoVolume = volOID
-		return nil
-	case "", "in-process":
-		cfg.Blobcache = gotrepo.BlobcacheSpec{
-			InProcess: &gotrepo.InProcessBlobcache{},
-		}
-		cfg.RepoVolume = blobcache.OID{} // in-process puts repo at root OID
-		return nil
-	default:
-		return fmt.Errorf("unrecognized blobcache option %v", configStr)
-	}
-}
-
-var volumeParam = &star.Optional[blobcache.OID]{
-	PosName: "volume",
-	Parse: func(s string) (blobcache.OID, error) {
-		return blobcache.ParseOID(s)
-	},
-	ShortDoc: "the OID of the volume to use for the repo",
+	ShortDoc: "the name in the namespace to use for the new volume",
 }
 
 var scrubCmd = star.Command{
@@ -129,11 +99,11 @@ var scrubCmd = star.Command{
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		if err := repo.CheckAll(ctx); err != nil {
 			return err
 		}
@@ -147,11 +117,11 @@ var repairLinksCmd = star.Command{
 		Short: "repairs repo volume link tokens",
 	},
 	F: func(c star.Context) error {
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		if err := gotrepo.RepairRepoLinks(c.Context, repo); err != nil {
 			return err
 		}
@@ -160,49 +130,120 @@ var repairLinksCmd = star.Command{
 	},
 }
 
+var repoAddPullCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "adds a pull task for a space",
+	},
+	Pos: []star.Positional{configSpaceNameParam},
+	F: func(c star.Context) error {
+		repo, close, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer close()
+		spaceName := configSpaceNameParam.Load(c)
+		return repo.Configure(c, func(x gotrepo.Config) gotrepo.Config {
+			return *x.AddPull(gotrepo.PullConfig{
+				From:      spaceName,
+				AddPrefix: spaceName + "/",
+			})
+		})
+	},
+}
+
+var configSpaceNameParam = &star.Required[string]{
+	PosName: "space-name",
+	Parse:   star.ParseString,
+}
+
+var repoAddPushCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "adds a push task for a space",
+	},
+	Pos: []star.Positional{configSpaceNameParam},
+	Flags: map[string]star.Flag{
+		"add-prefix": addPrefixParam,
+	},
+	F: func(c star.Context) error {
+		repo, close, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer close()
+		spaceName := configSpaceNameParam.Load(c)
+		return repo.Configure(c, func(x gotrepo.Config) gotrepo.Config {
+			pc := gotrepo.PushConfig{
+				To: spaceName,
+			}
+			if prefix, ok := addPrefixParam.LoadOpt(c); ok {
+				pc.AddPrefix = prefix
+			}
+			x.Push = append(x.Push, pc)
+			return x
+		})
+	},
+}
+
+var repoRmPullCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "removes a pull task by index",
+	},
+	Pos: []star.Positional{taskIndexParam},
+	F: func(c star.Context) error {
+		repo, close, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer close()
+		i := taskIndexParam.Load(c)
+		return repo.Configure(c, func(x gotrepo.Config) gotrepo.Config {
+			if i < 0 || i >= len(x.Pull) {
+				return x
+			}
+			x.Pull = append(x.Pull[:i], x.Pull[i+1:]...)
+			return x
+		})
+	},
+}
+
+var repoRmPushCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "removes a push task by index",
+	},
+	Pos: []star.Positional{taskIndexParam},
+	F: func(c star.Context) error {
+		repo, close, err := openRepo()
+		if err != nil {
+			return err
+		}
+		defer close()
+		i := taskIndexParam.Load(c)
+		return repo.Configure(c, func(x gotrepo.Config) gotrepo.Config {
+			if i < 0 || i >= len(x.Push) {
+				return x
+			}
+			x.Push = append(x.Push[:i], x.Push[i+1:]...)
+			return x
+		})
+	},
+}
+
+var taskIndexParam = &star.Required[int]{
+	PosName:  "index",
+	ShortDoc: "the index of the task to remove",
+	Parse: func(s string) (int, error) {
+		i, err := strconv.Atoi(s)
+		if err != nil {
+			return 0, fmt.Errorf("invalid index: %q", s)
+		}
+		return i, nil
+	},
+}
+
 var blobcacheCmd = star.NewDir(
 	star.Metadata{Short: "manage blobcache"},
-	map[string]star.Command{
-		"mkrepo": mkrepoCmd,
-	},
+	map[string]star.Command{},
 )
-
-var mkrepoCmd = star.Command{
-	Metadata: star.Metadata{
-		Short: "create a new Volume suitable for use as Repo root",
-	},
-	Pos: []star.Positional{volNameParam},
-	F: func(c star.Context) error {
-		ctx := c.Context
-		svc := bcclient.NewClientFromEnv()
-		volName := volNameParam.Load(c)
-		volh, err := createRepoVol(ctx, svc, volName)
-		if err != nil {
-			return err
-		}
-		spec := gotrepo.RepoVolumeSpec(false)
-		specJSON, err := json.Marshal(spec)
-		if err != nil {
-			return err
-		}
-		c.Printf("Successfully created a new volume in the ns root\n")
-		c.Printf("OID: %v\n", volh.OID)
-		c.Printf("INFO: %s\n", prettifyJSON(specJSON))
-
-		c.Printf("\nNEXT:\n")
-		c.Printf("  |> If you are accessing blobcache over the local socket, then you should have access already.\n")
-		c.Printf("  |> Provide this volume in a call to got init like this:\n")
-		c.Printf("  |> got init --blobcache from-env --volume %v\n", volh.OID)
-
-		return nil
-	},
-}
-
-var volNameParam = &star.Required[string]{
-	PosName:  "vol-name",
-	Parse:    star.ParseString,
-	ShortDoc: "the name in the namespace to use for the new volume",
-}
 
 // createVol create a new volume according to spec at volname in the namespace
 func createVol(ctx context.Context, svc blobcache.Service, volName string, spec blobcache.VolumeSpec) (*blobcache.Handle, error) {

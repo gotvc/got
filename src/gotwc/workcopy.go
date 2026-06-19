@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 
+	"blobcache.io/blobcache/src/bclocal"
+	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
@@ -18,10 +20,12 @@ import (
 	"github.com/gotvc/got/src/gotwc/internal/porting"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/gotwc/internal/staging"
+	"github.com/gotvc/got/src/internal/gotbc"
 	"github.com/gotvc/got/src/internal/gotcore"
 	"go.brendoncarroll.net/exp/slices2"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
+	"go.uber.org/zap"
 )
 
 const (
@@ -36,26 +40,52 @@ const (
 // Init initializes a new working copy in wcdir
 // The working copy will be associated with the given repo.
 // cfg.RepoDir will be overriden with repo.Dir().
-func Init(repo *gotrepo.Repo, wcRoot *os.Root, cfg Config) error {
+func Init(wcRoot *os.Root, cfg Config) error {
 	if err := wcRoot.MkdirAll(".got", defaultDirMode); err != nil {
 		return err
 	}
-	cfg.RepoDir = repo.Dir()
 	return SaveConfig(wcRoot, cfg)
 }
 
 // Open opens a directory as a WorkingCopy
 // `wcdir` is a directory containing a .got/wc-config file
-func Open(root *os.Root) (*WC, error) {
+func Open(root *os.Root) (_ *WC, retErr error) {
 	cfg, err := LoadConfig(root)
 	if err != nil {
 		return nil, err
 	}
-	repoRoot, err := os.OpenRoot(cfg.RepoDir)
+
+	// background context
+	bgCtx := context.Background()
+	bgCtx, cf := context.WithCancel(bgCtx)
+	defer func() {
+		if retErr != nil {
+			cf()
+		}
+	}()
+	log, _ := zap.NewProduction()
+	bgCtx = logctx.NewContext(bgCtx, log)
+
+	var closers []func() error
+
+	// blobcache
+	bc, err := gotbc.OpenBlobcache(root, cfg.Blobcache, bgCtx)
 	if err != nil {
 		return nil, err
 	}
-	repo, err := gotrepo.Open(repoRoot)
+	if srv, ok := bc.(*bclocal.Service); ok {
+		closers = append(closers, srv.Close)
+	}
+
+	// now check for a repo config, if there is one, then we set repoDir
+	var repoDir *os.Root
+	if _, err := gotrepo.LoadConfig(root); err != nil && !os.IsNotExist(err) {
+		return nil, err
+	} else if err == nil {
+		repoDir = root
+	}
+
+	repo, err := gotrepo.Open(bgCtx, bc, cfg.Repo, repoDir)
 	if err != nil {
 		return nil, err
 	}
@@ -63,7 +93,7 @@ func Open(root *os.Root) (*WC, error) {
 	if err != nil {
 		return nil, err
 	}
-	wc.closeRepoOnClose = true
+	wc.closers = closers
 	return wc, nil
 }
 
@@ -102,15 +132,17 @@ func New(repo *gotrepo.Repo, root *os.Root) (*WC, error) {
 // A WC is a directory in the local filesystem, which has a .got/wc.db file
 // WC are associated with a single repository each.
 type WC struct {
-	root             *os.Root
-	repo             *gotrepo.Repo
-	closeRepoOnClose bool
-	id               gotrepo.WorkingCopyID
+	root                  *os.Root
+	repo                  *gotrepo.Repo
+	closeBlobcacheOnClose bool
+	closeAll              bool
+	id                    gotrepo.WorkingCopyID
 
 	// TODO: eventually we should move away from this interface, but
 	// the existing importers and exporters use it.
-	fsys posixfs.FS
-	db   *sqlutil.Pool
+	fsys    posixfs.FS
+	db      *sqlutil.Pool
+	closers []func() error
 }
 
 func (wc *WC) Repo() *gotrepo.Repo {
@@ -119,6 +151,25 @@ func (wc *WC) Repo() *gotrepo.Repo {
 
 func (wc *WC) Dir() string {
 	return wc.root.Name()
+}
+
+func (wc *WC) Blobcache() blobcache.Service {
+	return wc.Repo().Blobcache()
+}
+
+func (wc *WC) Configure(ctx context.Context, fn func(Config) Config) error {
+	var cfg2 Config
+	if err := EditConfig(wc.root, func(x Config) Config {
+		x = fn(x)
+		cfg2 = x
+		return x
+	}); err != nil {
+		return err
+	}
+	if bc, ok := wc.Blobcache().(*gotbc.Local); ok {
+		bc.SetPolicy(cfg2.Blobcache.InProcess.CanLook, cfg2.Blobcache.InProcess.CanTouch)
+	}
+	return nil
 }
 
 // ListSpans returns the tracked spans
@@ -377,8 +428,8 @@ func (wc *WC) Close() error {
 	if err := wc.db.Close(); err != nil {
 		return err
 	}
-	if wc.closeRepoOnClose {
-		if err := wc.repo.Close(); err != nil {
+	for _, closer := range wc.closers {
+		if err := closer(); err != nil {
 			return err
 		}
 	}

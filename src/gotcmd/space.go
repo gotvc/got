@@ -28,10 +28,11 @@ var spaceCmd = star.NewDir(star.Metadata{
 var spaceListCmd = star.Command{
 	Metadata: star.Metadata{Short: "list namespaces"},
 	F: func(c star.Context) error {
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
+		defer close()
 		spaces, err := repo.ListSpaces(c)
 		if err != nil {
 			return err
@@ -66,11 +67,11 @@ var spaceSyncCmd = star.Command{
 	Pos: []star.Positional{srcSpaceParam, dstSpaceParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		var m func(string) string
 		if prefix, ok := addPrefixParam.LoadOpt(c); ok {
 			m = func(s string) string {
@@ -102,10 +103,11 @@ var spaceCreateBcCmd = star.Command{
 		"mkvol": volNameParam,
 	},
 	F: func(c star.Context) error {
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
+		defer close()
 		bcsvc := bcclient.NewClientFromEnv()
 		ep, err := bcsvc.Endpoint(c)
 		if err != nil {
@@ -138,10 +140,11 @@ var spaceAddBcCmd = star.Command{
 		"secret": secretParam,
 	},
 	F: func(c star.Context) error {
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
+		defer close()
 		bc := bcclient.NewClientFromEnv()
 		u := bcURLParam.Load(c)
 		volh, err := bcsdk.OpenURL(c, bc, u)
@@ -209,11 +212,11 @@ var pullCmd = star.Command{
 	Pos: []star.Positional{},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		var hadErrors bool
 		if err := repo.Pull(ctx, func(sr gotrepo.SyncResult) {
 			for _, item := range sr.Items {
@@ -241,11 +244,11 @@ var pushCmd = star.Command{
 	Pos: []star.Positional{},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, err := openRepo()
+		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
-		defer repo.Close()
+		defer close()
 		var hadErrors bool
 		if err := repo.Push(ctx, func(sr gotrepo.SyncResult) {
 			for _, item := range sr.Items {
@@ -267,19 +270,32 @@ var pushCmd = star.Command{
 }
 
 func printSyncResult(c *star.Context, sr gotrepo.SyncResult) error {
-	c.Printf("%s -> %s\n", sr.Src, sr.Dst)
 	slices.SortFunc(sr.Items, func(a, b gotcore.SyncResult) int {
 		return strings.Compare(a.Dst, b.Dst)
 	})
+	c.Printf("%s -> %s\n", sr.Src, sr.Dst)
+	const fmtStr = "%-30s -> %-30s %s... %s\n"
+	var count int
+	var errCount int
 	for _, res := range sr.Items {
+		next := res.Next.CID.String()[:8]
 		switch {
+		case !res.IsOK():
+			c.Printf(fmtStr, res.Src, res.Dst, next, "ERROR: "+res.Err.Error())
+			errCount++
 		case res.WasDeleted():
-			c.Printf("  %s (deleted)\n", res.Dst)
+			c.Printf(fmtStr, res.Src, res.Dst, next, "(deleted)")
+			count++
 		case res.WasCreated():
-			c.Printf("  %s -> %s (created)\n", res.Src, res.Dst)
-		default:
-			c.Printf("  %s -> %s\n", res.Src, res.Dst)
+			c.Printf(fmtStr, res.Src, res.Dst, next, "(created)")
+			count++
+		case res.WasUpdated():
+			c.Printf(fmtStr, res.Src, res.Dst, next, "(updated)")
+			count++
 		}
+	}
+	if count == 0 && errCount == 0 {
+		c.Printf("Nothing to do.\n")
 	}
 	c.Printf("\n")
 	return nil

@@ -25,12 +25,12 @@ var fixCmd = star.Command{
 		dst := newMarkNameParam.Load(c)
 		fixName := fixNameParam.Load(c)
 
-		r, err := openRepo()
+		r, close, err := openRepo()
 		if err != nil {
 			return err
 		}
+		defer close()
 		ctx := c.Context
-		defer r.Close()
 
 		// check that the fixname is valid before the transaction
 		var fixFn func(ctx context.Context, srcTx, dstTx *gotcore.MarkTx) error

@@ -19,15 +19,17 @@ import (
 )
 
 type Client struct {
-	Service blobcache.Service
-	GotKV   gotkv.Machine
+	bcsvc blobcache.Service
+	gotkv gotkv.Machine
+	dmach gdat.Machine
 }
 
 func NewClient(svc blobcache.Service) Client {
 	mach := gotkv.NewMachine(gotkv.Params{MeanSize: 1 << 14, MaxSize: 1 << 22})
 	return Client{
-		Service: svc,
-		GotKV:   mach,
+		bcsvc: svc,
+		gotkv: mach,
+		dmach: *gdat.NewMachine(gdat.Params{}),
 	}
 }
 
@@ -38,7 +40,7 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 	if err != nil {
 		return nil, nil, err
 	}
-	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Modify: true})
+	txn, err := bcsdk.BeginTx(ctx, c.bcsvc, *rootH, blobcache.TxParams{Modify: true})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -54,7 +56,7 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 	}
 	if sve != nil {
 		// ns exists, return it.
-		volh, err := c.Service.OpenFrom(ctx, *rootH, sve.Token, blobcache.Action_ALL)
+		volh, err := c.bcsvc.OpenFrom(ctx, *rootH, sve.Token, blobcache.Action_ALL)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -95,7 +97,7 @@ func (c *Client) StagingArea(ctx context.Context, repoVol blobcache.OID, wcid St
 	if err != nil {
 		return nil, nil, err
 	}
-	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Modify: true})
+	txn, err := bcsdk.BeginTx(ctx, c.bcsvc, *rootH, blobcache.TxParams{Modify: true})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -138,7 +140,7 @@ func (c *Client) ForEachStage(ctx context.Context, repoVol blobcache.OID, fn fun
 	if err != nil {
 		return err
 	}
-	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Modify: false})
+	txn, err := bcsdk.BeginTx(ctx, c.bcsvc, *rootH, blobcache.TxParams{Modify: false})
 	if err != nil {
 		return err
 	}
@@ -148,7 +150,7 @@ func (c *Client) ForEachStage(ctx context.Context, repoVol blobcache.OID, fn fun
 		return err
 	}
 	span := gotkv.PrefixSpan([]byte("stage/"))
-	return c.GotKV.ForEach(ctx, txn, root, span, func(ent gotkv.Entry) error {
+	return c.gotkv.ForEach(ctx, txn, root, span, func(ent gotkv.Entry) error {
 		var paramHash [32]byte
 		hexData := bytes.TrimPrefix(ent.Key, []byte("stage/"))
 		if _, err := hex.Decode(hexData, paramHash[:]); err != nil {
@@ -169,7 +171,7 @@ func (c *Client) RepairRepoLinks(ctx context.Context, repoVol blobcache.OID) err
 	if err != nil {
 		return err
 	}
-	txn, err := bcsdk.BeginTx(ctx, c.Service, *rootH, blobcache.TxParams{Modify: true})
+	txn, err := bcsdk.BeginTx(ctx, c.bcsvc, *rootH, blobcache.TxParams{Modify: true})
 	if err != nil {
 		return err
 	}
@@ -193,7 +195,7 @@ func (c *Client) RepairRepoLinks(ctx context.Context, repoVol blobcache.OID) err
 	}
 
 	span := gotkv.PrefixSpan([]byte("stage/"))
-	if err := c.GotKV.ForEach(ctx, txn, root, span, func(ent gotkv.Entry) error {
+	if err := c.gotkv.ForEach(ctx, txn, root, span, func(ent gotkv.Entry) error {
 		sve, err := parseSubvolEntry(ent.Value)
 		if err != nil {
 			return err
@@ -208,7 +210,7 @@ func (c *Client) RepairRepoLinks(ctx context.Context, repoVol blobcache.OID) err
 	for i := range entries {
 		old := entries[i].SVE
 		logctx.Infof(ctx, "replacing repo link key=%q target=%v", string(entries[i].Key), old.Token.Target)
-		target, err := c.Service.OpenFiat(ctx, old.Token.Target, old.Token.Rights)
+		target, err := c.bcsvc.OpenFiat(ctx, old.Token.Target, old.Token.Rights)
 		if err != nil {
 			return err
 		}
@@ -217,7 +219,7 @@ func (c *Client) RepairRepoLinks(ctx context.Context, repoVol blobcache.OID) err
 			return err
 		}
 		old.Token = *ltok
-		root, err = c.GotKV.Put(ctx, txn, root, entries[i].Key, old.Marshal(nil))
+		root, err = c.gotkv.Put(ctx, txn, root, entries[i].Key, old.Marshal(nil))
 		if err != nil {
 			return err
 		}
@@ -232,7 +234,7 @@ func (c *Client) RepairRepoLinks(ctx context.Context, repoVol blobcache.OID) err
 // createSubVolume creates a new volume and calls txn.AllowLink so it can be persisted indefinitely
 // by the root Volume's Schema.
 func (c *Client) createSubVolume(ctx context.Context, txn *bcsdk.Tx, spec blobcache.VolumeSpec) (*blobcache.Handle, *blobcache.LinkToken, error) {
-	subVol, err := c.Service.CreateVolume(ctx, nil, spec)
+	subVol, err := c.bcsvc.CreateVolume(ctx, nil, spec)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -244,7 +246,7 @@ func (c *Client) createSubVolume(ctx context.Context, txn *bcsdk.Tx, spec blobca
 }
 
 func (c *Client) rootHandle(ctx context.Context, repoVol blobcache.OID) (*blobcache.Handle, error) {
-	return c.Service.OpenFiat(ctx, repoVol, blobcache.Action_ALL)
+	return c.bcsvc.OpenFiat(ctx, repoVol, blobcache.Action_ALL)
 }
 
 func (c *Client) getRoot(ctx context.Context, txn *bcsdk.Tx) (gotkv.Root, error) {
@@ -258,7 +260,7 @@ func (c *Client) getRoot(ctx context.Context, txn *bcsdk.Tx) (gotkv.Root, error)
 			return gotkv.Root{}, err
 		}
 	} else {
-		newRoot, err := c.GotKV.NewEmpty(ctx, txn)
+		newRoot, err := c.gotkv.NewEmpty(ctx, txn)
 		if err != nil {
 			return gotkv.Root{}, err
 		}
@@ -269,7 +271,7 @@ func (c *Client) getRoot(ctx context.Context, txn *bcsdk.Tx) (gotkv.Root, error)
 
 // getState returns the volume OID for a stage.
 func (c *Client) getStage(ctx context.Context, s stores.RO, root gotkv.Root, wcid StageID) (*subvolEntry, error) {
-	val, err := c.GotKV.Get(ctx, s, root, stageKey(wcid))
+	val, err := c.gotkv.Get(ctx, s, root, stageKey(wcid))
 	if err != nil {
 		if gotkv.IsErrKeyNotFound(err) {
 			return nil, nil
@@ -280,12 +282,12 @@ func (c *Client) getStage(ctx context.Context, s stores.RO, root gotkv.Root, wci
 }
 
 func (c *Client) putStage(ctx context.Context, s stores.RW, root gotkv.Root, wcid StageID, sve subvolEntry) (gotkv.Root, error) {
-	return c.GotKV.Put(ctx, s, root, stageKey(wcid), sve.Marshal(nil))
+	return c.gotkv.Put(ctx, s, root, stageKey(wcid), sve.Marshal(nil))
 }
 
 // getNS returns the Namespace Volume OID if it exists, or (nil, nil) if it doesn't.
 func (c *Client) getNS(ctx context.Context, s stores.RO, root gotkv.Root) (*subvolEntry, error) {
-	val, err := c.GotKV.Get(ctx, s, root, nsKey)
+	val, err := c.gotkv.Get(ctx, s, root, nsKey)
 	if err != nil {
 		if gotkv.IsErrKeyNotFound(err) {
 			return nil, nil
@@ -296,12 +298,12 @@ func (c *Client) getNS(ctx context.Context, s stores.RO, root gotkv.Root) (*subv
 }
 
 func (c *Client) setNS(ctx context.Context, s stores.RW, root gotkv.Root, sve subvolEntry) (gotkv.Root, error) {
-	return c.GotKV.Put(ctx, s, root, nsKey, sve.Marshal(nil))
+	return c.gotkv.Put(ctx, s, root, nsKey, sve.Marshal(nil))
 }
 
 func (c *Client) openSubvolume(ctx context.Context, rooth blobcache.Handle, sve subvolEntry) (*blobcache.Handle, *gdat.DEK, error) {
 	// stage exists, return it.
-	volh, err := c.Service.OpenFrom(ctx, rooth, sve.Token, blobcache.Action_ALL)
+	volh, err := c.bcsvc.OpenFrom(ctx, rooth, sve.Token, blobcache.Action_ALL)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -313,17 +315,6 @@ func stageKey(wcid StageID) []byte {
 }
 
 var nsKey = []byte("ns")
-
-func GotRepoVolumeSpec() blobcache.VolumeSpec {
-	return blobcache.VolumeSpec{
-		Local: &blobcache.VolumeBackend_Local{
-			Schema:   blobcache.SchemaSpec{Name: SchemaName_GotRepo},
-			HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
-			MaxSize:  1 << 21,
-			Salted:   false,
-		},
-	}
-}
 
 func StageVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{

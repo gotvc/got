@@ -6,6 +6,7 @@ import (
 
 	"blobcache.io/blobcache/src/schema"
 	"blobcache.io/blobcache/src/schema/statetrace"
+	"github.com/gotvc/got/src/internal/gotbc"
 )
 
 var (
@@ -41,4 +42,8 @@ func (s Schema) ValidateChange(ctx context.Context, change schema.Change) error 
 		return err
 	}
 	return mach.led.Validate(ctx, change.Prev.Store, prevRoot, nextRoot)
+}
+
+func init() {
+	gotbc.AddSchema(SchemaName, SchemaConstructor)
 }

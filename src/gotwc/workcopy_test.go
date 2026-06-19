@@ -11,6 +11,7 @@ import (
 
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotrepo"
+	"github.com/gotvc/got/src/internal/gotbc"
 	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
@@ -150,7 +151,8 @@ func TestFork(t *testing.T) {
 }
 
 func newTestWC(t testing.TB, trackAll bool) *WC {
-	r := gotrepo.NewTestRepo(t)
+	bc := gotbc.NewTest(t)
+	r := gotrepo.NewTestRepo(t, bc)
 	_, err := r.CreateMark(context.TODO(), gotrepo.FQM{Name: nameMaster}, gotcore.DSConfig{}, nil)
 	require.NoError(t, err)
 	wcdir := t.TempDir()
@@ -159,7 +161,7 @@ func newTestWC(t testing.TB, trackAll bool) *WC {
 	if !trackAll {
 		cfg.Tracking = nil
 	}
-	require.NoError(t, Init(r, root, cfg))
+	require.NoError(t, Init(root, cfg))
 	wc, err := New(r, root)
 	require.NoError(t, err)
 	t.Cleanup(func() {

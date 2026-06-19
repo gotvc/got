@@ -33,7 +33,8 @@ func (r *Repo) SyncUnit(ctx context.Context, src, dst FQM, force bool) error {
 			if err != nil {
 				return err
 			}
-			return gotcore.Sync(ctx, srcMTx, dstMTx, force)
+			_, err = gotcore.Sync(ctx, srcMTx, dstMTx, force)
+			return err
 		})
 	})
 }
