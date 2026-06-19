@@ -172,7 +172,7 @@ func printConfig(c star.Context) error {
 			return err
 		}
 	}
-	c.Printf("|" + strings.Repeat("_", 40) + "\n\n")
+	c.Printf("%s\n\n", "|"+strings.Repeat("_", 40))
 
 	repo, closer, err := openRepo()
 	if err != nil {
@@ -184,29 +184,29 @@ func printConfig(c star.Context) error {
 	if err := printRepoConfig(&c, repoCfg, "| "); err != nil {
 		return err
 	}
-	c.Printf("|" + strings.Repeat("_", 40) + "\n\n")
+	c.Printf("%s\n\n", "|"+strings.Repeat("_", 40))
 
 	return nil
 }
 
 func printWCConfig(c *star.Context, wcCfg gotwc.Config, indent string) error {
-	c.Printf(indent+"ID: %s\n", wcCfg.ID)
-	c.Printf(indent+"HEAD: %s\n", wcCfg.SaveTo)
-	c.Printf(indent+"ACT AS: %s\n", wcCfg.ActAs)
-	c.Printf(indent+"REPO: %v\n", wcCfg.Repo)
+	c.Printf("%sID: %s\n", indent, wcCfg.ID)
+	c.Printf("%sHEAD: %s\n", indent, wcCfg.SaveTo)
+	c.Printf("%sACT AS: %s\n", indent, wcCfg.ActAs)
+	c.Printf("%sREPO: %v\n", indent, wcCfg.Repo)
 	if len(wcCfg.Base) > 0 {
-		c.Printf(indent + "BASE:\n")
+		c.Printf("%sBASE:\n", indent)
 		for _, ref := range wcCfg.Base {
-			c.Printf(indent+"| %s\n", ref.CID)
+			c.Printf("%s| %s\n", indent, ref.CID)
 		}
 	}
 	if len(wcCfg.Tracking) > 0 {
-		c.Printf(indent + "TRACKING:\n")
+		c.Printf("%sTRACKING:\n", indent)
 		for _, p := range wcCfg.Tracking {
 			c.Printf("|   %s\n", p)
 		}
 	}
-	c.Printf(indent + "BLOBCACHE:\n")
+	c.Printf("%sBLOBCACHE:\n", indent)
 	if err := printBlobcacheConfig(c, wcCfg.Blobcache, "|   "); err != nil {
 		return err
 	}
@@ -215,18 +215,19 @@ func printWCConfig(c *star.Context, wcCfg gotwc.Config, indent string) error {
 
 func printRepoConfig(c *star.Context, repoCfg gotrepo.Config, indent string) error {
 	if len(repoCfg.Identities) > 0 {
-		c.Printf(indent + "IDENTITIES:\n")
+		c.Printf("%sIDENTITIES:\n", indent)
 		for name, id := range repoCfg.Identities {
-			c.Printf(indent+"|  %-30s %s\n", name, id.Base64String()[:16]+"...")
+			c.Printf("%s|  %-30s %s\n", indent, name, id.Base64String()[:16]+"...")
 		}
 	}
 
 	if len(repoCfg.Spaces) > 0 {
-		c.Printf(indent + "SPACES:\n")
-		c.Printf(indent+"|  %-30s %-19s %-19s\n", "NAME", "NODE", "OID")
+		c.Printf("%sSPACES:\n", indent)
+		c.Printf("%s|  %-30s %-19s %-19s\n", indent, "NAME", "NODE", "OID")
 		for name, spec := range repoCfg.Spaces {
 			if spec.Blobcache != nil {
-				c.Printf(indent+"|  %-30s %16s... %16s...\n",
+				c.Printf("%s|  %-30s %16s... %16s...\n",
+					indent,
 					name,
 					spec.Blobcache.URL.Node.Base64String()[:16],
 					spec.Blobcache.URL.Base.String()[:16],
@@ -235,8 +236,8 @@ func printRepoConfig(c *star.Context, repoCfg gotrepo.Config, indent string) err
 		}
 	}
 
-	c.Printf(indent + "PULL TASKS:\n")
-	c.Printf(indent+"|  %-20s %-20s %-20s %-20s\n", "FROM", "FILTER", "CUT_PREFIX", "ADD_PREFIX")
+	c.Printf("%sPULL TASKS:\n", indent)
+	c.Printf("%s|  %-20s %-20s %-20s %-20s\n", indent, "FROM", "FILTER", "CUT_PREFIX", "ADD_PREFIX")
 	for _, pc := range repoCfg.Pull {
 		var filter string
 		if pc.Filter != nil {
@@ -244,11 +245,11 @@ func printRepoConfig(c *star.Context, repoCfg gotrepo.Config, indent string) err
 		} else {
 			filter = "(none)"
 		}
-		c.Printf(indent+"|  %-20s %-20s %-20s %-20s\n", pc.From, filter, pc.CutPrefix, pc.AddPrefix)
+		c.Printf("%s|  %-20s %-20s %-20s %-20s\n", indent, pc.From, filter, pc.CutPrefix, pc.AddPrefix)
 	}
 
-	c.Printf(indent + "PUSH TASKS:\n")
-	c.Printf(indent+"|  %-20s %-20s %-20s %-20s\n", "TO", "FILTER", "CUT_PREFIX", "ADD_PREFIX")
+	c.Printf("%sPUSH TASKS:\n", indent)
+	c.Printf("%s|  %-20s %-20s %-20s %-20s\n", indent, "TO", "FILTER", "CUT_PREFIX", "ADD_PREFIX")
 	for _, pc := range repoCfg.Push {
 		var filter string
 		if pc.Filter != nil {
@@ -256,7 +257,7 @@ func printRepoConfig(c *star.Context, repoCfg gotrepo.Config, indent string) err
 		} else {
 			filter = "(none)"
 		}
-		c.Printf(indent+"|  %-20s %-20s %-20s %-20s\n", pc.To, filter, pc.CutPrefix, pc.AddPrefix)
+		c.Printf("%s|  %-20s %-20s %-20s %-20s\n", indent, pc.To, filter, pc.CutPrefix, pc.AddPrefix)
 	}
 	return nil
 }
@@ -268,11 +269,11 @@ func printBlobcacheConfig(c *star.Context, x gotwc.BlobcacheSpec, indent string)
 		if !ok {
 			v = bcclient.DefaultEndpoint + " (default)"
 		}
-		c.Printf(indent+"  FROM-ENV: %v=%v\n", bcclient.EnvBlobcacheAPI, v)
+		c.Printf("%s  FROM-ENV: %v=%v\n", indent, bcclient.EnvBlobcacheAPI, v)
 	case x.InProcess != nil:
-		c.Printf(indent + "  IN PROCESS\n")
+		c.Printf("%s  IN PROCESS\n", indent)
 	default:
-		c.Printf(indent + "  (EMPTY BLOBCACHE CONFIG)\n")
+		c.Printf("%s  (EMPTY BLOBCACHE CONFIG)\n", indent)
 	}
 	return nil
 }

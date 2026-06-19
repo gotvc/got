@@ -213,7 +213,7 @@ type SyncResult struct {
 }
 
 func (sr SyncResult) IsOK() bool {
-	return sr.Err != nil
+	return sr.Err == nil
 }
 
 func (sr SyncResult) WasDeleted() bool {

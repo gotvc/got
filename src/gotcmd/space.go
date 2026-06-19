@@ -275,18 +275,23 @@ func printSyncResult(c *star.Context, sr gotrepo.SyncResult) error {
 	})
 	c.Printf("%s -> %s\n", sr.Src, sr.Dst)
 	const fmtStr = "%-30s -> %-30s %s\n"
+	var count int
 	for _, res := range sr.Items {
 		switch {
+		case !res.IsOK():
+			c.Printf(fmtStr, res.Src, res.Dst, "ERROR: "+res.Err.Error())
 		case res.WasDeleted():
-			c.Printf(fmtStr, res.Dst, "(deleted)")
+			c.Printf(fmtStr, res.Src, res.Dst, "(deleted)")
+			count++
 		case res.WasCreated():
 			c.Printf(fmtStr, res.Src, res.Dst, "(created)")
+			count++
 		case res.WasUpdated():
 			c.Printf(fmtStr, res.Src, res.Dst, "(updated)")
-		default:
-			// c.Printf("%-30s -> %s (unchanged)\n", res.Src, res.Dst)
+			count++
 		}
 	}
+	c.Printf("Nothing to do.\n")
 	c.Printf("\n")
 	return nil
 }

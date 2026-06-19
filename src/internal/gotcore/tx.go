@@ -261,12 +261,13 @@ func ViewCommit(ctx context.Context, stx SpaceTx, se CommitExpr, fn func(vctx *V
 }
 
 // SyncVolumes syncs the contents of src to dst.
+// It returns true if dst was changed.
 func Sync(ctx context.Context, src, dst *MarkTx, force bool) (bool, error) {
 	if !force && src.info.Config.Salt != dst.info.Config.Salt {
 		return false, fmt.Errorf("cannot sync volumes with different salts, must use force=true")
 	}
 	var changed bool
-	return changed, dst.Apply(ctx, func(dsts RW, x gdat.Ref) (gdat.Ref, error) {
+	err := dst.Apply(ctx, func(dsts RW, x gdat.Ref) (gdat.Ref, error) {
 		goalRef, err := src.Load(ctx)
 		if err != nil {
 			return gdat.Ref{}, err
@@ -280,6 +281,7 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) (bool, error) {
 		case x.IsZero():
 			changed = true
 		case goalRef.Equals(&x):
+			return x, nil
 		default:
 			vcmach := dst.GotVC()
 			prevCommit, err := vcmach.GetVertex(ctx, dst.VCRO(), x)
@@ -304,6 +306,7 @@ func Sync(ctx context.Context, src, dst *MarkTx, force bool) (bool, error) {
 		changed = true
 		return goalRef, nil
 	})
+	return changed, err
 }
 
 func History(ctx context.Context, vcmach *VCMach, s stores.RO, commRef gdat.Ref, fn func(ref gdat.Ref, comm Commit) error) error {
