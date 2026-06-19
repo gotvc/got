@@ -9,7 +9,6 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotns"
-	"github.com/gotvc/got/src/internal/gotcfg"
 	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/volumes"
 )
@@ -38,20 +37,22 @@ func (r *Repo) CreateSpace(ctx context.Context, name string, spec SpaceSpec) err
 	if err := spec.Validate(); err != nil {
 		return err
 	}
-	cfg, err := gotcfg.LoadFile[Config](r.root, configPath)
-	if err != nil {
-		return err
-	}
-	if _, exists := cfg.Spaces[name]; exists {
-		return fmt.Errorf("a space with that name already exists")
-	}
-	return gotcfg.EditFile(r.root, configPath, func(x Config) Config {
+	var success bool
+	if err := r.Configure(ctx, func(x Config) Config {
 		if _, exists := x.Spaces[name]; exists {
 			return x
 		}
+
 		x.Spaces[name] = spec
+		success = true
 		return x
-	})
+	}); err != nil {
+		return err
+	}
+	if !success {
+		return fmt.Errorf("a space with that name already exists")
+	}
+	return nil
 }
 
 type VolumeSpec struct {
@@ -77,11 +78,11 @@ func (ss SpaceSpec) Validate() error {
 }
 
 func (r *Repo) makeLocalSpace(ctx context.Context) (Space, error) {
-	volh, secret, err := r.repoc.GetNamespace(ctx, r.config.RepoVolume, r.useSchema())
+	volh, secret, err := r.repoc.GetNamespace(ctx, r.rootVol, false)
 	if err != nil {
 		return nil, err
 	}
-	return spaceFromHandle(r.blobcache(), *volh, secret), nil
+	return spaceFromHandle(r.bc, *volh, secret), nil
 }
 
 func (r *Repo) makeSpace(ctx context.Context, spec SpaceSpec) (Space, error) {
@@ -92,7 +93,7 @@ func (r *Repo) makeSpace(ctx context.Context, spec SpaceSpec) (Space, error) {
 		if err != nil {
 			return nil, err
 		}
-		return spaceFromHandle(r.blobcache(), *volh, &bspec.Secret), nil
+		return spaceFromHandle(r.bc, *volh, &bspec.Secret), nil
 	default:
 		return nil, fmt.Errorf("empty SpaceSpec")
 	}

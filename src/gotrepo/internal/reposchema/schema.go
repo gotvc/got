@@ -8,6 +8,7 @@ import (
 
 	"blobcache.io/blobcache/src/schema"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/gotbc"
 )
 
 const (
@@ -48,4 +49,8 @@ func (sch *Schema) ValidateChange(ctx context.Context, change schema.Change) err
 		return err
 	}
 	return nil
+}
+
+func init() {
+	gotbc.AddSchema(SchemaName_GotRepo, Constructor)
 }

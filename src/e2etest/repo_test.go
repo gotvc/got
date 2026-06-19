@@ -32,27 +32,27 @@ func TestMultiRepoSync(t *testing.T) {
 	origin := sites[0]
 
 	// serve the origin repo
-	origin.ConfigureRepo(func(cfg gotrepo.Config) gotrepo.Config {
+	origin.ConfigureWC(ctx, func(cfg gotwc.Config) gotwc.Config {
 		// add the PeerIDs to the origin policy
 		list := cfg.Blobcache.InProcess.CanTouch
 		for _, s := range sites[1:] {
-			list = append(list, s.Repo.BlobcachePeer())
+			list = append(list, s.BlobcacheNodeID())
 		}
 		cfg.Blobcache.InProcess.CanTouch = list
 		return cfg
 	})
-	go origin.Repo.Serve(ctx, testutil.PacketConn(t))
+	go origin.Serve(ctx, testutil.PacketConn(t))
 	originSpec, err := origin.Repo.NSVolumeSpec(ctx)
 	require.NoError(t, err)
 
 	// configure other repos to use it.
 	for _, s := range sites[1:] {
-		err := s.Repo.Configure(func(x gotrepo.Config) gotrepo.Config {
+		err := s.Repo.Configure(ctx, func(x gotrepo.Config) gotrepo.Config {
 			x.Spaces["origin"] = gotrepo.SpaceSpec{Blobcache: originSpec}
 			return x
 		})
 		require.NoError(t, err)
-		go s.Repo.Serve(ctx, testutil.PacketConn(t))
+		go s.Serve(ctx, testutil.PacketConn(t))
 	}
 
 	// use sites[1] to create marks on origin.
@@ -79,7 +79,7 @@ func TestMultiRepoSync(t *testing.T) {
 func TestClone(t *testing.T) {
 	ctx := testutil.Context(t)
 	origin := gottests.NewSite(t)
-	go origin.Repo.Serve(ctx, testutil.PacketConn(t))
+	go origin.Serve(ctx, testutil.PacketConn(t))
 	origin.CreateMark(localMaster)
 	origin.CreateFile("test.txt", []byte("hello world\n"))
 	origin.Add("test.txt")
@@ -87,8 +87,8 @@ func TestClone(t *testing.T) {
 
 	s1 := origin.Clone()
 	s2 := origin.Clone()
-	go s1.Repo.Serve(ctx, testutil.PacketConn(t))
-	go s2.Repo.Serve(ctx, testutil.PacketConn(t))
+	go s1.Serve(ctx, testutil.PacketConn(t))
+	go s2.Serve(ctx, testutil.PacketConn(t))
 
 	s1.Pull()
 	s2.Pull()

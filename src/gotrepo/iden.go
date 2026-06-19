@@ -2,12 +2,14 @@ package gotrepo
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
 
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo/internal/reposchema"
+	"github.com/gotvc/got/src/internal/gotcfg"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.inet256.org/inet256/src/inet256"
 	"go.uber.org/zap"
@@ -21,7 +23,7 @@ func (r *Repo) Identities(ctx context.Context) (map[string]gotorg.IdentityUnit, 
 	}
 	ret := make(map[string]gotorg.IdentityUnit)
 	for name, id := range r.config.Identities {
-		idp, err := r.repoc.GetIdentity(ctx, r.config.RepoVolume, id)
+		idp, err := r.repoc.GetIdentity(ctx, r.rootVol, id)
 		if err != nil {
 			return nil, err
 		}
@@ -38,20 +40,24 @@ func (r *Repo) CreateIdentity(ctx context.Context, name string) (*inet256.ID, er
 		return nil, fmt.Errorf("cannot create, there is already an identity called %v", name)
 	}
 	idp := gotorg.GenerateIden()
-	id, err := r.repoc.PostIdentity(ctx, r.config.RepoVolume, idp)
+	id, err := r.repoc.PostIdentity(ctx, r.rootVol, idp)
 	if err != nil {
 		return nil, err
 	}
-	if err := EditConfig(r.root, func(x Config) Config {
+	if err := r.repoc.EditConfig(ctx, r.rootVol, func(xData json.RawMessage) json.RawMessage {
+		x, err := gotcfg.Parse[Config](xData)
+		if err != nil {
+			return nil
+		}
 		if x.Identities == nil {
 			x.Identities = make(map[string]inet256.ID)
 		}
 		x.Identities[name] = id
-		return x
+		return gotcfg.Marshal(*x)
 	}); err != nil {
 		return nil, err
 	}
-	return &id, r.reloadConfig()
+	return &id, r.reloadConfig(ctx)
 }
 
 func (r *Repo) GetIdentity(ctx context.Context, name string) (*gotorg.IdentityUnit, error) {
@@ -71,35 +77,37 @@ func (r *Repo) getPrivate(ctx context.Context, name string) (*gotorg.IdenPrivate
 	if !exists {
 		return nil, fmt.Errorf("unknown identity %s", name)
 	}
-	return r.repoc.GetIdentity(ctx, r.config.RepoVolume, id)
+	return r.repoc.GetIdentity(ctx, r.rootVol, id)
 }
 
 // syncOldIdentities copies identies from the filesystem identity store
-// into the repo's Blobcache volume
+// into the repo's Blobcache volume, but only if the repo is configured with a dir
 func (r *Repo) syncOldIdentities(ctx context.Context) error {
-	s, err := r.openIdenStore()
-	if err != nil {
-		return err
-	}
-	defer s.Close()
-	ids, err := s.List(ctx)
-	if err != nil {
-		return err
-	}
-	for _, id := range ids {
-		idp, err := s.Get(id)
+	if r.dir != nil {
+		s, err := r.openIdenStore()
 		if err != nil {
 			return err
 		}
-		if _, err := r.repoc.PostIdentity(ctx, r.config.RepoVolume, *idp); err != nil {
+		defer s.Close()
+		ids, err := s.List(ctx)
+		if err != nil {
 			return err
+		}
+		for _, id := range ids {
+			idp, err := s.Get(id)
+			if err != nil {
+				return err
+			}
+			if _, err := r.repoc.PostIdentity(ctx, r.rootVol, *idp); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
 }
 
 func (r *Repo) openIdenStore() (*idenStore, error) {
-	return openIdenStore(r.root)
+	return openIdenStore(r.dir)
 }
 
 func openIdenStore(repo *os.Root) (*idenStore, error) {

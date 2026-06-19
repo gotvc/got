@@ -5,6 +5,7 @@ import (
 	"context"
 	"io/fs"
 	"iter"
+	"net"
 	"os"
 	"path"
 	"regexp"
@@ -16,71 +17,103 @@ import (
 	"github.com/gotvc/got/src/gotorg"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc"
+	"github.com/gotvc/got/src/internal/gotbc"
 	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
 
-// Site is a gotrepo and working copy
+// Site is a gotrepo, working copy, and in-process Blobcache
 type Site struct {
+	// Root is the directory containing all of the data for this Site
 	Root *os.Root
-	Repo *gotrepo.Repo
-	WC   *gotwc.WC
+	// WC is the working copy, using Root
+	WC *gotwc.WC
+	// Blobcache is an in-process Blobcache
+	Blobcache blobcache.Service
+	Repo      *gotrepo.Repo
 
 	t testing.TB
 }
 
+// NewSite creates a new tempdir in the test, calls gotwc.Init with the default config
+// then opens the WC and fills the remaining fields in the site
 func NewSite(t testing.TB) Site {
-	dirpath := t.TempDir()
-	repoCfg := gotrepo.DefaultConfig()
-	repoRoot := testutil.OpenRoot(t, dirpath)
-	t.Cleanup(func() {
-		require.NoError(t, repoRoot.Close())
-	})
-	require.NoError(t, gotrepo.Init(repoRoot, repoCfg))
-	return openSite(t, repoRoot)
+	return newSite(t, gotrepo.DefaultConfig())
 }
 
+func newSite(t testing.TB, repoConfig gotrepo.Config) Site {
+	ctx := t.Context()
+	dirpath := t.TempDir()
+	root := testutil.OpenRoot(t, dirpath)
+	t.Cleanup(func() {
+		require.NoError(t, root.Close())
+	})
+	wcCfg := gotwc.DefaultConfig()
+
+	// setup repo
+	func() {
+		bc, err := gotbc.OpenBlobcache(root, wcCfg.Blobcache, t.Context())
+		require.NoError(t, err)
+		defer func() { require.NoError(t, bc.(*gotbc.Local).Close()) }()
+		volh, err := bc.OpenFiat(ctx, wcCfg.Repo, blobcache.Action_ALL)
+		require.NoError(t, err)
+		require.NoError(t, gotrepo.Init(t.Context(), bc, *volh, repoConfig))
+	}()
+
+	require.NoError(t, gotwc.Init(root, wcCfg))
+	return openSite(t, root)
+}
+
+// openSite opens the working copy and uses it to fill out the Site
 func openSite(t testing.TB, root *os.Root) Site {
-	repo, err := gotrepo.Open(root)
+	// wc
+	wc, err := gotwc.Open(root)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		repo.Close()
+		wc.Close()
 	})
-	require.NoError(t, gotwc.Init(repo, root, gotwc.DefaultConfig()))
-	wc, err := gotwc.New(repo, root)
-	require.NoError(t, err)
+
+	repo := wc.Repo()
 	return Site{
-		Root: root,
-		Repo: repo,
-		WC:   wc,
+		Root:      root,
+		WC:        wc,
+		Blobcache: repo.Blobcache(),
+		Repo:      repo,
 
 		t: t,
 	}
 }
 
-func (s *Site) ConfigureRepo(fn func(gotrepo.Config) gotrepo.Config) {
-	require.NoError(s.t, s.Repo.Configure(fn))
+func (s *Site) ConfigureRepo(ctx context.Context, fn func(gotrepo.Config) gotrepo.Config) {
+	require.NoError(s.t, s.Repo.Configure(ctx, fn))
+}
+
+func (s *Site) ConfigureWC(ctx context.Context, fn func(gotwc.Config) gotwc.Config) {
+	require.NoError(s.t, s.WC.Configure(ctx, fn))
+}
+
+func (s *Site) BlobcacheNodeID() blobcache.NodeID {
+	return s.Blobcache.(*gotbc.Local).LocalNode()
 }
 
 // Clone creates a new site, by cloning the this site.
 func (s *Site) Clone() Site {
 	ctx := testutil.Context(s.t)
-	dirpath := s.t.TempDir()
-	repoRoot := testutil.OpenRoot(s.t, dirpath)
-
-	repoCfg := gotrepo.DefaultConfig()
 	vspec, err := s.Repo.NSVolumeSpec(ctx)
 	require.NoError(s.t, err)
-	repoCfg.PutSpace("origin", gotrepo.SpaceSpec{Blobcache: vspec})
-	repoCfg.AddPull(gotrepo.PullConfig{
-		From:      "origin",
-		Filter:    regexp.MustCompile(".*"),
-		AddPrefix: "remote/origin/",
+
+	// create and open other site
+	other := NewSite(s.t)
+	other.ConfigureRepo(ctx, func(c gotrepo.Config) gotrepo.Config {
+		return *c.PutSpace("origin", gotrepo.SpaceSpec{Blobcache: vspec}).
+			AddPull(gotrepo.PullConfig{
+				From:      "origin",
+				Filter:    regexp.MustCompile(".*"),
+				AddPrefix: "remote/origin/",
+			})
 	})
-	require.NoError(s.t, gotrepo.Init(repoRoot, repoCfg))
-	other := openSite(s.t, repoRoot)
-	s.ConfigureRepo(ConfigAddTouch(other.Repo.BlobcachePeer()))
+	s.ConfigureWC(ctx, ConfigAddTouch(other.BlobcacheNodeID()))
 	return other
 }
 
@@ -248,8 +281,12 @@ func (s *Site) AllPaths() iter.Seq[string] {
 	}
 }
 
-func ConfigAddTouch(peer blobcache.NodeID) func(cfg gotrepo.Config) gotrepo.Config {
-	return func(cfg gotrepo.Config) gotrepo.Config {
+func (s *Site) Serve(ctx context.Context, pc net.PacketConn) error {
+	return s.Blobcache.(*gotbc.Local).Serve(ctx, pc)
+}
+
+func ConfigAddTouch(peer blobcache.NodeID) func(cfg gotwc.Config) gotwc.Config {
+	return func(cfg gotwc.Config) gotwc.Config {
 		allowed := cfg.Blobcache.InProcess.CanTouch
 		allowed = append(allowed, peer)
 		cfg.Blobcache.InProcess.CanTouch = allowed

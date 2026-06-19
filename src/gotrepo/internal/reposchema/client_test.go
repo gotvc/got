@@ -3,6 +3,7 @@ package reposchema
 import (
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"testing"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotorg"
+	"github.com/gotvc/got/src/internal/gotbc"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 	"go.inet256.org/inet256/src/inet256"
@@ -182,6 +184,37 @@ func TestPostIdentityIdempotent(t *testing.T) {
 	require.Equal(t, before, after)
 }
 
+func TestConfigRoundTrip(t *testing.T) {
+	ctx := testutil.Context(t)
+	bc := newBlobcache(t)
+	client := NewClient(bc)
+	repoVol := blobcache.OID{}
+
+	cfg, err := client.GetConfig(ctx, repoVol)
+	require.NoError(t, err)
+	require.Nil(t, cfg)
+
+	err = client.EditConfig(ctx, repoVol, func(prev json.RawMessage) json.RawMessage {
+		require.Nil(t, prev)
+		return json.RawMessage(`{"hello":"world"}`)
+	})
+	require.NoError(t, err)
+
+	cfg, err = client.GetConfig(ctx, repoVol)
+	require.NoError(t, err)
+	require.JSONEq(t, `{"hello":"world"}`, string(cfg))
+
+	err = client.EditConfig(ctx, repoVol, func(prev json.RawMessage) json.RawMessage {
+		require.JSONEq(t, `{"hello":"world"}`, string(prev))
+		return nil
+	})
+	require.NoError(t, err)
+
+	cfg, err = client.GetConfig(ctx, repoVol)
+	require.NoError(t, err)
+	require.Nil(t, cfg)
+}
+
 func breakAllRepoLinks(t testing.TB, ctx context.Context, c *Client, repoVol blobcache.OID) {
 	t.Helper()
 	rootH, err := c.rootHandle(ctx, repoVol)
@@ -304,6 +337,6 @@ func newBlobcache(t testing.TB) blobcache.Service {
 			return nil, fmt.Errorf("unknown schema %q", spec.Name)
 		}
 	}
-	env.Root = GotRepoVolumeSpec()
+	env.Root = gotbc.GotVolumeSpec()
 	return bclocal.NewTestServiceFromEnv(t, env)
 }

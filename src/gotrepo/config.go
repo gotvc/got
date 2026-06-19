@@ -1,24 +1,17 @@
 package gotrepo
 
 import (
+	"context"
+	"encoding/json"
 	"os"
 	"regexp"
 
-	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/internal/gotcfg"
 	"go.inet256.org/inet256/src/inet256"
 )
 
 // Config contains runtime parameters for a Repo
 type Config struct {
-	// Blobcache configures access to a Blobcache service.
-	// Got stores most of it's data in Blobcache.
-	Blobcache BlobcacheSpec `json:"blobcache"`
-	// RepoVolume is the OID of the volume that stores the repo's data.
-	// This is different than the volume for the namespace.
-	// This volume will have a link to the namespace volume.
-	RepoVolume blobcache.OID `json:"repo_volume"`
-
 	// Identities are named identities stored in repo schema and referenced by ID.
 	Identities map[string]inet256.ID `json:"identities"`
 	// Spaces contain named mutable references (Bookmarks) to Commits
@@ -32,11 +25,6 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-func (c *Config) SetBlobcache(spec BlobcacheSpec) *Config {
-	c.Blobcache = spec
-	return c
-}
-
 func (c *Config) PutSpace(name string, spec SpaceSpec) *Config {
 	c.Spaces[name] = spec
 	return c
@@ -44,6 +32,11 @@ func (c *Config) PutSpace(name string, spec SpaceSpec) *Config {
 
 func (c *Config) AddPull(fc PullConfig) *Config {
 	c.Pull = append(c.Pull, fc)
+	return c
+}
+
+func (c *Config) AddPush(fc PushConfig) *Config {
+	c.Push = append(c.Push, fc)
 	return c
 }
 
@@ -84,13 +77,6 @@ type PushConfig struct {
 func DefaultConfig() Config {
 	return Config{
 		Spaces: map[string]SpaceSpec{},
-		Blobcache: BlobcacheSpec{
-			InProcess: &InProcessBlobcache{
-				CanLook:  []inet256.ID{},
-				CanTouch: []inet256.ID{},
-			},
-		},
-		RepoVolume: blobcache.OID{},
 	}
 }
 
@@ -102,8 +88,8 @@ func LoadConfig(repo *os.Root) (*Config, error) {
 	return gotcfg.Parse[Config](data)
 }
 
-// EditConfig applies fn to the config of the repo at repoPath
-func EditConfig(repo *os.Root, fn func(x Config) Config) error {
+// editConfig applies fn to the config of the repo at repoPath
+func editConfig(repo *os.Root, fn func(x Config) Config) error {
 	return gotcfg.EditFile(repo, configPath, func(x Config) Config {
 		// maps
 		if x.Identities == nil {
@@ -123,9 +109,22 @@ func EditConfig(repo *os.Root, fn func(x Config) Config) error {
 	})
 }
 
-func (r *Repo) Configure(fn func(x Config) Config) error {
-	if err := EditConfig(r.root, fn); err != nil {
-		return err
+func (r *Repo) Configure(ctx context.Context, fn func(x Config) Config) error {
+	if r.dir != nil {
+		if err := editConfig(r.dir, fn); err != nil {
+			return err
+		}
+	} else {
+		if err := r.repoc.EditConfig(ctx, r.rootVol, func(xData json.RawMessage) json.RawMessage {
+			x, err := gotcfg.Parse[Config](xData)
+			if err != nil {
+				panic(err) // TODO: move Config into reposchema
+			}
+			y := fn(*x)
+			return gotcfg.Marshal(y)
+		}); err != nil {
+			return err
+		}
 	}
-	return r.reloadConfig()
+	return r.reloadConfig(ctx)
 }

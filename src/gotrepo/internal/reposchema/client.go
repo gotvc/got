@@ -316,17 +316,6 @@ func stageKey(wcid StageID) []byte {
 
 var nsKey = []byte("ns")
 
-func GotRepoVolumeSpec() blobcache.VolumeSpec {
-	return blobcache.VolumeSpec{
-		Local: &blobcache.VolumeBackend_Local{
-			Schema:   blobcache.SchemaSpec{Name: SchemaName_GotRepo},
-			HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
-			MaxSize:  1 << 21,
-			Salted:   false,
-		},
-	}
-}
-
 func StageVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
