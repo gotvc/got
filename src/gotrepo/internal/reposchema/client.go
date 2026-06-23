@@ -64,7 +64,7 @@ func (c *Client) GetNamespace(ctx context.Context, repoVol blobcache.OID, useSch
 	}
 
 	// ns doesn't exist, create it.
-	nsSpec := gotns.DefaultVolumeSpec()
+	nsSpec := gotns.SpaceVolumeSpec()
 	if !useSchema {
 		nsSpec.Local.Schema = blobcache.SchemaSpec{Name: blobcache.Schema_NONE}
 	}

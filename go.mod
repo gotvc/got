@@ -3,7 +3,7 @@ module github.com/gotvc/got
 go 1.26.0
 
 require (
-	blobcache.io/blobcache v0.7.1-0.20260612234922-1e0699a6e39a
+	blobcache.io/blobcache v0.7.1-0.20260622234859-8bc20163d91a
 	capnproto.org/go/capnp/v3 v3.1.0-alpha.2
 	charm.land/bubbletea/v2 v2.0.2
 	github.com/cloudflare/circl v1.6.1

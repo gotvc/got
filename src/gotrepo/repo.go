@@ -168,7 +168,7 @@ func (r *Repo) NSVolumeSpec(ctx context.Context) (*VolumeSpec, error) {
 		URL: blobcache.URL{
 			Node:   ep.Node,
 			IPPort: &ep.IPPort,
-			Base:   nsh.OID,
+			OID:    nsh.OID,
 		},
 		Secret: *secret,
 	}, nil

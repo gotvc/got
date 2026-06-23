@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	bcclient "blobcache.io/blobcache/client/go"
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
@@ -19,10 +18,10 @@ import (
 var spaceCmd = star.NewDir(star.Metadata{
 	Short: "manage namespaces",
 }, map[string]star.Command{
-	"list":      spaceListCmd,
-	"create-bc": spaceCreateBcCmd,
-	"add-bc":    spaceAddBcCmd,
-	"sync":      spaceSyncCmd,
+	"list": spaceListCmd,
+	"add":  spaceAddCmd,
+	"rm":   spaceRmCmd,
+	"sync": spaceSyncCmd,
 })
 
 var spaceListCmd = star.Command{
@@ -42,7 +41,7 @@ var spaceListCmd = star.Command{
 			var oid blobcache.OID
 			switch {
 			case scfg.Blobcache != nil:
-				oid = scfg.Blobcache.URL.Base
+				oid = scfg.Blobcache.URL.OID
 			default:
 				c.Printf("ERROR: don't know how to print %v\n", scfg)
 				continue
@@ -94,43 +93,27 @@ var addPrefixParam = &star.Optional[string]{
 	Parse:    star.ParseString,
 }
 
-var spaceCreateBcCmd = star.Command{
+var spaceRmCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "create a new space backed by a Blobcache Volume",
+		Short: "remove a space from the repo. (DESTRUCTIVE)",
 	},
 	Pos: []star.Positional{spaceNameParam},
-	Flags: map[string]star.Flag{
-		"mkvol": volNameParam,
-	},
 	F: func(c star.Context) error {
 		repo, close, err := openRepo()
 		if err != nil {
 			return err
 		}
 		defer close()
-		bcsvc := bcclient.NewClientFromEnv()
-		ep, err := bcsvc.Endpoint(c)
-		if err != nil {
+		name := spaceNameParam.Load(c)
+		if err := repo.RemoveSpace(c, name); err != nil {
 			return err
 		}
-		volname := volNameParam.Load(c)
-		h, err := createNSVol(c, bcsvc, volname)
-		if err != nil {
-			return err
-		}
-		return repo.CreateSpace(c, spaceNameParam.Load(c), gotrepo.SpaceSpec{
-			Blobcache: &gotrepo.VolumeSpec{
-				URL: blobcache.URL{
-					Node: ep.Node,
-					Base: h.OID,
-				},
-				Secret: randomSecret(),
-			},
-		})
+		c.Printf("removed space %s successfully\n", name)
+		return nil
 	},
 }
 
-var spaceAddBcCmd = star.Command{
+var spaceAddCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "adds an existing Space backed by a Blobcache Volume",
 	},
@@ -145,7 +128,7 @@ var spaceAddBcCmd = star.Command{
 			return err
 		}
 		defer close()
-		bc := bcclient.NewClientFromEnv()
+		bc := repo.Blobcache()
 		u := bcURLParam.Load(c)
 		volh, err := bcsdk.OpenURL(c, bc, u)
 		if err != nil {
@@ -156,7 +139,7 @@ var spaceAddBcCmd = star.Command{
 		if err != nil {
 			return err
 		}
-		return repo.CreateSpace(c, spaceNameParam.Load(c), gotrepo.SpaceSpec{
+		return repo.AddSpace(c, spaceNameParam.Load(c), gotrepo.SpaceSpec{
 			Blobcache: &gotrepo.VolumeSpec{
 				URL:    u,
 				Secret: secretParam.Load(c),

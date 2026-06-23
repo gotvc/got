@@ -108,7 +108,7 @@ func printRepoConfig(c *star.Context, repoCfg gotrepo.Config, indent string) err
 					indent,
 					name,
 					spec.Blobcache.URL.Node.Base64String()[:16],
-					spec.Blobcache.URL.Base.String()[:16],
+					spec.Blobcache.URL.OID.String()[:16],
 				)
 			}
 		}

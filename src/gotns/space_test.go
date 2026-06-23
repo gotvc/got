@@ -14,7 +14,7 @@ import (
 
 func TestSpace(t *testing.T) {
 	gotcore.TestSpace(t, func(t testing.TB) gotcore.Space {
-		spec := DefaultVolumeSpec()
+		spec := SpaceVolumeSpec()
 		bc, volh := schematests.Setup(t, map[blobcache.SchemaName]schema.Constructor{
 			"": schema.NoneConstructor,
 		}, *spec.Local)

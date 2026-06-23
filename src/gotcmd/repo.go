@@ -1,7 +1,6 @@
 package gotcmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"strconv"
@@ -9,8 +8,6 @@ import (
 	bcclient "blobcache.io/blobcache/client/go"
 	"blobcache.io/blobcache/src/blobcache"
 	_ "blobcache.io/blobcache/src/blobcachecmd"
-	"blobcache.io/blobcache/src/schema/bcns"
-	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/gotrepo"
 	"go.brendoncarroll.net/star"
 )
@@ -35,15 +32,15 @@ var repoInitCmd = star.Command{
 	F: func(c star.Context) error {
 		ctx := c.Context
 		bc := bcclient.NewClientFromEnv()
-		nsVol, nsc, err := bcclient.OpenNSRoot(ctx, bc)
+		nsc, err := bcclient.NewNSClientFromEnv()
 		if err != nil {
 			return err
 		}
-		volh, err := bcns.Lookup(ctx, nsc, *nsVol, volNameParam.Load(c))
+		volh, err := nsc.Open(ctx, volNameParam.Load(c), blobcache.Action_ALL)
 		if err != nil {
 			return err
 		}
-		if err := gotrepo.Init(ctx, bc, *volh, gotrepo.DefaultConfig()); err != nil {
+		if err := gotrepo.Init(ctx, bc, volh, gotrepo.DefaultConfig()); err != nil {
 			return err
 		}
 		c.Printf("repo initialized successfully")
@@ -75,11 +72,11 @@ var repoCreateCmd = star.Command{
 		}
 		c.Printf("Successfully created a new volume in the ns root\n")
 		c.Printf("NODE: %v", ep.Node)
-		c.Printf("HANDLE: %v\n", *volh)
+		c.Printf("HANDLE: %v\n", volh)
 		c.Printf("INFO: %s\n", prettifyJSON(specJSON))
 
 		c.Printf("initializing volume...\n")
-		if err := gotrepo.Init(ctx, svc, *volh, gotrepo.DefaultConfig()); err != nil {
+		if err := gotrepo.Init(ctx, svc, volh, gotrepo.DefaultConfig()); err != nil {
 			return err
 		}
 		c.Printf("successfully initialized Repo in %v", volh.OID)
@@ -238,27 +235,4 @@ var taskIndexParam = &star.Required[int]{
 		}
 		return i, nil
 	},
-}
-
-var blobcacheCmd = star.NewDir(
-	star.Metadata{Short: "manage blobcache"},
-	map[string]star.Command{},
-)
-
-// createVol create a new volume according to spec at volname in the namespace
-func createVol(ctx context.Context, svc blobcache.Service, volName string, spec blobcache.VolumeSpec) (*blobcache.Handle, error) {
-	nsh, nsc, err := bcclient.OpenNSRoot(ctx, svc)
-	if err != nil {
-		return nil, err
-	}
-	defer svc.Drop(ctx, *nsh)
-	return nsc.CreateAt(ctx, *nsh, volName, spec)
-}
-
-func createRepoVol(ctx context.Context, svc blobcache.Service, volName string) (*blobcache.Handle, error) {
-	return createVol(ctx, svc, volName, gotrepo.RepoVolumeSpec(false))
-}
-
-func createNSVol(ctx context.Context, svc blobcache.Service, volName string) (*blobcache.Handle, error) {
-	return createVol(ctx, svc, volName, gotns.DefaultVolumeSpec())
 }

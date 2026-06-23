@@ -33,7 +33,7 @@ func (r *Repo) GetSpace(ctx context.Context, name string) (gotcore.Space, error)
 	return r.makeSpace(ctx, spec)
 }
 
-func (r *Repo) CreateSpace(ctx context.Context, name string, spec SpaceSpec) error {
+func (r *Repo) AddSpace(ctx context.Context, name string, spec SpaceSpec) error {
 	if err := spec.Validate(); err != nil {
 		return err
 	}
@@ -53,6 +53,13 @@ func (r *Repo) CreateSpace(ctx context.Context, name string, spec SpaceSpec) err
 		return fmt.Errorf("a space with that name already exists")
 	}
 	return nil
+}
+
+func (r *Repo) RemoveSpace(ctx context.Context, name string) error {
+	return r.Configure(ctx, func(x Config) Config {
+		delete(x.Spaces, name)
+		return x
+	})
 }
 
 type VolumeSpec struct {

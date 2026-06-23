@@ -18,6 +18,7 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/cloudflare/circl/sign/ed25519"
 	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.inet256.org/inet256/src/inet256"
 	"go.uber.org/zap"
 )
@@ -58,8 +59,8 @@ type EnvClientSpec struct {
 func GotVolumeSpec() blobcache.VolumeSpec {
 	return blobcache.VolumeSpec{
 		Local: &blobcache.VolumeBackend_Local{
-			HashAlgo: blobcache.HashAlgo_BLAKE2b_256,
-			MaxSize:  1 << 21,
+			HashAlgo: stores.HashAlgo,
+			MaxSize:  stores.MaxSize,
 			Salted:   false,
 		},
 	}
@@ -67,7 +68,7 @@ func GotVolumeSpec() blobcache.VolumeSpec {
 
 func newBCLogger() *zap.Logger {
 	cfg := zap.NewProductionConfig()
-	cfg.Level = zap.NewAtomicLevelAt(zap.PanicLevel)
+	cfg.Level = zap.NewAtomicLevelAt(zap.ErrorLevel)
 	l, _ := cfg.Build()
 	return l
 }

@@ -12,9 +12,9 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/gotbc"
 	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/sbe"
-	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/exp/streams"
 )
@@ -262,9 +262,8 @@ func saveRoot(ctx context.Context, tx volumes.Tx, r Root) error {
 	return tx.Save(ctx, r.Marshal(nil))
 }
 
-func DefaultVolumeSpec() blobcache.VolumeSpec {
-	spec := blobcache.DefaultLocalSpec()
-	spec.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
-	spec.Local.MaxSize = stores.MaxSize
+// SpaceVolumeSpec returns a VolumeSpec for a got space
+func SpaceVolumeSpec() blobcache.VolumeSpec {
+	spec := gotbc.GotVolumeSpec()
 	return spec
 }

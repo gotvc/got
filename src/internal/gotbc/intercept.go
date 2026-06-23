@@ -123,7 +123,7 @@ func (b *Local) Delete(ctx context.Context, tx blobcache.Handle, cids []blobcach
 	return b.svc.Delete(b.ctx(ctx), tx, cids)
 }
 
-func (b *Local) Copy(ctx context.Context, tx blobcache.Handle, srcTxns []blobcache.Handle, cids []blobcache.CID, success []bool) error {
+func (b *Local) Copy(ctx context.Context, tx blobcache.Handle, srcTxns []blobcache.Handle, cids []blobcache.CID, success *blobcache.BitMap) error {
 	return b.svc.Copy(b.ctx(ctx), tx, srcTxns, cids, success)
 }
 
