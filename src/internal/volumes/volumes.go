@@ -5,7 +5,6 @@ import (
 
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
-	"github.com/gotvc/got/src/internal/stores"
 )
 
 type TxParams = blobcache.TxParams
@@ -27,39 +26,6 @@ type Tx interface {
 	Get(ctx context.Context, cid blobcache.CID, buf []byte) (int, error)
 	MaxSize() int
 	Hash(data []byte) blobcache.CID
-}
-
-func Modify(ctx context.Context, vol Volume, fn func(dst stores.RW, x []byte) ([]byte, error)) error {
-	tx, err := vol.BeginTx(ctx, TxParams{Modify: true})
-	if err != nil {
-		return err
-	}
-	defer tx.Abort(ctx)
-	var x []byte
-	if err := tx.Load(ctx, &x); err != nil {
-		return err
-	}
-	y, err := fn(tx, x)
-	if err != nil {
-		return err
-	}
-	if err := tx.Save(ctx, y); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
-func View(ctx context.Context, vol Volume, fn func(src stores.RO, root []byte) error) error {
-	tx, err := vol.BeginTx(ctx, TxParams{Modify: false})
-	if err != nil {
-		return err
-	}
-	defer tx.Abort(ctx)
-	var root []byte
-	if err := tx.Load(ctx, &root); err != nil {
-		return err
-	}
-	return fn(tx, root)
 }
 
 // Blobcache is a volume backed by blobcache.

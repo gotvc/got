@@ -96,7 +96,7 @@ var scrubCmd = star.Command{
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -114,7 +114,7 @@ var repairLinksCmd = star.Command{
 		Short: "repairs repo volume link tokens",
 	},
 	F: func(c star.Context) error {
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -133,7 +133,7 @@ var repoAddPullCmd = star.Command{
 	},
 	Pos: []star.Positional{configSpaceNameParam},
 	F: func(c star.Context) error {
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -162,7 +162,7 @@ var repoAddPushCmd = star.Command{
 		"add-prefix": addPrefixParam,
 	},
 	F: func(c star.Context) error {
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -187,7 +187,7 @@ var repoRmPullCmd = star.Command{
 	},
 	Pos: []star.Positional{taskIndexParam},
 	F: func(c star.Context) error {
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -209,7 +209,7 @@ var repoRmPushCmd = star.Command{
 	},
 	Pos: []star.Positional{taskIndexParam},
 	F: func(c star.Context) error {
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}

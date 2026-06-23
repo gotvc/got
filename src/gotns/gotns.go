@@ -17,15 +17,18 @@ import (
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/stdctx/logctx"
 )
 
 func BeginTx(ctx context.Context, dmach *gdat.Machine, kvmach *gotkv.Machine, vol volumes.Volume, modify bool) (*Tx, error) {
 	ctx, cf := context.WithTimeoutCause(ctx, 3*time.Second, errors.New("trying to begin transaction"))
 	defer cf()
+	logctx.Debug(ctx, "gotns: BeginTx...")
 	tx, err := vol.BeginTx(ctx, blobcache.TxParams{Modify: modify})
 	if err != nil {
 		return nil, err
 	}
+	logctx.Debug(ctx, "gotns: started transaction")
 	return NewTx(tx, dmach, kvmach), nil
 }
 

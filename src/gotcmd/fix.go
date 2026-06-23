@@ -25,7 +25,7 @@ var fixCmd = star.Command{
 		dst := newMarkNameParam.Load(c)
 		fixName := fixNameParam.Load(c)
 
-		r, close, err := openRepo()
+		r, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}

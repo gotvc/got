@@ -6,6 +6,8 @@ import (
 	"os"
 	"runtime/debug"
 
+	bcclient "blobcache.io/blobcache/client/go"
+	"blobcache.io/blobcache/src/blobcache"
 	"go.brendoncarroll.net/star"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.uber.org/zap"
@@ -126,8 +128,34 @@ var rootCmd = star.NewGroupedDir(
 	},
 )
 
-func openRepo() (*gotrepo.Repo, func() error, error) {
-	wc, err := openWC()
+const (
+	EnvGotRepo = "GOT_REPO"
+)
+
+func openRepo(ctx context.Context) (*gotrepo.Repo, func() error, error) {
+	r, err := os.OpenRoot(".")
+	if err != nil {
+		return nil, nil, err
+	}
+	if yes, err := gotwc.IsWC(r); err != nil {
+		return nil, nil, err
+	} else if !yes {
+		val, ok := os.LookupEnv(EnvGotRepo)
+		if !ok {
+			return nil, nil, fmt.Errorf("not in a working copy and %s not set.", EnvGotRepo)
+		}
+		repoOID, err := blobcache.ParseOID(val)
+		if err != nil {
+			return nil, nil, err
+		}
+		bc := bcclient.NewClientFromEnv()
+		repo, err := gotrepo.Open(ctx, bc, repoOID, nil)
+		if err != nil {
+			return nil, nil, err
+		}
+		return repo, func() error { return nil }, nil
+	}
+	wc, err := gotwc.Open(r)
 	if err != nil {
 		return nil, nil, err
 	}

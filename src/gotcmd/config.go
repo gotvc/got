@@ -52,7 +52,7 @@ func printConfig(c star.Context) error {
 	}
 	c.Printf("%s\n\n", "|"+strings.Repeat("_", 40))
 
-	repo, closer, err := openRepo()
+	repo, closer, err := openRepo(c)
 	if err != nil {
 		return err
 	}

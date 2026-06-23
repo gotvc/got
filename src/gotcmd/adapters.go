@@ -23,7 +23,7 @@ var httpCmd = star.Command{
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -56,7 +56,7 @@ var ftpCmd = star.Command{
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
