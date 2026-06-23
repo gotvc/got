@@ -44,16 +44,16 @@ func (r *Repo) CreateIdentity(ctx context.Context, name string) (*inet256.ID, er
 	if err != nil {
 		return nil, err
 	}
-	if err := r.repoc.EditConfig(ctx, r.rootVol, func(xData json.RawMessage) json.RawMessage {
+	if err := r.repoc.EditConfig(ctx, r.rootVol, func(xData json.RawMessage) (json.RawMessage, error) {
 		x, err := gotcfg.Parse[Config](xData)
 		if err != nil {
-			return nil
+			return nil, err
 		}
 		if x.Identities == nil {
 			x.Identities = make(map[string]inet256.ID)
 		}
 		x.Identities[name] = id
-		return gotcfg.Marshal(*x)
+		return gotcfg.Marshal(*x), nil
 	}); err != nil {
 		return nil, err
 	}

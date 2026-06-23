@@ -63,5 +63,7 @@ func LoadConfig(wcRoot *os.Root) (*Config, error) {
 }
 
 func EditConfig(wcRoot *os.Root, fn func(x Config) Config) error {
-	return gotcfg.EditFile(wcRoot, configPath, fn)
+	return gotcfg.EditFile(wcRoot, configPath, func(x Config) (Config, error) {
+		return fn(x), nil
+	})
 }

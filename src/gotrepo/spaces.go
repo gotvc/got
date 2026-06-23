@@ -11,6 +11,8 @@ import (
 	"github.com/gotvc/got/src/gotns"
 	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/volumes"
+	"go.brendoncarroll.net/stdctx/logctx"
+	"go.uber.org/zap"
 )
 
 // ListSpaces lists all the spaces that the repository is configured to use
@@ -62,6 +64,23 @@ func (r *Repo) RemoveSpace(ctx context.Context, name string) error {
 	})
 }
 
+// RenameSpace moves the space configured at oldName, to newName.
+// if there is already a Space at newName, then an error is returned.
+func (r *Repo) RenameSpace(ctx context.Context, oldName, newName string) error {
+	return r.configure(ctx, func(x Config) (Config, error) {
+		spec, exists := x.Spaces[oldName]
+		if !exists {
+			return x, fmt.Errorf("%s does not exist", oldName)
+		}
+		if _, exists := x.Spaces[newName]; exists {
+			return x, fmt.Errorf("%s already exists", newName)
+		}
+		delete(x.Spaces, oldName)
+		x.Spaces[newName] = spec
+		return x, nil
+	})
+}
+
 type VolumeSpec struct {
 	URL    blobcache.URL `json:"url"`
 	Secret gdat.DEK      `json:"secret"`
@@ -96,10 +115,12 @@ func (r *Repo) makeSpace(ctx context.Context, spec SpaceSpec) (Space, error) {
 	switch {
 	case spec.Blobcache != nil:
 		bspec := *spec.Blobcache
+		logctx.Info(ctx, "opening url", zap.Stringer("url", bspec.URL))
 		volh, err := bcsdk.OpenURL(ctx, r.bc, bspec.URL)
 		if err != nil {
 			return nil, err
 		}
+		logctx.Info(ctx, "opened volume for URL", zap.Stringer("url", bspec.URL))
 		return spaceFromHandle(r.bc, *volh, &bspec.Secret), nil
 	default:
 		return nil, fmt.Errorf("empty SpaceSpec")

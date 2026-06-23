@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/gotvc/got/src/internal/stores"
+	"go.brendoncarroll.net/exp/iter2"
 	"go.brendoncarroll.net/exp/streams"
 )
 
@@ -110,7 +111,10 @@ func (tx *Tx) Delete(ctx context.Context, key []byte) error {
 	return nil
 }
 
-func (tx *Tx) IterateFlushed(ctx context.Context, span Span) *Iterator {
+func (tx *Tx) IterateFlushed(ctx context.Context, span Span) streams.Iterator[Entry] {
+	if tx.BaseIsZero() {
+		return streams.NewSeq(iter2.Empty[Entry]())
+	}
 	return tx.m.NewIterator(tx.s, tx.prev, span)
 }
 

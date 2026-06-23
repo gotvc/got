@@ -64,8 +64,8 @@ func Init(ctx context.Context, bc blobcache.Service, volh blobcache.Handle, conf
 	if len(cfgData) != 0 {
 		return fmt.Errorf("repo volume has already been initialized")
 	}
-	if err := rc.EditConfig(ctx, volh.OID, func(x json.RawMessage) json.RawMessage {
-		return gotcfg.Marshal(config)
+	if err := rc.EditConfig(ctx, volh.OID, func(x json.RawMessage) (json.RawMessage, error) {
+		return gotcfg.Marshal(config), nil
 	}); err != nil {
 		return err
 	}
@@ -217,8 +217,8 @@ func (r *Repo) reloadConfig(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
-		if err := r.repoc.EditConfig(ctx, r.rootVol, func(json.RawMessage) json.RawMessage {
-			return gotcfg.Marshal(cfg) // blind overwrite
+		if err := r.repoc.EditConfig(ctx, r.rootVol, func(json.RawMessage) (json.RawMessage, error) {
+			return gotcfg.Marshal(cfg), nil // blind overwrite
 		}); err != nil {
 			return err
 		}

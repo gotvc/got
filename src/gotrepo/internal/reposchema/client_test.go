@@ -194,9 +194,9 @@ func TestConfigRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, cfg)
 
-	err = client.EditConfig(ctx, repoVol, func(prev json.RawMessage) json.RawMessage {
+	err = client.EditConfig(ctx, repoVol, func(prev json.RawMessage) (json.RawMessage, error) {
 		require.Nil(t, prev)
-		return json.RawMessage(`{"hello":"world"}`)
+		return json.RawMessage(`{"hello":"world"}`), nil
 	})
 	require.NoError(t, err)
 
@@ -204,9 +204,9 @@ func TestConfigRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.JSONEq(t, `{"hello":"world"}`, string(cfg))
 
-	err = client.EditConfig(ctx, repoVol, func(prev json.RawMessage) json.RawMessage {
+	err = client.EditConfig(ctx, repoVol, func(prev json.RawMessage) (json.RawMessage, error) {
 		require.JSONEq(t, `{"hello":"world"}`, string(prev))
-		return nil
+		return nil, nil
 	})
 	require.NoError(t, err)
 
