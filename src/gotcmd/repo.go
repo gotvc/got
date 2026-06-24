@@ -1,8 +1,11 @@
 package gotcmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
 	"strconv"
 
 	bcclient "blobcache.io/blobcache/client/go"
@@ -22,6 +25,7 @@ var repoCmd = star.NewDir(star.Metadata{
 	"add-pull":     repoAddPullCmd,
 	"rm-push":      repoRmPushCmd,
 	"rm-pull":      repoRmPullCmd,
+	"edit":         repoEditCmd,
 })
 
 var repoInitCmd = star.Command{
@@ -46,6 +50,67 @@ var repoInitCmd = star.Command{
 		c.Printf("repo initialized successfully")
 		return nil
 	},
+}
+
+var repoEditCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "edit the repo config in your editor",
+	},
+	F: func(c star.Context) error {
+		repo, close, err := openRepo(c)
+		if err != nil {
+			return err
+		}
+		defer close()
+		editor := os.Getenv("EDITOR")
+		if editor == "" {
+			editor = "vi"
+		}
+		if err := repo.Configure(c, func(x gotrepo.Config) (gotrepo.Config, error) {
+			if err := userEdit(c.Context, &x, editor); err != nil {
+				return x, err
+			}
+			return x, nil
+		}); err != nil {
+			return err
+		}
+		c.Printf("config saved successfully\n")
+		return nil
+	},
+}
+
+func userEdit[T any](ctx context.Context, x *T, editor string) error {
+	data, err := json.MarshalIndent(x, "", "  ")
+	if err != nil {
+		return err
+	}
+	f, err := os.CreateTemp("", "got-edit-*.json")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(f.Name())
+	defer f.Close()
+	if _, err := f.Write(data); err != nil {
+		return err
+	}
+	for {
+		cmd := exec.Command(editor, f.Name())
+		cmd.Stdin = os.Stdin
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("editor: %w", err)
+		}
+		data, err := os.ReadFile(f.Name())
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(data, x); err != nil {
+			fmt.Fprintf(os.Stderr, "invalid JSON: %v\n", err)
+			continue
+		}
+		return nil
+	}
 }
 
 var repoCreateCmd = star.Command{
@@ -139,11 +204,11 @@ var repoAddPullCmd = star.Command{
 		}
 		defer close()
 		spaceName := configSpaceNameParam.Load(c)
-		return repo.Configure(c, func(x gotrepo.Config) gotrepo.Config {
+		return repo.Configure(c, func(x gotrepo.Config) (gotrepo.Config, error) {
 			return *x.AddPull(gotrepo.PullConfig{
 				From:      spaceName,
 				AddPrefix: spaceName + "/",
-			})
+			}), nil
 		})
 	},
 }
@@ -168,7 +233,7 @@ var repoAddPushCmd = star.Command{
 		}
 		defer close()
 		spaceName := configSpaceNameParam.Load(c)
-		return repo.Configure(c, func(x gotrepo.Config) gotrepo.Config {
+		return repo.Configure(c, func(x gotrepo.Config) (gotrepo.Config, error) {
 			pc := gotrepo.PushConfig{
 				To: spaceName,
 			}
@@ -176,7 +241,7 @@ var repoAddPushCmd = star.Command{
 				pc.AddPrefix = prefix
 			}
 			x.Push = append(x.Push, pc)
-			return x
+			return x, nil
 		})
 	},
 }
@@ -193,12 +258,12 @@ var repoRmPullCmd = star.Command{
 		}
 		defer close()
 		i := taskIndexParam.Load(c)
-		return repo.Configure(c, func(x gotrepo.Config) gotrepo.Config {
+		return repo.Configure(c, func(x gotrepo.Config) (gotrepo.Config, error) {
 			if i < 0 || i >= len(x.Pull) {
-				return x
+				return x, nil
 			}
 			x.Pull = append(x.Pull[:i], x.Pull[i+1:]...)
-			return x
+			return x, nil
 		})
 	},
 }
@@ -215,12 +280,12 @@ var repoRmPushCmd = star.Command{
 		}
 		defer close()
 		i := taskIndexParam.Load(c)
-		return repo.Configure(c, func(x gotrepo.Config) gotrepo.Config {
+		return repo.Configure(c, func(x gotrepo.Config) (gotrepo.Config, error) {
 			if i < 0 || i >= len(x.Push) {
-				return x
+				return x, nil
 			}
 			x.Push = append(x.Push[:i], x.Push[i+1:]...)
-			return x
+			return x, nil
 		})
 	},
 }

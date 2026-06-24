@@ -109,13 +109,7 @@ func editConfig(repo *os.Root, fn func(x Config) (Config, error)) error {
 	})
 }
 
-func (r *Repo) Configure(ctx context.Context, fn func(x Config) Config) error {
-	return r.configure(ctx, func(x Config) (Config, error) {
-		return fn(x), nil
-	})
-}
-
-func (r *Repo) configure(ctx context.Context, fn func(x Config) (Config, error)) error {
+func (r *Repo) Configure(ctx context.Context, fn func(x Config) (Config, error)) error {
 	if r.dir != nil {
 		if err := editConfig(r.dir, fn); err != nil {
 			return err

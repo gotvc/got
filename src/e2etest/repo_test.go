@@ -47,7 +47,7 @@ func TestMultiRepoSync(t *testing.T) {
 
 	// configure other repos to use it.
 	for _, s := range sites[1:] {
-		err := s.Repo.Configure(ctx, func(x gotrepo.Config) gotrepo.Config {
+		s.ConfigureRepo(ctx, func(x gotrepo.Config) gotrepo.Config {
 			x.Spaces["origin"] = gotrepo.SpaceSpec{Blobcache: originSpec}
 			return x
 		})
