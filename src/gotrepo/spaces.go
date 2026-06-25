@@ -66,6 +66,7 @@ func (r *Repo) RemoveSpace(ctx context.Context, name string) error {
 
 // RenameSpace moves the space configured at oldName, to newName.
 // if there is already a Space at newName, then an error is returned.
+// It also renames references in Pull and Push configurations.
 func (r *Repo) RenameSpace(ctx context.Context, oldName, newName string) error {
 	return r.Configure(ctx, func(x Config) (Config, error) {
 		spec, exists := x.Spaces[oldName]
@@ -77,6 +78,16 @@ func (r *Repo) RenameSpace(ctx context.Context, oldName, newName string) error {
 		}
 		delete(x.Spaces, oldName)
 		x.Spaces[newName] = spec
+		for i := range x.Pull {
+			if x.Pull[i].From == oldName {
+				x.Pull[i].From = newName
+			}
+		}
+		for i := range x.Push {
+			if x.Push[i].To == oldName {
+				x.Push[i].To = newName
+			}
+		}
 		return x, nil
 	})
 }
