@@ -32,23 +32,47 @@ var initCmd = star.Command{
 		if err := configureBlobcache(c, &config); err != nil {
 			return err
 		}
+		ctx := c.Context
 		root, err := os.OpenRoot(".")
 		if err != nil {
 			return err
 		}
 		defer root.Close()
+		// setup blobcache, create repo
+		if err := func() error {
+			bcsvc, err := gotbc.OpenBlobcache(root, config.Blobcache, ctx)
+			if err != nil {
+				return err
+			}
+			if bclocal, ok := bcsvc.(*gotbc.Local); ok {
+				c.Printf("using internal blobcache\n")
+				defer bclocal.Close()
+			}
+			repoVolh, err := bcsvc.OpenFiat(ctx, config.Repo, blobcache.Action_ALL)
+			if err != nil {
+				return err
+			}
+			repoCfg := gotrepo.DefaultConfig()
+			if err := gotrepo.Init(ctx, bcsvc, *repoVolh, repoCfg); err != nil {
+				return err
+			}
+			c.Printf("successfully initialized repo in %v\n", config.Repo)
+			repo, err := gotrepo.Open(ctx, bcsvc, config.Repo, nil)
+			if err != nil {
+				return err
+			}
+			dsConfig := gotcore.DefaultConfig(false)
+			_, err = repo.CreateMark(ctx, gotrepo.DefaultMark(), dsConfig, nil)
+			return err
+		}(); err != nil {
+			return err
+		}
 
-		// create the first branch
 		// setup a working copy in the same directory
 		if err := gotwc.Init(root, gotwc.DefaultConfig()); err != nil {
 			return err
 		}
-		repo, close, err := openRepo(c)
-		if _, err := repo.CreateMark(c, gotrepo.FQM{Name: "master"}, gotcore.DefaultConfig(false), nil); err != nil {
-			return err
-		}
-		defer close()
-		c.Printf("successfully initialized got working copy in current directory\n")
+		c.Printf("successfully initialized working copy in current directory\n")
 		return nil
 	},
 }
@@ -60,8 +84,9 @@ var mkvolParam = &star.Optional[string]{
 }
 
 var blobcacheParam = &star.Optional[string]{
-	PosName: "blobcache",
-	Parse:   star.ParseString,
+	PosName:  "blobcache",
+	Parse:    star.ParseString,
+	ShortDoc: "configure how to use Blobcache",
 }
 
 // configureBlobcache reads parameters from c

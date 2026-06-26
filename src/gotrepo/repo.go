@@ -72,6 +72,8 @@ func Init(ctx context.Context, bc blobcache.Service, volh blobcache.Handle, conf
 	return nil
 }
 
+// Open opens a repo from the volume.
+// dir is a legacy parameter, and will be removed in the future.  Set it to nil.
 func Open(ctx context.Context, bc blobcache.Service, volid blobcache.OID, dir *os.Root) (_ *Repo, retErr error) {
 	if dir != nil {
 		// if there is a directory then config must be present

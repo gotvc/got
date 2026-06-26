@@ -77,8 +77,8 @@ var markListCmd = star.Command{
 			return err
 		}
 		spaceName, _ := spaceNameOptParam.LoadOpt(c)
-		hdrs := []any{"NAME", "CREATED_AT", "SALT", "ANNOTATIONS"}
-		fmt.Fprintf(c.StdOut, " %-20s %-20s %-8s %-10s\n", hdrs...)
+		hdrs := []any{"NAME", "CREATED_AT", "SALT", "TARGET", "ANNOTATIONS"}
+		fmt.Fprintf(c.StdOut, " %-20s %-20s %-8s %-8s %-10s\n", hdrs...)
 		return repo.ForEachMark(ctx, spaceName, func(k string) error {
 			isHead := " "
 			if spaceName == "" && k == head {
@@ -90,8 +90,16 @@ var markListCmd = star.Command{
 			}
 			createdAt := info.CreatedAt.GoTime().Local().Format(time.DateTime)
 			salt := info.Config.Salt[:4]
+			target := "(empty)"
+			ref, err := repo.MarkLoad(ctx, gotrepo.FQM{Space: spaceName, Name: k})
+			if err != nil {
+				return err
+			}
+			if !ref.IsZero() {
+				target = ref.CID.String()[:8]
+			}
 			annots := len(info.Annotations)
-			fmt.Fprintf(c.StdOut, "%s%-20s %-20s %-8x %-10d\n", isHead, k, createdAt, salt, annots)
+			fmt.Fprintf(c.StdOut, "%s%-20s %-20s %-8x %-8s %-10d\n", isHead, k, createdAt, salt, target, annots)
 			return nil
 		})
 	},
@@ -222,7 +230,7 @@ var markLoadCmd = star.Command{
 		defer close()
 		space, _ := spaceNameOptParam.LoadOpt(c)
 		name := markNameParam.Load(c)
-		ref, comm, err := repo.MarkLoad(ctx, gotrepo.FQM{Space: space, Name: name})
+		ref, comm, err := repo.MarkLoadCommit(ctx, gotrepo.FQM{Space: space, Name: name})
 		if err != nil {
 			return err
 		}

@@ -249,7 +249,7 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	baseRef, _, err := wc.repo.MarkLoad(ctx, gotrepo.FQM{Name: name})
+	baseRef, _, err := wc.repo.MarkLoadCommit(ctx, gotrepo.FQM{Name: name})
 	if err != nil {
 		return err
 	}

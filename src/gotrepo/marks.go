@@ -9,9 +9,9 @@ import (
 	"github.com/gotvc/got/src/internal/gotcore"
 )
 
-const (
-	nameMaster = "master"
-)
+func DefaultMark() FQM {
+	return FQM{Name: "master"}
+}
 
 type MarkInfo = gotcore.Info
 
@@ -118,9 +118,22 @@ func (r *Repo) ViewMark(ctx context.Context, fqm FQM, fn func(*gotcore.MarkTx) e
 	})
 }
 
-// MarkLoad loads the Commit that the mark points to.
+// MarkLoad loads the target of the mark
+func (r *Repo) MarkLoad(ctx context.Context, fqm FQM) (Ref, error) {
+	var ref gdat.Ref
+	if err := r.ViewMark(ctx, fqm, func(mt *gotcore.MarkTx) error {
+		var err error
+		ref, err = mt.Load(ctx)
+		return err
+	}); err != nil {
+		return ref, err
+	}
+	return ref, nil
+}
+
+// MarkLoadCommit loads the Commit that the mark points to.
 // If the mark is empty then the Ref will be zeroed.
-func (r *Repo) MarkLoad(ctx context.Context, fqm FQM) (Ref, Commit, error) {
+func (r *Repo) MarkLoadCommit(ctx context.Context, fqm FQM) (Ref, Commit, error) {
 	var ref gdat.Ref
 	var comm gotcore.Commit
 	if err := r.ViewMark(ctx, fqm, func(mt *gotcore.MarkTx) error {

@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"slices"
 
+	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"go.brendoncarroll.net/exp/streams"
@@ -376,6 +377,20 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 		if err := stage.Clear(ctx); err != nil {
 			return err
 		}
+		saveTo, err := wc.GetSaveTo()
+		if err != nil {
+			return err
+		}
+		ref, err := wc.repo.MarkLoad(ctx, gotrepo.FQM{Name: saveTo})
+		if err != nil {
+			return err
+		}
+		if err := EditConfig(wc.root, func(x Config) Config {
+			x.Base = []gdat.Ref{ref}
+			return x
+		}); err != nil {
+			return err
+		}
 		return nil
 	})
 }
@@ -444,37 +459,35 @@ type FileInfo = porting.FileInfo
 //  2. the active branch head
 func (wc *WC) ForEachDirty(ctx context.Context, fn func(fi DirtyFile) error) error {
 	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
-		return wc.viewSnap(ctx, func(vctx *gotcore.ViewCtx) error {
-			stage := sctx.Stage
-			fsys, _, err := wc.getFilteredFS(ctx)
-			if err != nil {
+		stage := sctx.Stage
+		fsys, _, err := wc.getFilteredFS(ctx)
+		if err != nil {
+			return err
+		}
+		spans, err := wc.ListSpans(ctx)
+		if err != nil {
+			return err
+		}
+		uk := wc.newUnknownIterator(sctx.DB, fsys, spans)
+		return streams.ForEach(ctx, uk, func(ukp unknownFile) error {
+			p := ukp.Path()
+			// filter staging
+			var op staging.Operation
+			if found, err := stage.Get(ctx, p, &op); err != nil {
 				return err
-			}
-			spans, err := wc.ListSpans(ctx)
-			if err != nil {
-				return err
-			}
-			uk := wc.newUnknownIterator(sctx.DB, fsys, spans)
-			return streams.ForEach(ctx, uk, func(ukp unknownFile) error {
-				p := ukp.Path()
-				// filter staging
-				var op staging.Operation
-				if found, err := stage.Get(ctx, p, &op); err != nil {
-					return err
-				} else if found {
-					if op.Delete != nil && !ukp.Current.Ok {
-						// File is gone, and staging deleted it, skip.
-						return nil
-					}
-					// If it is a Put operation, then it is definitely different,
-					// otherwise it would be in the database, and would have been filtered by the matching join.
+			} else if found {
+				if op.Delete != nil && !ukp.Current.Ok {
+					// File is gone, and staging deleted it, skip.
+					return nil
 				}
-				return fn(DirtyFile{
-					Path:       p,
-					Exists:     ukp.Current.Ok,
-					Mode:       ukp.Current.X.Mode,
-					ModifiedAt: ukp.Current.X.ModifiedAt,
-				})
+				// If it is a Put operation, then it is definitely different,
+				// otherwise it would be in the database, and would have been filtered by the matching join.
+			}
+			return fn(DirtyFile{
+				Path:       p,
+				Exists:     ukp.Current.Ok,
+				Mode:       ukp.Current.X.Mode,
+				ModifiedAt: ukp.Current.X.ModifiedAt,
 			})
 		})
 	})
