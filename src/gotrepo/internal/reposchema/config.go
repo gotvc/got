@@ -36,7 +36,10 @@ func (c *Client) GetConfig(ctx context.Context, repoVol blobcache.OID) (json.Raw
 	return append(json.RawMessage(nil), cfg...), nil
 }
 
-func (c *Client) EditConfig(ctx context.Context, repoVol blobcache.OID, fn func(x json.RawMessage) json.RawMessage) error {
+// TODO: move config definition into this package.
+type Config = json.RawMessage
+
+func (c *Client) EditConfig(ctx context.Context, repoVol blobcache.OID, fn func(x Config) (Config, error)) error {
 	rootH, err := c.rootHandle(ctx, repoVol)
 	if err != nil {
 		return err
@@ -59,7 +62,10 @@ func (c *Client) EditConfig(ctx context.Context, repoVol blobcache.OID, fn func(
 	} else {
 		prev = append(json.RawMessage(nil), cfg...)
 	}
-	next := fn(prev)
+	next, err := fn(prev)
+	if err != nil {
+		return err
+	}
 	if next == nil {
 		root, err = c.gotkv.Delete(ctx, txn, root, configKey)
 		if err != nil {

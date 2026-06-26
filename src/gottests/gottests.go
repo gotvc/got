@@ -83,7 +83,9 @@ func openSite(t testing.TB, root *os.Root) Site {
 }
 
 func (s *Site) ConfigureRepo(ctx context.Context, fn func(gotrepo.Config) gotrepo.Config) {
-	require.NoError(s.t, s.Repo.Configure(ctx, fn))
+	require.NoError(s.t, s.Repo.Configure(ctx, func(x gotrepo.Config) (gotrepo.Config, error) {
+		return fn(x), nil
+	}))
 }
 
 func (s *Site) ConfigureWC(ctx context.Context, fn func(gotwc.Config) gotwc.Config) {

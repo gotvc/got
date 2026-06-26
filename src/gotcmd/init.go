@@ -43,7 +43,7 @@ var initCmd = star.Command{
 		if err := gotwc.Init(root, gotwc.DefaultConfig()); err != nil {
 			return err
 		}
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if _, err := repo.CreateMark(c, gotrepo.FQM{Name: "master"}, gotcore.DefaultConfig(false), nil); err != nil {
 			return err
 		}

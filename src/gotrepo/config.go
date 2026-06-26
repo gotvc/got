@@ -89,8 +89,8 @@ func LoadConfig(repo *os.Root) (*Config, error) {
 }
 
 // editConfig applies fn to the config of the repo at repoPath
-func editConfig(repo *os.Root, fn func(x Config) Config) error {
-	return gotcfg.EditFile(repo, configPath, func(x Config) Config {
+func editConfig(repo *os.Root, fn func(x Config) (Config, error)) error {
+	return gotcfg.EditFile(repo, configPath, func(x Config) (Config, error) {
 		// maps
 		if x.Identities == nil {
 			x.Identities = make(map[string]inet256.ID)
@@ -109,19 +109,19 @@ func editConfig(repo *os.Root, fn func(x Config) Config) error {
 	})
 }
 
-func (r *Repo) Configure(ctx context.Context, fn func(x Config) Config) error {
+func (r *Repo) Configure(ctx context.Context, fn func(x Config) (Config, error)) error {
 	if r.dir != nil {
 		if err := editConfig(r.dir, fn); err != nil {
 			return err
 		}
 	} else {
-		if err := r.repoc.EditConfig(ctx, r.rootVol, func(xData json.RawMessage) json.RawMessage {
+		if err := r.repoc.EditConfig(ctx, r.rootVol, func(xData json.RawMessage) (json.RawMessage, error) {
 			x, err := gotcfg.Parse[Config](xData)
 			if err != nil {
 				panic(err) // TODO: move Config into reposchema
 			}
-			y := fn(*x)
-			return gotcfg.Marshal(y)
+			y, err := fn(*x)
+			return gotcfg.Marshal(y), nil
 		}); err != nil {
 			return err
 		}

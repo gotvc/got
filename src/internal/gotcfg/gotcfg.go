@@ -45,12 +45,15 @@ func LoadFile[T any](root *os.Root, p string) (*T, error) {
 	return Parse[T](data)
 }
 
-func EditFile[T any](root *os.Root, p string, fn func(T) T) error {
+func EditFile[T any](root *os.Root, p string, fn func(T) (T, error)) error {
 	cfg, err := LoadFile[T](root, p)
 	if err != nil {
 		return err
 	}
-	cfg2 := fn(*cfg)
+	cfg2, err := fn(*cfg)
+	if err != nil {
+		return err
+	}
 	// TODO: we should rename a new temp file into place.
 	return root.WriteFile(p, Marshal(cfg2), 0o644)
 }

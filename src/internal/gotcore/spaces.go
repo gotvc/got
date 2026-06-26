@@ -152,7 +152,10 @@ func CreateIfNotExists(ctx context.Context, stx SpaceTx, k string, cfg Metadata)
 // ForEach is a convenience function which uses Space.List to call fn with
 // all the mark names contained in span.
 func ForEach(ctx context.Context, stx SpaceTx, span Span, fn func(string) error) (retErr error) {
-	for name := range stx.All(ctx) {
+	for name, err := range stx.All(ctx) {
+		if err != nil {
+			return err
+		}
 		if !span.Contains(name) {
 			return fmt.Errorf("gotcore.ForEach: Space implementation is broken got %s when asking for %v", name, span)
 		}
@@ -251,7 +254,10 @@ func SyncSpaces(ctx context.Context, task SyncSpacesTask) ([]SyncResult, error) 
 	err := task.Src.Do(ctx, false, func(src SpaceTx) error {
 		return task.Dst.Do(ctx, true, func(dst SpaceTx) error {
 			nameMap := make(map[string]string)
-			for srcName := range src.All(ctx) {
+			for srcName, err := range src.All(ctx) {
+				if err != nil {
+					return err
+				}
 				// filter
 				if task.Filter != nil && !task.Filter(srcName) {
 					continue

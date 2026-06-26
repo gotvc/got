@@ -12,20 +12,23 @@ import (
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/internal/gotbc"
 	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/sbe"
-	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 	"go.brendoncarroll.net/exp/streams"
+	"go.brendoncarroll.net/stdctx/logctx"
 )
 
 func BeginTx(ctx context.Context, dmach *gdat.Machine, kvmach *gotkv.Machine, vol volumes.Volume, modify bool) (*Tx, error) {
 	ctx, cf := context.WithTimeoutCause(ctx, 3*time.Second, errors.New("trying to begin transaction"))
 	defer cf()
+	logctx.Debug(ctx, "gotns: BeginTx...")
 	tx, err := vol.BeginTx(ctx, blobcache.TxParams{Modify: modify})
 	if err != nil {
 		return nil, err
 	}
+	logctx.Debug(ctx, "gotns: started transaction")
 	return NewTx(tx, dmach, kvmach), nil
 }
 
@@ -262,9 +265,8 @@ func saveRoot(ctx context.Context, tx volumes.Tx, r Root) error {
 	return tx.Save(ctx, r.Marshal(nil))
 }
 
-func DefaultVolumeSpec() blobcache.VolumeSpec {
-	spec := blobcache.DefaultLocalSpec()
-	spec.Local.HashAlgo = blobcache.HashAlgo_BLAKE2b_256
-	spec.Local.MaxSize = stores.MaxSize
+// SpaceVolumeSpec returns a VolumeSpec for a got space
+func SpaceVolumeSpec() blobcache.VolumeSpec {
+	spec := gotbc.GotVolumeSpec()
 	return spec
 }

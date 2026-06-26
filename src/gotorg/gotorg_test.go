@@ -21,13 +21,9 @@ import (
 func TestInit(t *testing.T) {
 	ctx := testutil.Context(t)
 	bc := bclocal.NewTestService(t)
-	rootExpr := bcns.ObjectExpr{}
-	nsc, err := bcns.ClientForVolumeExpr(ctx, bc, rootExpr)
-	require.NoError(t, err)
-	nsh, err := rootExpr.Open(ctx, bc)
-	require.NoError(t, err)
+	nsc := bcns.NewClient(bc, blobcache.OID{})
 
-	volh, err := nsc.CreateAt(ctx, *nsh, "test", BranchVolumeSpec())
+	volh, err := nsc.CreateVolume(ctx, "test", BranchVolumeSpec())
 	require.NoError(t, err)
 
 	signPub, sigPriv := newTestSigner(t)
@@ -35,10 +31,10 @@ func TestInit(t *testing.T) {
 	gnsc := Client{Blobcache: bc, Machine: New(), ActAs: IdenPrivate{SigPrivateKey: sigPriv, KEMPrivateKey: kemPriv}}
 	adminLeaf := NewIDUnit(signPub, kemPub)
 	admins := []IdentityUnit{adminLeaf}
-	err = gnsc.EnsureInit(ctx, *volh, admins)
+	err = gnsc.EnsureInit(ctx, volh, admins)
 	require.NoError(t, err)
 
-	adminGrp, err := gnsc.LookupGroup(ctx, *volh, "admin")
+	adminGrp, err := gnsc.LookupGroup(ctx, volh, "admin")
 	require.NoError(t, err)
 	require.Equal(t, adminLeaf.ID, adminGrp.Owners[0])
 }

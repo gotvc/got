@@ -23,19 +23,7 @@ type Space struct {
 }
 
 func (s *Space) Do(ctx context.Context, modify bool, fn func(sptx gotcore.SpaceTx) error) error {
-	if modify {
-		return s.modify(ctx, func(tx *SpaceTx) error {
-			return fn(tx)
-		})
-	} else {
-		return s.view(ctx, func(tx *SpaceTx) error {
-			return fn(tx)
-		})
-	}
-}
-
-func (s *Space) modify(ctx context.Context, fn func(space *SpaceTx) error) error {
-	tx, err := BeginTx(ctx, s.DMach, s.KVMach, s.Volume, true)
+	tx, err := BeginTx(ctx, s.DMach, s.KVMach, s.Volume, modify)
 	if err != nil {
 		return err
 	}
@@ -47,20 +35,10 @@ func (s *Space) modify(ctx context.Context, fn func(space *SpaceTx) error) error
 	}); err != nil {
 		return err
 	}
-	return tx.Commit(ctx)
-}
-
-func (s *Space) view(ctx context.Context, fn func(space *SpaceTx) error) error {
-	tx, err := BeginTx(ctx, s.DMach, s.KVMach, s.Volume, false)
-	if err != nil {
-		return err
+	if modify {
+		return tx.Commit(ctx)
 	}
-	defer tx.Abort(ctx)
-	return fn(&SpaceTx{
-		kvmach: s.KVMach,
-		dmach:  s.DMach,
-		tx:     tx,
-	})
+	return nil
 }
 
 var _ gotcore.SpaceTx = &SpaceTx{}

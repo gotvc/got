@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	bcclient "blobcache.io/blobcache/client/go"
 	"blobcache.io/blobcache/src/bcsdk"
 	"blobcache.io/blobcache/src/blobcache"
 	"github.com/gotvc/got/src/gdat"
@@ -19,16 +18,17 @@ import (
 var spaceCmd = star.NewDir(star.Metadata{
 	Short: "manage namespaces",
 }, map[string]star.Command{
-	"list":      spaceListCmd,
-	"create-bc": spaceCreateBcCmd,
-	"add-bc":    spaceAddBcCmd,
-	"sync":      spaceSyncCmd,
+	"list": spaceListCmd,
+	"add":  spaceAddCmd,
+	"rm":   spaceRmCmd,
+	"mv":   spaceMvCmd,
+	"sync": spaceSyncCmd,
 })
 
 var spaceListCmd = star.Command{
 	Metadata: star.Metadata{Short: "list namespaces"},
 	F: func(c star.Context) error {
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -42,7 +42,7 @@ var spaceListCmd = star.Command{
 			var oid blobcache.OID
 			switch {
 			case scfg.Blobcache != nil:
-				oid = scfg.Blobcache.URL.Base
+				oid = scfg.Blobcache.URL.OID
 			default:
 				c.Printf("ERROR: don't know how to print %v\n", scfg)
 				continue
@@ -67,7 +67,7 @@ var spaceSyncCmd = star.Command{
 	Pos: []star.Positional{srcSpaceParam, dstSpaceParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -94,43 +94,44 @@ var addPrefixParam = &star.Optional[string]{
 	Parse:    star.ParseString,
 }
 
-var spaceCreateBcCmd = star.Command{
+var spaceRmCmd = star.Command{
 	Metadata: star.Metadata{
-		Short: "create a new space backed by a Blobcache Volume",
+		Short: "remove a space from the repo. (DESTRUCTIVE)",
 	},
 	Pos: []star.Positional{spaceNameParam},
-	Flags: map[string]star.Flag{
-		"mkvol": volNameParam,
-	},
 	F: func(c star.Context) error {
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
 		defer close()
-		bcsvc := bcclient.NewClientFromEnv()
-		ep, err := bcsvc.Endpoint(c)
-		if err != nil {
+		name := spaceNameParam.Load(c)
+		if err := repo.RemoveSpace(c, name); err != nil {
 			return err
 		}
-		volname := volNameParam.Load(c)
-		h, err := createNSVol(c, bcsvc, volname)
-		if err != nil {
-			return err
-		}
-		return repo.CreateSpace(c, spaceNameParam.Load(c), gotrepo.SpaceSpec{
-			Blobcache: &gotrepo.VolumeSpec{
-				URL: blobcache.URL{
-					Node: ep.Node,
-					Base: h.OID,
-				},
-				Secret: randomSecret(),
-			},
-		})
+		c.Printf("removed space %s successfully\n", name)
+		return nil
 	},
 }
 
-var spaceAddBcCmd = star.Command{
+var spaceMvCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "rename a space",
+	},
+	Pos: []star.Positional{spaceNameParam, newSpaceNameParam},
+	F: func(c star.Context) error {
+		repo, close, err := openRepo(c)
+		if err != nil {
+			return err
+		}
+		defer close()
+		oldName := spaceNameParam.Load(c)
+		newName := newSpaceNameParam.Load(c)
+		return repo.RenameSpace(c, oldName, newName)
+	},
+}
+
+var spaceAddCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "adds an existing Space backed by a Blobcache Volume",
 	},
@@ -140,12 +141,12 @@ var spaceAddBcCmd = star.Command{
 		"secret": secretParam,
 	},
 	F: func(c star.Context) error {
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
 		defer close()
-		bc := bcclient.NewClientFromEnv()
+		bc := repo.Blobcache()
 		u := bcURLParam.Load(c)
 		volh, err := bcsdk.OpenURL(c, bc, u)
 		if err != nil {
@@ -156,7 +157,7 @@ var spaceAddBcCmd = star.Command{
 		if err != nil {
 			return err
 		}
-		return repo.CreateSpace(c, spaceNameParam.Load(c), gotrepo.SpaceSpec{
+		return repo.AddSpace(c, spaceNameParam.Load(c), gotrepo.SpaceSpec{
 			Blobcache: &gotrepo.VolumeSpec{
 				URL:    u,
 				Secret: secretParam.Load(c),
@@ -205,6 +206,16 @@ var spaceNameParam = &star.Required[string]{
 	},
 }
 
+var newSpaceNameParam = &star.Required[string]{
+	PosName: "new-name",
+	Parse: func(x string) (string, error) {
+		if err := gotcore.CheckName(x); err != nil {
+			return "", err
+		}
+		return x, nil
+	},
+}
+
 var pullCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "pulls marks from spaces according to the config",
@@ -212,7 +223,7 @@ var pullCmd = star.Command{
 	Pos: []star.Positional{},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -244,7 +255,7 @@ var pushCmd = star.Command{
 	Pos: []star.Positional{},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}

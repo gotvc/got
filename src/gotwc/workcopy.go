@@ -11,6 +11,11 @@ import (
 
 	"blobcache.io/blobcache/src/bclocal"
 	"blobcache.io/blobcache/src/blobcache"
+	"go.brendoncarroll.net/exp/slices2"
+	"go.brendoncarroll.net/state/posixfs"
+	"go.brendoncarroll.net/stdctx/logctx"
+	"go.uber.org/zap"
+
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
@@ -22,10 +27,6 @@ import (
 	"github.com/gotvc/got/src/gotwc/internal/staging"
 	"github.com/gotvc/got/src/internal/gotbc"
 	"github.com/gotvc/got/src/internal/gotcore"
-	"go.brendoncarroll.net/exp/slices2"
-	"go.brendoncarroll.net/state/posixfs"
-	"go.brendoncarroll.net/stdctx/logctx"
-	"go.uber.org/zap"
 )
 
 const (
@@ -36,6 +37,17 @@ const (
 	defaultDirMode  = 0o755
 	nameMaster      = "master"
 )
+
+func IsWC(wcRoot *os.Root) (bool, error) {
+	_, err := LoadConfig(wcRoot)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
 
 // Init initializes a new working copy in wcdir
 // The working copy will be associated with the given repo.

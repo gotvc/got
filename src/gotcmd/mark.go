@@ -45,7 +45,7 @@ var markCreateCmd = star.Command{
 	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -113,7 +113,7 @@ var markDeleteCmd = star.Command{
 	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -134,7 +134,7 @@ var markDeletePrefixCmd = star.Command{
 	Pos: []star.Positional{markNamePrefixParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -169,7 +169,7 @@ var markMvCmd = star.Command{
 	Pos: []star.Positional{srcMarkNameParam, dstMarkNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -186,7 +186,7 @@ var markCpCmd = star.Command{
 	Pos: []star.Positional{srcMarkParam, dstMarkParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -215,7 +215,7 @@ var markLoadCmd = star.Command{
 	Pos: []star.Positional{markNameParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -240,7 +240,7 @@ var markInspectCmd = star.Command{
 	Pos: []star.Positional{fqmParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -259,7 +259,7 @@ var markCpSaltCmd = star.Command{
 	Pos: []star.Positional{srcMarkParam, dstMarkParam},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
@@ -437,7 +437,7 @@ var markSyncCmd = star.Command{
 	},
 	F: func(c star.Context) error {
 		ctx := c.Context
-		repo, close, err := openRepo()
+		repo, close, err := openRepo(c)
 		if err != nil {
 			return err
 		}
