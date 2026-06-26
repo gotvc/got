@@ -92,6 +92,11 @@ func printWCConfig(c *star.Context, wcCfg gotwc.Config, indent string) error {
 }
 
 func printRepoConfig(c *star.Context, repoCfg gotrepo.Config, indent string) error {
+	if envRepo, envRepoOk := os.LookupEnv(EnvGotRepo); envRepoOk {
+		c.Printf("%sGOT_REPO=%s\n", indent, envRepo)
+	} else {
+		c.Printf("%sGOT_REPO= (not set)\n", indent)
+	}
 	if len(repoCfg.Identities) > 0 {
 		c.Printf("%sIDENTITIES:\n", indent)
 		for name, id := range repoCfg.Identities {
