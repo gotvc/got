@@ -9,6 +9,7 @@ import (
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/internal/gotcore"
+	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/stdctx/logctx"
 )
 
@@ -98,5 +99,16 @@ func (r *Repo) CheckAll(ctx context.Context) error {
 			}
 		}
 		return nil
+	})
+}
+
+func (r *Repo) DiffFS(ctx context.Context, left, right gotcore.CommitExpr, fn func(dfr *gotfs.Differ) error) error {
+	return r.ViewCommit(ctx, left, func(lctx *gotcore.ViewCtx) error {
+		return r.ViewCommit(ctx, right, func(rctx *gotcore.ViewCtx) error {
+			fsmach := gotfs.NewMachine(gotfs.Params{})
+			u := stores.Union{lctx.FSRO().Metadata, rctx.FSRO().Metadata}
+			dfr := fsmach.NewDiffer(u, lctx.Root.Payload.Snap, rctx.Root.Payload.Snap)
+			return fn(dfr)
+		})
 	})
 }
