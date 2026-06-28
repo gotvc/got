@@ -1,4 +1,4 @@
-package gotvc
+package gotdag
 
 import (
 	"container/list"

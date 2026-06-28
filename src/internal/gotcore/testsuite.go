@@ -10,8 +10,8 @@ import (
 	"testing"
 
 	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/gotdag"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
@@ -248,13 +248,13 @@ func makeFS(t testing.TB, ss gotfs.RW, files map[string]string) gotfs.Root {
 
 func makeCommit(t testing.TB, cfg DSConfig, s stores.WO, parents []Commit, fsroot gotfs.Root) *Commit {
 	ctx := testutil.Context(t)
-	vcmach := gotvc.NewMachine(gotvc.Params[Payload]{
+	vcmach := gotdag.NewMachine(gotdag.Params[Payload]{
 		Parse: ParsePayload,
 		Data: gdat.Params{
 			Salt: cfg.Salt,
 		},
 	})
-	comm, err := vcmach.NewVertex(ctx, s, gotvc.VertexParams[Payload]{
+	comm, err := vcmach.NewVertex(ctx, s, gotdag.VertexParams[Payload]{
 		Parents: parents,
 		Payload: Payload{
 			Snap: fsroot,

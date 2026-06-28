@@ -46,6 +46,8 @@ var rootCmd = star.NewGroupedDir(
 			"serve",
 			"scrub",
 			"iden",
+			"config",
+			"merge",
 		}},
 		{Title: "WORKING COPY & STAGING", Commands: []string{
 			"wc",
@@ -115,6 +117,7 @@ var rootCmd = star.NewGroupedDir(
 		"space": spaceCmd,
 		"pull":  pullCmd,
 		"push":  pushCmd,
+		"mall":  mallCmd,
 
 		// misc
 		"iden":    idenCmd,

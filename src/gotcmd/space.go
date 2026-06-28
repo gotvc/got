@@ -57,6 +57,33 @@ var spaceListCmd = star.Command{
 	},
 }
 
+var mallCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "runs the merge all (mall) task, which merges Marks in the local space",
+	},
+	Flags: map[string]star.Flag{},
+	Pos:   []star.Positional{spaceNameOptParam},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		r, closer, err := openRepo(ctx)
+		if err != nil {
+			return err
+		}
+		defer closer()
+		var filter func(string) bool
+		if space, ok := spaceNameOptParam.LoadOpt(c); ok {
+			filter = func(x string) bool { return x == space }
+		}
+		if err := r.MergeAll(ctx, filter, func(sr gotcore.SyncResult) {
+			c.Printf("%s -> %s ERR: %v\n", sr.Src, sr.Dst, sr.Err)
+		}); err != nil {
+			return err
+		}
+		c.Printf("merged all marks successfully\n")
+		return nil
+	},
+}
+
 var spaceSyncCmd = star.Command{
 	Metadata: star.Metadata{
 		Short: "copies marks from one space to another",

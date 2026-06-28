@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/gotvc/got/src/gotdag"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
@@ -23,7 +23,7 @@ func TestMarshalCommit(t *testing.T) {
 		{
 			N:         1,
 			CreatedAt: tai64.Now().TAI64(),
-			Parents: []gotvc.Ref{
+			Parents: []gotdag.Ref{
 				{},
 				{},
 				{},

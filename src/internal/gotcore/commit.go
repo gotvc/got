@@ -6,9 +6,9 @@ import (
 	"fmt"
 
 	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/gotdag"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotfsvm"
-	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/slices2"
@@ -17,7 +17,7 @@ import (
 )
 
 // Commit is a commitment to a filesystem commit, ancestor Commits, and additional metadata.
-type Commit = gotvc.Vertex[Payload]
+type Commit = gotdag.Vertex[Payload]
 
 // Payload is the thing being committed to.
 type Payload struct {
@@ -60,7 +60,7 @@ func (p *Payload) Unmarshal(data []byte) error {
 
 // GetCommit reads a commit from the store.
 func GetCommit(ctx context.Context, s stores.RO, ref gdat.Ref) (Commit, error) {
-	vcmach := gotvc.NewMachine(gotvc.Params[Payload]{Parse: ParsePayload})
+	vcmach := gotdag.NewMachine(gotdag.Params[Payload]{Parse: ParsePayload})
 	return vcmach.GetVertex(ctx, s, ref)
 }
 
@@ -90,7 +90,7 @@ func CreateCommit(ctx context.Context, vcmach *VCMach, srw stores.RW, copa Commi
 	if err != nil {
 		panic(err)
 	}
-	return vcmach.NewVertex(ctx, srw, gotvc.VertexParams[Payload]{
+	return vcmach.NewVertex(ctx, srw, gotdag.VertexParams[Payload]{
 		Parents:   copa.Base,
 		CreatedAt: copa.CommittedAt,
 		Creator:   copa.Committer,

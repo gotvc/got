@@ -7,8 +7,8 @@ import (
 
 	"blobcache.io/blobcache/src/bcsdk"
 	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/gotdag"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/stores"
 )
@@ -353,7 +353,7 @@ func newGotFS(b *DSConfig) gotfs.Machine {
 
 // NewGotVC creates a new gotvc.Machine suitable for writing to the mark
 func newGotVC(b *DSConfig) VCMach {
-	return gotvc.NewMachine(gotvc.Params[Payload]{
+	return gotdag.NewMachine(gotdag.Params[Payload]{
 		Parse: ParsePayload,
 		Data:  gdat.Params{Salt: *deriveVCSalt(b)},
 	})

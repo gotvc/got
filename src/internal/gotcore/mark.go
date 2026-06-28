@@ -4,16 +4,17 @@ import (
 	"crypto/rand"
 	"strings"
 
-	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotvc"
 	"go.brendoncarroll.net/tai64"
 	"go.inet256.org/inet256/src/inet256"
 	"golang.org/x/exp/slices"
+
+	"github.com/gotvc/got/src/gotdag"
+	"github.com/gotvc/got/src/gotfs"
 )
 
 type (
 	FSMach = gotfs.Machine
-	VCMach = gotvc.Machine[Payload]
+	VCMach = gotdag.Machine[Payload]
 )
 
 // Info is the metadata associated with a Mark.

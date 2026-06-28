@@ -3,6 +3,7 @@ package gotrepo
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 
 	"github.com/gotvc/got/src/internal/gotcore"
@@ -220,4 +221,78 @@ func chainFilters(a, b func(string) bool) func(string) bool {
 		}
 		return true
 	}
+}
+
+// MergeConfig describes a merge task for a given Space.
+type MergeConfig struct {
+	Space     string `json:"space"`
+	SrcPrefix string `json:"src_prefix"`
+	DstPrefix string `json:"dst_prefix"`
+}
+
+// MergeAll performs all the configured Merge tasks involving for each space
+// filter should return true for spaces to run merge tasks for.
+func (r *Repo) MergeAll(ctx context.Context, filter func(string) bool, onDone func(gotcore.SyncResult)) error {
+	if onDone == nil {
+		onDone = func(sr gotcore.SyncResult) {}
+	}
+	if filter == nil {
+		filter = func(s string) bool { return true }
+	}
+	cfg := r.Config()
+	for _, mcfg := range cfg.Merge {
+		if !filter(mcfg.Space) {
+			continue
+		}
+		sp, err := r.GetSpace(ctx, mcfg.Space)
+		if err != nil {
+			return err
+		}
+		if mcfg.SrcPrefix == "" {
+			return fmt.Errorf("src_prefix cannot be empty")
+		}
+		if err := sp.Do(ctx, true, func(st gotcore.SpaceTx) error {
+			for name, err := range st.All(ctx) {
+				if err != nil {
+					return err
+				}
+				if !strings.HasPrefix(name, mcfg.SrcPrefix) {
+					continue
+				}
+				relName := strings.TrimPrefix(name, mcfg.SrcPrefix)
+				dstName := mcfg.DstPrefix + relName
+
+				log.Println(name, dstName)
+				srcMtx, err := gotcore.NewMarkTx(ctx, st, name)
+				if err != nil {
+					return err
+				}
+				srcMeta := srcMtx.Info().AsMetadata()
+				if _, err := gotcore.EnsureMark(ctx, st, dstName, srcMeta); err != nil {
+					return err
+				}
+				dstMtx, err := gotcore.NewMarkTx(ctx, st, dstName)
+				if err != nil {
+					return err
+				}
+				delta, err := gotcore.Sync(ctx, srcMtx, dstMtx, false)
+				sr := gotcore.SyncResult{
+					Src:  name,
+					Dst:  dstName,
+					Prev: delta.Prev,
+					Next: delta.Next,
+				}
+				if err != nil {
+					sr.Err = err
+					onDone(sr)
+					return err
+				}
+				onDone(sr)
+			}
+			return nil
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
 }

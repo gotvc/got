@@ -19,6 +19,7 @@ type Config struct {
 	Spaces map[string]SpaceSpec `json:"spaces"`
 	Pull   []PullConfig         `json:"pull"`
 	Push   []PushConfig         `json:"push"`
+	Merge  []MergeConfig        `json:"merge"`
 }
 
 func (c *Config) Validate() error {
