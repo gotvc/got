@@ -13,6 +13,15 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 )
 
+// EnsureMark calls Create, but ignores Exists errors.
+func EnsureMark(ctx context.Context, stx SpaceTx, name string, createWith Metadata) (*Info, error) {
+	info, err := stx.Create(ctx, name, createWith)
+	if err != nil && !IsExists(err) {
+		return nil, err
+	}
+	return info, nil
+}
+
 // MarkTx scopes down a SpaceTx to a single Mark.
 type MarkTx struct {
 	stx  SpaceTx
@@ -20,8 +29,7 @@ type MarkTx struct {
 	info Info
 
 	initOnce sync.Once
-	gotvc    VCMach
-	gotfs    FSMach
+	mach     Machine
 }
 
 func NewMarkTx(ctx context.Context, stx SpaceTx, name string) (*MarkTx, error) {
@@ -38,8 +46,7 @@ func NewMarkTx(ctx context.Context, stx SpaceTx, name string) (*MarkTx, error) {
 
 func (b *MarkTx) init() {
 	b.initOnce.Do(func() {
-		b.gotvc = newGotVC(&b.info.Config)
-		b.gotfs = newGotFS(&b.info.Config)
+		b.mach = NewMachine(b.info.Config)
 	})
 }
 
@@ -49,12 +56,12 @@ func (b *MarkTx) Info() Info {
 
 func (b *MarkTx) GotFS() *gotfs.Machine {
 	b.init()
-	return &b.gotfs
+	return &b.mach.FS
 }
 
 func (b *MarkTx) GotVC() *VCMach {
 	b.init()
-	return &b.gotvc
+	return &b.mach.VC
 }
 
 func (m *MarkTx) Config() DSConfig {
@@ -149,11 +156,10 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Commit, e
 		}
 	}
 	modctx := ModifyCtx{
-		VC:     m.GotVC(),
-		FS:     m.GotFS(),
-		Stores: ss,
-		Target: target,
-		Root:   &comm,
+		Machine: &m.mach,
+		Stores:  ss,
+		Target:  target,
+		Commit:  &comm,
 	}
 	y, err := fn(modctx)
 	if err != nil {
@@ -165,7 +171,7 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Commit, e
 		if err != nil {
 			return err
 		}
-		if err = syncCommitRef(ctx, &m.gotvc, &m.gotfs, m.RO(), m.WO(), ref); err != nil {
+		if err = syncCommitRef(ctx, &m.mach.VC, &m.mach.FS, m.RO(), m.WO(), ref); err != nil {
 			return err
 		}
 		yRef = ref
@@ -176,11 +182,10 @@ func (m *MarkTx) Modify(ctx context.Context, fn func(mctx ModifyCtx) (*Commit, e
 
 // ModifyCtx is the context passed to the modify function.
 type ModifyCtx struct {
-	VC     *VCMach
-	FS     *FSMach
+	*Machine
 	Stores RW
 	Target gdat.Ref
-	Root   *Commit
+	Commit *Commit
 }
 
 // Sync syncs a commit into the Space's store
@@ -202,11 +207,11 @@ func (b *MarkTx) History(ctx context.Context, fn func(ref gdat.Ref, comm Commit)
 	} else if !ok {
 		return nil
 	}
-	ref := b.gotvc.RefFromVertex(comm)
+	ref := b.mach.VC.RefFromVertex(comm)
 	if err := fn(ref, comm); err != nil {
 		return err
 	}
-	return b.gotvc.ForEach(ctx, b.VCRO(), comm.Parents, fn)
+	return b.mach.VC.ForEach(ctx, b.VCRO(), comm.Parents, fn)
 }
 
 func (b *MarkTx) LoadFS(ctx context.Context, dst *gotfs.Root) (bool, error) {
@@ -351,7 +356,7 @@ func newGotFS(b *DSConfig) gotfs.Machine {
 	return gotfs.NewMachine(p)
 }
 
-// NewGotVC creates a new gotvc.Machine suitable for writing to the mark
+// NewGotVC creates a new gotdag.Machine suitable for writing to the mark
 func newGotVC(b *DSConfig) VCMach {
 	return gotdag.NewMachine(gotdag.Params[Payload]{
 		Parse: ParsePayload,

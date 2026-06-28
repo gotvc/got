@@ -423,24 +423,3 @@ func prettifyJSON(x json.RawMessage) string {
 	}
 	return string(data)
 }
-
-var mergeCmd = star.Command{
-	Metadata: star.Metadata{
-		Short: "merges other bookmarks into the current bookmark",
-	},
-	Pos: []star.Positional{mergeNamesParam},
-	F: func(c star.Context) error {
-		wc, err := openWC()
-		if err != nil {
-			return err
-		}
-		defer wc.Close()
-		return wc.BeginMerge(c, mergeNamesParam.Load(c))
-	},
-}
-
-var mergeNamesParam = &star.Repeated[string]{
-	ShortDoc: "list of marks to merge",
-	PosName:  "mark-names",
-	Parse:    star.ParseString,
-}

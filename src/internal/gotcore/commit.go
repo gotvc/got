@@ -16,6 +16,18 @@ import (
 	"go.inet256.org/inet256/src/inet256"
 )
 
+type Machine struct {
+	FS FSMach
+	VC VCMach
+}
+
+func NewMachine(dcfg DSConfig) Machine {
+	return Machine{
+		FS: newGotFS(&dcfg),
+		VC: newGotVC(&dcfg),
+	}
+}
+
 // Commit is a commitment to a filesystem commit, ancestor Commits, and additional metadata.
 type Commit = gotdag.Vertex[Payload]
 
