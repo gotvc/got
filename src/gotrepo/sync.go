@@ -3,7 +3,6 @@ package gotrepo
 import (
 	"context"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/gotvc/got/src/internal/gotcore"
@@ -262,7 +261,6 @@ func (r *Repo) MergeAll(ctx context.Context, filter func(string) bool, onDone fu
 				relName := strings.TrimPrefix(name, mcfg.SrcPrefix)
 				dstName := mcfg.DstPrefix + relName
 
-				log.Println(name, dstName)
 				srcMtx, err := gotcore.NewMarkTx(ctx, st, name)
 				if err != nil {
 					return err
