@@ -347,13 +347,13 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			for _, base := range bases {
 				fsinputs = append(fsinputs, base.Payload.Snap)
 			}
-			nextSnap, err := gotcore.Apply(ctx, mctx.FS, ss, fn, fsinputs)
+			nextSnap, err := gotcore.Apply(ctx, &mctx.FS, ss, fn, fsinputs)
 			if err != nil {
 				return nil, err
 			}
 
 			vcs := stores.NewOverlay(mctx.Stores.VC, scratch)
-			next, err := gotcore.CreateCommit(ctx, mctx.VC, vcs, gotcore.CommitParams{
+			next, err := gotcore.CreateCommit(ctx, &mctx.VC, vcs, gotcore.CommitParams{
 				Committer:   params.Committer,
 				CommittedAt: params.CommittedAt,
 				Base:        bases,

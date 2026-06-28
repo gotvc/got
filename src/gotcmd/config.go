@@ -142,6 +142,11 @@ func printRepoConfig(c *star.Context, repoCfg gotrepo.Config, indent string) err
 		}
 		c.Printf("%s|  %-20s %-20s %-20s %-20s\n", indent, pc.To, filter, pc.CutPrefix, pc.AddPrefix)
 	}
+	c.Printf("%sMERGE TASKS:\n", indent)
+	c.Printf("%s|  %-20s %-20s %-20s\n", indent, "SPACE", "SRC_PREFIX", "DST_PREFIX")
+	for _, mc := range repoCfg.Merge {
+		c.Printf("%s|  %-20s %-20s %-20s\n", indent, mc.Space, mc.SrcPrefix, mc.DstPrefix)
+	}
 	return nil
 }
 

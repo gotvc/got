@@ -4,8 +4,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 
+	"github.com/gotvc/got/src/gotdag"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotvc"
 	"github.com/gotvc/got/src/internal/stores"
 )
 
@@ -90,6 +90,6 @@ func GotFS(cfg DSConfig) gotfs.Machine {
 	return newGotFS(&cfg)
 }
 
-func GotVC(cfg DSConfig) gotvc.Machine[Payload] {
+func GotVC(cfg DSConfig) gotdag.Machine[Payload] {
 	return newGotVC(&cfg)
 }
