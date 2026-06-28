@@ -65,6 +65,7 @@ var rootCmd = star.NewGroupedDir(
 			"history",
 			"cat",
 			"ls",
+			"diff",
 		}},
 		{Title: "SPACES", Commands: []string{
 			"space",
@@ -102,6 +103,7 @@ var rootCmd = star.NewGroupedDir(
 
 		"ls":   lsCmd,
 		"cat":  catCmd,
+		"diff": diffCmd,
 		"http": httpCmd,
 		"ftp":  ftpCmd,
 

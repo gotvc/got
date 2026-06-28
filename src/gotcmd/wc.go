@@ -1,8 +1,11 @@
 package gotcmd
 
 import (
+	"bufio"
 	"fmt"
 
+	"github.com/fatih/color"
+	"github.com/gotvc/got/src/gotwc"
 	"github.com/gotvc/got/src/internal/metrics"
 	"go.brendoncarroll.net/star"
 )
@@ -22,6 +25,60 @@ var wcCmd = star.NewDir(star.Metadata{
 		"checkout": checkoutCmd,
 	},
 )
+
+var statusCmd = star.Command{
+	Metadata: star.Metadata{
+		Short: "shows the status of the working tree",
+	},
+	F: func(c star.Context) error {
+		ctx := c.Context
+		wc, err := openWC()
+		if err != nil {
+			return err
+		}
+		defer wc.Close()
+		name, err := wc.GetSaveTo()
+		if err != nil {
+			return err
+		}
+		bufw := bufio.NewWriter(c.StdOut)
+		if _, err := fmt.Fprintf(bufw, "HEAD: %s\n", name); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(bufw, "STAGED:\n"); err != nil {
+			return err
+		}
+		if err := wc.ForEachStaging(ctx, func(p string, op gotwc.FileOperation) error {
+			var desc = "UNKNOWN"
+			switch {
+			case op.Delete != nil:
+				desc = color.RedString("DELETE")
+			case op.Create != nil:
+				desc = color.BlueString("CREATE")
+			case op.Modify != nil:
+				desc = color.GreenString("MODIFY")
+			}
+			_, err := fmt.Fprintf(bufw, "  %7s %s\n", desc, p)
+			return err
+		}); err != nil {
+			return err
+		}
+		if _, err := fmt.Fprintf(bufw, "DIRTY:\n"); err != nil {
+			return err
+		}
+		if err := wc.ForEachDirty(ctx, func(fi gotwc.DirtyFile) error {
+			if fi.Exists {
+				fmt.Fprintf(bufw, "  + %v %s\n", fi.Mode, fi.Path)
+			} else {
+				fmt.Fprintf(bufw, "  - %s\n", fi.Path)
+			}
+			return err
+		}); err != nil {
+			return err
+		}
+		return bufw.Flush()
+	},
+}
 
 var cleanupCmd = star.Command{
 	Metadata: star.Metadata{

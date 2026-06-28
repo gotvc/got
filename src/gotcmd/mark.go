@@ -1,19 +1,16 @@
 package gotcmd
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
 	"time"
 
-	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo"
 	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/metrics"
 	"go.brendoncarroll.net/star"
-	"golang.org/x/sync/errgroup"
 )
 
 var markCmd = star.NewDir(
@@ -315,72 +312,6 @@ var markAsCmd = star.Command{
 		c.Printf("marked commit as %v", newfqn.Name)
 		return nil
 	},
-}
-
-var historyCmd = star.Command{
-	Metadata: star.Metadata{
-		Short: "prints the commit log",
-	},
-	Pos: []star.Positional{fqmnOptParam},
-	F: func(c star.Context) error {
-		ctx := c.Context
-		wc, err := openWC()
-		if err != nil {
-			return err
-		}
-		defer wc.Close()
-		repo := wc.Repo()
-		bname, err := wc.GetSaveTo()
-		if err != nil {
-			return err
-		}
-		fqm, ok := fqmnOptParam.LoadOpt(c)
-		if !ok {
-			fqm = gotrepo.FQM{Name: bname}
-		}
-		markExpr := gotcore.CommitExpr_Mark{Space: fqm.Space, Name: fqm.Name}
-		pr, pw := io.Pipe()
-		eg := errgroup.Group{}
-		eg.Go(func() error {
-			bufw := bufio.NewWriter(pw)
-			err := repo.History(ctx, markExpr, func(ref gdat.Ref, comm gotrepo.Commit) error {
-				if err := printcomm(bufw, ref, comm); err != nil {
-					return err
-				}
-				if err := bufw.WriteByte('\n'); err != nil {
-					return err
-				}
-				return bufw.Flush()
-			})
-			pw.CloseWithError(err)
-			return err
-		})
-		eg.Go(func() error {
-			err := pipeToLess(pr)
-			// _, err := io.Copy(c.StdOut, pr)
-			pr.CloseWithError(err)
-			return err
-		})
-		return eg.Wait()
-	},
-}
-
-func printcomm(bufw *bufio.Writer, ref gdat.Ref, comm gotcore.Commit) error {
-	fmt.Fprintf(bufw, "#%04d\t%v\n", comm.N, ref.CID)
-	fmt.Fprintf(bufw, "FS: %v\n", comm.Payload.Snap.Ref.CID)
-	if len(comm.Parents) == 0 {
-		fmt.Fprintf(bufw, "Parents: (none)\n")
-	} else {
-		fmt.Fprintf(bufw, "Parents:\n")
-		for _, parent := range comm.Parents {
-			fmt.Fprintf(bufw, "  %v\n", parent.CID)
-		}
-	}
-	fmt.Fprintf(bufw, "Created At: %v\n", comm.CreatedAt.GoTime().Local().String())
-	fmt.Fprintf(bufw, "Created By: %v\n", comm.Creator)
-	bufw.Write([]byte(prettifyJSON(comm.Payload.Notes)))
-	fmt.Fprintln(bufw)
-	return nil
 }
 
 var fqmParam = &star.Required[gotrepo.FQM]{
