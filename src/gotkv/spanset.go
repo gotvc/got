@@ -12,14 +12,14 @@ import (
 // SpanSet is an ordered set of non-overlapping Spans
 type SpanSet Root
 
-// SSEntry is a ReadSet entry
-type SSEntry struct {
-	Type  uint8
+// ssEntry is a ReadSet entry
+type ssEntry struct {
+	Type  deType
 	Begin []byte
 	End   []byte
 }
 
-func (rse SSEntry) Key(out []byte) []byte {
+func (rse ssEntry) Key(out []byte) []byte {
 	switch rse.Type {
 	case deltaEntry_BEGIN:
 		out = append(out, rse.Begin...)
@@ -31,7 +31,7 @@ func (rse SSEntry) Key(out []byte) []byte {
 	return out
 }
 
-func (rse SSEntry) Value(out []byte) []byte {
+func (rse ssEntry) Value(out []byte) []byte {
 	switch rse.Type {
 	case deltaEntry_BEGIN:
 		out = sbe.AppendLP16(out, rse.End)
@@ -64,11 +64,11 @@ func (rsw *SpanSetWriter) Add(ctx context.Context, span Span) error {
 			}
 			return nil
 		}
-		beginEnt := SSEntry{Type: deltaEntry_BEGIN, Begin: rsw.lastSpan.Begin, End: rsw.lastSpan.End}
+		beginEnt := ssEntry{Type: deltaEntry_BEGIN, Begin: rsw.lastSpan.Begin, End: rsw.lastSpan.End}
 		if err := rsw.b.Put(ctx, beginEnt.Key(nil), beginEnt.Value(nil)); err != nil {
 			return err
 		}
-		endEnt := SSEntry{Type: deltaEntry_END, Begin: rsw.lastSpan.Begin, End: rsw.lastSpan.End}
+		endEnt := ssEntry{Type: deltaEntry_END, Begin: rsw.lastSpan.Begin, End: rsw.lastSpan.End}
 		if err := rsw.b.Put(ctx, endEnt.Key(nil), endEnt.Value(nil)); err != nil {
 			return err
 		}
@@ -81,11 +81,11 @@ func (rsw *SpanSetWriter) Add(ctx context.Context, span Span) error {
 // Finish adds an end entry if necessary and then returns the root of the SpanSet.
 func (rsw *SpanSetWriter) Finish(ctx context.Context) (SpanSet, error) {
 	if rsw.haveSpan {
-		beginEnt := SSEntry{Type: deltaEntry_BEGIN, Begin: rsw.lastSpan.Begin, End: rsw.lastSpan.End}
+		beginEnt := ssEntry{Type: deltaEntry_BEGIN, Begin: rsw.lastSpan.Begin, End: rsw.lastSpan.End}
 		if err := rsw.b.Put(ctx, beginEnt.Key(nil), beginEnt.Value(nil)); err != nil {
 			return SpanSet{}, err
 		}
-		endEnt := SSEntry{Type: deltaEntry_END, Begin: rsw.lastSpan.Begin, End: rsw.lastSpan.End}
+		endEnt := ssEntry{Type: deltaEntry_END, Begin: rsw.lastSpan.Begin, End: rsw.lastSpan.End}
 		if err := rsw.b.Put(ctx, endEnt.Key(nil), endEnt.Value(nil)); err != nil {
 			return SpanSet{}, err
 		}
@@ -128,4 +128,17 @@ func spanOverlaps(a, b Span) bool {
 		return false
 	}
 	return true
+}
+
+var _ streams.Iterator[Span] = &SpanSetReader{}
+
+type SpanSetReader struct {
+}
+
+func (m *Machine) NewSpanSetReader() SpanSetReader {
+	return SpanSetReader{}
+}
+
+func (ssr *SpanSetReader) Next(ctx context.Context, dst []Span) (int, error) {
+	panic("todo")
 }

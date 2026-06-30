@@ -60,20 +60,47 @@ func (d *Delta) Unmarshal(data []byte) error {
 }
 
 const (
-	deltaEntry_BEGIN = (1 << 7)
-	deltaEntry_END   = (1 << 6)
+	deltaEntry_BEGIN = deType(1 << 7)
+	deltaEntry_END   = deType(1 << 6)
 	deltaEntry_PIVOT = deltaEntry_BEGIN | deltaEntry_END
 	// UNIT is not yet used.
-	deltaEntry_UNIT = 0
+	deltaEntry_UNIT = deType(0)
 )
 
-// 0 => begin
-// 255 => end
-func deltaEntryType(val []byte) (uint8, error) {
+// deType is a delta entry type
+type deType uint8
+
+func (t deType) isBegin() bool {
+	return t.hasForwardPartner() && !t.hasBackwardPartner()
+}
+
+func (t deType) isEnd() bool {
+	return !t.hasForwardPartner() && t.hasBackwardPartner()
+}
+
+func (t deType) isPivot() bool {
+	return t.hasBackwardPartner() && t.hasForwardPartner()
+}
+
+func (t deType) isUnit() bool {
+	return !t.hasBackwardPartner() && !t.hasForwardPartner()
+}
+
+func (t deType) hasForwardPartner() bool {
+	const mask = (1 << 7)
+	return t&mask > 0
+}
+
+func (t deType) hasBackwardPartner() bool {
+	const mask = (1 << 6)
+	return t&mask > 0
+}
+
+func parseDeltaEntryType(val []byte) (deType, error) {
 	if len(val) == 0 {
 		return 0, fmt.Errorf("invalid key in Delta entry")
 	}
-	return val[0], nil
+	return deType(val[0]), nil
 }
 
 // Segment is a single entry in a Delta
@@ -84,7 +111,7 @@ type Segment struct {
 
 // deltaEntry is a single entry in a Delta KV stream
 type deltaEntry struct {
-	Type              uint8
+	Type              deType
 	Begin, Pivot, End []byte
 
 	// Prev is set for END and PIVOT entries
@@ -108,7 +135,7 @@ func (de deltaEntry) Key(out []byte) []byte {
 }
 
 func (de deltaEntry) Value(out []byte) []byte {
-	out = append(out, de.Type)
+	out = append(out, byte(de.Type))
 	switch de.Type {
 	case deltaEntry_BEGIN:
 		out = sbe.AppendLP16(out, de.End)               // matches the END entry key
@@ -138,7 +165,7 @@ func (de deltaEntry) Contents() Root {
 	}
 }
 
-func parseDeltaValue(val []byte, typ uint8) (deltaEntry, error) {
+func parseDeltaValue(val []byte, typ deType) (deltaEntry, error) {
 	de := deltaEntry{Type: typ}
 	data := val[1:]
 	var field, contentsData []byte
@@ -434,7 +461,7 @@ func (di *DeltaReader) Next(ctx context.Context, dst []Segment) (int, error) {
 		if err := streams.NextUnit(ctx, di.it, &ent); err != nil {
 			return 0, err
 		}
-		typ, err := deltaEntryType(ent.Value)
+		typ, err := parseDeltaEntryType(ent.Value)
 		if err != nil {
 			return 0, err
 		}
@@ -484,7 +511,7 @@ func (di *DeltaReader) Next(ctx context.Context, dst []Segment) (int, error) {
 	if err := streams.NextUnit(ctx, di.it, &ent); err != nil {
 		return 0, err
 	}
-	typ, err := deltaEntryType(ent.Value)
+	typ, err := parseDeltaEntryType(ent.Value)
 	if err != nil {
 		return 0, err
 	}
@@ -555,7 +582,7 @@ func (m *Machine) Apply(ctx context.Context, s stores.RW, base Root, deltas ...D
 				}
 				return Root{}, err
 			}
-			beginTyp, _ := deltaEntryType(beginEntry.Value)
+			beginTyp, _ := parseDeltaEntryType(beginEntry.Value)
 			if beginTyp != deltaEntry_BEGIN {
 				return Root{}, fmt.Errorf("expected BEGIN entry in delta, got type %d", beginTyp)
 			}
@@ -568,7 +595,7 @@ func (m *Machine) Apply(ctx context.Context, s stores.RW, base Root, deltas ...D
 			if err := streams.NextUnit(ctx, it, &endEntry); err != nil {
 				return Root{}, fmt.Errorf("expected END entry: %w", err)
 			}
-			endTyp, _ := deltaEntryType(endEntry.Value)
+			endTyp, _ := parseDeltaEntryType(endEntry.Value)
 			if endTyp != deltaEntry_END {
 				return Root{}, fmt.Errorf("expected END entry in delta, got type %d", endTyp)
 			}
