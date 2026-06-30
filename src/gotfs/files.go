@@ -5,21 +5,21 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 
 	"github.com/gotvc/got/src/gotfs/gotlob"
+	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/stores"
-	"go.brendoncarroll.net/state/posixfs"
+	"go.brendoncarroll.net/exp/streams"
 	"golang.org/x/sync/errgroup"
 )
 
-func (mach *Machine) FileFromReader(ctx context.Context, ss RW, mode posixfs.FileMode, r io.Reader) (*Root, error) {
-	return mach.FileFromReaders(ctx, ss, mode, []io.Reader{r})
+func (mach *Machine) ExtentsFromReader(ctx context.Context, ss RW, r io.Reader) ([]Extent, error) {
+	return mach.ExtentsFromReaders(ctx, ss, []io.Reader{r})
 }
 
-// ImportReaders creates a single file at the root from concatenating the data in rs.
-// Each reader will be imported from in parallel.
-func (mach *Machine) FileFromReaders(ctx context.Context, ss RW, mode posixfs.FileMode, rs []io.Reader) (*Root, error) {
+func (mach *Machine) ExtentsFromReaders(ctx context.Context, ss RW, rs []io.Reader) ([]Extent, error) {
 	exts := make([][]Extent, len(rs))
 	eg := errgroup.Group{}
 	for i, r := range rs {
@@ -45,6 +45,31 @@ func (mach *Machine) FileFromReaders(ctx context.Context, ss RW, mode posixfs.Fi
 			return nil, err
 		}
 	}
+	root, err := b.Finish()
+	if err != nil {
+		return nil, err
+	}
+	var retExts []Extent
+	it := mach.NewIterator(ss.Metadata, *root, gotkv.TotalSpan())
+	if err := streams.ForEach(ctx, &it, func(ent Entry) error {
+		if !ent.Key.IsInfo() {
+			retExts = append(retExts, ent.Value.Extent)
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	return retExts, nil
+}
+
+func (mach *Machine) newFile(ctx context.Context, ss RW, mode fs.FileMode, exts []Extent) (*Root, error) {
+	b := mach.NewBuilder(ctx, ss)
+	if err := b.BeginFile("", mode); err != nil {
+		return nil, err
+	}
+	if err := b.writeExtents(ctx, exts); err != nil {
+		return nil, err
+	}
 	return b.Finish()
 }
 
@@ -61,7 +86,11 @@ func (mach *Machine) CreateFile(ctx context.Context, ss RW, x Root, p string, r 
 // PutFile creates or replaces the file at path using data from r
 func (mach *Machine) PutFile(ctx context.Context, ss RW, x Root, p string, r io.Reader) (*Root, error) {
 	p = cleanPath(p)
-	fileRoot, err := mach.FileFromReader(ctx, ss, 0o755, r)
+	exts, err := mach.ExtentsFromReader(ctx, ss, r)
+	if err != nil {
+		return nil, err
+	}
+	fileRoot, err := mach.newFile(ctx, ss, 0o644, exts)
 	if err != nil {
 		return nil, err
 	}

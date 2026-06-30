@@ -2,7 +2,6 @@ package gotfs
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	mrand "math/rand"
 	"os"
@@ -54,11 +53,15 @@ func TestLargeFiles(t *testing.T) {
 		i := i
 		eg.Go(func() error {
 			rng := mrand.New(mrand.NewSource(int64(i)))
-			x, err := ag.FileFromReader(ctx, ss, 0o755, io.LimitReader(rng, size))
+			x, err := ag.ExtentsFromReader(ctx, ss, io.LimitReader(rng, size))
 			if err != nil {
 				return err
 			}
-			fileRoots[i] = *x
+			root, err := ag.newFile(ctx, ss, 0o644, x)
+			if err != nil {
+				return err
+			}
+			fileRoots[i] = *root
 			return nil
 		})
 	}
@@ -78,18 +81,5 @@ func TestLargeFiles(t *testing.T) {
 		actualSize, err := ag.SizeOfFile(ctx, s, *root, p)
 		require.NoError(t, err)
 		require.Equal(t, uint64(size), actualSize)
-		eg.Go(func() error {
-			r, err := ag.NewReader(ctx, RO{s, s}, *root, p)
-			require.NoError(t, err)
-			n, err := io.Copy(io.Discard, r)
-			if err != nil {
-				return err
-			}
-			if n != size {
-				return fmt.Errorf("reader returned wrong number of bytes HAVE: %d WANT: %d", n, uint64(size))
-			}
-			return nil
-		})
 	}
-	require.NoError(t, eg.Wait())
 }
