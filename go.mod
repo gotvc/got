@@ -16,13 +16,13 @@ require (
 	go.brendoncarroll.net/state v0.0.0-20241118200920-627c9c196901
 	go.brendoncarroll.net/stdctx v0.0.0-20241118190518-40d09f4d11e7
 	go.brendoncarroll.net/tai64 v0.0.0-20241118171318-6e12d283d5e4
+	go.etcd.io/bbolt v1.5.0
 	go.inet256.org/inet256 v0.0.8
 	go.uber.org/zap v1.27.0
 	goftp.io/server/v2 v2.0.1-0.20210902054531-841529b15085
 	golang.org/x/crypto v0.46.1-0.20251210140736-7dacc380ba00
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
-	golang.org/x/sync v0.19.0
-	zombiezen.com/go/sqlite v1.4.2
+	golang.org/x/sync v0.20.0
 )
 
 require (
@@ -81,7 +81,7 @@ require (
 	go.brendoncarroll.net/p2p v0.0.0-20241118201502-2abd1a6f58e7 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
-	golang.org/x/sys v0.42.0 // indirect
+	golang.org/x/sys v0.45.0 // indirect
 	golang.org/x/text v0.32.0 // indirect
 	google.golang.org/protobuf v1.35.1 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

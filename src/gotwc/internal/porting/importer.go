@@ -145,10 +145,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 	}
 	// need update
 	finfo.ByGot = false
-	if err := pr.db.PutInfo(ctx, *finfo); err != nil {
-		return nil, err
-	}
-	if err := pr.db.PutFSRoot(ctx, p, finfo.ModifiedAt, *root); err != nil {
+	if err := pr.db.PutBoth(ctx, *finfo, finfo.ModifiedAt, *root); err != nil {
 		return nil, err
 	}
 	return root, nil

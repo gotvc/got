@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/gotvc/got/src/gotwc/internal/porting"
-	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"go.brendoncarroll.net/exp/maybe"
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/posixfs"
@@ -30,12 +29,11 @@ func (ukp *unknownFile) Path() string {
 }
 
 type unknownIter struct {
-	conn *sqlutil.Conn
-	it   streams.Iterator[unknownFile]
+	it streams.Iterator[unknownFile]
 }
 
 func (it *unknownIter) Close() error {
-	return it.conn.Close()
+	return nil
 }
 
 func (it *unknownIter) Next(ctx context.Context, dst []unknownFile) (int, error) {
