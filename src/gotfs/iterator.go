@@ -22,6 +22,18 @@ func (v *Value) unmarshal(isInfo bool, data []byte) error {
 	}
 }
 
+func (v *Value) Marshal(isInfo bool, out []byte) []byte {
+	if isInfo {
+		return v.Info.Marshal(out)
+	} else {
+		data, err := v.Extent.MarshalBinary()
+		if err != nil {
+			panic(err)
+		}
+		return data
+	}
+}
+
 type Entry struct {
 	Key
 	Value

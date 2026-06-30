@@ -31,7 +31,11 @@ type (
 type Root struct {
 	Ref   gdat.Ref `json:"ref"`
 	Depth uint8    `json:"depth"`
-	First []byte   `json:"first,omitempty"`
+	// Count is not included in the marshalled representation
+	Count uint64 `json:"count"`
+	// TotalBytes is not included in the marshalled representation.
+	TotalBytes uint64 `json:"total_bytes"`
+	First      []byte `json:"first,omitempty"`
 }
 
 func (r Root) Equal(r2 Root) bool {
@@ -60,9 +64,11 @@ func newRoot(x *ptree.Root[Entry, gdat.Ref]) Root {
 	}
 	lb, _ := x.Span.LowerBound()
 	return Root{
-		Ref:   x.Ref,
-		Depth: x.Depth,
-		First: lb.Key,
+		Ref:        x.Ref,
+		Depth:      x.Depth,
+		Count:      x.Count,
+		TotalBytes: x.TotalBytes,
+		First:      lb.Key,
 	}
 }
 
