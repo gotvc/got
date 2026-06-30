@@ -2,14 +2,14 @@ package porting
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"io/fs"
 
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/tai64"
-	"zombiezen.com/go/sqlite"
+	"go.etcd.io/bbolt"
 )
 
 type FileInfo struct {
@@ -20,49 +20,91 @@ type FileInfo struct {
 	ByGot      bool
 }
 
-// DB stores metadata about the state of the directory and
-// any data that has been imported from it.
 type DB struct {
-	conn      *sqlutil.Conn
+	db        *bbolt.DB
 	paramHash [32]byte
 }
 
-func NewDB(conn *sqlutil.Conn, paramHash [32]byte) *DB {
+func NewDB(db *bbolt.DB, paramHash [32]byte) *DB {
 	return &DB{
-		conn:      conn,
+		db:        db,
 		paramHash: paramHash,
 	}
+}
+
+var (
+	bucketDirstate = []byte("dirstate")
+	bucketFSRoots  = []byte("fsroots")
+)
+
+func (db *DB) ensureBuckets(tx *bbolt.Tx) error {
+	for _, name := range [][]byte{bucketDirstate, bucketFSRoots} {
+		if _, err := tx.CreateBucketIfNotExists(name); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (db *DB) PutInfo(ctx context.Context, ent FileInfo) error {
 	if ent.Path == "" {
 		return fmt.Errorf("import/export DB does not allow the root to be stored")
 	}
-	p := ent.Path
-	// replacing the info should also delete the root if it exists.
-	if err := sqlutil.Exec(db.conn, `DELETE FROM fsroots WHERE path = ? AND param_hash = ?`, p, db.paramHash[:]); err != nil {
-		return err
-	}
-	return sqlutil.Exec(db.conn, `INSERT OR REPLACE INTO dirstate (path, mode, modtime, size, by_got) VALUES (?, ?, ?, ?, ?)`, p, uint32(ent.Mode), ent.ModifiedAt.Marshal(), ent.Size, ent.ByGot)
+	return db.db.Update(func(tx *bbolt.Tx) error {
+		if err := db.ensureBuckets(tx); err != nil {
+			return err
+		}
+		b := tx.Bucket(bucketDirstate)
+		if err := b.Put([]byte(ent.Path), marshalInfo(&ent)); err != nil {
+			return err
+		}
+		fsroots := tx.Bucket(bucketFSRoots)
+		key := fsrootKey(db.paramHash, ent.Path)
+		return fsroots.Delete(key)
+	})
 }
 
 func (db *DB) GetInfo(ctx context.Context, p string, dst *FileInfo) (bool, error) {
-	return sqlutil.GetOne(db.conn, dst, scanInfo, `SELECT path, modtime, mode, size, by_got FROM dirstate WHERE path = ?`, p)
+	var found bool
+	err := db.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket(bucketDirstate)
+		if b == nil {
+			return nil
+		}
+		data := b.Get([]byte(p))
+		if data == nil {
+			return nil
+		}
+		dst.Path = p
+		if err := unmarshalInfo(data, dst); err != nil {
+			return err
+		}
+		found = true
+		return nil
+	})
+	return found, err
 }
 
 func (db *DB) NewInfoIterator() *DBInfoIterator {
-	return NewDBInfoIterator(db.conn)
+	return NewDBInfoIterator(db)
 }
 
-// Delete removes all information associated with a path.
 func (db *DB) Delete(ctx context.Context, p string) error {
-	if err := sqlutil.Exec(db.conn, `DELETE FROM dirstate WHERE path = ?`, p); err != nil {
-		return err
-	}
-	if err := sqlutil.Exec(db.conn, `DELETE FROM fsroots WHERE path = ?`, p); err != nil {
-		return err
-	}
-	return nil
+	return db.db.Update(func(tx *bbolt.Tx) error {
+		d := tx.Bucket(bucketDirstate)
+		if d != nil {
+			if err := d.Delete([]byte(p)); err != nil {
+				return err
+			}
+		}
+		f := tx.Bucket(bucketFSRoots)
+		if f != nil {
+			if err := f.Delete(fsrootKey(db.paramHash, p)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func (db *DB) PutFSRoot(ctx context.Context, p string, modt tai64.TAI64N, fsroot gotfs.Root) error {
@@ -75,46 +117,112 @@ func (db *DB) PutFSRoot(ctx context.Context, p string, modt tai64.TAI64N, fsroot
 	if info.ModifiedAt != modt {
 		return fmt.Errorf("modtime does not match")
 	}
-	return sqlutil.Exec(db.conn, `UPDATE fsroots
-		SET fsroot = ?
-		WHERE path = ? AND param_hash = ?
-	`, fsroot.Marshal(nil), p, db.paramHash[:])
+	return db.db.Update(func(tx *bbolt.Tx) error {
+		b := tx.Bucket(bucketFSRoots)
+		if b == nil {
+			return fmt.Errorf("fsroots bucket missing")
+		}
+		return b.Put(fsrootKey(db.paramHash, p), fsroot.Marshal(nil))
+	})
 }
 
 func (db *DB) GetFSRoot(ctx context.Context, p string, dst *gotfs.Root) (bool, error) {
-	return sqlutil.GetOne(db.conn, dst, scanFSRoot, `SELECT fsroot FROM fsroots
-		WHERE path = ? AND param_hash = ?
-	`, p, db.paramHash[:])
+	var found bool
+	err := db.db.View(func(tx *bbolt.Tx) error {
+		b := tx.Bucket(bucketFSRoots)
+		if b == nil {
+			return nil
+		}
+		data := b.Get(fsrootKey(db.paramHash, p))
+		if data == nil {
+			return nil
+		}
+		if err := dst.Unmarshal(data); err != nil {
+			return err
+		}
+		found = true
+		return nil
+	})
+	return found, err
 }
 
-// scanInfo expects:
-// 0: path
-// 1: modtime
-// 2: mode
-// 3: size
-// 4: by_got
-func scanInfo(stmt *sqlite.Stmt, dst *FileInfo) error {
-	dst.Path = stmt.ColumnText(0)
-	var modtime [8 + 4]byte
-	stmt.ColumnBytes(1, modtime[:])
-	if err := dst.ModifiedAt.UnmarshalBinary(modtime[:]); err != nil {
-		return err
+func (db *DB) PutBoth(ctx context.Context, ent FileInfo, modt tai64.TAI64N, root gotfs.Root) error {
+	if ent.Path == "" {
+		return fmt.Errorf("import/export DB does not allow the root to be stored")
 	}
-	dst.Mode = fs.FileMode(stmt.ColumnInt64(2))
-	dst.Size = stmt.ColumnInt64(3)
-	dst.ByGot = stmt.ColumnInt64(4) != 0
-	return nil
+	if ent.ModifiedAt != modt {
+		return fmt.Errorf("modtime does not match")
+	}
+	return db.db.Update(func(tx *bbolt.Tx) error {
+		if err := db.ensureBuckets(tx); err != nil {
+			return err
+		}
+		d := tx.Bucket(bucketDirstate)
+		if err := d.Put([]byte(ent.Path), marshalInfo(&ent)); err != nil {
+			return err
+		}
+		f := tx.Bucket(bucketFSRoots)
+		key := fsrootKey(db.paramHash, ent.Path)
+		return f.Put(key, root.Marshal(nil))
+	})
 }
 
-func scanFSRoot(stmt *sqlite.Stmt, dst *gotfs.Root) error {
-	var buf [gotfs.RootSize]byte
-	stmt.ColumnBytes(0, buf[:])
-	return dst.Unmarshal(buf[:])
+func marshalInfo(ent *FileInfo) []byte {
+	buf := make([]byte, 25)
+	binary.LittleEndian.PutUint32(buf[0:4], uint32(ent.Mode))
+	binary.LittleEndian.PutUint64(buf[4:12], uint64(ent.Size))
+	if ent.ByGot {
+		buf[12] = 1
+	}
+	copy(buf[13:25], ent.ModifiedAt.Marshal())
+	return buf
+}
+
+func unmarshalInfo(data []byte, ent *FileInfo) error {
+	if len(data) != 25 {
+		return fmt.Errorf("invalid info data length: %d", len(data))
+	}
+	ent.Mode = fs.FileMode(binary.LittleEndian.Uint32(data[0:4]))
+	ent.Size = int64(binary.LittleEndian.Uint64(data[4:12]))
+	ent.ByGot = data[12] != 0
+	return ent.ModifiedAt.UnmarshalBinary(data[13:25])
+}
+
+func fsrootKey(ph [32]byte, p string) []byte {
+	buf := make([]byte, 32+len(p))
+	copy(buf, ph[:])
+	copy(buf[32:], p)
+	return buf
 }
 
 type DBInfoIterator = streams.SeqErr[FileInfo]
 
-func NewDBInfoIterator(conn *sqlutil.Conn) *DBInfoIterator {
-	seq := sqlutil.Select(conn, scanInfo, `SELECT path, modtime, mode, size, by_got FROM dirstate ORDER BY path`)
+func NewDBInfoIterator(db *DB) *DBInfoIterator {
+	seq := func(yield func(FileInfo, error) bool) {
+		err := db.db.View(func(tx *bbolt.Tx) error {
+			b := tx.Bucket(bucketDirstate)
+			if b == nil {
+				return nil
+			}
+			c := b.Cursor()
+			for k, v := c.First(); k != nil; k, v = c.Next() {
+				var ent FileInfo
+				ent.Path = string(k)
+				if err := unmarshalInfo(v, &ent); err != nil {
+					if !yield(FileInfo{}, err) {
+						return nil
+					}
+					continue
+				}
+				if !yield(ent, nil) {
+					return nil
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			yield(FileInfo{}, err)
+		}
+	}
 	return streams.NewSeqErr(seq)
 }

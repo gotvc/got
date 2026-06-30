@@ -14,16 +14,14 @@ import (
 	"go.brendoncarroll.net/exp/slices2"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
+	"go.etcd.io/bbolt"
 	"go.uber.org/zap"
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/gotrepo"
-	"github.com/gotvc/got/src/gotwc/internal/dbmig"
-	"github.com/gotvc/got/src/gotwc/internal/migrations"
 	"github.com/gotvc/got/src/gotwc/internal/porting"
-	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/gotwc/internal/staging"
 	"github.com/gotvc/got/src/internal/gotbc"
 	"github.com/gotvc/got/src/internal/gotcore"
@@ -111,23 +109,13 @@ func Open(root *os.Root) (_ *WC, retErr error) {
 
 // New creates a new working copy using root and the Repo
 func New(repo *gotrepo.Repo, root *os.Root) (*WC, error) {
-	p := root.Name()
-	db, err := sqlutil.OpenPool(filepath.Join(p, dbPath))
+	db, err := bbolt.Open(filepath.Join(root.Name(), dbPath), 0o600, nil)
 	if err != nil {
-		return nil, err
-	}
-	ctx := context.TODO()
-	// setup database
-	if err := sqlutil.Borrow(ctx, db, func(conn *sqlutil.Conn) error {
-		if err := migrations.EnsureAll(conn, dbmig.ListMigrations()); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
 		return nil, err
 	}
 	cfg, err := LoadConfig(root)
 	if err != nil {
+		db.Close()
 		return nil, err
 	}
 	return &WC{
@@ -135,7 +123,7 @@ func New(repo *gotrepo.Repo, root *os.Root) (*WC, error) {
 		repo: repo,
 		id:   cfg.ID,
 
-		fsys: posixfs.NewDirFS(p),
+		fsys: posixfs.NewDirFS(root.Name()),
 		db:   db,
 	}, nil
 }
@@ -153,7 +141,7 @@ type WC struct {
 	// TODO: eventually we should move away from this interface, but
 	// the existing importers and exporters use it.
 	fsys    posixfs.FS
-	db      *sqlutil.Pool
+	db      *bbolt.DB
 	closers []func() error
 }
 
@@ -253,21 +241,15 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	if err := sqlutil.DoTx(ctx, wc.db, func(conn *sqlutil.Conn) error {
-		activeName, err := wc.GetSaveTo()
-		if err != nil {
-			return err
-		}
-		activeInfo, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: activeName})
-		if err != nil && !gotcore.IsNotExist(err) {
-			return err
-		}
-		if activeInfo == nil {
-			return nil
-		}
-		// if active branch has the same salt as the desired branch, then
-		// there is no check to do.
-		// If they have different parameters, then we need to check if the staging area is empty.
+	activeName, err := wc.GetSaveTo()
+	if err != nil {
+		return err
+	}
+	activeInfo, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: activeName})
+	if err != nil && !gotcore.IsNotExist(err) {
+		return err
+	}
+	if activeInfo != nil {
 		if desiredInfo.Config.Hash() != activeInfo.Config.Hash() {
 			stagetx, err := wc.beginStageTx(ctx, nil, false)
 			if err != nil {
@@ -282,9 +264,6 @@ func (wc *WC) SetHead(ctx context.Context, name string) error {
 				return fmt.Errorf("staging must be empty to change to a branch with a different salt")
 			}
 		}
-		return nil
-	}); err != nil {
-		return err
 	}
 	var baseRefs []gdat.Ref
 	if !baseRef.IsZero() {
@@ -356,14 +335,9 @@ func (wc *WC) Export(ctx context.Context) error {
 	if err != nil {
 		return nil
 	}
-	conn, err := wc.db.Take(ctx)
-	if err != nil {
-		return nil
-	}
-	defer wc.db.Put(conn)
 	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: mname}, func(mtx *gotcore.MarkTx) error {
 		paramHash := mtx.Config().Hash()
-		portDB := porting.NewDB(conn, paramHash)
+		portDB := porting.NewDB(wc.db, paramHash)
 		fsys, filter, err := wc.getFilteredFS(ctx)
 		if err != nil {
 			return err
@@ -386,18 +360,13 @@ func (wc *WC) Clobber(ctx context.Context, p string) error {
 	if err != nil {
 		return nil
 	}
-	conn, err := wc.db.Take(ctx)
-	if err != nil {
-		return nil
-	}
-	defer wc.db.Put(conn)
 	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: mname}, func(mtx *gotcore.MarkTx) error {
 		paramHash := mtx.Config().Hash()
 		fsys, filter, err := wc.getFilteredFS(ctx)
 		if err != nil {
 			return err
 		}
-		portDB := porting.NewDB(conn, paramHash)
+		portDB := porting.NewDB(wc.db, paramHash)
 		exp := porting.NewExporter(mtx.GotFS(), portDB, fsys, filter)
 		ss := mtx.FSRO()
 		var root gotfs.Root
@@ -450,29 +419,8 @@ func (wc *WC) Close() error {
 
 // Cleanup removes unreferenced data from the stage.
 func (wc *WC) Cleanup(ctx context.Context) error {
-	if err := sqlutil.DoTx(ctx, wc.db, func(conn *sqlutil.Conn) error {
-		logctx.Infof(ctx, "removing blobs from staging areas")
-		if err := wc.cleanupStagingBlobs(ctx); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	if err := sqlutil.Borrow(ctx, wc.db, func(conn *sqlutil.Conn) error {
-		logctx.Infof(ctx, "truncating WAL...")
-		if err := sqlutil.WALCheckpoint(conn); err != nil {
-			return err
-		}
-		logctx.Infof(ctx, "running VACUUM...")
-		if err := sqlutil.Vacuum(conn); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	return nil
+	logctx.Infof(ctx, "removing blobs from staging areas")
+	return wc.cleanupStagingBlobs(ctx)
 }
 
 func (wc *WC) viewSnap(ctx context.Context, fn func(*gotcore.ViewCtx) error) error {

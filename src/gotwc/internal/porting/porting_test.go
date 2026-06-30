@@ -12,15 +12,13 @@ import (
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotwc/internal/dbmig"
-	"github.com/gotvc/got/src/gotwc/internal/migrations"
-	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/posixfs"
+	"go.etcd.io/bbolt"
 )
 
 type FileEntry struct {
@@ -178,11 +176,11 @@ func TestExport(t *testing.T) {
 			}
 
 			cfg := gotcore.DefaultConfig(true)
-			conn, paramHash := newTestDB(t, ctx, cfg)
+			bdb, paramHash := newTestDB(t, ctx, cfg)
 			mach := gotcore.GotFS(cfg)
 			s := stores.NewMem()
 			ss := gotfs.RO{s, s}
-			db := NewDB(conn, paramHash)
+			db := NewDB(bdb, paramHash)
 
 			for _, info := range tt.InDB {
 				require.NoError(t, db.PutInfo(ctx, info))
@@ -246,8 +244,8 @@ func TestImportPath(t *testing.T) {
 			dst := stores.NewMem()
 			cfg := gotcore.DefaultConfig(false)
 			mach := gotcore.GotFS(cfg)
-			conn, paramHash := newTestDB(t, ctx, cfg)
-			db := NewDB(conn, paramHash)
+			bdb, paramHash := newTestDB(t, ctx, cfg)
+			db := NewDB(bdb, paramHash)
 			imp := NewImporter(&mach, db, [2]stores.RW{dst, dst})
 
 			// prepare files on disk
@@ -275,17 +273,15 @@ func TestImportPath(t *testing.T) {
 	}
 }
 
-func newTestDB(t testing.TB, ctx context.Context, cfg gotcore.DSConfig) (*sqlutil.Conn, [32]byte) {
+func newTestDB(t testing.TB, ctx context.Context, cfg gotcore.DSConfig) (*bbolt.DB, [32]byte) {
 	t.Helper()
-	pool := sqlutil.NewTestPool(t)
-	conn, err := pool.Take(ctx)
+	path := filepath.Join(t.TempDir(), "test.db")
+	db, err := bbolt.Open(path, 0o600, nil)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		pool.Put(conn)
+		db.Close()
 	})
-
-	require.NoError(t, migrations.EnsureAll(conn, dbmig.ListMigrations()))
-	return conn, cfg.Hash()
+	return db, cfg.Hash()
 }
 
 func writeToFS(t testing.TB, dir *os.Root, ents []FileEntry) {

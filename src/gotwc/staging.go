@@ -8,13 +8,11 @@ import (
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotrepo"
-	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
 	"go.inet256.org/inet256/src/inet256"
-	"zombiezen.com/go/sqlite/sqlitex"
 
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotwc/internal/porting"
@@ -43,93 +41,79 @@ type stagingCtx struct {
 }
 
 func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
-	conn, err := wc.db.Take(ctx)
+	branchName, err := wc.GetSaveTo()
 	if err != nil {
 		return err
 	}
-	defer wc.db.Put(conn)
-
-	// this function is to easily defer the transaction and cleanup.
-	if err := func() (retErr error) {
-		defer sqlitex.Transaction(conn)(&retErr)
-
-		branchName, err := wc.GetSaveTo()
-		if err != nil {
-			return err
-		}
-		info, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: branchName})
-		if err != nil {
-			return err
-		}
-		fsys, filter, err := wc.getFilteredFS(ctx)
-		if err != nil {
-			return err
-		}
-		cfg := info.Config
-		paramHash := cfg.Hash()
-		fsmach := gotcore.GotFS(cfg)
-		stagetx, err := wc.beginStageTx(ctx, &paramHash, true)
-		if err != nil {
-			return err
-		}
-		defer stagetx.Abort(ctx)
-		stagingStore := stagetx.Store()
-		storePair := [2]stores.RW{stagingStore, stagingStore}
-		dirState := porting.NewDB(conn, paramHash)
-		imp := porting.NewImporter(&fsmach, dirState, storePair)
-		exp := porting.NewExporter(&fsmach, dirState, fsys, filter)
-		vcmach := gotcore.GotVC(cfg)
-		if err := fn(stagingCtx{
-			Stage:    stagetx,
-			Store:    stagingStore,
-			GotFS:    &fsmach,
-			GotVC:    &vcmach,
-			FS:       fsys,
-			DB:       porting.NewDB(conn, paramHash),
-			Importer: imp,
-			Exporter: exp,
-		}); err != nil {
-			return err
-		}
-		return stagetx.Commit(ctx)
-	}(); err != nil {
+	info, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: branchName})
+	if err != nil {
 		return err
 	}
-	// This has to be done outside of the transaction.
-	return sqlutil.WALCheckpoint(conn)
+	fsys, filter, err := wc.getFilteredFS(ctx)
+	if err != nil {
+		return err
+	}
+	cfg := info.Config
+	paramHash := cfg.Hash()
+	fsmach := gotcore.GotFS(cfg)
+	stagetx, err := wc.beginStageTx(ctx, &paramHash, true)
+	if err != nil {
+		return err
+	}
+	defer stagetx.Abort(ctx)
+	stagingStore := stagetx.Store()
+	storePair := [2]stores.RW{stagingStore, stagingStore}
+	dirState := porting.NewDB(wc.db, paramHash)
+	imp := porting.NewImporter(&fsmach, dirState, storePair)
+	exp := porting.NewExporter(&fsmach, dirState, fsys, filter)
+	vcmach := gotcore.GotVC(cfg)
+	if err := fn(stagingCtx{
+		Stage:    stagetx,
+		Store:    stagingStore,
+		GotFS:    &fsmach,
+		GotVC:    &vcmach,
+		FS:       fsys,
+		DB:       porting.NewDB(wc.db, paramHash),
+		Importer: imp,
+		Exporter: exp,
+	}); err != nil {
+		return err
+	}
+	return stagetx.Commit(ctx)
 }
 
 func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
-	return sqlutil.DoTxRO(ctx, wc.db, func(conn *sqlutil.Conn) error {
-		branchName, err := wc.GetSaveTo()
-		info, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: branchName})
-		if err != nil {
-			return err
-		}
-		paramHash := info.Config.Hash()
-		stagetx, err := wc.beginStageTx(ctx, &paramHash, false)
-		if err != nil {
-			return err
-		}
-		filtFS, filter, err := wc.getFilteredFS(ctx)
-		if err != nil {
-			return err
-		}
-		portdb := porting.NewDB(conn, paramHash)
-		fsmach := gotcore.GotFS(info.Config)
-		exp := porting.NewExporter(&fsmach, portdb, filtFS, filter)
-		stagingStore, err := wc.repo.BeginStagingTx(ctx, wc.id, false)
-		if err != nil {
-			return err
-		}
-		defer stagingStore.Abort(ctx)
-		return fn(stagingCtx{
-			GotFS:    &fsmach,
-			Stage:    stagetx,
-			Store:    stagingStore,
-			Exporter: exp,
-			DB:       portdb,
-		})
+	branchName, err := wc.GetSaveTo()
+	if err != nil {
+		return err
+	}
+	info, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: branchName})
+	if err != nil {
+		return err
+	}
+	paramHash := info.Config.Hash()
+	stagetx, err := wc.beginStageTx(ctx, &paramHash, false)
+	if err != nil {
+		return err
+	}
+	filtFS, filter, err := wc.getFilteredFS(ctx)
+	if err != nil {
+		return err
+	}
+	portdb := porting.NewDB(wc.db, paramHash)
+	fsmach := gotcore.GotFS(info.Config)
+	exp := porting.NewExporter(&fsmach, portdb, filtFS, filter)
+	stagingStore, err := wc.repo.BeginStagingTx(ctx, wc.id, false)
+	if err != nil {
+		return err
+	}
+	defer stagingStore.Abort(ctx)
+	return fn(stagingCtx{
+		GotFS:    &fsmach,
+		Stage:    stagetx,
+		Store:    stagingStore,
+		Exporter: exp,
+		DB:       portdb,
 	})
 }
 
