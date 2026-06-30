@@ -47,12 +47,12 @@ func MarshalExtent(e *Extent) []byte {
 	return data
 }
 
-func ParseExtent(x []byte) (*Extent, error) {
+func ParseExtent(x []byte) (Extent, error) {
 	var e Extent
 	if err := e.UnmarshalBinary(x); err != nil {
-		return nil, err
+		return Extent{}, err
 	}
-	return &e, nil
+	return e, nil
 }
 
 func ParseExtentKey(x []byte) ([]byte, uint64, error) {
@@ -83,7 +83,7 @@ func appendUint32(out []byte, x uint32) []byte {
 	return append(out, buf[:]...)
 }
 
-func checkExtentBounds(ext *Extent, n int) error {
+func checkExtentBounds(ext Extent, n int) error {
 	if n < int(ext.Offset) || n < int(ext.Offset+ext.Length) {
 		return fmt.Errorf("extent data too short len=%d offset=%d length=%d", n, ext.Offset, ext.Length)
 	}

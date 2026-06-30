@@ -17,6 +17,14 @@ type DiffEntry struct {
 	Right maybe.Maybe[Value]
 }
 
+func (de DiffEntry) IsCreate() bool {
+	return !de.Left.Ok && de.Right.Ok
+}
+
+func (de DiffEntry) IsDelete() bool {
+	return de.Left.Ok && !de.Right.Ok
+}
+
 // Differ iterates over the difference between 2 filesystems.
 type Differ struct {
 	kvdiff *gotkv.Differ

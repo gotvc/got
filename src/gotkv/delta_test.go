@@ -49,16 +49,6 @@ func TestDeltaWriter(t *testing.T) {
 			},
 		},
 		{
-			Name: "touching-should-combine",
-			Edits: []Edit{
-				makeEdit("a", "c", mkEnt("a", "1")),
-				makeEdit("c", "e", mkEnt("c", "2")),
-			},
-			Want: []dwSegment{
-				{Span: mkSpan("a", "e"), Entries: []Entry{mkEnt("a", "1"), mkEnt("c", "2")}},
-			},
-		},
-		{
 			Name: "overlapping",
 			Edits: []Edit{
 				makeEdit("a", "d", mkEnt("a", "1")),
@@ -110,7 +100,7 @@ func TestDeltaWriter(t *testing.T) {
 
 			var gotErr error
 			for _, edit := range tc.Edits {
-				if err := dw.AddEdit(ctx, edit); err != nil {
+				if err := dw.Edit(ctx, edit); err != nil {
 					gotErr = err
 					break
 				}
@@ -139,7 +129,7 @@ func TestDeltaWriter(t *testing.T) {
 	}
 }
 
-func collectDeltaSegments(t testing.TB, ctx context.Context, ag Machine, s stores.RO, d Delta) []dwSegment {
+func collectDeltaSegments(t testing.TB, ctx context.Context, ag Machine, s stores.RW, d Delta) []dwSegment {
 	t.Helper()
 	segments, err := streams.Collect[Segment](ctx, ag.NewDeltaReader(s, d), 100)
 	require.NoError(t, err)

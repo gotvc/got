@@ -20,7 +20,7 @@ func (mach *Machine) FileFromReader(ctx context.Context, ss RW, mode posixfs.Fil
 // ImportReaders creates a single file at the root from concatenating the data in rs.
 // Each reader will be imported from in parallel.
 func (mach *Machine) FileFromReaders(ctx context.Context, ss RW, mode posixfs.FileMode, rs []io.Reader) (*Root, error) {
-	exts := make([][]*Extent, len(rs))
+	exts := make([][]Extent, len(rs))
 	eg := errgroup.Group{}
 	for i, r := range rs {
 		i := i
@@ -50,8 +50,6 @@ func (mach *Machine) FileFromReaders(ctx context.Context, ss RW, mode posixfs.Fi
 
 // CreateFile creates a file at p with data from r
 // If there is an entry at p CreateFile returns an error
-// ms is the store used for metadata
-// ds is the store used for data.
 func (mach *Machine) CreateFile(ctx context.Context, ss RW, x Root, p string, r io.Reader) (*Root, error) {
 	p = cleanPath(p)
 	if err := mach.checkNoEntry(ctx, ss.Metadata, x, p); err != nil {

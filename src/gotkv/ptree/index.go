@@ -12,8 +12,9 @@ type Index[T, Ref any] struct {
 	// A natural boundary.
 	IsNatural bool
 
-	Span  state.Span[T]
-	Count uint
+	Span       state.Span[T]
+	Count      uint64
+	TotalBytes uint64
 }
 
 func (idx Index[T, Ref]) String() string {
@@ -22,10 +23,11 @@ func (idx Index[T, Ref]) String() string {
 
 func (idx Index[T, Ref]) Clone(cp func(dst *T, src T)) Index[T, Ref] {
 	return Index[T, Ref]{
-		Ref:       idx.Ref,
-		IsNatural: idx.IsNatural,
-		Span:      cloneSpan(idx.Span, cp),
-		Count:     idx.Count,
+		Ref:        idx.Ref,
+		IsNatural:  idx.IsNatural,
+		Span:       cloneSpan(idx.Span, cp),
+		Count:      idx.Count,
+		TotalBytes: idx.TotalBytes,
 	}
 }
 
@@ -34,20 +36,22 @@ func metaIndex[T, Ref any](idx Index[T, Ref]) Index[Index[T, Ref], Ref] {
 	span = span.WithLowerIncl(Index[T, Ref]{Span: idx.Span})
 	span = span.WithUpperIncl(Index[T, Ref]{Span: idx.Span})
 	return Index[Index[T, Ref], Ref]{
-		Ref:       idx.Ref,
-		IsNatural: idx.IsNatural,
-		Span:      span,
-		Count:     idx.Count,
+		Ref:        idx.Ref,
+		IsNatural:  idx.IsNatural,
+		Span:       span,
+		Count:      idx.Count,
+		TotalBytes: idx.TotalBytes,
 	}
 }
 
 // flattenIndex turns an index of an index into an index.
 func flattenIndex[T, Ref any](x Index[Index[T, Ref], Ref]) Index[T, Ref] {
 	return Index[T, Ref]{
-		Ref:       x.Ref,
-		IsNatural: x.IsNatural,
-		Span:      flattenIndexSpan(x.Span),
-		Count:     x.Count,
+		Ref:        x.Ref,
+		IsNatural:  x.IsNatural,
+		Span:       flattenIndexSpan(x.Span),
+		Count:      x.Count,
+		TotalBytes: x.TotalBytes,
 	}
 }
 

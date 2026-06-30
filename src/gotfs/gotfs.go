@@ -100,7 +100,7 @@ func (r *Root) toGotKV() gotkv.Root {
 
 const MaxPathLen = gotkv.MaxKeySize - 9
 
-func parseExtent(v []byte) (*Extent, error) {
+func parseExtent(v []byte) (Extent, error) {
 	return gotlob.ParseExtent(v)
 }
 

@@ -57,8 +57,8 @@ func NewMachine(gkvop *gotkv.Machine, dop *gdat.Machine, opts ...Option) Machine
 	return o
 }
 
-func (a *Machine) CreateExtents(ctx context.Context, ds stores.RW, r io.Reader) ([]*Extent, error) {
-	var exts []*Extent
+func (a *Machine) CreateExtents(ctx context.Context, ds stores.RW, r io.Reader) ([]Extent, error) {
+	var exts []Extent
 	chunker := a.newChunker(func(data []byte) error {
 		ext, err := a.post(ctx, ds, data)
 		if err != nil {
@@ -100,15 +100,15 @@ func (a *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (
 	return b.Finish(ctx)
 }
 
-func (ag *Machine) post(ctx context.Context, s stores.RW, data []byte) (*Extent, error) {
+func (ag *Machine) post(ctx context.Context, s stores.RW, data []byte) (Extent, error) {
 	ref, err := ag.gdat.Post(ctx, s, data)
 	if err != nil {
-		return nil, err
+		return Extent{}, err
 	}
-	return &Extent{Offset: 0, Length: uint32(len(data)), Ref: ref}, nil
+	return Extent{Offset: 0, Length: uint32(len(data)), Ref: ref}, nil
 }
 
-func (ag *Machine) getExtentF(ctx context.Context, ds stores.RO, ext *Extent, fn func([]byte) error) error {
+func (ag *Machine) getExtentF(ctx context.Context, ds stores.RO, ext Extent, fn func([]byte) error) error {
 	return ag.gdat.GetF(ctx, ds, ext.Ref, func(data []byte) error {
 		if err := checkExtentBounds(ext, len(data)); err != nil {
 			return err
@@ -117,7 +117,7 @@ func (ag *Machine) getExtentF(ctx context.Context, ds stores.RO, ext *Extent, fn
 	})
 }
 
-func (ag *Machine) readExtent(ctx context.Context, buf []byte, ds stores.RO, ext *Extent) (int, error) {
+func (ag *Machine) readExtent(ctx context.Context, buf []byte, ds stores.RO, ext Extent) (int, error) {
 	n, err := ag.gdat.Read(ctx, ds, ext.Ref, buf)
 	if err != nil {
 		return 0, err
@@ -129,19 +129,19 @@ func (ag *Machine) readExtent(ctx context.Context, buf []byte, ds stores.RO, ext
 }
 
 // maxEntry finds the maximum extent entry in root within span.
-func (ag *Machine) MaxExtent(ctx context.Context, ms stores.RO, root Root, span Span) ([]byte, *Extent, error) {
+func (ag *Machine) MaxExtent(ctx context.Context, ms stores.RO, root Root, span Span) ([]byte, Extent, error) {
 	for {
 		ent, err := ag.gotkv.MaxEntry(ctx, ms, root, span)
 		if err != nil {
-			return nil, nil, err
+			return nil, Extent{}, err
 		}
 		if ent == nil {
-			return nil, nil, nil
+			return nil, Extent{}, nil
 		}
 		if ag.keyFilter(ent.Key) {
 			ext, err := ParseExtent(ent.Value)
 			if err != nil {
-				return nil, nil, err
+				return nil, Extent{}, err
 			}
 			return ent.Key, ext, nil
 		}
@@ -149,20 +149,20 @@ func (ag *Machine) MaxExtent(ctx context.Context, ms stores.RO, root Root, span 
 	}
 }
 
-func (ag *Machine) MinExtent(ctx context.Context, ms stores.RO, root Root, span Span) ([]byte, *Extent, error) {
+func (ag *Machine) MinExtent(ctx context.Context, ms stores.RO, root Root, span Span) ([]byte, Extent, error) {
 	it := ag.gotkv.NewIterator(ms, root, span)
 	var ent gotkv.Entry
 	for {
 		if err := streams.NextUnit(ctx, it, &ent); err != nil {
 			if streams.IsEOS(err) {
-				return nil, nil, nil
+				return nil, Extent{}, nil
 			}
-			return nil, nil, err
+			return nil, Extent{}, err
 		}
 		if ag.keyFilter(ent.Key) {
 			ext, err := ParseExtent(ent.Value)
 			if err != nil {
-				return nil, nil, err
+				return nil, Extent{}, err
 			}
 			return ent.Key, ext, nil
 		}

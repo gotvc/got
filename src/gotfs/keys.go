@@ -59,6 +59,10 @@ func (k *Key) EndAt() uint64 {
 	return k.endAt
 }
 
+func (k *Key) Equals(k2 Key) bool {
+	return k.endAt == k2.endAt && bytes.Equal(k.path, k2.path)
+}
+
 // pathPrefixNoTrail returns the null-separated prefix for a path without the trailing terminator.
 func pathPrefixNoTrail(out []byte, p string) []byte {
 	k := newInfoKey(p)
