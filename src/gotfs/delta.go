@@ -49,7 +49,7 @@ func (dw *DeltaWriter) PutAllFileData(ctx context.Context, p string, exts []Exte
 	var cum uint64
 	for _, ext := range exts {
 		cum += uint64(ext.Length)
-		ek := newExtentKey(p, cum)
+		ek := NewExtentKey(p, cum)
 		v := Value{Extent: ext}
 		if err := dw.kvw.Put(ctx, ek.Marshal(nil), v.Marshal(false, nil)); err != nil {
 			return err
