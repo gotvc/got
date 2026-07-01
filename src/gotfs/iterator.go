@@ -34,6 +34,9 @@ func (v *Value) Marshal(isInfo bool, out []byte) []byte {
 	}
 }
 
+// Entry is an element of the filesystem.
+// It contains a Key and Value
+// The type can be determined using the Key.IsInfo() method
 type Entry struct {
 	Key
 	Value

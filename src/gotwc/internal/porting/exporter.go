@@ -71,15 +71,7 @@ func (pr *Exporter) Clobber(ctx context.Context, ss gotfs.RO, root gotfs.Root, p
 	if err := posixfs.PutFile(ctx, pr.fsx, p, md.Mode, r); err != nil {
 		return err
 	}
-	finfo, err := stat(pr.fsx, p)
-	if err != nil {
-		return err
-	}
-	finfo.ByGot = true
-	if p == "" {
-		return nil
-	}
-	return pr.db.PutInfo(ctx, *finfo)
+	return nil
 }
 
 // exportDir exports a known dir in root
@@ -133,17 +125,6 @@ func (pr *Exporter) exportDir(ctx context.Context, ms, ds stores.RO, root gotfs.
 	}); err != nil {
 		return err
 	}
-	// record directory state after exporting children
-	dirInfo, err := stat(pr.fsx, p)
-	if err != nil {
-		return err
-	}
-	dirInfo.ByGot = true
-	if p != "" {
-		if err := pr.db.PutInfo(ctx, *dirInfo); err != nil {
-			return err
-		}
-	}
 	return nil
 }
 
@@ -162,14 +143,14 @@ func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.RO, root gotfs
 				Op:   "write",
 				Path: p,
 			}
-		} else if HasChanged(&dbinfo, finfo) {
+		} else if HasChanged(&dbinfo, &finfo) {
 			return ErrWouldClobber{
 				Op:   "write",
 				Path: p,
 			}
 		}
 	}
-	if finfo != nil && finfo.Mode.IsDir() {
+	if err == nil && finfo.Mode.IsDir() {
 		if err := pr.deleteDir(ctx, p); err != nil {
 			return err
 		}
@@ -185,12 +166,7 @@ func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.RO, root gotfs
 	if err := posixfs.PutFile(ctx, pr.fsx, p, gfinfo.Mode, r); err != nil {
 		return err
 	}
-	finfo, err = stat(pr.fsx, p)
-	if err != nil {
-		return err
-	}
-	finfo.ByGot = true
-	return pr.db.PutInfo(ctx, *finfo)
+	return nil
 }
 
 func (pr *Exporter) deleteFile(ctx context.Context, p string) error {
@@ -206,7 +182,7 @@ func (pr *Exporter) deleteFile(ctx context.Context, p string) error {
 		if err != nil {
 			return err
 		}
-		if HasChanged(finfo, &dbinfo) {
+		if HasChanged(&finfo, &dbinfo) {
 			return ErrWouldClobber{Op: "delete", Path: p}
 		}
 	}

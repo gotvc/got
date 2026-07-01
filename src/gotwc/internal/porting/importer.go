@@ -16,30 +16,29 @@ import (
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/units"
 	"go.brendoncarroll.net/state/posixfs"
-	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
 	"golang.org/x/exp/slices"
 )
 
 type Importer struct {
-	gotfs  *gotfs.Machine
-	db     *DB
-	ms, ds stores.RW
+	gotfs     *gotfs.Machine
+	db        *DB
+	ss        gotfs.RW
+	paramHash [32]byte
 }
 
-func NewImporter(fsmach *gotfs.Machine, db *DB, ss [2]stores.RW) *Importer {
+func NewImporter(fsmach *gotfs.Machine, db *DB, ss gotfs.RW, paramHash [32]byte) *Importer {
 	return &Importer{
-		gotfs: fsmach,
-		db:    db,
-
-		ms: ss[1],
-		ds: ss[0],
+		gotfs:     fsmach,
+		db:        db,
+		ss:        ss,
+		paramHash: paramHash,
 	}
 }
 
 // ImportPath returns gotfs instance containing the content in fsx at p.
 // The content will be at the root of the filesystem.
-func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
+func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) ([]gotfs.Entry, error) {
 	finfo, err := fsx.Stat(p)
 	if err != nil {
 		return nil, err
@@ -51,9 +50,10 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 	}
 }
 
-func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, finfo fs.FileInfo) (*gotfs.Root, error) {
+// importDir lists the contents of the dir and imports all children.
+func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, finfo fs.FileInfo) ([]gotfs.Entry, error) {
 	var changes []gotfs.Segment
-	emptyDir, err := createEmptyDir(ctx, pr.gotfs, pr.ms, finfo.Mode())
+	emptyDir, err := createEmptyDir(ctx, pr.gotfs, pr.ss.Metadata, finfo.Mode())
 	if err != nil {
 		return nil, err
 	}
@@ -69,102 +69,104 @@ func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, fin
 		return strings.Compare(a.Name, b.Name)
 	})
 	metrics.SetDenom(ctx, "paths", len(dirents), "paths")
+	var retEnts []gotfs.Entry
 	for _, dirent := range dirents {
 		ctx, cf := metrics.Child(ctx, dirent.Name)
 		defer cf()
 		p2 := path.Join(p, dirent.Name)
-		pathRoot, err := pr.ImportPath(ctx, fsx, p2)
+		ents, err := pr.ImportPath(ctx, fsx, p2)
 		if err != nil {
 			return nil, err
 		}
 		metrics.AddInt(ctx, "paths", 1, "paths")
-		changes = append(changes, pr.gotfs.ShiftOut(pathRoot.Segment(), dirent.Name))
-	}
-	root, err := pr.gotfs.Splice(ctx, gotfs.RW{Data: pr.ds, Metadata: pr.ms}, changes)
-	if err != nil {
-		return nil, err
+		retEnts = append(retEnts, ents...)
 	}
 	if p != "" {
 		// for directories we don't add the root, just the mode and modified at.
-		if err := pr.db.PutInfo(ctx, FileInfo{
-			Path:       p,
+		_, err := pr.db.UpdateInfo(ctx, p, FileInfo{
 			Mode:       finfo.Mode(),
 			ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
-			ByGot:      false,
-		}); err != nil {
+		})
+		if err != nil {
 			return nil, err
 		}
 	}
-	return root, nil
+	return retEnts, nil
 }
 
-func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
+func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) ([]gotfs.Entry, error) {
 	return pr.importFile(ctx, fsx, p)
 }
 
 // ImportFile returns a gotfs.Root with the content from the file in fsx at p.
-func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
+func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) ([]gotfs.Entry, error) {
 	finfo, err := stat(fsx, p)
+	if err != nil {
+		return nil, err
+	}
 	if !finfo.Mode.IsRegular() {
 		return nil, fmt.Errorf("ImportFile called for non-regular file at path %q", p)
+	}
+	if needUpdate, err := pr.db.UpdateInfo(ctx, p, finfo); err != nil {
+		return nil, err
+	} else if !needUpdate {
+		// file has not changed, see if there are extents for this param hash.
+		ents, err := pr.db.GetExtents(ctx, p, pr.paramHash, nil)
+		if err == nil {
+			return ents, nil
+		}
 	}
 	var ent FileInfo
 	if ok, err := pr.db.GetInfo(ctx, p, &ent); err != nil {
 		return nil, err
-	} else if ok && !HasChanged(&ent, finfo) {
-		logctx.Infof(ctx, "using cache entry for path %q. skipped import", p)
-		var root gotfs.Root
-		if yes, err := pr.db.GetFSRoot(ctx, p, &root); err != nil {
-			return nil, err
-		} else if yes {
-			return &root, nil
-		}
+	} else if ok && !HasChanged(&ent, &finfo) {
+		// TODO: rebuild root from cached extents using gotfs.Builder
+		// once gotlob access is available from this package.
 	}
 	fileSize := finfo.Size
 	metrics.SetDenom(ctx, "data_in", int(fileSize), units.Bytes)
 	numWorkers := runtime.GOMAXPROCS(0)
 	sizeCutoff := 20 * pr.gotfs.MeanBlobSizeData() * numWorkers
-	// fast path for small files
-	var root *gotfs.Root
+	var ents []gotfs.Entry
 	if fileSize < int64(sizeCutoff) {
+		// fast path for small files
 		f, err := fsx.OpenFile(p, posixfs.O_RDONLY, 0)
 		if err != nil {
 			return nil, err
 		}
 		defer f.Close()
-		root, err = pr.gotfs.FileFromReader(ctx, gotfs.RW{pr.ds, pr.ms}, finfo.Mode, f)
+		exts, err := pr.gotfs.ExtentsFromReader(ctx, pr.ss, f)
 		if err != nil {
 			return nil, err
 		}
 		metrics.AddInt(ctx, "data_in", int(fileSize), units.Bytes)
+		ents = appendExtents(ents, p, exts)
 	} else {
-		root, err = importFileConcurrent(ctx, pr.gotfs, pr.ms, pr.ds, fsx, p, numWorkers)
+		ents2, err := importFileConcurrent(ctx, pr.gotfs, pr.ss.Metadata, pr.ss.Data, fsx, p, numWorkers)
 		if err != nil {
 			return nil, err
 		}
+		ents = append(ents, ents2...)
 	}
-	// need update
-	finfo.ByGot = false
-	if err := pr.db.PutBoth(ctx, *finfo, finfo.ModifiedAt, *root); err != nil {
+	if err := pr.db.AddExtents(ctx, p, pr.paramHash, ents); err != nil {
 		return nil, err
 	}
-	return root, nil
+	return ents, nil
 }
 
-func stat(fsys posixfs.FS, p string) (*FileInfo, error) {
+func stat(fsys posixfs.FS, p string) (FileInfo, error) {
 	finfo, err := fsys.Stat(p)
 	if err != nil {
-		return nil, err
+		return FileInfo{}, err
 	}
-	return &FileInfo{
-		Path:       p,
+	return FileInfo{
 		ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
 		Mode:       finfo.Mode(),
 		Size:       finfo.Size(),
 	}, nil
 }
 
-func importFileConcurrent(ctx context.Context, fsag *gotfs.Machine, ms, ds stores.RW, fsx posixfs.FS, p string, numWorkers int) (*gotfs.Root, error) {
+func importFileConcurrent(ctx context.Context, fsag *gotfs.Machine, ms, ds stores.RW, fsx posixfs.FS, p string, numWorkers int) ([]gotfs.Entry, error) {
 	stat, err := fsx.Stat(p)
 	if err != nil {
 		return nil, err
@@ -185,7 +187,11 @@ func importFileConcurrent(ctx context.Context, fsag *gotfs.Machine, ms, ds store
 		}
 		rs[i] = io.LimitReader(f, end-start)
 	}
-	return fsag.FileFromReaders(ctx, gotfs.RW{ds, ms}, stat.Mode(), rs)
+	rawExts, err := fsag.ExtentsFromReaders(ctx, gotfs.RW{ds, ms}, rs)
+	if err != nil {
+		return nil, err
+	}
+	return appendExtents(nil, p, rawExts), nil
 }
 
 func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
@@ -208,4 +214,16 @@ func HasChanged(a, b *FileInfo) bool {
 	return a.ModifiedAt != b.ModifiedAt ||
 		a.Mode != b.Mode ||
 		(!a.Mode.IsDir() && a.Size != b.Size)
+}
+
+func appendExtents(out []gotfs.Entry, p string, exts []gotfs.Extent) []gotfs.Entry {
+	var offset uint64
+	for _, ext := range exts {
+		offset += uint64(ext.Length)
+		out = append(out, gotfs.Entry{
+			Key:   gotfs.NewExtentKey(p, offset),
+			Value: gotfs.Value{Extent: ext},
+		})
+	}
+	return out
 }
