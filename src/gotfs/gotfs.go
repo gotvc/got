@@ -1,6 +1,7 @@
 package gotfs
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"strings"
@@ -13,7 +14,6 @@ import (
 
 type (
 	Ref    = gotkv.Ref
-	Store  = gotkv.Store
 	Extent = gotlob.Extent
 	Span   = gotkv.Span
 )
@@ -34,6 +34,7 @@ func ParseRoot(data []byte) (Root, error) {
 }
 
 // Marshal appends the root data to out and returns the new slice.
+// The format is fixed length.
 func (r Root) Marshal(out []byte) []byte {
 	out = append(out, r.Ref.Marshal()...)
 	out = append(out, r.Depth)
@@ -73,21 +74,30 @@ func Equal(a, b Root) bool {
 	return gdat.Equal(a.Ref, b.Ref) && a.Depth == b.Depth
 }
 
-func newRoot(x gotkv.Root) Root {
+// TODO: remove this method
+func newRoot(x gotkv.Root) *Root {
+	r, err := NewRoot(x)
+	if err != nil {
+		panic(err)
+	}
+	return &r
+}
+
+func NewRoot(x gotkv.Root) (Root, error) {
 	if x.Equal(gotkv.Root{}) {
-		return Root{}
+		return Root{}, nil
 	}
 	var key Key
 	if err := unmarshalInfoKey(x.First, &key); err != nil {
-		panic(err)
+		return Root{}, err
 	}
 	if key.Path() != "" {
-		panic(x)
+		return Root{}, fmt.Errorf("first path must be empty string. HAVE: %q", key.Path())
 	}
 	return Root{
 		Ref:   x.Ref,
 		Depth: x.Depth,
-	}
+	}, nil
 }
 
 func (r Root) toGotKV() gotkv.Root {
@@ -95,6 +105,21 @@ func (r Root) toGotKV() gotkv.Root {
 		return gotkv.Root{}
 	}
 	return r.ToGotKV()
+}
+
+// Promote promotes a segment to a Root if the segment has the correct first key.
+func Promote(ctx context.Context, seg Segment) (*Root, error) {
+	var key Key
+	if err := unmarshalInfoKey(seg.Contents.First, &key); err != nil {
+		panic(err)
+	}
+	if key.Path() != "" {
+		return nil, fmt.Errorf("segment is not a valid gotfs.Root")
+	}
+	return &Root{
+		Ref:   seg.Contents.Ref,
+		Depth: seg.Contents.Depth,
+	}, nil
 }
 
 const MaxPathLen = gotkv.MaxKeySize - 9

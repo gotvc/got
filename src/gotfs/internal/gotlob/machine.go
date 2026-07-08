@@ -93,7 +93,7 @@ func (a *Machine) SizeOf(ctx context.Context, ms stores.RO, root Root, prefix []
 func (a *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (Root, error) {
 	b := a.NewBuilder(ctx, ss[1], ss[0])
 	for _, seg := range segs {
-		if err := b.CopyFrom(ctx, seg.Root, seg.Span); err != nil {
+		if err := b.CopyFrom(ctx, seg.Contents, seg.Span); err != nil {
 			return Root{}, err
 		}
 	}

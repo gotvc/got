@@ -7,8 +7,7 @@ import (
 	"io"
 	"io/fs"
 
-	"github.com/gotvc/got/src/gotfs/gotlob"
-	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotfs/internal/gotlob"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
@@ -50,7 +49,7 @@ func (mach *Machine) ExtentsFromReaders(ctx context.Context, ss RW, rs []io.Read
 		return nil, err
 	}
 	var retExts []Extent
-	it := mach.NewIterator(ss.Metadata, *root, gotkv.TotalSpan())
+	it := mach.NewIterator(ss.Metadata, *root, "")
 	if err := streams.ForEach(ctx, &it, func(ent Entry) error {
 		if !ent.Key.IsInfo() {
 			retExts = append(retExts, ent.Value.Extent)

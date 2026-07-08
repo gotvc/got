@@ -96,7 +96,7 @@ func (b *Builder) writeExtents(ctx context.Context, exts []Extent) error {
 	return nil
 }
 
-func (b *Builder) copyFrom(ctx context.Context, root gotkv.Root, span gotkv.Span) error {
+func (b *Builder) CopyFrom(ctx context.Context, root gotkv.Root, span gotkv.Span) error {
 	if err := b.b.CopyFrom(ctx, root, span); err != nil {
 		return err
 	}

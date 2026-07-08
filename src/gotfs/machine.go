@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"go.brendoncarroll.net/exp/sbe"
 	"go.brendoncarroll.net/stdctx/logctx"
 
 	"github.com/gotvc/got/src/chunking"
@@ -343,39 +342,8 @@ func (mach *Machine) Check(ctx context.Context, ms stores.RO, root Root, checkDa
 
 // Segment is a contiguous subset of a GotFS instance.
 // It may not be a valid Root.
-type Segment struct {
-	// Contents is the gotkv instance representing the segment.
-	// If it contains entries outside of Span, they will not be used.
-	// If Contents is the zero value, then it will be interpretted as empty
-	Contents gotkv.Root
-	// Span is the span in the final Splice operation
-	Span gotkv.Span
-}
-
-func (s Segment) String() string {
-	return fmt.Sprintf("{ %v : %v}", s.Span, s.Contents.Ref)
-}
-
-func (s *Segment) Marshal(out []byte) []byte {
-	out = sbe.AppendLP16(out, s.Contents.Marshal(nil))
-	out = sbe.AppendLP16(out, s.Span.Marshal(nil))
-	return out
-}
-
-func (s *Segment) Unmarshal(data []byte) error {
-	contentData, data, err := sbe.ReadLP16(data)
-	if err != nil {
-		return err
-	}
-	if err := s.Contents.Unmarshal(contentData); err != nil {
-		return err
-	}
-	spanData, _, err := sbe.ReadLP16(data)
-	if err != nil {
-		return err
-	}
-	return s.Span.Unmarshal(spanData)
-}
+// The zero valued segment is interpretted as an empty segment.
+type Segment = gotkv.Segment
 
 // ShiftOut shifts all the entries in a segment out by path.
 // A path at a/b/ in x will be at p + a/b/ in the returned segment.
@@ -416,7 +384,7 @@ func (mach *Machine) Concat(ctx context.Context, ss RW, segs iter.Seq[Segment]) 
 		} else {
 			root = seg.Contents
 		}
-		if err := b.copyFrom(ctx, root, seg.Span); err != nil {
+		if err := b.CopyFrom(ctx, root, seg.Span); err != nil {
 			return Segment{}, err
 		}
 		i++
@@ -432,21 +400,6 @@ func (mach *Machine) Concat(ctx context.Context, ss RW, segs iter.Seq[Segment]) 
 			End:   prevSeg.Span.End,
 		},
 		Contents: out.ToGotKV(),
-	}, nil
-}
-
-// Promote promotes a segment to a Root if the segment has the correct first key.
-func Promote(ctx context.Context, seg Segment) (Root, error) {
-	var key Key
-	if err := unmarshalInfoKey(seg.Contents.First, &key); err != nil {
-		panic(err)
-	}
-	if key.Path() != "" {
-		return Root{}, fmt.Errorf("segment is not a valid gotfs.Root")
-	}
-	return Root{
-		Ref:   seg.Contents.Ref,
-		Depth: seg.Contents.Depth,
 	}, nil
 }
 
@@ -480,4 +433,14 @@ func (mach *Machine) ExistsDir(ctx context.Context, ms stores.RO, root Root, p s
 		return false, err
 	}
 	return info.Mode.IsDir(), nil
+}
+
+func (mach *Machine) FromEntries(ctx context.Context, ms stores.RW, ents iter.Seq[Entry]) (Root, error) {
+	mdw := mach.NewMetadataWriter(ms)
+	for ent := range ents {
+		if err := mdw.Push(ctx, ent); err != nil {
+			return Root{}, err
+		}
+	}
+	return mdw.Finish(ctx)
 }
