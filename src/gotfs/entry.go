@@ -60,7 +60,7 @@ type Iterator struct {
 
 func (m *Machine) NewIterator(s stores.RO, root Root, subpath string) Iterator {
 	subpath = cleanPath(subpath)
-	span := SpanForPath(subpath)
+	span := spanForPath(subpath)
 	it := m.gotkv.NewIterator(s, root.toGotKV(), span)
 	return Iterator{s: s, mdit: it}
 }
@@ -111,6 +111,5 @@ func (mdw *MetadataWriter) Finish(ctx context.Context) (Root, error) {
 	if err != nil {
 		return Root{}, err
 	}
-	r := newRoot(kvr)
-	return *r, nil
+	return newRoot(kvr), nil
 }

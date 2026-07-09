@@ -8,10 +8,8 @@ import (
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotdag"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotfsvm"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
-	"go.brendoncarroll.net/exp/slices2"
 	"go.brendoncarroll.net/tai64"
 	"go.inet256.org/inet256/src/inet256"
 )
@@ -116,23 +114,4 @@ func CreateCommit(ctx context.Context, vcmach *VCMach, srw stores.RW, copa Commi
 // PostCommit write a commit to the store.
 func PostCommit(ctx context.Context, vcmach *VCMach, srw stores.WO, comm Commit) (gdat.Ref, error) {
 	return vcmach.PostVertex(ctx, srw, comm)
-}
-
-// Apply applies a function to a root to create a new Root.
-func Apply(ctx context.Context, fsmach *gotfs.Machine, ss gotfs.RW, fn gotfsvm.Function, ins []gotfs.Root) (gotfs.Root, error) {
-	if len(ins) == 0 {
-		base, err := fsmach.NewEmpty(ctx, ss.Metadata, 0o755)
-		if err != nil {
-			return gotfs.Root{}, err
-		}
-		ins = append(ins, base)
-	}
-	vm := gotfsvm.New(fsmach)
-	ins2 := slices2.Map(ins, func(x gotfs.Root) gotfsvm.Input {
-		return gotfsvm.Input{
-			Stores: ss.RO(),
-			Root:   x,
-		}
-	})
-	return vm.Apply(ctx, ss, fn, ins2)
 }

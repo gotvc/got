@@ -13,8 +13,6 @@ import (
 )
 
 type (
-	Span = gotkv.Span
-
 	Root   = gotfs.Root
 	Extent = gotfs.Extent
 	Entry  = gotfs.Entry
@@ -63,6 +61,11 @@ func (dw *DeltaWriter) Finish(ctx context.Context) (Delta, error) {
 		return Delta{}, err
 	}
 	return Delta(d), nil
+}
+
+func (dw *DeltaWriter) Push(ctx context.Context, seg gotfs.Segment) error {
+	seg2 := seg.ToSegment()
+	return dw.kvw.Push(ctx, seg2)
 }
 
 // PutAllFileData replaces the file data extents for path p.
@@ -196,7 +199,25 @@ func (m *Machine) NewDeltaReader(s stores.RO, d Delta) DeltaReader {
 }
 
 func (dw *DeltaReader) Next(ctx context.Context, dst []gotfs.Segment) (int, error) {
-	return dw.dr.Next(ctx, dst)
+	dst2 := make([]gotkv.Segment, len(dst))
+	for i := range dst2 {
+		dst2[i] = dst[i].ToSegment()
+	}
+	n, err := dw.dr.Next(ctx, dst2)
+	if err != nil {
+		return 0, err
+	}
+	for i := range dst[:n] {
+		span, err := gotfs.NewSpan(dst2[i].Span)
+		if err != nil {
+			return 0, err
+		}
+		dst[i] = gotfs.Segment{
+			Span:     span,
+			Contents: dst2[i].Contents,
+		}
+	}
+	return n, nil
 }
 
 func infoKeyNext(infoKey []byte) []byte {
@@ -217,7 +238,11 @@ func (m *Machine) Apply(ctx context.Context, ss gotfs.RW, root Root, d Delta) (R
 		case cmp < 0:
 			// there is a gap from the end of the last segment, and the start of this one.
 			// we need to copy from the root first.
-			if err := b.CopyFrom(ctx, root.ToGotKV(), gotkv.Span{Begin: lastEnd, End: seg.Span.Begin}); err != nil {
+			span, err := gotfs.NewSpan(gotkv.Span{Begin: lastEnd, End: seg.Span.Begin})
+			if err != nil {
+				return err
+			}
+			if err := b.CopyFrom(ctx, root.ToGotKV(), span); err != nil {
 				return err
 			}
 		case cmp == 0:
@@ -225,21 +250,25 @@ func (m *Machine) Apply(ctx context.Context, ss gotfs.RW, root Root, d Delta) (R
 		case cmp > 0:
 			return fmt.Errorf("out of order segments lastEnd=%v seg=%v", lastEnd, seg)
 		}
+		span, err := gotfs.NewSpan(seg.Span)
+		if err != nil {
+			return err
+		}
 		// now copy the segment from the diff.
-		if err := b.CopyFrom(ctx, seg.Contents, seg.Span); err != nil {
+		if err := b.CopyFrom(ctx, seg.Contents, span); err != nil {
 			return err
 		}
 		return nil
 	}); err != nil {
 		return Root{}, err
 	}
-	// now copy from the root until infinity.
-	if err := b.CopyFrom(ctx, root.ToGotKV(), Span{Begin: lastEnd}); err != nil {
-		return Root{}, err
-	}
-	root2, err := b.Finish()
+	span, err := gotfs.NewSpan(gotkv.Span{Begin: lastEnd})
 	if err != nil {
 		return Root{}, err
 	}
-	return *root2, nil
+	// now copy from the root until infinity.
+	if err := b.CopyFrom(ctx, root.ToGotKV(), span); err != nil {
+		return Root{}, err
+	}
+	return b.Finish()
 }

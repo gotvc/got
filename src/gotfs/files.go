@@ -49,7 +49,7 @@ func (mach *Machine) ExtentsFromReaders(ctx context.Context, ss RW, rs []io.Read
 		return nil, err
 	}
 	var retExts []Extent
-	it := mach.NewIterator(ss.Metadata, *root, "")
+	it := mach.NewIterator(ss.Metadata, root, "")
 	if err := streams.ForEach(ctx, &it, func(ent Entry) error {
 		if !ent.Key.IsInfo() {
 			retExts = append(retExts, ent.Value.Extent)
@@ -61,20 +61,20 @@ func (mach *Machine) ExtentsFromReaders(ctx context.Context, ss RW, rs []io.Read
 	return retExts, nil
 }
 
-func (mach *Machine) newFile(ctx context.Context, ss RW, mode fs.FileMode, exts []Extent) (*Root, error) {
+func (mach *Machine) newFile(ctx context.Context, ss RW, mode fs.FileMode, exts []Extent) (Root, error) {
 	b := mach.NewBuilder(ctx, ss)
 	if err := b.BeginFile("", mode); err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	if err := b.writeExtents(ctx, exts); err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	return b.Finish()
 }
 
 // CreateFile creates a file at p with data from r
 // If there is an entry at p CreateFile returns an error
-func (mach *Machine) CreateFile(ctx context.Context, ss RW, x Root, p string, r io.Reader) (*Root, error) {
+func (mach *Machine) CreateFile(ctx context.Context, ss RW, x Root, p string, r io.Reader) (Root, error) {
 	p = cleanPath(p)
 	if err := mach.checkNoEntry(ctx, ss.Metadata, x, p); err != nil {
 		return Root{}, err
@@ -87,7 +87,7 @@ func (mach *Machine) PutFile(ctx context.Context, ss RW, x Root, p string, r io.
 	p = cleanPath(p)
 	exts, err := mach.ExtentsFromReader(ctx, ss, r)
 	if err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	fileRoot, err := mach.newFile(ctx, ss, 0o644, exts)
 	if err != nil {

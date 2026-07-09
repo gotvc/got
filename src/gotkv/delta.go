@@ -109,6 +109,40 @@ type Segment struct {
 	Contents Root
 }
 
+func (seg Segment) IsZero() bool {
+	return seg.Span.Begin == nil && seg.Span.End == nil && seg.Contents.Ref.IsZero()
+}
+
+func (seg Segment) IsDelete() bool {
+	return seg.Contents.Ref.IsZero()
+}
+
+func (s Segment) String() string {
+	return fmt.Sprintf("{ %v : %v}", s.Span, s.Contents.Ref)
+}
+
+// Marshal produces a variable length format.
+func (s *Segment) Marshal(out []byte) []byte {
+	out = sbe.AppendLP16(out, s.Contents.Marshal(nil))
+	out = sbe.AppendLP16(out, s.Span.Marshal(nil))
+	return out
+}
+
+func (s *Segment) Unmarshal(data []byte) error {
+	contentData, data, err := sbe.ReadLP16(data)
+	if err != nil {
+		return err
+	}
+	if err := s.Contents.Unmarshal(contentData); err != nil {
+		return err
+	}
+	spanData, _, err := sbe.ReadLP16(data)
+	if err != nil {
+		return err
+	}
+	return s.Span.Unmarshal(spanData)
+}
+
 // deltaEntry is a single entry in a Delta KV stream
 type deltaEntry struct {
 	Type              deType
@@ -265,6 +299,13 @@ func (dw *DeltaWriter) Finish(ctx context.Context) (Delta, error) {
 		return Delta{}, err
 	}
 	return Delta(kvr), nil
+}
+
+func (dw *DeltaWriter) Push(ctx context.Context, seg Segment) error {
+	if dw.IsEditOpen() {
+		return fmt.Errorf("cannot push segment to delta writer, an edit is active")
+	}
+	return dw.writeSegment(ctx, seg)
 }
 
 // writeSegment appends seg to pendingSegs.
@@ -428,23 +469,21 @@ var _ streams.Iterator[Segment] = &DeltaReader{}
 
 type DeltaReader struct {
 	m *Machine
-	s stores.RW
+	s stores.RO
 	d Delta
 
-	it         *Iterator
-	chainBegin []byte
-	chainEnd   []byte
-	chainEnts  []Entry
+	it *Iterator
 
 	buf    [2]deltaEntry
 	bufLen int
 }
 
-func (m *Machine) NewDeltaReader(s stores.RW, d Delta) *DeltaReader {
+func (m *Machine) NewDeltaReader(s stores.RO, d Delta) *DeltaReader {
 	return &DeltaReader{
-		m: m,
-		s: s,
-		d: d,
+		m:  m,
+		s:  s,
+		d:  d,
+		it: m.NewIterator(s, Root(d), TotalSpan()),
 	}
 }
 
@@ -453,105 +492,7 @@ func (di *DeltaReader) Next(ctx context.Context, dst []Segment) (int, error) {
 	if len(dst) == 0 {
 		return 0, nil
 	}
-	if di.it == nil {
-		di.it = di.m.NewIterator(di.s, Root(di.d), TotalSpan())
-	}
-	if di.bufLen == 1 {
-		var ent Entry
-		if err := streams.NextUnit(ctx, di.it, &ent); err != nil {
-			return 0, err
-		}
-		typ, err := parseDeltaEntryType(ent.Value)
-		if err != nil {
-			return 0, err
-		}
-		switch typ {
-		case deltaEntry_END:
-			ee, err := parseDeltaValue(ent.Value, deltaEntry_END)
-			if err != nil {
-				return 0, err
-			}
-			ee.End = ent.Key
-			if !bytes.Equal(di.buf[0].End, ent.Key) {
-				return 0, fmt.Errorf("END key %q does not match BEGIN End %q", ent.Key, di.buf[0].End)
-			}
-			if !di.buf[0].Next.Equal(ee.Prev) {
-				return 0, fmt.Errorf("END Prev does not match BEGIN Next")
-			}
-			di.appendEntries(ctx, di.buf[0].Contents())
-			dst[0] = di.emitMerged(ctx, ee.End)
-			return 1, nil
-
-		case deltaEntry_PIVOT:
-			pv, err := parsePivot(ent.Value)
-			if err != nil {
-				return 0, err
-			}
-			pv.Pivot = ent.Key
-			if !bytes.Equal(di.buf[0].End, ent.Key) {
-				return 0, fmt.Errorf("PIVOT key %q does not match BEGIN End %q", ent.Key, di.buf[0].End)
-			}
-			if !di.buf[0].Next.Equal(pv.Prev) {
-				return 0, fmt.Errorf("PIVOT Prev does not match BEGIN Next")
-			}
-			di.appendEntries(ctx, pv.Prev)
-			di.chainEnd = pv.Begin
-			di.buf[0].Type = deltaEntry_BEGIN
-			di.buf[0].Begin = pv.Pivot
-			di.buf[0].End = pv.Begin
-			di.buf[0].Next = pv.Next
-			return di.Next(ctx, dst)
-
-		default:
-			return 0, fmt.Errorf("expected END or PIVOT after BEGIN, got type %d", typ)
-		}
-	}
-
-	var ent Entry
-	if err := streams.NextUnit(ctx, di.it, &ent); err != nil {
-		return 0, err
-	}
-	typ, err := parseDeltaEntryType(ent.Value)
-	if err != nil {
-		return 0, err
-	}
-	if typ != deltaEntry_BEGIN {
-		return 0, fmt.Errorf("expected BEGIN entry, got type %d", typ)
-	}
-	be, err := parseDeltaValue(ent.Value, deltaEntry_BEGIN)
-	if err != nil {
-		return 0, err
-	}
-	be.Begin = ent.Key
-	di.buf[0] = be
-	di.bufLen = 1
-	di.chainBegin = be.Begin
-	di.chainEnd = be.End
-	di.chainEnts = di.chainEnts[:0]
-	return di.Next(ctx, dst)
-}
-
-func (di *DeltaReader) appendEntries(ctx context.Context, root Root) {
-	_ = di.m.ForEach(ctx, di.s, root, TotalSpan(), func(ent Entry) error {
-		di.chainEnts = append(di.chainEnts, ent.Clone())
-		return nil
-	})
-}
-
-func (di *DeltaReader) emitMerged(ctx context.Context, end []byte) Segment {
-	b := di.m.NewBuilder(di.s)
-	for _, e := range di.chainEnts {
-		_ = b.Put(ctx, e.Key, e.Value)
-	}
-	root, _ := b.Finish(ctx)
-	di.bufLen = 0
-	return Segment{
-		Span: Span{
-			Begin: di.chainBegin,
-			End:   end,
-		},
-		Contents: root,
-	}
+	panic("todo")
 }
 
 // SegmentFor returns the Segment in d that contains key.

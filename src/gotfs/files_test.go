@@ -31,6 +31,7 @@ func TestFileInfo(t *testing.T) {
 	ctx, ag, s := setup(t)
 	x, err := ag.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
+	require.NotNil(t, x)
 	x, err = ag.CreateFile(ctx, RW{s, s}, x, "file.txt", bytes.NewReader(nil))
 	require.NoError(t, err)
 	md, err := ag.GetInfo(ctx, s, x, "file.txt")
@@ -58,7 +59,7 @@ func TestLargeFiles(t *testing.T) {
 			if err != nil {
 				return err
 			}
-			fileRoots[i] = *root
+			fileRoots[i] = root
 			return nil
 		})
 	}

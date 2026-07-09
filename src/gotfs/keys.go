@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/gotvc/got/src/gotkv"
@@ -15,6 +16,11 @@ type Key struct {
 	// path contains a null separated path without any leading or trailing separators
 	path  []byte
 	endAt uint64
+}
+
+func ParseKey(data []byte) (Key, error) {
+	var k Key
+	return k, k.Unmarshal(data)
 }
 
 func NewInfoKey(p string) (Key, error) {
@@ -61,6 +67,19 @@ func (k *Key) EndAt() uint64 {
 
 func (k *Key) Equals(k2 Key) bool {
 	return k.endAt == k2.endAt && bytes.Equal(k.path, k2.path)
+}
+
+func (k Key) Clone() Key {
+	return Key{path: bytes.Clone(k.path), endAt: k.endAt}
+}
+
+// AddPrefix moves the key below a directory at p.
+func (k *Key) AddPrefix(p string) {
+	prefix := pathPrefixNoTrail(nil, p)
+	if len(prefix) == 0 {
+		return
+	}
+	k.path = slices.Concat(prefix, k.path)
 }
 
 // pathPrefixNoTrail returns the null-separated prefix for a path without the trailing terminator.

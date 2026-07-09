@@ -41,7 +41,7 @@ func TestDeltaWriterPutAllData(t *testing.T) {
 
 	root, err := fsmach.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
-	root, err = fsmach.PutInfo(ctx, s, *root, "f", &Info{Mode: 0o644})
+	root, err = fsmach.PutInfo(ctx, s, root, "f", &Info{Mode: 0o644})
 	require.NoError(t, err)
 
 	dw := mach.NewDeltaWriter(s)
@@ -68,10 +68,10 @@ func TestDeltaWriterDeletePath(t *testing.T) {
 
 	root, err := fsmach.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
-	root, err = fsmach.PutInfo(ctx, s, *root, "f", &Info{Mode: 0o644})
+	root, err = fsmach.PutInfo(ctx, s, root, "f", &Info{Mode: 0o644})
 	require.NoError(t, err)
 
-	exists, err := fsmach.Exists(ctx, s, *root, "f")
+	exists, err := fsmach.Exists(ctx, s, root, "f")
 	require.NoError(t, err)
 	require.True(t, exists)
 
@@ -98,12 +98,12 @@ func TestDeltaWriterReadFromDiffer(t *testing.T) {
 
 	target, err := fsmach.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
-	target, err = fsmach.PutInfo(ctx, s, *target, "a", &Info{Mode: 0o644})
+	target, err = fsmach.PutInfo(ctx, s, target, "a", &Info{Mode: 0o644})
 	require.NoError(t, err)
-	target, err = fsmach.PutInfo(ctx, s, *target, "b", &Info{Mode: 0o755})
+	target, err = fsmach.PutInfo(ctx, s, target, "b", &Info{Mode: 0o755})
 	require.NoError(t, err)
 
-	differ := fsmach.NewDiffer(s, *empty, *target)
+	differ := fsmach.NewDiffer(s, empty, target)
 	dw := mach.NewDeltaWriter(s)
 	require.NoError(t, dw.ReadFromDiffer(ctx, differ))
 	delta, err := dw.Finish(ctx)
@@ -129,13 +129,13 @@ func TestDeltaWriterDeleteDiffer(t *testing.T) {
 
 	source, err := fsmach.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
-	source, err = fsmach.PutInfo(ctx, s, *source, "a", &Info{Mode: 0o644})
+	source, err = fsmach.PutInfo(ctx, s, source, "a", &Info{Mode: 0o644})
 	require.NoError(t, err)
 
 	empty, err := fsmach.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
 
-	differ := fsmach.NewDiffer(s, *source, *empty)
+	differ := fsmach.NewDiffer(s, source, empty)
 	dw := mach.NewDeltaWriter(s)
 	require.NoError(t, dw.ReadFromDiffer(ctx, differ))
 	delta, err := dw.Finish(ctx)

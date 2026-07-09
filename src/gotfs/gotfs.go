@@ -1,6 +1,7 @@
 package gotfs
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"path"
@@ -15,7 +16,6 @@ import (
 type (
 	Ref    = gotkv.Ref
 	Extent = gotlob.Extent
-	Span   = gotkv.Span
 )
 
 type Root struct {
@@ -64,7 +64,7 @@ func (r Root) ToGotKV() gotkv.Root {
 // Segment returns the root as a single segment.
 func (r Root) Segment() Segment {
 	return Segment{
-		Span:     SpanForPath(""),
+		Span:     Span{},
 		Contents: r.ToGotKV(),
 	}
 }
@@ -75,12 +75,12 @@ func Equal(a, b Root) bool {
 }
 
 // TODO: remove this method
-func newRoot(x gotkv.Root) *Root {
+func newRoot(x gotkv.Root) Root {
 	r, err := NewRoot(x)
 	if err != nil {
 		panic(err)
 	}
-	return &r
+	return r
 }
 
 func NewRoot(x gotkv.Root) (Root, error) {
@@ -107,16 +107,114 @@ func (r Root) toGotKV() gotkv.Root {
 	return r.ToGotKV()
 }
 
+// Span is a range in the filesystem.
+// Begin and End are both inclusive.
+type Span struct {
+	Begin, End Key
+}
+
+// TotalSpan returns a Span including all keys
+func TotalSpan() Span {
+	return Span{}
+}
+
+// NewSpan creates a NewSpan from a gotkv.Span by validating the keys.
+func NewSpan(x gotkv.Span) (Span, error) {
+	beg, err := ParseKey(x.Begin)
+	if err != nil {
+		return Span{}, err
+	}
+	if !bytes.HasSuffix(x.End, []byte{0}) {
+		return Span{}, fmt.Errorf("gotfs.NewSpan: span end is not suffixed with zero byte")
+	}
+	end, err := ParseKey(x.Begin)
+	if err != nil {
+		return Span{}, err
+	}
+	return Span{Begin: beg, End: end}, nil
+}
+
+func ParseSpan(data []byte) (Span, error) {
+	if len(data) == 0 {
+		return Span{}, nil
+	}
+	var span gotkv.Span
+	if err := span.Unmarshal(data); err != nil {
+		return Span{}, err
+	}
+	var beg, end Key
+	if err := beg.Unmarshal(span.Begin); err != nil {
+		return Span{}, err
+	}
+	if err := end.Unmarshal(span.End); err != nil {
+		return Span{}, err
+	}
+	return Span{Begin: beg, End: end}, nil
+}
+
+func (sp *Span) AddPrefix(p string) {
+	sp.Begin.AddPrefix(p)
+	sp.End.AddPrefix(p)
+}
+
+// ToSpan returns the gotkv.Span that this Span covers.
+func (sp Span) ToSpan() gotkv.Span {
+	return gotkv.Span{
+		Begin: sp.Begin.Marshal(nil),
+		// need to change to exclusive from inclusive End here
+		End: gotkv.KeyAfter(sp.End.Marshal(nil)),
+	}
+}
+
+func (sp Span) Clone() Span {
+	return Span{
+		Begin: sp.Begin.Clone(),
+		End:   sp.End.Clone(),
+	}
+}
+
+// Segment is a contiguous subset of a GotFS instance.
+// It may not be a valid Root.
+// The zero valued segment is interpretted as an empty segment.
+type Segment struct {
+	Span     Span
+	Contents gotkv.Root
+}
+
+func NewSegment(x gotkv.Segment) (Segment, error) {
+	span, err := NewSpan(x.Span)
+	if err != nil {
+		return Segment{}, err
+	}
+	return Segment{Span: span, Contents: x.Contents}, nil
+}
+
+func (seg Segment) ToSegment() gotkv.Segment {
+	return gotkv.Segment{
+		Span:     seg.Span.ToSpan(),
+		Contents: seg.Contents,
+	}
+}
+
+func (seg Segment) Marshal(out []byte) []byte {
+	seg2 := seg.ToSegment()
+	return seg2.Marshal(out)
+}
+
+func (seg *Segment) Unmarshal(data []byte) error {
+	return nil
+}
+
 // Promote promotes a segment to a Root if the segment has the correct first key.
-func Promote(ctx context.Context, seg Segment) (*Root, error) {
+func Promote(ctx context.Context, seg Segment) (Root, error) {
 	var key Key
 	if err := unmarshalInfoKey(seg.Contents.First, &key); err != nil {
 		panic(err)
 	}
 	if key.Path() != "" {
-		return nil, fmt.Errorf("segment is not a valid gotfs.Root")
+		return Root{}, fmt.Errorf("segment is not a valid gotfs.Root")
 	}
-	return &Root{
+	return Root{
 		Ref:   seg.Contents.Ref,
 		Depth: seg.Contents.Depth,
 	}, nil
