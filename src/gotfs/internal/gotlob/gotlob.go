@@ -2,6 +2,7 @@ package gotlob
 
 import (
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotkv/gotkvdelta"
 )
 
 type (
@@ -11,4 +12,4 @@ type (
 	Span  = gotkv.Span
 )
 
-type Segment = gotkv.Segment
+type Segment = gotkvdelta.Segment

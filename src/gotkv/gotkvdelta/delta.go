@@ -1,4 +1,4 @@
-package gotkv
+package gotkvdelta
 
 import (
 	"bytes"
@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotkv/kvstreams"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
@@ -14,7 +15,7 @@ import (
 
 // Delta can be applied to an FS to get another FS
 // Delta includes count and total bytes in its marshalled representation.
-type Delta Root
+type Delta gotkv.Root
 
 func (d Delta) Marshal(out []byte) []byte {
 	out = append(out, d.Ref.Marshal()...)
@@ -105,8 +106,8 @@ func parseDeltaEntryType(val []byte) (deType, error) {
 
 // Segment is a single entry in a Delta
 type Segment struct {
-	Span     Span
-	Contents Root
+	Span     gotkv.Span
+	Contents gotkv.Root
 }
 
 func (seg Segment) IsZero() bool {
@@ -149,9 +150,9 @@ type deltaEntry struct {
 	Begin, Pivot, End []byte
 
 	// Prev is set for END and PIVOT entries
-	Prev Root
+	Prev gotkv.Root
 	// Next is set for BEGIN and PIVOT entries
-	Next Root
+	Next gotkv.Root
 }
 
 func (de deltaEntry) Key(out []byte) []byte {
@@ -188,7 +189,7 @@ func (de deltaEntry) Value(out []byte) []byte {
 	return out
 }
 
-func (de deltaEntry) Contents() Root {
+func (de deltaEntry) Contents() gotkv.Root {
 	switch de.Type {
 	case deltaEntry_BEGIN:
 		return de.Next
@@ -212,7 +213,7 @@ func parseDeltaValue(val []byte, typ deType) (deltaEntry, error) {
 	if err != nil {
 		return deltaEntry{}, err
 	}
-	var contents Root
+	var contents gotkv.Root
 	if err := contents.Unmarshal(contentsData); err != nil {
 		return deltaEntry{}, err
 	}
@@ -257,14 +258,14 @@ func parsePivot(val []byte) (deltaEntry, error) {
 	return de, nil
 }
 
-// DeltaWriter writes a Delta
+// Writer writes a Delta
 // It is not thread-safe
-type DeltaWriter struct {
+type Writer struct {
 	m *Machine
 	s stores.RW
 
 	// kvb is the Builder for writing DeltaEntries
-	kvb *Builder
+	kvb *gotkv.Builder
 	// lastEnd is the key for the last END entry that was written.
 	lastEnd []byte
 	// pendingSegs holds segments that cannot be written as delta entries yet.
@@ -278,16 +279,16 @@ type DeltaWriter struct {
 		end []byte
 		// contentb is a builder containing the actual edit contents.
 		// it buffers operations until
-		contentb *Builder
+		contentb *gotkv.Builder
 	}
 }
 
-func (m *Machine) NewDeltaWriter(s stores.RW) DeltaWriter {
-	b := m.NewBuilder(s)
-	return DeltaWriter{m: m, s: s, kvb: b}
+func (m *Machine) NewWriter(s stores.RW) Writer {
+	b := m.kv.NewBuilder(s)
+	return Writer{m: m, s: s, kvb: b}
 }
 
-func (dw *DeltaWriter) Finish(ctx context.Context) (Delta, error) {
+func (dw *Writer) Finish(ctx context.Context) (Delta, error) {
 	if dw.IsEditOpen() {
 		return Delta{}, fmt.Errorf("cannot finish with open edit")
 	}
@@ -301,7 +302,7 @@ func (dw *DeltaWriter) Finish(ctx context.Context) (Delta, error) {
 	return Delta(kvr), nil
 }
 
-func (dw *DeltaWriter) Push(ctx context.Context, seg Segment) error {
+func (dw *Writer) Push(ctx context.Context, seg Segment) error {
 	if dw.IsEditOpen() {
 		return fmt.Errorf("cannot push segment to delta writer, an edit is active")
 	}
@@ -311,7 +312,7 @@ func (dw *DeltaWriter) Push(ctx context.Context, seg Segment) error {
 // writeSegment appends seg to pendingSegs.
 // If seg is not adjacent to the last pending segment, all pending segments
 // are flushed first.
-func (dw *DeltaWriter) writeSegment(ctx context.Context, seg Segment) error {
+func (dw *Writer) writeSegment(ctx context.Context, seg Segment) error {
 	if len(dw.pendingSegs) > 0 {
 		last := dw.pendingSegs[len(dw.pendingSegs)-1]
 		if !bytes.Equal([]byte(last.Span.End), []byte(seg.Span.Begin)) {
@@ -324,7 +325,7 @@ func (dw *DeltaWriter) writeSegment(ctx context.Context, seg Segment) error {
 	return nil
 }
 
-func (dw *DeltaWriter) flushSegments(ctx context.Context) error {
+func (dw *Writer) flushSegments(ctx context.Context) error {
 	segs := dw.pendingSegs
 	if len(segs) == 0 {
 		return nil
@@ -373,13 +374,13 @@ func (dw *DeltaWriter) flushSegments(ctx context.Context) error {
 }
 
 // IsOpen returns true if the last entry written was not an end entry
-func (dw *DeltaWriter) IsEditOpen() bool {
+func (dw *Writer) IsEditOpen() bool {
 	return dw.edit.contentb != nil
 }
 
 // BeginEdit starts a new edit, recording a contiguous region of the keyspace.
 // begin is the first key in the current editing span.
-func (dw *DeltaWriter) BeginEdit(ctx context.Context, begin []byte) error {
+func (dw *Writer) BeginEdit(ctx context.Context, begin []byte) error {
 	if dw.IsEditOpen() {
 		return fmt.Errorf("there is already an active edit")
 	}
@@ -387,13 +388,13 @@ func (dw *DeltaWriter) BeginEdit(ctx context.Context, begin []byte) error {
 		return fmt.Errorf("edit begin %q overlaps with already written region", begin)
 	}
 	dw.edit.begin = append(dw.edit.begin[:0], begin...)
-	dw.edit.contentb = dw.m.NewBuilder(dw.s)
+	dw.edit.contentb = dw.m.kv.NewBuilder(dw.s)
 	dw.edit.end = append(dw.edit.end[:0], begin...)
 	return nil
 }
 
 // Put writes to the content entries Builder for the current edit.
-func (dw *DeltaWriter) Put(ctx context.Context, key, value []byte) error {
+func (dw *Writer) Put(ctx context.Context, key, value []byte) error {
 	if !dw.IsEditOpen() {
 		return fmt.Errorf("cannot put entry, there is no active edit")
 	}
@@ -401,7 +402,7 @@ func (dw *DeltaWriter) Put(ctx context.Context, key, value []byte) error {
 }
 
 // DeleteUntil deletes a contiguous Span of the keyspace, up until, but not including endExcl
-func (dw *DeltaWriter) DeleteUntil(ctx context.Context, endExcl []byte) error {
+func (dw *Writer) DeleteUntil(ctx context.Context, endExcl []byte) error {
 	if !dw.IsEditOpen() {
 		return fmt.Errorf("cannot delete span, there is no active edit")
 	}
@@ -413,7 +414,7 @@ func (dw *DeltaWriter) DeleteUntil(ctx context.Context, endExcl []byte) error {
 }
 
 // EndEdit ends the current edit, and marks the last key affected.
-func (dw *DeltaWriter) EndEdit(ctx context.Context, endExcludingKey []byte) error {
+func (dw *Writer) EndEdit(ctx context.Context, endExcludingKey []byte) error {
 	if !dw.IsEditOpen() {
 		return fmt.Errorf("cannot end edit.  there is no active edit")
 	}
@@ -435,7 +436,7 @@ func (dw *DeltaWriter) EndEdit(ctx context.Context, endExcludingKey []byte) erro
 // CanEdit returns true if a key is editable.
 // A key can be edited (either put or delete) if it has not yet been included
 // in a span written out.
-func (dw *DeltaWriter) CanEdit(k []byte) bool {
+func (dw *Writer) CanEdit(k []byte) bool {
 	if bytes.Compare(k, dw.lastEnd) < 0 {
 		return false
 	}
@@ -450,7 +451,7 @@ func (dw *DeltaWriter) CanEdit(k []byte) bool {
 
 // Edit adds an edit to the DeltaWriter
 // The Edit Span must be ordered after the last edit.
-func (dw *DeltaWriter) Edit(ctx context.Context, edit Edit) error {
+func (dw *Writer) Edit(ctx context.Context, edit gotkv.Edit) error {
 	if dw.IsEditOpen() {
 		return fmt.Errorf("there is already an active edit")
 	}
@@ -465,30 +466,30 @@ func (dw *DeltaWriter) Edit(ctx context.Context, edit Edit) error {
 	return dw.EndEdit(ctx, edit.Span.End)
 }
 
-var _ streams.Iterator[Segment] = &DeltaReader{}
+var _ streams.Iterator[Segment] = &Reader{}
 
-type DeltaReader struct {
+type Reader struct {
 	m *Machine
 	s stores.RO
 	d Delta
 
-	it *Iterator
+	it *gotkv.Iterator
 
 	buf    [2]deltaEntry
 	bufLen int
 }
 
-func (m *Machine) NewDeltaReader(s stores.RO, d Delta) *DeltaReader {
-	return &DeltaReader{
+func (m *Machine) NewReader(s stores.RO, d Delta) Reader {
+	return Reader{
 		m:  m,
 		s:  s,
 		d:  d,
-		it: m.NewIterator(s, Root(d), TotalSpan()),
+		it: m.kv.NewIterator(s, gotkv.Root(d), gotkv.TotalSpan()),
 	}
 }
 
 // Next reads until it has a beginning and pivot/end for a Segment and then emits it.
-func (di *DeltaReader) Next(ctx context.Context, dst []Segment) (int, error) {
+func (di *Reader) Next(ctx context.Context, dst []Segment) (int, error) {
 	if len(dst) == 0 {
 		return 0, nil
 	}
@@ -497,10 +498,10 @@ func (di *DeltaReader) Next(ctx context.Context, dst []Segment) (int, error) {
 
 // SegmentFor returns the Segment in d that contains key.
 func (m *Machine) SegmentFor(ctx context.Context, s stores.RW, d Delta, key []byte) (Segment, error) {
-	iter := m.NewDeltaReader(s, d)
+	iter := m.NewReader(s, d)
 	for {
 		var seg Segment
-		if err := streams.NextUnit(ctx, iter, &seg); err != nil {
+		if err := streams.NextUnit(ctx, &iter, &seg); err != nil {
 			if streams.IsEOS(err) {
 				return Segment{}, fmt.Errorf("no segment contains key %q", key)
 			}
@@ -512,49 +513,49 @@ func (m *Machine) SegmentFor(ctx context.Context, s stores.RW, d Delta, key []by
 	}
 }
 
-func (m *Machine) Apply(ctx context.Context, s stores.RW, base Root, deltas ...Delta) (Root, error) {
+func (m *Machine) Apply(ctx context.Context, s stores.RW, base gotkv.Root, deltas ...Delta) (gotkv.Root, error) {
 	for _, d := range deltas {
-		it := m.NewIterator(s, Root(d), TotalSpan())
+		it := m.kv.NewIterator(s, gotkv.Root(d), gotkv.TotalSpan())
 		for {
 			var beginEntry Entry
 			if err := streams.NextUnit(ctx, it, &beginEntry); err != nil {
 				if streams.IsEOS(err) {
 					break
 				}
-				return Root{}, err
+				return gotkv.Root{}, err
 			}
 			beginTyp, _ := parseDeltaEntryType(beginEntry.Value)
 			if beginTyp != deltaEntry_BEGIN {
-				return Root{}, fmt.Errorf("expected BEGIN entry in delta, got type %d", beginTyp)
+				return gotkv.Root{}, fmt.Errorf("expected BEGIN entry in delta, got type %d", beginTyp)
 			}
 			be, err := parseDeltaValue(beginEntry.Value, deltaEntry_BEGIN)
 			if err != nil {
-				return Root{}, err
+				return gotkv.Root{}, err
 			}
 			be.Begin = beginEntry.Key
 			var endEntry Entry
 			if err := streams.NextUnit(ctx, it, &endEntry); err != nil {
-				return Root{}, fmt.Errorf("expected END entry: %w", err)
+				return gotkv.Root{}, fmt.Errorf("expected END entry: %w", err)
 			}
 			endTyp, _ := parseDeltaEntryType(endEntry.Value)
 			if endTyp != deltaEntry_END {
-				return Root{}, fmt.Errorf("expected END entry in delta, got type %d", endTyp)
+				return gotkv.Root{}, fmt.Errorf("expected END entry in delta, got type %d", endTyp)
 			}
 			var entries []Entry
-			if err := m.ForEach(ctx, s, be.Contents(), TotalSpan(), func(ent Entry) error {
+			if err := m.kv.ForEach(ctx, s, be.Contents(), gotkv.TotalSpan(), func(ent Entry) error {
 				entries = append(entries, ent.Clone())
 				return nil
 			}); err != nil {
-				return Root{}, err
+				return gotkv.Root{}, err
 			}
 			edit := Edit{
 				Span:    Span{Begin: be.Begin, End: be.End},
 				Entries: entries,
 			}
 			var err2 error
-			base, err2 = m.Edit(ctx, s, base, edit)
+			base, err2 = m.kv.Edit(ctx, s, base, edit)
 			if err2 != nil {
-				return Root{}, err2
+				return gotkv.Root{}, err2
 			}
 		}
 	}

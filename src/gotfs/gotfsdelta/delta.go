@@ -8,7 +8,9 @@ import (
 
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotkv/gotkvdelta"
 	"github.com/gotvc/got/src/internal/stores"
+	"go.brendoncarroll.net/exp/slices2"
 	"go.brendoncarroll.net/exp/streams"
 )
 
@@ -23,7 +25,8 @@ type (
 
 type Machine struct {
 	gotfs *gotfs.Machine
-	gotkv gotkv.Machine
+	gotkv *gotkv.Machine
+	kvd   gotkvdelta.Machine
 }
 
 func NewMachine(fsmach *gotfs.Machine, salt [32]byte) Machine {
@@ -32,23 +35,24 @@ func NewMachine(fsmach *gotfs.Machine, salt [32]byte) Machine {
 		MeanSize: 1 << 16,
 		MaxSize:  stores.MaxSize,
 	})
-	return Machine{gotfs: fsmach, gotkv: kvmach}
+	kvdmach := gotkvdelta.NewMachine(&kvmach)
+	return Machine{gotfs: fsmach, gotkv: &kvmach, kvd: kvdmach}
 }
 
-type Delta gotkv.Delta
+type Delta gotkvdelta.Delta
 
 // DeltaWriter writes a stream of GotFS filesystem edits to a store
 type DeltaWriter struct {
 	s stores.RW
 
-	kvw        gotkv.DeltaWriter
+	kvw        gotkvdelta.Writer
 	differPath string
 }
 
 func (m *Machine) NewDeltaWriter(s stores.RW) DeltaWriter {
 	return DeltaWriter{
 		s:   s,
-		kvw: m.gotkv.NewDeltaWriter(s),
+		kvw: m.kvd.NewWriter(s),
 	}
 }
 
@@ -187,19 +191,19 @@ var _ streams.Iterator[gotfs.Segment] = &DeltaReader{}
 type DeltaReader struct {
 	s  stores.RO
 	d  Delta
-	dr gotkv.DeltaReader
+	dr gotkvdelta.Reader
 }
 
 func (m *Machine) NewDeltaReader(s stores.RO, d Delta) DeltaReader {
 	return DeltaReader{
 		s:  s,
 		d:  d,
-		dr: *m.gotkv.NewDeltaReader(s, gotkv.Delta(d)),
+		dr: m.kvd.NewReader(s, gotkvdelta.Delta(d)),
 	}
 }
 
 func (dw *DeltaReader) Next(ctx context.Context, dst []gotfs.Segment) (int, error) {
-	dst2 := make([]gotkv.Segment, len(dst))
+	dst2 := make([]gotkvdelta.Segment, len(dst))
 	for i := range dst2 {
 		dst2[i] = dst[i].ToSegment()
 	}
@@ -229,10 +233,10 @@ func infoKeyNext(infoKey []byte) []byte {
 
 // Apply applies a delta to the root, producing a new root
 func (m *Machine) Apply(ctx context.Context, ss gotfs.RW, root Root, d Delta) (Root, error) {
-	dr := m.gotkv.NewDeltaReader(ss.Metadata, gotkv.Delta(d))
+	dr := m.kvd.NewReader(ss.Metadata, gotkvdelta.Delta(d))
 	b := m.gotfs.NewBuilder(ctx, ss)
 	var lastEnd []byte
-	if err := streams.ForEach(ctx, dr, func(seg gotkv.Segment) error {
+	if err := streams.ForEach(ctx, &dr, func(seg gotkvdelta.Segment) error {
 		cmp := bytes.Compare(lastEnd, seg.Span.Begin)
 		switch {
 		case cmp < 0:
@@ -271,4 +275,27 @@ func (m *Machine) Apply(ctx context.Context, ss gotfs.RW, root Root, d Delta) (R
 		return Root{}, err
 	}
 	return b.Finish()
+}
+
+// Applied represents a sequence of Deltas applied to a base.
+type Applied struct {
+	base   gotfs.Root
+	deltas []Delta
+}
+
+func NewApplied(base gotfs.Root, deltas []Delta) Applied {
+	return Applied{base: base, deltas: deltas}
+}
+
+func (a *Applied) lower() *gotkvdelta.Applied {
+	return &gotkvdelta.Applied{
+		Base: a.base.ToGotKV(),
+		Deltas: slices2.Map(a.deltas, func(x Delta) gotkvdelta.Delta {
+			return gotkvdelta.Delta(x)
+		}),
+	}
+}
+
+func (a *Applied) Iterate(span gotfs.Span) gotkvdelta.Iterator {
+	return a.lower().Iterate(span.ToSpan())
 }

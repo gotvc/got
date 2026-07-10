@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotkv/gotkvdelta"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
@@ -23,7 +23,7 @@ func TestDeltaWriterPutInfo(t *testing.T) {
 	delta, err := dw.Finish(ctx)
 	require.NoError(t, err)
 
-	applied, err := mach.gotkv.Apply(ctx, s, root.ToGotKV(), gotkv.Delta(delta))
+	applied, err := mach.kvd.Apply(ctx, s, root.ToGotKV(), gotkvdelta.Delta(delta))
 	require.NoError(t, err)
 	appliedRoot := Root{Ref: applied.Ref, Depth: applied.Depth}
 
@@ -53,7 +53,7 @@ func TestDeltaWriterPutAllData(t *testing.T) {
 	delta, err := dw.Finish(ctx)
 	require.NoError(t, err)
 
-	applied, err := mach.gotkv.Apply(ctx, s, root.ToGotKV(), gotkv.Delta(delta))
+	applied, err := mach.kvd.Apply(ctx, s, root.ToGotKV(), gotkvdelta.Delta(delta))
 	require.NoError(t, err)
 	appliedRoot := Root{Ref: applied.Ref, Depth: applied.Depth}
 
@@ -80,7 +80,7 @@ func TestDeltaWriterDeletePath(t *testing.T) {
 	delta, err := dw.Finish(ctx)
 	require.NoError(t, err)
 
-	applied, err := mach.gotkv.Apply(ctx, s, root.ToGotKV(), gotkv.Delta(delta))
+	applied, err := mach.kvd.Apply(ctx, s, root.ToGotKV(), gotkvdelta.Delta(delta))
 	require.NoError(t, err)
 	appliedRoot := Root{Ref: applied.Ref, Depth: applied.Depth}
 
@@ -109,7 +109,7 @@ func TestDeltaWriterReadFromDiffer(t *testing.T) {
 	delta, err := dw.Finish(ctx)
 	require.NoError(t, err)
 
-	applied, err := mach.gotkv.Apply(ctx, s, empty.ToGotKV(), gotkv.Delta(delta))
+	applied, err := mach.kvd.Apply(ctx, s, empty.ToGotKV(), gotkvdelta.Delta(delta))
 	require.NoError(t, err)
 	appliedRoot := Root{Ref: applied.Ref, Depth: applied.Depth}
 
@@ -141,7 +141,7 @@ func TestDeltaWriterDeleteDiffer(t *testing.T) {
 	delta, err := dw.Finish(ctx)
 	require.NoError(t, err)
 
-	applied, err := mach.gotkv.Apply(ctx, s, source.ToGotKV(), gotkv.Delta(delta))
+	applied, err := mach.kvd.Apply(ctx, s, source.ToGotKV(), gotkvdelta.Delta(delta))
 	require.NoError(t, err)
 	appliedRoot := Root{Ref: applied.Ref, Depth: applied.Depth}
 

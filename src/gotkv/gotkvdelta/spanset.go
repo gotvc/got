@@ -1,16 +1,17 @@
-package gotkv
+package gotkvdelta
 
 import (
 	"bytes"
 	"context"
 
+	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/streams"
 )
 
 // SpanSet is an ordered set of non-overlapping Spans
-type SpanSet Root
+type SpanSet gotkv.Root
 
 // ssEntry is a ReadSet entry
 type ssEntry struct {
@@ -44,13 +45,13 @@ func (rse ssEntry) Value(out []byte) []byte {
 }
 
 type SpanSetWriter struct {
-	b        *Builder
+	b        *gotkv.Builder
 	haveSpan bool
-	lastSpan Span
+	lastSpan gotkv.Span
 }
 
 func (m *Machine) NewSpanSetWriter(s stores.RW) SpanSetWriter {
-	return SpanSetWriter{b: m.NewBuilder(s)}
+	return SpanSetWriter{b: m.kv.NewBuilder(s)}
 }
 
 // Add adds a Span to the Set. It may overlap with the last span
@@ -96,7 +97,7 @@ func (rsw *SpanSetWriter) Finish(ctx context.Context) (SpanSet, error) {
 
 // SpansOverlap returns true if any of the spans in ss overlap x.
 func (m *Machine) SpansOverlap(ctx context.Context, s stores.RO, ss SpanSet, x Span) (bool, error) {
-	it := m.NewIterator(s, Root(ss), TotalSpan())
+	it := m.kv.NewIterator(s, gotkv.Root(ss), gotkv.TotalSpan())
 	for {
 		var beginEntry Entry
 		if err := streams.NextUnit(ctx, it, &beginEntry); err != nil {

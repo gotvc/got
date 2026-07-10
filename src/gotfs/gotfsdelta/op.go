@@ -2,7 +2,7 @@ package gotfsdelta
 
 import (
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotkv/gotkvdelta"
 )
 
 // Op is an operation on the filesystem
@@ -27,7 +27,7 @@ type PutContentOp struct {
 	Extents []gotfs.Extent
 }
 
-func isPutContentOp(seg gotkv.Segment) bool {
+func isPutContentOp(seg gotkvdelta.Segment) bool {
 	var k gotfs.Key
 	if err := k.Unmarshal(seg.Span.Begin); err != nil {
 		return false
@@ -37,7 +37,7 @@ func isPutContentOp(seg gotkv.Segment) bool {
 
 type DeleteOp string
 
-func isDelete(seg gotkv.Segment) bool {
+func isDelete(seg gotkvdelta.Segment) bool {
 	return seg.IsDelete()
 }
 
@@ -46,7 +46,7 @@ type PutOp struct {
 	Root Root
 }
 
-func isPutInfo(seg gotkv.Segment) bool {
+func isPutInfo(seg gotkvdelta.Segment) bool {
 	return seg.Contents.Count == 1
 }
 

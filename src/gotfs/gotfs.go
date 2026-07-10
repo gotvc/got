@@ -10,6 +10,7 @@ import (
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs/internal/gotlob"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotkv/gotkvdelta"
 	"github.com/gotvc/got/src/internal/stores"
 )
 
@@ -181,7 +182,7 @@ type Segment struct {
 	Contents gotkv.Root
 }
 
-func NewSegment(x gotkv.Segment) (Segment, error) {
+func NewSegment(x gotkvdelta.Segment) (Segment, error) {
 	span, err := NewSpan(x.Span)
 	if err != nil {
 		return Segment{}, err
@@ -189,8 +190,8 @@ func NewSegment(x gotkv.Segment) (Segment, error) {
 	return Segment{Span: span, Contents: x.Contents}, nil
 }
 
-func (seg Segment) ToSegment() gotkv.Segment {
-	return gotkv.Segment{
+func (seg Segment) ToSegment() gotkvdelta.Segment {
+	return gotkvdelta.Segment{
 		Span:     seg.Span.ToSpan(),
 		Contents: seg.Contents,
 	}
