@@ -15,15 +15,14 @@ import (
 
 type Exporter struct {
 	gotfs  *gotfs.Machine
-	db     *DB
+	db     *Cache
 	fsx    posixfs.FS
 	filter func(p string) bool
 }
 
-func NewExporter(gotfs *gotfs.Machine, db *DB, fsx posixfs.FS, filter func(p string) bool) *Exporter {
+func NewExporter(c *Cache, gotfs *gotfs.Machine, fsx posixfs.FS, filter func(p string) bool) *Exporter {
 	return &Exporter{
 		gotfs:  gotfs,
-		db:     db,
 		fsx:    fsx,
 		filter: filter,
 	}

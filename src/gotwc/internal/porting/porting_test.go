@@ -179,15 +179,18 @@ func TestExport(t *testing.T) {
 			mach := gotcore.GotFS(cfg)
 			s := stores.NewMem()
 			ss := gotfs.RO{s, s}
-			db := NewDB(bdb)
+			tx, err := bdb.Begin(true)
+			require.NoError(t, err)
+			defer tx.Rollback()
+			c := NewCache(tx)
 
 			for _, info := range tt.InDB {
-				require.NoError(t, db.putInfoEntry(ctx, info))
+				require.NoError(t, c.putInfoEntry(ctx, info))
 			}
 			root := makeGotFS(t, &mach, s, tt.InGot)
 
-			exp := NewExporter(&mach, db, fsys, func(string) bool { return true })
-			err := exp.ExportPath(ctx, ss, root, tt.ExportPath)
+			exp := NewExporter(&c, &mach, fsys, func(string) bool { return true })
+			err = exp.ExportPath(ctx, ss, root, tt.ExportPath)
 			if tt.Err == nil {
 				require.NoError(t, err)
 				return
@@ -244,8 +247,11 @@ func TestImportPath(t *testing.T) {
 			cfg := gotcore.DefaultConfig(false)
 			mach := gotcore.GotFS(cfg)
 			bdb := newTestDB(t, ctx, cfg)
-			db := NewDB(bdb)
-			imp := NewImporter(&mach, db, gotfs.RW{Data: dst, Metadata: dst}, cfg.Hash())
+			tx, err := bdb.Begin(true)
+			require.NoError(t, err)
+			defer tx.Rollback()
+			c := NewCache(tx)
+			imp := NewImporter(&c, &mach, gotfs.RW{Data: dst, Metadata: dst}, cfg.Hash())
 
 			// prepare files on disk
 			dir := testutil.OpenRoot(t, t.TempDir())
@@ -280,7 +286,7 @@ func TestImportPath(t *testing.T) {
 func newTestDB(t testing.TB, ctx context.Context, cfg gotcore.DSConfig) *bbolt.DB {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "test.db")
-	db, err := bbolt.Open(path, 0o600, nil)
+	db, err := bbolt.Open(path, 0o600, &bbolt.Options{NoSync: true, NoFreelistSync: true})
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		db.Close()

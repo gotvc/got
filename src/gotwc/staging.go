@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/gotvc/got/src/gdat"
+	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotrepo"
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/posixfs"
@@ -30,14 +31,11 @@ func (wc *WC) DoWithStore(ctx context.Context, fn func(dst stores.RW) error) err
 }
 
 type stagingCtx struct {
-	Stage    *staging.Tx
-	GotFS    *gotfs.Machine
-	GotVC    *gotcore.VCMach
-	Store    stores.RW
-	FS       posixfs.FS
-	DB       *porting.DB
-	Importer *porting.Importer
-	Exporter *porting.Exporter
+	Stage *staging.Tx
+	GotFS *gotfs.Machine
+	GotVC *gotcore.VCMach
+	Store stores.RW
+	FS    posixfs.FS
 }
 
 func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
@@ -62,10 +60,14 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 	}
 	defer stagetx.Abort(ctx)
 	stagingStore := stagetx.Store()
-	storePair := [2]stores.RW{stagingStore, stagingStore}
-	dirState := porting.NewDB(wc.db, paramHash)
-	imp := porting.NewImporter(&fsmach, dirState, storePair)
-	exp := porting.NewExporter(&fsmach, dirState, fsys, filter)
+	tx, err := wc.db.Begin(true)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	cache := porting.NewCache(tx)
+	imp := porting.NewImporter(&cache, &fsmach, gotfs.RW{Data: stagingStore, Metadata: stagingStore}, paramHash)
+	exp := porting.NewExporter(&cache, &fsmach, fsys, filter)
 	vcmach := gotcore.GotVC(cfg)
 	if err := fn(stagingCtx{
 		Stage:    stagetx,
@@ -73,7 +75,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		GotFS:    &fsmach,
 		GotVC:    &vcmach,
 		FS:       fsys,
-		DB:       porting.NewDB(wc.db, paramHash),
+		DB:       porting.NewCache(wc.db),
 		Importer: imp,
 		Exporter: exp,
 	}); err != nil {
@@ -100,7 +102,7 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 	if err != nil {
 		return err
 	}
-	portdb := porting.NewDB(wc.db, paramHash)
+	portdb := porting.NewCache(wc.db)
 	fsmach := gotcore.GotFS(info.Config)
 	exp := porting.NewExporter(&fsmach, portdb, filtFS, filter)
 	stagingStore, err := wc.repo.BeginStagingTx(ctx, wc.id, false)
@@ -143,8 +145,9 @@ func (wc *WC) Add(ctx context.Context, paths ...string) error {
 		porter := sctx.Importer
 		for _, target := range paths {
 			it := porting.NewFSInfoIter(sctx.FS, target)
-			if err := streams.ForEach(ctx, it, func(info porting.FileInfo) error {
-				p := info.Path
+			if err := streams.ForEach(ctx, it, func(ent porting.InfoEntry) error {
+				info := ent.Info
+				p := ent.Path
 				if info.Mode.IsDir() {
 					// TODO, this should set the mode on the directory
 					return nil
@@ -154,11 +157,12 @@ func (wc *WC) Add(ctx context.Context, paths ...string) error {
 				}
 				ctx, cf := metrics.Child(ctx, p)
 				defer cf()
-				fileRoot, err := porter.ImportFile(ctx, sctx.FS, p)
+				exts, err := porter.ImportFile(ctx, sctx.FS, p)
 				if err != nil {
 					return err
 				}
-				return stage.PutRoot(ctx, p, fileRoot)
+				stage.PutRoot(ctx, p)
+				return stage.PutExtents(ctx, p, exts)
 			}); err != nil {
 				return err
 			}
@@ -192,7 +196,7 @@ func (wc *WC) Put(ctx context.Context, paths ...string) error {
 			if err := stage.CheckConflict(ctx, p); err != nil {
 				return err
 			}
-			root, err := porter.ImportPath(ctx, sctx.FS, p)
+			ents, err := porter.ImportPath(ctx, sctx.FS, p)
 			if err != nil && !posixfs.IsErrNotExist(err) {
 				return err
 			}
@@ -201,6 +205,13 @@ func (wc *WC) Put(ctx context.Context, paths ...string) error {
 					return err
 				}
 			} else {
+<<<<<<< HEAD
+=======
+				root, err := sctx.GotFS.FromEntries(ctx, sctx.Store, slices.Values(ents))
+				if err != nil {
+					return err
+				}
+>>>>>>> 2fb4d44 (wip)
 				if err := stage.PutRoot(ctx, p, root); err != nil {
 					return err
 				}
@@ -304,8 +315,7 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 		if err != nil {
 			return err
 		}
-
-		fn, err := sctx.Stage.CreateFunction(ctx, sctx.GotFS, gotfs.RW{Metadata: scratch, Data: scratch})
+		fn, err := sctx.Stage.CreateDelta(ctx, gotfs.RW{Metadata: scratch, Data: scratch})
 		if err != nil {
 			return err
 		}
@@ -403,7 +413,7 @@ func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOpera
 			}
 			stage := sctx.Stage
 
-			return stage.ForEach(ctx, func(ent staging.Entry) error {
+			return stage.ForEach(ctx, gotkv.Span{}, func(ent staging.Entry) error {
 				sop := ent.Op
 				var op FileOperation
 				switch {
@@ -456,11 +466,11 @@ func (wc *WC) ForEachDirty(ctx context.Context, fn func(fi DirtyFile) error) err
 		return streams.ForEach(ctx, uk, func(ukp unknownFile) error {
 			p := ukp.Path()
 			// filter staging
-			var op staging.Operation
-			if found, err := stage.Get(ctx, p, &op); err != nil {
+			var seg gotfs.Segment
+			if found, err := stage.Get(ctx, p, &seg); err != nil {
 				return err
 			} else if found {
-				if op.Delete != nil && !ukp.Current.Ok {
+				if seg.IsDelete() && !ukp.Current.Ok {
 					// File is gone, and staging deleted it, skip.
 					return nil
 				}
@@ -470,8 +480,8 @@ func (wc *WC) ForEachDirty(ctx context.Context, fn func(fi DirtyFile) error) err
 			return fn(DirtyFile{
 				Path:       p,
 				Exists:     ukp.Current.Ok,
-				Mode:       ukp.Current.X.Mode,
-				ModifiedAt: ukp.Current.X.ModifiedAt,
+				Mode:       ukp.Current.X.Info.Mode,
+				ModifiedAt: ukp.Current.X.Info.ModifiedAt,
 			})
 		})
 	})
@@ -484,18 +494,22 @@ func (wc *WC) cleanupStagingBlobs(ctx context.Context) error {
 		return err
 	}
 	defer tx.Abort(ctx)
-	kvmach := staging.DefaultGotKV()
-	stagetx := staging.New(&kvmach, tx, nil)
+	btx, err := wc.db.Begin(false)
+	if err != nil {
+		return err
+	}
 	fsmach := gotfs.NewMachine(gotfs.Params{})
-	if err := stagetx.ForEach(ctx, func(ent staging.Entry) error {
-		fop := ent.Op
-		if putOp := fop.Put; putOp != nil {
+	stagetx := staging.New(btx, &fsmach, tx, nil)
+	if err := stagetx.ForEach(ctx, gotkv.Span{}, func(ent staging.Entry) error {
+		seg := ent.Segment
+		if !seg.IsZero() {
 			// TODO: need to implement set for Tx
 			var set stores.Set
-			if err := fsmach.Populate(ctx, tx, *putOp, set, set); err != nil {
+			if err := fsmach.Populate(ctx, tx, seg, set, set); err != nil {
 				return nil
 			}
 		}
+		// deletes will not reference any data, so there would be nothing to visit.
 		return nil
 	}); err != nil {
 		return err

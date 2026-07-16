@@ -38,7 +38,7 @@ type FilePair struct {
 
 // GetExtents returns the extents for a file.
 // If the file has not been modified, then
-func GetExtents(ctx context.Context, db *DB, fsys posixfs.FS, p string) iter.Seq2[gotfs.Extent, error] {
+func GetExtents(ctx context.Context, db *Cache, fsys posixfs.FS, p string) iter.Seq2[gotfs.Extent, error] {
 	return func(yield func(gotfs.Extent, error) bool) {
 
 	}

@@ -279,12 +279,13 @@ func (m *Machine) Apply(ctx context.Context, ss gotfs.RW, root Root, d Delta) (R
 
 // Applied represents a sequence of Deltas applied to a base.
 type Applied struct {
+	s      stores.RO
 	base   gotfs.Root
 	deltas []Delta
 }
 
-func NewApplied(base gotfs.Root, deltas []Delta) Applied {
-	return Applied{base: base, deltas: deltas}
+func NewApplied(s stores.RO, base gotfs.Root, deltas []Delta) Applied {
+	return Applied{s: s, base: base, deltas: deltas}
 }
 
 func (a *Applied) lower() *gotkvdelta.Applied {

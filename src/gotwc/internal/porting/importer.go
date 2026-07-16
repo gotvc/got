@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/metrics"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/units"
@@ -22,15 +21,15 @@ import (
 
 type Importer struct {
 	gotfs     *gotfs.Machine
-	db        *DB
+	db        *Cache
 	ss        gotfs.RW
 	paramHash [32]byte
 }
 
-func NewImporter(fsmach *gotfs.Machine, db *DB, ss gotfs.RW, paramHash [32]byte) *Importer {
+func NewImporter(c *Cache, fsmach *gotfs.Machine, ss gotfs.RW, paramHash [32]byte) *Importer {
 	return &Importer{
 		gotfs:     fsmach,
-		db:        db,
+		db:        c,
 		ss:        ss,
 		paramHash: paramHash,
 	}
@@ -58,7 +57,7 @@ func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, fin
 		return gotfs.Root{}, err
 	}
 	changes = append(changes, gotfs.Segment{
-		Span:     gotkv.TotalSpan(),
+		Span:     gotfs.Span{},
 		Contents: emptyDir.ToGotKV(),
 	})
 	dirents, err := posixfs.ReadDir(fsx, p)

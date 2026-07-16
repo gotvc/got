@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path"
+	"sync"
 	"sync/atomic"
 
 	"github.com/gotvc/got/src/gotfs"
@@ -72,13 +73,14 @@ type ExtentEntry struct {
 	Extent gotfs.Extent
 }
 
-type DB struct {
-	db        *bbolt.DB
+type Cache struct {
+	mu        sync.RWMutex
+	tx        *bbolt.Tx
 	doneSetup atomic.Bool
 }
 
-func NewDB(db *bbolt.DB) *DB {
-	return &DB{db: db}
+func NewCache(tx *bbolt.Tx) Cache {
+	return Cache{tx: tx}
 }
 
 const (
@@ -86,8 +88,8 @@ const (
 	bucketExtents = "extents"
 )
 
-func (db *DB) ensureBuckets(tx *bbolt.Tx) error {
-	if done := db.doneSetup.Load(); done {
+func (c *Cache) ensureBuckets(tx *bbolt.Tx) error {
+	if done := c.doneSetup.Load(); done {
 		return nil
 	}
 	for _, name := range []string{bucketInfos, bucketExtents} {
@@ -95,117 +97,104 @@ func (db *DB) ensureBuckets(tx *bbolt.Tx) error {
 			return err
 		}
 	}
-	db.doneSetup.Store(true)
+	c.doneSetup.Store(true)
 	return nil
 }
 
 // UpdateInfo updates the cached file info for a path.
 // If the file has changed in anyway, then all of the extents are invalidated.
 // It returns true if the path has changed, and will require reimport.
-func (db *DB) UpdateInfo(ctx context.Context, p string, info FileInfo) (bool, error) {
+func (c *Cache) UpdateInfo(ctx context.Context, p string, info FileInfo) (bool, error) {
 	p = CleanPath(p)
 	var hasChanged bool
-	err := db.db.Update(func(tx *bbolt.Tx) error {
-		if err := db.ensureBuckets(tx); err != nil {
-			return err
-		}
-		b := tx.Bucket([]byte(bucketInfos))
-		k := []byte(p)
+	if err := c.ensureBuckets(c.tx); err != nil {
+		return false, err
+	}
+	b := c.tx.Bucket([]byte(bucketInfos))
+	k := []byte(p)
 
-		if val := b.Get(k); val != nil {
-			var oldInfo FileInfo
-			if err := oldInfo.Unmarshal(val); err != nil {
-				return err
-			}
-			if HasChanged(&oldInfo, &info) {
-				hasChanged = true
-				if err := invalidateExtents(tx, p); err != nil {
-					return err
-				}
-			} else {
-				return nil // nothing to do.
+	if val := b.Get(k); val != nil {
+		var oldInfo FileInfo
+		if err := oldInfo.Unmarshal(val); err != nil {
+			return false, err
+		}
+		if HasChanged(&oldInfo, &info) {
+			hasChanged = true
+			if err := invalidateExtents(c.tx, p); err != nil {
+				return false, err
 			}
 		} else {
-			// no previous entry, need update
-			hasChanged = true
+			return false, nil // nothing to do.
 		}
-		return b.Put(k, info.Marshal(nil))
-	})
-	return hasChanged, err
+	} else {
+		// no previous entry, need update
+		hasChanged = true
+	}
+	return hasChanged, b.Put(k, info.Marshal(nil))
 }
 
-func (db *DB) putInfoEntry(ctx context.Context, ient InfoEntry) error {
-	_, err := db.UpdateInfo(ctx, ient.Path, ient.Info)
+func (c *Cache) putInfoEntry(ctx context.Context, ient InfoEntry) error {
+	_, err := c.UpdateInfo(ctx, ient.Path, ient.Info)
 	return err
 }
 
 // GetInfo returns the last known info about the file.
-func (db *DB) GetInfo(ctx context.Context, p string, dst *FileInfo) (bool, error) {
+func (c *Cache) GetInfo(ctx context.Context, p string, dst *FileInfo) (bool, error) {
 	var found bool
-	err := db.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(bucketInfos))
-		if b == nil {
-			return nil
-		}
-		val := b.Get([]byte(p))
-		found = true
-		return dst.Unmarshal(val)
-	})
-	return found, err
+	b := c.tx.Bucket([]byte(bucketInfos))
+	if b == nil {
+		return false, nil
+	}
+	val := b.Get([]byte(p))
+	found = val != nil
+	return found, dst.Unmarshal(val)
 }
 
-func (db *DB) Delete(ctx context.Context, p string) error {
-	return db.db.Update(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(bucketInfos))
-		if b != nil {
-			if err := b.Delete([]byte(p)); err != nil {
-				return err
-			}
-		}
-		return invalidateExtents(tx, p)
-	})
-}
-
-func (db *DB) AddExtents(ctx context.Context, p string, paramHash [32]byte, ents []gotfs.Entry) error {
-	return db.db.Update(func(tx *bbolt.Tx) error {
-		if err := db.ensureBuckets(tx); err != nil {
+func (c *Cache) Delete(ctx context.Context, p string) error {
+	b := c.tx.Bucket([]byte(bucketInfos))
+	if b != nil {
+		if err := b.Delete([]byte(p)); err != nil {
 			return err
 		}
-		b := tx.Bucket([]byte(bucketExtents))
-		for _, ent := range ents {
-			if ent.IsInfo() {
-				continue
-			}
-			if err := putExtent(b, p, paramHash, ent.EndAt(), ent.Extent); err != nil {
-				return err
-			}
+	}
+	return invalidateExtents(c.tx, p)
+}
+
+func (c *Cache) AddExtents(ctx context.Context, p string, paramHash [32]byte, ents []gotfs.Entry) error {
+	if err := c.ensureBuckets(c.tx); err != nil {
+		return err
+	}
+	b := c.tx.Bucket([]byte(bucketExtents))
+	for _, ent := range ents {
+		if ent.IsInfo() {
+			continue
 		}
-		return nil
-	})
+		if err := putExtent(b, p, paramHash, ent.EndAt(), ent.Extent); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // GetExtents gets extents for (p, paramHash) and appends them to out
-func (db *DB) GetExtents(ctx context.Context, p string, paramHash [32]byte, out []gotfs.Entry) ([]gotfs.Entry, error) {
-	err := db.db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(bucketExtents))
-		if b == nil {
-			return fmt.Errorf("no extents for path + paramHash")
+func (c *Cache) GetExtents(ctx context.Context, p string, paramHash [32]byte, out []gotfs.Entry) ([]gotfs.Entry, error) {
+	b := c.tx.Bucket([]byte(bucketExtents))
+	if b == nil {
+		return nil, fmt.Errorf("no extents for path + paramHash")
+	}
+	prefix := extentPrefix(p, paramHash)
+	cur := b.Cursor()
+	for k, _ := cur.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = cur.Next() {
+		ee, err := parseExtentEntry(k, b.Get(k))
+		if err != nil {
+			return nil, err
 		}
-		prefix := extentPrefix(p, paramHash)
-		c := b.Cursor()
-		for k, _ := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = c.Next() {
-			ee, err := parseExtentEntry(k, b.Get(k))
-			if err != nil {
-				return err
-			}
-			out = append(out, gotfs.Entry{
-				Key:   gotfs.NewExtentKey(p, ee.EndAt),
-				Value: gotfs.Value{Extent: ee.Extent},
-			})
-		}
-		return nil
-	})
-	return out, err
+		out = append(out, gotfs.Entry{
+			Key:   gotfs.NewExtentKey(p, ee.EndAt),
+			Value: gotfs.Value{Extent: ee.Extent},
+		})
+	}
+	return out, nil
 }
 
 func putExtent(b *bbolt.Bucket, p string, paramHash [32]byte, endAt uint64, ext gotfs.Extent) error {
@@ -230,8 +219,8 @@ func parseExtentEntry(k, v []byte) (ExtentEntry, error) {
 }
 
 // NewInfoIterator returns an iterator over all tracked paths.
-func (db *DB) NewInfoIterator() *DBInfoIterator {
-	return newDBInfoIterator(db)
+func (c *Cache) NewInfoIterator() *DBInfoIterator {
+	return newDBInfoIterator(c)
 }
 
 func deleteInfo(tx *bbolt.Tx, p string) error {
@@ -273,10 +262,10 @@ func extentPrefix(p string, paramHash [32]byte) []byte {
 
 type DBInfoIterator = streams.SeqErr[InfoEntry]
 
-func newDBInfoIterator(db *DB) *DBInfoIterator {
+func newDBInfoIterator(db *Cache) *DBInfoIterator {
 	seq := func(yield func(InfoEntry, error) bool) {
-		err := db.db.View(func(tx *bbolt.Tx) error {
-			b := tx.Bucket([]byte(bucketInfos))
+		err := func() error {
+			b := db.tx.Bucket([]byte(bucketInfos))
 			if b == nil {
 				return nil
 			}
@@ -292,7 +281,7 @@ func newDBInfoIterator(db *DB) *DBInfoIterator {
 				}
 			}
 			return nil
-		})
+		}()
 		if err != nil {
 			yield(InfoEntry{}, err)
 		}

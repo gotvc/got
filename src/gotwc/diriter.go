@@ -13,9 +13,9 @@ import (
 // unknownFile is a path in the working directory which has changed.
 type unknownFile struct {
 	// Known is the last known version of the file recorded in the database.
-	Known maybe.Maybe[FileInfo]
+	Known maybe.Maybe[porting.InfoEntry]
 	// Current is the most recent observation of the file in the filesystem.
-	Current maybe.Maybe[FileInfo]
+	Current maybe.Maybe[porting.InfoEntry]
 }
 
 func (ukp *unknownFile) Path() string {
@@ -48,28 +48,28 @@ func hasChangedDirAware(a, b *porting.FileInfo) bool {
 }
 
 // newUnknownIterator iterates over files which are unknown to the database.
-func (wc *WC) newUnknownIterator(db *porting.DB, fsys posixfs.FS, spans []Span) streams.Iterator[unknownFile] {
-	dbit := streams.NewPeeker(streams.NewFilter(db.NewInfoIterator(), func(ent porting.FileInfo) bool {
+func (wc *WC) newUnknownIterator(db *porting.Cache, fsys posixfs.FS, spans []Span) streams.Iterator[unknownFile] {
+	dbit := streams.NewPeeker(streams.NewFilter(db.NewInfoIterator(), func(ent porting.InfoEntry) bool {
 		if strings.HasPrefix(ent.Path, ".got") {
 			return false
 		}
 		return spansContain(spans, ent.Path)
 	}), nil)
 	fsit := streams.NewPeeker(porting.NewFSInfoIter(fsys, ""), nil)
-	join := streams.NewOJoiner(dbit, fsit, func(left porting.FileInfo, right FileInfo) int {
+	join := streams.NewOJoiner(dbit, fsit, func(left porting.InfoEntry, right porting.InfoEntry) int {
 		return strings.Compare(left.Path, right.Path)
 	})
-	diff := streams.NewFilter(join, func(x streams.OJoined[porting.FileInfo, FileInfo]) bool {
+	diff := streams.NewFilter(join, func(x streams.OJoined[porting.InfoEntry, porting.InfoEntry]) bool {
 		switch {
 		case x.Left.Ok != x.Right.Ok:
 			// path only exists in 1
 			return true
 		case x.Left.Ok && x.Right.Ok:
-			return hasChangedDirAware(&x.Left.X, &x.Right.X)
+			return hasChangedDirAware(&x.Left.X.Info, &x.Right.X.Info)
 		}
 		return false
 	})
-	return streams.NewMap(diff, func(dst *unknownFile, src streams.OJoined[porting.FileInfo, porting.FileInfo]) {
+	return streams.NewMap(diff, func(dst *unknownFile, src streams.OJoined[porting.InfoEntry, porting.InfoEntry]) {
 		*dst = unknownFile{
 			Known:   src.Left,
 			Current: src.Right,

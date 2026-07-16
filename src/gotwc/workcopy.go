@@ -303,8 +303,21 @@ func (wc *WC) beginStageTx(ctx context.Context, paramHash *[32]byte, modify bool
 	if paramHash == nil && modify {
 		return nil, fmt.Errorf("paramHash must be provided for modifying transaction.")
 	}
-	kvmach := staging.DefaultGotKV()
-	return staging.New(&kvmach, tx, paramHash), nil
+	btx, err := wc.db.Begin(modify)
+	if err != nil {
+		return nil, err
+	}
+	fsys, filter, err := wc.getFilteredFS(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return staging.New(staging.Env{
+		Tx:        btx,
+		VTx:       tx,
+		FS:        fsys,
+		Filter:    filter,
+		ParamHash: paramHash,
+	}), nil
 }
 
 // StageIsEmpty returns (true, nil) IFF there are no changes staged.
@@ -336,8 +349,7 @@ func (wc *WC) Export(ctx context.Context) error {
 		return nil
 	}
 	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: mname}, func(mtx *gotcore.MarkTx) error {
-		paramHash := mtx.Config().Hash()
-		portDB := porting.NewDB(wc.db, paramHash)
+		portDB := porting.NewCache(wc.db)
 		fsys, filter, err := wc.getFilteredFS(ctx)
 		if err != nil {
 			return err
@@ -361,13 +373,12 @@ func (wc *WC) Clobber(ctx context.Context, p string) error {
 		return nil
 	}
 	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: mname}, func(mtx *gotcore.MarkTx) error {
-		paramHash := mtx.Config().Hash()
 		fsys, filter, err := wc.getFilteredFS(ctx)
 		if err != nil {
 			return err
 		}
-		portDB := porting.NewDB(wc.db, paramHash)
-		exp := porting.NewExporter(mtx.GotFS(), portDB, fsys, filter)
+		cache := porting.NewCache(wc.d)
+		exp := porting.NewExporter(&cache, mtx.GotFS(), fsys, filter)
 		ss := mtx.FSRO()
 		var root gotfs.Root
 		if ok, err := mtx.LoadFS(ctx, &root); err != nil {
