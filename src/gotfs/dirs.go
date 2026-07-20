@@ -107,12 +107,12 @@ func (mach *Machine) RemoveAll(ctx context.Context, s stores.RW, x Root, p strin
 	if err != nil {
 		return Root{}, err
 	}
-	span := SpanForPath(p)
+	span := spanForPath(p)
 	root, err := mach.gotkv.DeleteSpan(ctx, s, x.toGotKV(), span)
 	return newRoot(root), err
 }
 
-func SpanForPath(p string) gotkv.Span {
+func spanForPath(p string) gotkv.Span {
 	k := newInfoKey(p)
 	return k.ChildrenSpan()
 }
@@ -129,7 +129,7 @@ func (mach *Machine) newDirIterator(ctx context.Context, s stores.RO, x Root, p 
 	if err != nil {
 		return nil, err
 	}
-	span := SpanForPath(p)
+	span := spanForPath(p)
 	iter := mach.gotkv.NewIterator(s, x.toGotKV(), span)
 	ent := &gotkv.Entry{}
 	if err := streams.NextUnit(ctx, iter, ent); err != nil {

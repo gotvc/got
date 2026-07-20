@@ -197,7 +197,7 @@ func (fb *FnBuilder) Concat(xs ...Expr[gotfs.Segment]) Expr[gotfs.Segment] {
 func (fb *FnBuilder) ChangesOnBase(base Expr[gotfs.Root], changes []gotfs.Segment) Expr[gotfs.Segment] {
 	var exprs []Expr[gotfs.Segment]
 	for i := range changes {
-		var baseSpan gotkv.Span
+		var baseSpan gotfs.Span
 		if i > 0 {
 			baseSpan.Begin = changes[i-1].Span.End
 		}
@@ -206,15 +206,14 @@ func (fb *FnBuilder) ChangesOnBase(base Expr[gotfs.Root], changes []gotfs.Segmen
 		exprs = append(exprs, fb.Segment(changes[i]))
 	}
 	if len(exprs) > 0 {
-		exprs = append(exprs, fb.Select(base, gotkv.Span{
+		exprs = append(exprs, fb.Select(base, gotfs.Span{
 			Begin: changes[len(changes)-1].Span.End,
-			End:   nil,
 		}))
 	}
 	return fb.Concat(exprs...)
 }
 
-func (fb *FnBuilder) Select(root Expr[gotfs.Root], span gotkv.Span) Expr[gotfs.Segment] {
+func (fb *FnBuilder) Select(root Expr[gotfs.Root], span gotfs.Span) Expr[gotfs.Segment] {
 	spanV := fb.Span(span)
 	return Expr[gotfs.Segment]{fb.fc.append2(OpCode_SELECT, root.i, spanV.i)}
 }

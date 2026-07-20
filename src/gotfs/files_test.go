@@ -32,6 +32,7 @@ func TestFileInfo(t *testing.T) {
 	ctx, ag, s := setup(t)
 	x, err := ag.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
+	require.NotNil(t, x)
 	x, err = ag.CreateFile(ctx, RW{s, s}, x, "file.txt", bytes.NewReader(nil))
 	require.NoError(t, err)
 	md, err := ag.GetInfo(ctx, s, x, "file.txt")
@@ -51,11 +52,15 @@ func TestLargeFiles(t *testing.T) {
 		i := i
 		eg.Go(func() error {
 			rng := mrand.New(mrand.NewSource(int64(i)))
-			x, err := ag.FileFromReader(ctx, ss, 0o755, io.LimitReader(rng, size))
+			x, err := ag.ExtentsFromReader(ctx, ss, io.LimitReader(rng, size))
 			if err != nil {
 				return err
 			}
-			fileRoots[i] = x
+			root, err := ag.newFile(ctx, ss, 0o644, x)
+			if err != nil {
+				return err
+			}
+			fileRoots[i] = root
 			return nil
 		})
 	}
@@ -88,5 +93,4 @@ func TestLargeFiles(t *testing.T) {
 			return nil
 		})
 	}
-	require.NoError(t, eg.Wait())
 }

@@ -1,9 +1,10 @@
-package gotkv
+package gotkvdelta
 
 import (
 	"context"
 	"testing"
 
+	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
@@ -126,9 +127,9 @@ func TestSpanSet(t *testing.T) {
 	}
 }
 
-func collectSpanSetSpans(t testing.TB, ctx context.Context, ag Machine, s stores.RO, ss SpanSet) []Span {
+func collectSpanSetSpans(t testing.TB, ctx context.Context, m Machine, s stores.RO, ss SpanSet) []Span {
 	t.Helper()
-	entries, err := streams.Collect[Entry](ctx, ag.NewIterator(s, Root(ss), TotalSpan()), 100)
+	entries, err := streams.Collect[Entry](ctx, m.kv.NewIterator(s, gotkv.Root(ss), gotkv.TotalSpan()), 100)
 	require.NoError(t, err)
 	require.Equal(t, 0, len(entries)%2, "odd number of span set entries")
 	spans := make([]Span, 0, len(entries)/2)

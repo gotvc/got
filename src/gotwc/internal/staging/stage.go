@@ -29,8 +29,8 @@ import (
 
 // Entry is an entry in the stage
 type Entry struct {
-	Path    string
-	Segment gotfs.Segment
+	Path       string
+	Segment    gotfs.Segment
 	HasEntries bool
 }
 
