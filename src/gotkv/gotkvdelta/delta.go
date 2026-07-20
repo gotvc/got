@@ -331,40 +331,39 @@ func (dw *Writer) flushSegments(ctx context.Context) error {
 		return nil
 	}
 	dw.pendingSegs = dw.pendingSegs[:0]
-
 	first := segs[0]
+	last := segs[len(segs)-1]
+	contents := first.Contents
+	if len(segs) > 1 {
+		b := dw.m.kv.NewBuilder(dw.s)
+		for _, seg := range segs {
+			if err := dw.m.kv.ForEach(ctx, dw.s, seg.Contents, gotkv.TotalSpan(), func(ent Entry) error {
+				return b.Put(ctx, ent.Key, ent.Value)
+			}); err != nil {
+				return err
+			}
+		}
+		root, err := b.Finish(ctx)
+		if err != nil {
+			return err
+		}
+		contents = root
+	}
+
 	be := deltaEntry{
 		Type:  deltaEntry_BEGIN,
 		Begin: first.Span.Begin,
-		End:   first.Span.End,
-		Next:  first.Contents,
+		End:   last.Span.End,
+		Next:  contents,
 	}
 	if err := dw.kvb.Put(ctx, be.Key(nil), be.Value(nil)); err != nil {
 		return err
 	}
-
-	for i := 1; i < len(segs); i++ {
-		prev := segs[i-1]
-		cur := segs[i]
-		pivot := deltaEntry{
-			Type:  deltaEntry_PIVOT,
-			Pivot: cur.Span.Begin,
-			End:   prev.Span.Begin,
-			Begin: cur.Span.End,
-			Prev:  prev.Contents,
-			Next:  cur.Contents,
-		}
-		if err := dw.kvb.Put(ctx, pivot.Key(nil), pivot.Value(nil)); err != nil {
-			return err
-		}
-	}
-
-	last := segs[len(segs)-1]
 	ee := deltaEntry{
 		Type:  deltaEntry_END,
 		End:   []byte(last.Span.End),
 		Begin: []byte(last.Span.Begin),
-		Prev:  last.Contents,
+		Prev:  contents,
 	}
 	if err := dw.kvb.Put(ctx, ee.Key(nil), ee.Value(nil)); err != nil {
 		return err
@@ -493,7 +492,135 @@ func (di *Reader) Next(ctx context.Context, dst []Segment) (int, error) {
 	if len(dst) == 0 {
 		return 0, nil
 	}
-	panic("todo")
+	n := 0
+	for n < len(dst) {
+		for di.bufLen < 2 {
+			var ent Entry
+			err := streams.NextUnit(ctx, di.it, &ent)
+			if err != nil {
+				if streams.IsEOS(err) {
+					switch {
+					case di.bufLen == 0 && n == 0:
+						return 0, streams.EOS()
+					case di.bufLen == 0:
+						return n, nil
+					default:
+						return n, fmt.Errorf("malformed delta: missing boundary entry")
+					}
+				}
+				return n, err
+			}
+			de, err := parseDeltaKVEntry(ent)
+			if err != nil {
+				return n, err
+			}
+			di.buf[di.bufLen] = de
+			di.bufLen++
+		}
+
+		seg, err := segmentFromDeltaPair(di.buf[0], di.buf[1])
+		if err != nil {
+			return n, err
+		}
+		dst[n] = seg
+		n++
+
+		if di.buf[1].Type.hasForwardPartner() {
+			di.buf[0] = di.buf[1]
+			di.bufLen = 1
+		} else {
+			di.bufLen = 0
+		}
+	}
+	return n, nil
+}
+
+func parseDeltaKVEntry(ent Entry) (deltaEntry, error) {
+	typ, err := parseDeltaEntryType(ent.Value)
+	if err != nil {
+		return deltaEntry{}, err
+	}
+	switch typ {
+	case deltaEntry_BEGIN, deltaEntry_END:
+		de, err := parseDeltaValue(ent.Value, typ)
+		if err != nil {
+			return deltaEntry{}, err
+		}
+		if typ == deltaEntry_BEGIN {
+			de.Begin = append([]byte{}, ent.Key...)
+			de.End = append([]byte{}, de.End...)
+		} else {
+			de.End = append([]byte{}, ent.Key...)
+			de.Begin = append([]byte{}, de.Begin...)
+		}
+		return de, nil
+	case deltaEntry_PIVOT:
+		de, err := parsePivot(ent.Value)
+		if err != nil {
+			return deltaEntry{}, err
+		}
+		de.Pivot = append([]byte{}, ent.Key...)
+		de.Begin = append([]byte{}, de.Begin...)
+		de.End = append([]byte{}, de.End...)
+		return de, nil
+	default:
+		return deltaEntry{}, fmt.Errorf("invalid delta entry type: %d", typ)
+	}
+}
+
+func segmentFromDeltaPair(left, right deltaEntry) (Segment, error) {
+	if !left.Type.hasForwardPartner() {
+		return Segment{}, fmt.Errorf("malformed delta: left boundary type %d has no forward partner", left.Type)
+	}
+	if !right.Type.hasBackwardPartner() {
+		return Segment{}, fmt.Errorf("malformed delta: right boundary type %d has no backward partner", right.Type)
+	}
+
+	begin, err := deltaBeginKey(left)
+	if err != nil {
+		return Segment{}, err
+	}
+	end, err := deltaEndKey(right)
+	if err != nil {
+		return Segment{}, err
+	}
+	if bytes.Compare(begin, end) > 0 {
+		return Segment{}, fmt.Errorf("malformed delta: span begin %q is after end %q", begin, end)
+	}
+
+	contents := left.Next
+	if !contents.Equal(right.Prev) {
+		return Segment{}, fmt.Errorf("malformed delta: mismatched segment contents")
+	}
+	return Segment{
+		Span: Span{
+			Begin: append([]byte{}, begin...),
+			End:   append([]byte{}, end...),
+		},
+		Contents: contents,
+	}, nil
+}
+
+func deltaBeginKey(de deltaEntry) ([]byte, error) {
+	switch de.Type {
+	case deltaEntry_BEGIN:
+		return de.Begin, nil
+	case deltaEntry_PIVOT:
+		return de.Pivot, nil
+	default:
+		return nil, fmt.Errorf("invalid segment left boundary type: %d", de.Type)
+	}
+}
+
+func deltaEndKey(de deltaEntry) ([]byte, error) {
+	switch de.Type {
+	case deltaEntry_END:
+		return de.End, nil
+	case deltaEntry_PIVOT:
+		return de.Pivot, nil
+	default:
+		return nil, fmt.Errorf("invalid segment right boundary type: %d", de.Type)
+	}
 }
 
 // SegmentFor returns the Segment in d that contains key.
