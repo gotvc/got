@@ -2,9 +2,7 @@
 package gotfsdelta
 
 import (
-	"bytes"
 	"context"
-	"fmt"
 
 	"github.com/gotvc/got/src/gotfs"
 	"github.com/gotvc/got/src/gotkv"
@@ -233,48 +231,15 @@ func infoKeyNext(infoKey []byte) []byte {
 
 // Apply applies a delta to the root, producing a new root
 func (m *Machine) Apply(ctx context.Context, ss gotfs.RW, root Root, d Delta) (Root, error) {
-	dr := m.kvd.NewReader(ss.Metadata, gotkvdelta.Delta(d))
-	b := m.gotfs.NewBuilder(ctx, ss)
-	var lastEnd []byte
-	if err := streams.ForEach(ctx, &dr, func(seg gotkvdelta.Segment) error {
-		cmp := bytes.Compare(lastEnd, seg.Span.Begin)
-		switch {
-		case cmp < 0:
-			// there is a gap from the end of the last segment, and the start of this one.
-			// we need to copy from the root first.
-			span, err := gotfs.NewSpan(gotkv.Span{Begin: lastEnd, End: seg.Span.Begin})
-			if err != nil {
-				return err
-			}
-			if err := b.CopyFrom(ctx, root.ToGotKV(), span); err != nil {
-				return err
-			}
-		case cmp == 0:
-			// don't need to copy anything from old root
-		case cmp > 0:
-			return fmt.Errorf("out of order segments lastEnd=%v seg=%v", lastEnd, seg)
-		}
-		span, err := gotfs.NewSpan(seg.Span)
-		if err != nil {
-			return err
-		}
-		// now copy the segment from the diff.
-		if err := b.CopyFrom(ctx, seg.Contents, span); err != nil {
-			return err
-		}
-		return nil
-	}); err != nil {
-		return Root{}, err
-	}
-	span, err := gotfs.NewSpan(gotkv.Span{Begin: lastEnd})
+	root2, err := m.kvd.Apply(ctx, ss.Metadata, root.ToGotKV(), gotkvdelta.Delta(d))
 	if err != nil {
 		return Root{}, err
 	}
-	// now copy from the root until infinity.
-	if err := b.CopyFrom(ctx, root.ToGotKV(), span); err != nil {
+	ret, err := gotfs.NewRoot(root2)
+	if err != nil {
 		return Root{}, err
 	}
-	return b.Finish()
+	return ret, nil
 }
 
 // Applied represents a sequence of Deltas applied to a base.

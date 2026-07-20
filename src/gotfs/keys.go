@@ -82,11 +82,15 @@ func (k Key) Clone() Key {
 
 // AddPrefix moves the key below a directory at p.
 func (k *Key) AddPrefix(p string) {
-	prefix := pathPrefixNoTrail(nil, p)
+	prefix := newInfoKey(p).path
 	if len(prefix) == 0 {
 		return
 	}
-	k.path = slices.Concat(prefix, k.path)
+	if len(k.path) == 0 {
+		k.path = slices.Clone(prefix)
+		return
+	}
+	k.path = slices.Concat(prefix, []byte{0}, k.path)
 }
 
 // pathPrefixNoTrail returns the null-separated prefix for a path without the trailing terminator.

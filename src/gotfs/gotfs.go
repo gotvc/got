@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"path"
 	"strings"
 
@@ -11,7 +12,6 @@ import (
 	"github.com/gotvc/got/src/gotfs/internal/gotlob"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotkv/gotkvdelta"
-	"github.com/gotvc/got/src/internal/sbe"
 	"github.com/gotvc/got/src/internal/stores"
 )
 
@@ -116,25 +116,15 @@ type Span struct {
 }
 
 func (s Span) Marshal(out []byte) []byte {
-	out = sbe.AppendLP16(out, s.Begin.Marshal(nil))
-	out = sbe.AppendLP16(out, s.Begin.Marshal(nil))
-	return out
+	return s.ToSpan().Marshal(out)
 }
 
 func (s *Span) Unmarshal(data []byte) error {
-	if len(data) == 0 {
-		return nil
-	}
-	var span gotkv.Span
-	if err := span.Unmarshal(data); err != nil {
+	span, err := ParseSpan(data)
+	if err != nil {
 		return err
 	}
-	if err := s.Begin.Unmarshal(span.Begin); err != nil {
-		return err
-	}
-	if err := s.End.Unmarshal(span.End); err != nil {
-		return err
-	}
+	*s = span
 	return nil
 }
 
@@ -153,16 +143,24 @@ func SpanForPath(p string) Span {
 
 // NewSpan creates a NewSpan from a gotkv.Span by validating the keys.
 func NewSpan(x gotkv.Span) (Span, error) {
-	beg, err := ParseKey(x.Begin)
-	if err != nil {
-		return Span{}, err
+	var beg Key
+	if x.Begin != nil {
+		b, err := ParseKey(x.Begin)
+		if err != nil {
+			return Span{}, err
+		}
+		beg = b
 	}
-	if !bytes.HasSuffix(x.End, []byte{0}) {
-		return Span{}, fmt.Errorf("gotfs.NewSpan: span end is not suffixed with zero byte")
-	}
-	end, err := ParseKey(x.Begin)
-	if err != nil {
-		return Span{}, err
+	var end Key
+	if x.End != nil {
+		if !bytes.HasSuffix(x.End, []byte{0}) {
+			return Span{}, fmt.Errorf("gotfs.NewSpan: span end is not suffixed with zero byte")
+		}
+		e, err := ParseKey(x.End[:len(x.End)-1])
+		if err != nil {
+			return Span{}, err
+		}
+		end = e
 	}
 	return Span{Begin: beg, End: end}, nil
 }
@@ -171,31 +169,36 @@ func ParseSpan(data []byte) (Span, error) {
 	if len(data) == 0 {
 		return Span{}, nil
 	}
-	var span gotkv.Span
-	if err := span.Unmarshal(data); err != nil {
+	var kvspan gotkv.Span
+	if err := kvspan.Unmarshal(data); err != nil {
 		return Span{}, err
 	}
-	var beg, end Key
-	if err := beg.Unmarshal(span.Begin); err != nil {
-		return Span{}, err
-	}
-	if err := end.Unmarshal(span.End); err != nil {
-		return Span{}, err
-	}
-	return Span{Begin: beg, End: end}, nil
+	return NewSpan(kvspan)
 }
 
 func (sp *Span) AddPrefix(p string) {
+	if sp.Begin.Equals(Key{}) && sp.End.Equals(Key{}) {
+		sp.Begin = newInfoKey(p)
+		sp.End = NewExtentKey(p, math.MaxUint64)
+		return
+	}
 	sp.Begin.AddPrefix(p)
 	sp.End.AddPrefix(p)
 }
 
 // ToSpan returns the gotkv.Span that this Span covers.
 func (sp Span) ToSpan() gotkv.Span {
-	return gotkv.Span{
-		Begin: sp.Begin.Marshal(nil),
+	var begin, end []byte
+	if !sp.Begin.Equals(Key{}) {
+		begin = sp.Begin.Marshal(nil)
+	}
+	if !sp.End.Equals(Key{}) {
 		// need to change to exclusive from inclusive End here
-		End: gotkv.KeyAfter(sp.End.Marshal(nil)),
+		end = gotkv.KeyAfter(sp.End.Marshal(nil))
+	}
+	return gotkv.Span{
+		Begin: begin,
+		End:   end,
 	}
 }
 
@@ -235,6 +238,15 @@ func (seg Segment) Marshal(out []byte) []byte {
 }
 
 func (seg *Segment) Unmarshal(data []byte) error {
+	var seg2 gotkvdelta.Segment
+	if err := seg2.Unmarshal(data); err != nil {
+		return err
+	}
+	seg3, err := NewSegment(seg2)
+	if err != nil {
+		return err
+	}
+	*seg = seg3
 	return nil
 }
 

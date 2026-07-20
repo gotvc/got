@@ -173,7 +173,8 @@ func ensureBlobcachePrivateSeed(stateDir *os.Root) ([32]byte, error) {
 func NewTest(t testing.TB) blobcache.Service {
 	env := bclocal.NewTestEnv(t)
 	env.Root = GotVolumeSpec()
-	return bclocal.NewTestServiceFromEnv(t, env)
+	bc := bclocal.NewTestServiceFromEnv(t, env)
+	return &Local{svc: bc, logger: newBCLogger(), pol: &bcPolicy{}}
 }
 
 type PolicyFunc = func(context.Context) (canLook, canTouch []inet256.ID, _ error)

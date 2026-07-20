@@ -445,12 +445,9 @@ func (mach *Machine) ConcatErr(ctx context.Context, ss RW, segs iter.Seq2[Segmen
 	if err != nil {
 		return Segment{}, err
 	}
-	span, err := NewSpan(gotkv.Span{
-		Begin: firstSeg.Span.Begin.Marshal(nil),
-		End:   prevSeg.Span.End.Marshal(nil),
-	})
-	if err != nil {
-		return Segment{}, err
+	span := Span{
+		Begin: firstSeg.Span.Begin.Clone(),
+		End:   prevSeg.Span.End.Clone(),
 	}
 	return Segment{
 		Span:     span,
