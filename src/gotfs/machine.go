@@ -223,21 +223,22 @@ func (mach *Machine) Graft(ctx context.Context, ss RW, root Root, p string, bran
 	if err != nil {
 		return Root{}, err
 	}
-	k := newInfoKey(p)
-	return mach.Splice(ctx, ss, []Segment{
-		{
-			Span:     Span{End: k},
-			Contents: root2.ToGotKV(),
-		},
-		{
-			//	Span:     spanForPath(p),
-			Contents: mach.addPrefix(branch, p),
-		},
-		{
-			//	Span:     gotkv.Span{Begin: gotkv.PrefixEnd(k.Prefix(nil)), End: nil},
-			Contents: root2.ToGotKV(),
-		},
+	branch2 := mach.addPrefix(branch, p)
+	entries := make([]gotkv.Entry, 0, branch2.Count)
+	if err := mach.gotkv.ForEach(ctx, ss.Metadata, branch2, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
+		entries = append(entries, ent.Clone())
+		return nil
+	}); err != nil {
+		return Root{}, err
+	}
+	root3, err := mach.gotkv.Edit(ctx, ss.Metadata, root2.toGotKV(), gotkv.Edit{
+		Span:    spanForPath(p),
+		Entries: entries,
 	})
+	if err != nil {
+		return Root{}, err
+	}
+	return newRoot(root3), nil
 }
 
 func (mach *Machine) addPrefix(root Root, p string) gotkv.Root {
@@ -417,10 +418,11 @@ func (mach *Machine) ConcatErr(ctx context.Context, ss RW, segs iter.Seq2[Segmen
 		if err != nil {
 			return Segment{}, err
 		}
+		if i == 0 {
+			firstSeg = seg
+		}
 		if i > 0 && bytes.Compare(prevSeg.Span.End.Marshal(nil), seg.Span.Begin.Marshal(nil)) > 0 {
 			return Segment{}, fmt.Errorf("segs out of order, %d end=%v %d begin=%v", i-1, prevSeg.Span.End, i, seg.Span.Begin)
-		} else {
-			firstSeg = seg
 		}
 
 		var root gotkv.Root
