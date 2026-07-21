@@ -174,6 +174,12 @@ func (fb *FnBuilder) Span(span gotfs.Span) Expr[gotfs.Span] {
 	return Expr[gotfs.Span]{fb.fc.append1(OpCode_Data, n.i)}
 }
 
+func (fb *FnBuilder) KVSpan(span gotkv.Span) Expr[gotkv.Span] {
+	dataIdx := fb.fc.appendData(&Value_KVSpan{Span: span})
+	n := fb.Nat(uint32(dataIdx))
+	return Expr[gotkv.Span]{fb.fc.append1(OpCode_Data, n.i)}
+}
+
 func (fb *FnBuilder) Promote(x Expr[gotfs.Segment]) Expr[gotfs.Root] {
 	return Expr[gotfs.Root]{fb.fc.append1(OpCode_PROMOTE, x.i)}
 }
@@ -196,17 +202,23 @@ func (fb *FnBuilder) Concat(xs ...Expr[gotfs.Segment]) Expr[gotfs.Segment] {
 
 func (fb *FnBuilder) ChangesOnBase(base Expr[gotfs.Root], changes []gotfs.Segment) Expr[gotfs.Segment] {
 	var exprs []Expr[gotfs.Segment]
+	var cursor []byte
 	for i := range changes {
 		var baseSpan gotfs.Span
 		if i > 0 {
 			baseSpan.Begin = changes[i-1].Span.End
 		}
 		baseSpan.End = changes[i].Span.Begin
-		exprs = append(exprs, fb.Select(base, baseSpan))
+		kvSpan := gotkv.Span{
+			Begin: cursor,
+			End:   changes[i].Span.Begin.Marshal(nil),
+		}
+		exprs = append(exprs, fb.SelectKV(base, kvSpan, baseSpan))
 		exprs = append(exprs, fb.Segment(changes[i]))
+		cursor = gotkv.KeyAfter(changes[i].Span.End.Marshal(nil))
 	}
 	if len(exprs) > 0 {
-		exprs = append(exprs, fb.Select(base, gotfs.Span{
+		exprs = append(exprs, fb.SelectKV(base, gotkv.Span{Begin: cursor}, gotfs.Span{
 			Begin: changes[len(changes)-1].Span.End,
 		}))
 	}
@@ -216,6 +228,12 @@ func (fb *FnBuilder) ChangesOnBase(base Expr[gotfs.Root], changes []gotfs.Segmen
 func (fb *FnBuilder) Select(root Expr[gotfs.Root], span gotfs.Span) Expr[gotfs.Segment] {
 	spanV := fb.Span(span)
 	return Expr[gotfs.Segment]{fb.fc.append2(OpCode_SELECT, root.i, spanV.i)}
+}
+
+func (fb *FnBuilder) SelectKV(root Expr[gotfs.Root], kvspan gotkv.Span, span gotfs.Span) Expr[gotfs.Segment] {
+	kvSpanV := fb.KVSpan(kvspan)
+	spanV := fb.Span(span)
+	return Expr[gotfs.Segment]{fb.fc.append3(OpCode_SELECT_KV, root.i, kvSpanV.i, spanV.i)}
 }
 
 func (fb *FnBuilder) MkdirAll(base Expr[gotfs.Root], p string, mode fs.FileMode) Expr[gotfs.Root] {

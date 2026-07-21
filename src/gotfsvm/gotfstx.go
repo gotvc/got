@@ -8,6 +8,7 @@ import (
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/gotjob"
 	"github.com/gotvc/got/src/internal/stores"
 	"go.brendoncarroll.net/exp/slices2"
@@ -106,6 +107,26 @@ func (m *Machine) eval(ectx *evalCtx, expr Vertex) (Value, error) {
 			return nil, err
 		}
 		seg := gotfs.Segment{Span: span, Contents: rootVal.Root.ToGotKV()}
+		return &Value_Segment{seg}, nil
+	case OpCode_SELECT_KV:
+		rootVal, err := m.evalRoot(ectx, args[0])
+		if err != nil {
+			return nil, err
+		}
+		kvSpan, err := m.evalKVSpan(ectx, args[1])
+		if err != nil {
+			return nil, err
+		}
+		span, err := m.evalSpan(ectx, args[2])
+		if err != nil {
+			return nil, err
+		}
+		ss := mkRW(ectx.Src, ectx.Dst)
+		root2, err := m.gotfs.SelectKV(ctx, ss.Metadata, rootVal.Root, kvSpan)
+		if err != nil {
+			return nil, err
+		}
+		seg := gotfs.Segment{Span: span, Contents: root2}
 		return &Value_Segment{seg}, nil
 	case OpCode_ShiftOut:
 		panic("ShiftOut not yet implemented")
@@ -240,6 +261,25 @@ func (m *Machine) evalSpan(ectx *evalCtx, expr Vertex) (gotfs.Span, error) {
 		return gotfs.Span{}, fmt.Errorf("expected span, got %T", val)
 	}
 	return gotfs.Span(v.Span), nil
+}
+
+func (m *Machine) evalKVSpan(ectx *evalCtx, expr Vertex) (gotkv.Span, error) {
+	val, err := m.eval(ectx, expr)
+	if err != nil {
+		return gotkv.Span{}, err
+	}
+	v, ok := val.(*Value_KVSpan)
+	if !ok {
+		return gotkv.Span{}, fmt.Errorf("expected kv span, got %T", val)
+	}
+	var begin, end []byte
+	if v.Span.Begin != nil {
+		begin = append([]byte{}, v.Span.Begin...)
+	}
+	if v.Span.End != nil {
+		end = append([]byte{}, v.Span.End...)
+	}
+	return gotkv.Span{Begin: begin, End: end}, nil
 }
 
 func (m *Machine) evalFileMode(ectx *evalCtx, expr Vertex) (os.FileMode, error) {

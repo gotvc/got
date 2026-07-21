@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/gotvc/got/src/gotfs"
+	"github.com/gotvc/got/src/gotkv"
 	"go.brendoncarroll.net/exp/sbe"
 )
 
@@ -17,6 +18,7 @@ const (
 	Type_Root
 	Type_Segment
 	Type_Span
+	Type_KVSpan
 	Type_Info
 	Type_Extent
 	Type_Path
@@ -54,6 +56,9 @@ func marshalValue(x Value, out []byte) []byte {
 		out = sbe.AppendUint32(out, uint32(x))
 	case *Value_Span:
 		out = append(out, Type_Span)
+		out = x.Span.Marshal(out)
+	case *Value_KVSpan:
+		out = append(out, Type_KVSpan)
 		out = x.Span.Marshal(out)
 	case *Value_Path:
 		out = append(out, Type_Path)
@@ -110,6 +115,12 @@ func parseValue(data []byte) (Value, error) {
 			return nil, err
 		}
 		return &Value_Span{Span: s}, nil
+	case Type_KVSpan:
+		var s gotkv.Span
+		if err := s.Unmarshal(data); err != nil {
+			return nil, err
+		}
+		return &Value_KVSpan{Span: s}, nil
 	case Type_Path:
 		p := Value_Path(data)
 		return &p, nil
@@ -161,6 +172,12 @@ type Value_Span struct {
 }
 
 func (r *Value_Span) isValue() {}
+
+type Value_KVSpan struct {
+	Span gotkv.Span
+}
+
+func (r *Value_KVSpan) isValue() {}
 
 // Value_Path is a path within a filesystem
 type Value_Path string

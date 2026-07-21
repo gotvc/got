@@ -400,6 +400,16 @@ func (mach *Machine) ShiftOut(x Segment, p string) Segment {
 	}
 }
 
+// SelectKV copies the entries in span from root into a new gotkv root.
+func (mach *Machine) SelectKV(ctx context.Context, ms stores.RW, root Root, span gotkv.Span) (gotkv.Root, error) {
+	b := mach.gotkv.NewBuilder(ms)
+	it := mach.gotkv.NewIterator(ms, root.toGotKV(), span)
+	if err := gotkv.CopyAll(ctx, b, it); err != nil {
+		return gotkv.Root{}, err
+	}
+	return b.Finish(ctx)
+}
+
 func (mach *Machine) Concat(ctx context.Context, ss RW, segs iter.Seq[Segment]) (Segment, error) {
 	return mach.ConcatErr(ctx, ss, func(yield func(Segment, error) bool) {
 		for seg := range segs {

@@ -114,6 +114,10 @@ func (b *Builder) CopyFrom(ctx context.Context, root gotkv.Root, span Span) erro
 	return nil
 }
 
+func (b *Builder) copyFromKVSpan(ctx context.Context, root gotkv.Root, span gotkv.Span) error {
+	return b.b.CopyFrom(ctx, root, span)
+}
+
 // Finish closes the builder and returns the Root to the filesystem.
 // Finish is idempotent, and is safe to call multiple times.
 // Not calling finish is not an error, the builder does not allocate resources other than memory.

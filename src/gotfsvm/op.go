@@ -67,6 +67,11 @@ const (
 	// MkdirAll creates the directory at path and any of its ancestors if necessary.
 	// (Root, Path, FileMode) -> Root
 	OpCode_MKDIRALL
+
+	// SelectKV produces a segment from a half-open gotkv span within a root,
+	// and tags it with a gotfs span for ordering metadata.
+	// (Root, KVSpan, Span) -> Segment
+	OpCode_SELECT_KV
 )
 
 func (o OpCode) Arity() int {
@@ -95,6 +100,8 @@ func (o OpCode) String() string {
 		return "promote"
 	case OpCode_MKDIRALL:
 		return "mkdirall"
+	case OpCode_SELECT_KV:
+		return "selectkv"
 	default:
 		return fmt.Sprintf("UNKNOWN(%d)", o)
 	}
