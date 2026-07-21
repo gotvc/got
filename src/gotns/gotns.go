@@ -46,18 +46,20 @@ func NewTx(tx volumes.Tx, dmach *gdat.Machine, kvmach *gotkv.Machine) *Tx {
 
 // Root is the root of a gotns namespace
 type Root struct {
-	Marks gotkv.Root
-	// BrokenSet is the set of CIDs which the Space cannot dereference.
+	Version uint16
+	Marks   gotkv.Root
+	// BrokenSet is a mapping from CIDs (which the Space cannot dereference)
+	// to a count of the children of the data at the CID.
 	// This is used to correctly Sync even with incomplete structures.
 	BrokenSet gotkv.Root
 }
 
-func ParseRoot(data []byte) (*Root, error) {
+func ParseRoot(data []byte) (Root, error) {
 	var r Root
 	if err := r.Unmarshal(data); err != nil {
-		return nil, err
+		return Root{}, err
 	}
-	return &r, nil
+	return r, nil
 }
 
 func (r *Root) Unmarshal(data []byte) error {
@@ -65,22 +67,32 @@ func (r *Root) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	bsData, _, err := sbe.ReadLP16(data)
+	bsData, data, err := sbe.ReadLP16(data)
 	if err != nil {
 		return err
 	}
+	var ver uint16
+	if len(data) > 0 {
+		ver, _, err = sbe.ReadUint16(data)
+		if err != nil {
+			return err
+		}
+	}
+
 	if err := r.Marks.Unmarshal(kvrData); err != nil {
 		return err
 	}
 	if err := r.BrokenSet.Unmarshal(bsData); err != nil {
 		return err
 	}
+	r.Version = ver
 	return nil
 }
 
 func (r Root) Marshal(out []byte) []byte {
 	out = sbe.AppendLP16(out, r.Marks.Marshal(nil))
 	out = sbe.AppendLP16(out, r.BrokenSet.Marshal(nil))
+	out = sbe.AppendUint16(out, r.Version)
 	return out
 }
 
