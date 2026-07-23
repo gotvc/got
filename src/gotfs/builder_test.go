@@ -39,7 +39,7 @@ func TestBuilderSmallFiles(t *testing.T) {
 	root, err := b.Finish()
 	require.NoError(t, err)
 	var count int
-	err = mach.ForEachLeaf(ctx, s, *root, "", func(p string, md *Info) error {
+	err = mach.ForEachLeaf(ctx, s, root, "", func(p string, md *Info) error {
 		count++
 		return nil
 	})

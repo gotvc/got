@@ -125,7 +125,7 @@ func (m *Machine) eval(ectx *evalCtx, expr Vertex) (Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &Value_Root{Root: *result}, nil
+		return &Value_Root{Root: result}, nil
 	case OpCode_PLACE:
 		baseVal, err := m.evalRoot(ectx, args[0])
 		if err != nil {
@@ -144,7 +144,7 @@ func (m *Machine) eval(ectx *evalCtx, expr Vertex) (Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &Value_Root{Root: *result}, nil
+		return &Value_Root{Root: result}, nil
 	case OpCode_MKDIRALL:
 		rootVal, err := m.evalRoot(ectx, args[0])
 		if err != nil {
@@ -163,7 +163,7 @@ func (m *Machine) eval(ectx *evalCtx, expr Vertex) (Value, error) {
 		if err != nil {
 			return nil, err
 		}
-		return &Value_Root{Root: *result}, nil
+		return &Value_Root{Root: result}, nil
 	case OpCode_CONCAT:
 		segs, err := m.flattenConcat(ectx, nil, expr)
 		if err != nil {

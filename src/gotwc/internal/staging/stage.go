@@ -151,13 +151,13 @@ func (tx *Tx) PutRoot(ctx context.Context, p string, root gotfs.Root) error {
 }
 
 // PutInfo creates a root, which can be used to overwrite just the info.
-func PutInfo(ctx context.Context, fsmach *gotfs.Machine, ms stores.RW, p string, info gotfs.Info) (*gotfs.Root, error) {
+func PutInfo(ctx context.Context, fsmach *gotfs.Machine, ms stores.RW, p string, info gotfs.Info) (gotfs.Root, error) {
 	p = cleanPath(p)
 	root, err := fsmach.NewEmpty(ctx, ms, 0)
 	if err != nil {
-		return nil, err
+		return gotfs.Root{}, err
 	}
-	return fsmach.PutInfo(ctx, ms, *root, p, &info)
+	return fsmach.PutInfo(ctx, ms, root, p, &info)
 }
 
 // Delete removes a file at p with root

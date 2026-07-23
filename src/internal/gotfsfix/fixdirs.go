@@ -14,7 +14,7 @@ import (
 )
 
 // FixDirs rebuilds a filesystem, inserting any missing parent directories.
-func FixDirs(ctx context.Context, fsmach *gotfs.Machine, ms stores.RW, root gotfs.Root) (*gotfs.Root, error) {
+func FixDirs(ctx context.Context, fsmach *gotfs.Machine, ms stores.RW, root gotfs.Root) (gotfs.Root, error) {
 	it := fsmach.NewIterator(ms, root, gotkv.TotalSpan())
 	kvmach := fsmach.MetadataKV()
 	b := kvmach.NewBuilder(ms)
@@ -26,19 +26,19 @@ func FixDirs(ctx context.Context, fsmach *gotfs.Machine, ms stores.RW, root gotf
 			if streams.IsEOS(err) {
 				break
 			}
-			return nil, err
+			return gotfs.Root{}, err
 		}
 		if ent.Key.IsInfo() {
 			p := ent.Path()
 			if err := ensureParents(ctx, &dirstack, b, p); err != nil {
-				return nil, err
+				return gotfs.Root{}, err
 			}
 			if ent.Info.Mode.IsDir() && p != "" {
 				dirstack = append(dirstack, path.Base(p))
 			}
 		}
 		if err := writeEntry(ctx, b, ent); err != nil {
-			return nil, err
+			return gotfs.Root{}, err
 		}
 	}
 	return finish(ctx, b)
@@ -54,10 +54,10 @@ func writeEntry(ctx context.Context, b *gotkv.Builder, ent gotfs.Entry) error {
 	return b.Put(ctx, ent.Key.Marshal(nil), value)
 }
 
-func finish(ctx context.Context, b *gotkv.Builder) (*gotfs.Root, error) {
+func finish(ctx context.Context, b *gotkv.Builder) (gotfs.Root, error) {
 	kvr, err := b.Finish(ctx)
 	if err != nil {
-		return nil, err
+		return gotfs.Root{}, err
 	}
 	return gotfs.Promote(ctx, gotfs.Segment{Contents: kvr, Span: gotkv.TotalSpan()})
 }

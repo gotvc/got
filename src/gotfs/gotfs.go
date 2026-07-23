@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"github.com/gotvc/got/src/gdat"
-	"github.com/gotvc/got/src/gotfs/gotlob"
+	"github.com/gotvc/got/src/gotfs/internal/gotlob"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
 )
@@ -25,12 +25,12 @@ type Root struct {
 
 const RootSize = gdat.RefSize + 1
 
-func ParseRoot(data []byte) (*Root, error) {
+func ParseRoot(data []byte) (Root, error) {
 	var r Root
 	if err := r.Unmarshal(data); err != nil {
-		return nil, err
+		return Root{}, err
 	}
-	return &r, nil
+	return r, nil
 }
 
 // Marshal appends the root data to out and returns the new slice.
@@ -73,9 +73,9 @@ func Equal(a, b Root) bool {
 	return gdat.Equal(a.Ref, b.Ref) && a.Depth == b.Depth
 }
 
-func newRoot(x gotkv.Root) *Root {
+func newRoot(x gotkv.Root) Root {
 	if x.Equal(gotkv.Root{}) {
-		return nil
+		return Root{}
 	}
 	var key Key
 	if err := unmarshalInfoKey(x.First, &key); err != nil {
@@ -84,18 +84,17 @@ func newRoot(x gotkv.Root) *Root {
 	if key.Path() != "" {
 		panic(x)
 	}
-	return &Root{
+	return Root{
 		Ref:   x.Ref,
 		Depth: x.Depth,
 	}
 }
 
-func (r *Root) toGotKV() gotkv.Root {
-	if r == nil {
+func (r Root) toGotKV() gotkv.Root {
+	if r == (Root{}) {
 		return gotkv.Root{}
 	}
-	r2 := r.ToGotKV()
-	return r2
+	return r.ToGotKV()
 }
 
 const MaxPathLen = gotkv.MaxKeySize - 9

@@ -14,26 +14,26 @@ func TestReadDir(t *testing.T) {
 	ss := RW{s, s}
 	x, err := ag.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
-	x, err = ag.Mkdir(ctx, s, *x, "dir0")
+	x, err = ag.Mkdir(ctx, s, x, "dir0")
 	require.NoError(t, err)
-	x, err = ag.Mkdir(ctx, s, *x, "dir1")
+	x, err = ag.Mkdir(ctx, s, x, "dir1")
 	require.NoError(t, err)
-	x, err = ag.Mkdir(ctx, s, *x, "dir2")
+	x, err = ag.Mkdir(ctx, s, x, "dir2")
 	require.NoError(t, err)
 	ps := []string{"0-file1.txt", "2-file2.txt", "3-file3.txt"}
 	for i := range ps {
 		p := path.Join("dir1", ps[i])
-		x, err = ag.CreateFile(ctx, ss, *x, p, bytes.NewReader(nil))
+		x, err = ag.CreateFile(ctx, ss, x, p, bytes.NewReader(nil))
 		require.NoError(t, err)
 	}
-	x, err = ag.Mkdir(ctx, s, *x, "dir1/1-subdir")
+	x, err = ag.Mkdir(ctx, s, x, "dir1/1-subdir")
 	require.NoError(t, err)
-	x, err = ag.CreateFile(ctx, ss, *x, "dir1/1-subdir/file.txt", bytes.NewReader(nil))
+	x, err = ag.CreateFile(ctx, ss, x, "dir1/1-subdir/file.txt", bytes.NewReader(nil))
 	require.NoError(t, err)
 
 	expected := append(ps[:1], append([]string{"1-subdir"}, ps[1:]...)...)
 	var i int
-	err = ag.ReadDir(ctx, s, *x, "dir1", func(de DirEnt) error {
+	err = ag.ReadDir(ctx, s, x, "dir1", func(de DirEnt) error {
 		t.Log(de)
 		require.Equal(t, expected[i], de.Name)
 		i++
@@ -47,13 +47,13 @@ func TestMkdirAll(t *testing.T) {
 	ctx, mach, s := setup(t)
 	x, err := mach.NewEmpty(ctx, s, 0o755)
 	require.NoError(t, err)
-	x, err = mach.MkdirAll(ctx, s, *x, "path/to/the/dir")
+	x, err = mach.MkdirAll(ctx, s, x, "path/to/the/dir")
 	require.NoError(t, err)
 
-	requireChildren(t, &mach, s, *x, "", []string{"path"})
-	requireChildren(t, &mach, s, *x, "path", []string{"to"})
-	requireChildren(t, &mach, s, *x, "path/to", []string{"the"})
-	requireChildren(t, &mach, s, *x, "path/to/the", []string{"dir"})
+	requireChildren(t, &mach, s, x, "", []string{"path"})
+	requireChildren(t, &mach, s, x, "path", []string{"to"})
+	requireChildren(t, &mach, s, x, "path/to", []string{"the"})
+	requireChildren(t, &mach, s, x, "path/to/the", []string{"dir"})
 }
 
 func requireChildren(t *testing.T, ag *Machine, s Store, x Root, p string, expected []string) {

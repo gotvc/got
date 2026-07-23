@@ -243,7 +243,7 @@ func makeFS(t testing.TB, ss gotfs.RW, files map[string]string) gotfs.Root {
 	}
 	root, err := b.Finish()
 	require.NoError(t, err)
-	return *root
+	return root
 }
 
 func makeCommit(t testing.TB, cfg DSConfig, s stores.WO, parents []Commit, fsroot gotfs.Root) *Commit {

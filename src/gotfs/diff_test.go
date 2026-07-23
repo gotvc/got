@@ -88,5 +88,5 @@ func buildFS(t testing.TB, b *Builder, m testutil.MemFS) Root {
 	}
 	root, err := b.Finish()
 	require.NoError(t, err)
-	return *root
+	return root
 }

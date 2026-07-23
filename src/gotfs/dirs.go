@@ -21,20 +21,20 @@ type DirEnt struct {
 }
 
 // NewEmpty creates a new filesystem with an empty root directory
-func (mach *Machine) NewEmpty(ctx context.Context, ms stores.RW, mode fs.FileMode) (*Root, error) {
+func (mach *Machine) NewEmpty(ctx context.Context, ms stores.RW, mode fs.FileMode) (Root, error) {
 	ss := RW{Metadata: ms, Data: stores.NewMem()}
 	b := mach.NewBuilder(ctx, ss)
 	if err := b.Mkdir("", mode|fs.ModeDir); err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	return b.Finish()
 }
 
 // Mkdir creates a directory at path p
-func (mach *Machine) Mkdir(ctx context.Context, s stores.RW, x Root, p string) (*Root, error) {
+func (mach *Machine) Mkdir(ctx context.Context, s stores.RW, x Root, p string) (Root, error) {
 	p = cleanPath(p)
 	if err := mach.checkNoEntry(ctx, s, x, p); err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	md := &Info{
 		Mode: fs.FileMode(0o755 | os.ModeDir),
@@ -43,35 +43,35 @@ func (mach *Machine) Mkdir(ctx context.Context, s stores.RW, x Root, p string) (
 }
 
 // MkdirAll creates the directory p and any of p's ancestors if necessary.
-func (mach *Machine) MkdirAll(ctx context.Context, s stores.RW, x Root, p string) (*Root, error) {
+func (mach *Machine) MkdirAll(ctx context.Context, s stores.RW, x Root, p string) (Root, error) {
 	p = cleanPath(p)
 	parts := strings.Split(p, string(Sep))
-	y := &x
+	y := x
 	var err error
 	y, err = mach.ensureDir(ctx, s, x, "")
 	if err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	for i := range parts {
 		p2 := strings.Join(parts[:i+1], string(Sep))
-		y, err = mach.ensureDir(ctx, s, *y, p2)
+		y, err = mach.ensureDir(ctx, s, y, p2)
 		if err != nil {
-			return nil, err
+			return Root{}, err
 		}
 	}
 	return y, nil
 }
 
-func (mach *Machine) ensureDir(ctx context.Context, s stores.RW, x Root, p string) (*Root, error) {
-	y := &x
+func (mach *Machine) ensureDir(ctx context.Context, s stores.RW, x Root, p string) (Root, error) {
+	y := x
 	_, err := mach.GetDirInfo(ctx, s, x, p)
 	if posixfs.IsErrNotExist(err) {
 		y, err = mach.Mkdir(ctx, s, x, p)
 		if err != nil {
-			return nil, err
+			return Root{}, err
 		}
 	} else if err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	return y, nil
 }
@@ -98,14 +98,14 @@ func (mach *Machine) ReadDir(ctx context.Context, s stores.RO, x Root, p string,
 	return nil
 }
 
-func (mach *Machine) RemoveAll(ctx context.Context, s stores.RW, x Root, p string) (*Root, error) {
+func (mach *Machine) RemoveAll(ctx context.Context, s stores.RW, x Root, p string) (Root, error) {
 	p = cleanPath(p)
 	_, err := mach.GetInfo(ctx, s, x, p)
 	if os.IsNotExist(err) {
-		return &x, nil
+		return x, nil
 	}
 	if err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	span := SpanForPath(p)
 	root, err := mach.gotkv.DeleteSpan(ctx, s, x.toGotKV(), span)

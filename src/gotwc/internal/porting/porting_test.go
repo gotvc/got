@@ -258,11 +258,11 @@ func TestImportPath(t *testing.T) {
 			fsys := posixfs.NewDirFS(dir.Name())
 			root, err := imp.ImportPath(ctx, fsys, tc.Path)
 			require.NoError(t, err)
-			require.NoError(t, mach.Check(ctx, dst, *root, func(gdat.Ref) error {
+			require.NoError(t, mach.Check(ctx, dst, root, func(gdat.Ref) error {
 				return nil
 			}))
 
-			it := mach.NewInfoIterator(dst, *root)
+			it := mach.NewInfoIterator(dst, root)
 			infos, err := streams.Collect(ctx, it, len(tc.FS))
 			require.NoError(t, err)
 			for _, ent := range infos {
@@ -307,17 +307,17 @@ func makeGotFS(t testing.TB, fsmach *gotfs.Machine, s stores.RW, ents []FileEntr
 	require.NoError(t, err)
 	for _, ent := range ents {
 		if ent.Mode.IsDir() {
-			root, err = fsmach.MkdirAll(ctx, s, *root, ent.Path)
+			root, err = fsmach.MkdirAll(ctx, s, root, ent.Path)
 			require.NoError(t, err)
 			continue
 		}
 		parent := filepath.Dir(ent.Path)
 		if parent != "." && parent != "" {
-			root, err = fsmach.MkdirAll(ctx, s, *root, parent)
+			root, err = fsmach.MkdirAll(ctx, s, root, parent)
 			require.NoError(t, err)
 		}
-		root, err = fsmach.PutFile(ctx, gotfs.RW{s, s}, *root, ent.Path, strings.NewReader(ent.Data))
+		root, err = fsmach.PutFile(ctx, gotfs.RW{s, s}, root, ent.Path, strings.NewReader(ent.Data))
 		require.NoError(t, err)
 	}
-	return *root
+	return root
 }

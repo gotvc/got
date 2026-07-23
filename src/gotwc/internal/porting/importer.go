@@ -39,10 +39,10 @@ func NewImporter(fsmach *gotfs.Machine, db *DB, ss [2]stores.RW) *Importer {
 
 // ImportPath returns gotfs instance containing the content in fsx at p.
 // The content will be at the root of the filesystem.
-func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
+func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (gotfs.Root, error) {
 	finfo, err := fsx.Stat(p)
 	if err != nil {
-		return nil, err
+		return gotfs.Root{}, err
 	}
 	if !finfo.Mode().IsDir() {
 		return pr.importFile(ctx, fsx, p)
@@ -51,11 +51,11 @@ func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) (*
 	}
 }
 
-func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, finfo fs.FileInfo) (*gotfs.Root, error) {
+func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, finfo fs.FileInfo) (gotfs.Root, error) {
 	var changes []gotfs.Segment
 	emptyDir, err := createEmptyDir(ctx, pr.gotfs, pr.ms, finfo.Mode())
 	if err != nil {
-		return nil, err
+		return gotfs.Root{}, err
 	}
 	changes = append(changes, gotfs.Segment{
 		Span:     gotkv.TotalSpan(),
@@ -63,7 +63,7 @@ func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, fin
 	})
 	dirents, err := posixfs.ReadDir(fsx, p)
 	if err != nil {
-		return nil, err
+		return gotfs.Root{}, err
 	}
 	slices.SortFunc(dirents, func(a, b posixfs.DirEnt) int {
 		return strings.Compare(a.Name, b.Name)
@@ -75,14 +75,14 @@ func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, fin
 		p2 := path.Join(p, dirent.Name)
 		pathRoot, err := pr.ImportPath(ctx, fsx, p2)
 		if err != nil {
-			return nil, err
+			return gotfs.Root{}, err
 		}
 		metrics.AddInt(ctx, "paths", 1, "paths")
 		changes = append(changes, pr.gotfs.ShiftOut(pathRoot.Segment(), dirent.Name))
 	}
 	root, err := pr.gotfs.Splice(ctx, gotfs.RW{Data: pr.ds, Metadata: pr.ms}, changes)
 	if err != nil {
-		return nil, err
+		return gotfs.Root{}, err
 	}
 	if p != "" {
 		// for directories we don't add the root, just the mode and modified at.
@@ -92,32 +92,32 @@ func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, fin
 			ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
 			ByGot:      false,
 		}); err != nil {
-			return nil, err
+			return gotfs.Root{}, err
 		}
 	}
 	return root, nil
 }
 
-func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
+func (pr *Importer) ImportFile(ctx context.Context, fsx posixfs.FS, p string) (gotfs.Root, error) {
 	return pr.importFile(ctx, fsx, p)
 }
 
 // ImportFile returns a gotfs.Root with the content from the file in fsx at p.
-func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*gotfs.Root, error) {
+func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (gotfs.Root, error) {
 	finfo, err := stat(fsx, p)
 	if !finfo.Mode.IsRegular() {
-		return nil, fmt.Errorf("ImportFile called for non-regular file at path %q", p)
+		return gotfs.Root{}, fmt.Errorf("ImportFile called for non-regular file at path %q", p)
 	}
 	var ent FileInfo
 	if ok, err := pr.db.GetInfo(ctx, p, &ent); err != nil {
-		return nil, err
+		return gotfs.Root{}, err
 	} else if ok && !HasChanged(&ent, finfo) {
 		logctx.Infof(ctx, "using cache entry for path %q. skipped import", p)
 		var root gotfs.Root
 		if yes, err := pr.db.GetFSRoot(ctx, p, &root); err != nil {
-			return nil, err
+			return gotfs.Root{}, err
 		} else if yes {
-			return &root, nil
+			return root, nil
 		}
 	}
 	fileSize := finfo.Size
@@ -125,31 +125,31 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) (*
 	numWorkers := runtime.GOMAXPROCS(0)
 	sizeCutoff := 20 * pr.gotfs.MeanBlobSizeData() * numWorkers
 	// fast path for small files
-	var root *gotfs.Root
+	var root gotfs.Root
 	if fileSize < int64(sizeCutoff) {
 		f, err := fsx.OpenFile(p, posixfs.O_RDONLY, 0)
 		if err != nil {
-			return nil, err
+			return gotfs.Root{}, err
 		}
 		defer f.Close()
 		root, err = pr.gotfs.FileFromReader(ctx, gotfs.RW{pr.ds, pr.ms}, finfo.Mode, f)
 		if err != nil {
-			return nil, err
+			return gotfs.Root{}, err
 		}
 		metrics.AddInt(ctx, "data_in", int(fileSize), units.Bytes)
 	} else {
 		root, err = importFileConcurrent(ctx, pr.gotfs, pr.ms, pr.ds, fsx, p, numWorkers)
 		if err != nil {
-			return nil, err
+			return gotfs.Root{}, err
 		}
 	}
 	// need update
 	finfo.ByGot = false
 	if err := pr.db.PutInfo(ctx, *finfo); err != nil {
-		return nil, err
+		return gotfs.Root{}, err
 	}
-	if err := pr.db.PutFSRoot(ctx, p, finfo.ModifiedAt, *root); err != nil {
-		return nil, err
+	if err := pr.db.PutFSRoot(ctx, p, finfo.ModifiedAt, root); err != nil {
+		return gotfs.Root{}, err
 	}
 	return root, nil
 }
@@ -167,10 +167,10 @@ func stat(fsys posixfs.FS, p string) (*FileInfo, error) {
 	}, nil
 }
 
-func importFileConcurrent(ctx context.Context, fsag *gotfs.Machine, ms, ds stores.RW, fsx posixfs.FS, p string, numWorkers int) (*gotfs.Root, error) {
+func importFileConcurrent(ctx context.Context, fsag *gotfs.Machine, ms, ds stores.RW, fsx posixfs.FS, p string, numWorkers int) (gotfs.Root, error) {
 	stat, err := fsx.Stat(p)
 	if err != nil {
-		return nil, err
+		return gotfs.Root{}, err
 	}
 	fileSize := stat.Size()
 	rs := make([]io.Reader, numWorkers)
@@ -178,13 +178,13 @@ func importFileConcurrent(ctx context.Context, fsag *gotfs.Machine, ms, ds store
 		start, end := divide(fileSize, numWorkers, i)
 		f, err := fsx.OpenFile(p, posixfs.O_RDONLY, 0)
 		if err != nil {
-			return nil, err
+			return gotfs.Root{}, err
 		}
 		defer f.Close()
 		if n, err := f.Seek(start, io.SeekStart); err != nil {
-			return nil, err
+			return gotfs.Root{}, err
 		} else if n != start {
-			return nil, fmt.Errorf("file seeked to wrong place HAVE: %d WANT: %d", n, start)
+			return gotfs.Root{}, fmt.Errorf("file seeked to wrong place HAVE: %d WANT: %d", n, start)
 		}
 		rs[i] = io.LimitReader(f, end-start)
 	}
@@ -203,7 +203,7 @@ func divide(total int64, numWorkers int, workerIndex int) (start, end int64) {
 	return start, end
 }
 
-func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms stores.RW, mode fs.FileMode) (*gotfs.Root, error) {
+func createEmptyDir(ctx context.Context, fsag *gotfs.Machine, ms stores.RW, mode fs.FileMode) (gotfs.Root, error) {
 	return fsag.NewEmpty(ctx, ms, mode)
 }
 

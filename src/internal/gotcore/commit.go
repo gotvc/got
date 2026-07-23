@@ -61,7 +61,7 @@ func (p *Payload) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
-	p.Snap = *root
+	p.Snap = root
 	auxData, _, err := sbe.ReadLP(data)
 	if err != nil {
 		return err
@@ -125,7 +125,7 @@ func Apply(ctx context.Context, fsmach *gotfs.Machine, ss gotfs.RW, fn gotfsvm.F
 		if err != nil {
 			return gotfs.Root{}, err
 		}
-		ins = append(ins, *base)
+		ins = append(ins, base)
 	}
 	vm := gotfsvm.New(fsmach)
 	ins2 := slices2.Map(ins, func(x gotfs.Root) gotfsvm.Input {

@@ -31,7 +31,7 @@ var slurpCmd = star.Command{
 		}
 		defer f.Close()
 
-		var root *gotfs.Root
+		var root gotfs.Root
 		if err := wc.DoWithStore(ctx, func(st stores.RW) error {
 			fsag := gotfs.NewMachine(gotfs.Params{})
 			var err error

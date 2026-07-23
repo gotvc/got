@@ -174,7 +174,7 @@ func (wc *WC) Add(ctx context.Context, paths ...string) error {
 				if err != nil {
 					return err
 				}
-				return stage.PutRoot(ctx, p, *fileRoot)
+				return stage.PutRoot(ctx, p, fileRoot)
 			}); err != nil {
 				return err
 			}
@@ -217,7 +217,7 @@ func (wc *WC) Put(ctx context.Context, paths ...string) error {
 					return err
 				}
 			} else {
-				if err := stage.PutRoot(ctx, p, *root); err != nil {
+				if err := stage.PutRoot(ctx, p, root); err != nil {
 					return err
 				}
 			}
@@ -411,11 +411,11 @@ func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOpera
 			if ok, err := mt.LoadFS(ctx, &root); err != nil {
 				return err
 			} else if !ok {
-				rootPtr, err := sctx.GotFS.NewEmpty(ctx, s, 0o755)
+				root2, err := sctx.GotFS.NewEmpty(ctx, s, 0o755)
 				if err != nil {
 					return err
 				}
-				root = *rootPtr
+				root = root2
 			}
 			stage := sctx.Stage
 

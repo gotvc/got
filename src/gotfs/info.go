@@ -99,21 +99,21 @@ func parseInfo(data []byte) (*Info, error) {
 }
 
 // PutInfo assigns metadata to p
-func (mach *Machine) PutInfo(ctx context.Context, s stores.RW, x Root, p string, info *Info) (*Root, error) {
+func (mach *Machine) PutInfo(ctx context.Context, s stores.RW, x Root, p string, info *Info) (Root, error) {
 	if info == nil {
-		return nil, fmt.Errorf("gotfs.PutInfo: info cannot be nil")
+		return Root{}, fmt.Errorf("gotfs.PutInfo: info cannot be nil")
 	}
 	p = cleanPath(p)
 	if err := checkPath(p); err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	if p != "" {
 		// if it's not the root then check for immediate parent.
 		parent := parentPath(p)
 		if yes, err := mach.ExistsDir(ctx, s, x, parent); err != nil {
-			return nil, err
+			return Root{}, err
 		} else if !yes {
-			return nil, fmt.Errorf("missing parent directory for %s (%s)", p, parent)
+			return Root{}, fmt.Errorf("missing parent directory for %s (%s)", p, parent)
 		}
 	}
 	k := newInfoKey(p)

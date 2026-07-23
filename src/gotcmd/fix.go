@@ -82,7 +82,7 @@ func fixDirs(ctx context.Context, src, dst *gotcore.MarkTx) error {
 		if err != nil {
 			return p, err
 		}
-		p.Snap = *fixed
+		p.Snap = fixed
 		return p, nil
 	})
 	if err != nil {

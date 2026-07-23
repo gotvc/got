@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/gotvc/got/src/gotfs/gotlob"
+	"github.com/gotvc/got/src/gotfs/internal/gotlob"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
 )
@@ -117,7 +117,7 @@ func (b *Builder) copyFrom(ctx context.Context, root gotkv.Root, span gotkv.Span
 // Finish closes the builder and returns the Root to the filesystem.
 // Finish is idempotent, and is safe to call multiple times.
 // Not calling finish is not an error, the builder does not allocate resources other than memory.
-func (b *Builder) Finish() (*Root, error) {
+func (b *Builder) Finish() (Root, error) {
 	root, err := b.b.Finish(b.ctx)
 	return newRoot(root), err
 }

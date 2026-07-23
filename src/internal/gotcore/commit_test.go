@@ -30,7 +30,7 @@ func TestMarshalCommit(t *testing.T) {
 			},
 			Creator: inet256.ID{},
 			Payload: Payload{
-				Snap:  *root,
+				Snap:  root,
 				Notes: []byte{},
 			},
 		},

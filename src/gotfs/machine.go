@@ -14,7 +14,7 @@ import (
 
 	"github.com/gotvc/got/src/chunking"
 	"github.com/gotvc/got/src/gdat"
-	"github.com/gotvc/got/src/gotfs/gotlob"
+	"github.com/gotvc/got/src/gotfs/internal/gotlob"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
 )
@@ -149,16 +149,16 @@ func (mach *Machine) MetadataKV() *gotkv.Machine {
 }
 
 // Pick returns a new root containing everything under p, shifted to the root.
-func (mach *Machine) Pick(ctx context.Context, s stores.RW, root Root, p string) (*Root, error) {
+func (mach *Machine) Pick(ctx context.Context, s stores.RW, root Root, p string) (Root, error) {
 	p = cleanPath(p)
 	_, err := mach.GetInfo(ctx, s, root, p)
 	if err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	x := root.toGotKV()
 	span := SpanForPath(p)
 	if x, err = mach.deleteOutside(ctx, s, x, span); err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	if p == "" {
 		return newRoot(x), nil
@@ -166,7 +166,7 @@ func (mach *Machine) Pick(ctx context.Context, s stores.RW, root Root, p string)
 	prefix := pathPrefixNoTrail(nil, p)
 	y, err := mach.gotkv.RemovePrefix(ctx, s, x, prefix)
 	if err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	return newRoot(y), err
 }
@@ -215,14 +215,14 @@ func (mach *Machine) ForEachLeaf(ctx context.Context, s stores.RO, root Root, p 
 
 // Graft places branch at p in root.
 // If p == "" then branch is returned unaltered.
-func (mach *Machine) Graft(ctx context.Context, ss RW, root Root, p string, branch Root) (*Root, error) {
+func (mach *Machine) Graft(ctx context.Context, ss RW, root Root, p string, branch Root) (Root, error) {
 	p = cleanPath(p)
 	if p == "" {
-		return &branch, nil
+		return branch, nil
 	}
 	root2, err := mach.MkdirAll(ctx, ss.Metadata, root, parentPath(p))
 	if err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	k := newInfoKey(p)
 	return mach.Splice(ctx, ss, []Segment{
@@ -436,25 +436,25 @@ func (mach *Machine) Concat(ctx context.Context, ss RW, segs iter.Seq[Segment]) 
 }
 
 // Promote promotes a segment to a Root if the segment has the correct first key.
-func Promote(ctx context.Context, seg Segment) (*Root, error) {
+func Promote(ctx context.Context, seg Segment) (Root, error) {
 	var key Key
 	if err := unmarshalInfoKey(seg.Contents.First, &key); err != nil {
 		panic(err)
 	}
 	if key.Path() != "" {
-		return nil, fmt.Errorf("segment is not a valid gotfs.Root")
+		return Root{}, fmt.Errorf("segment is not a valid gotfs.Root")
 	}
-	return &Root{
+	return Root{
 		Ref:   seg.Contents.Ref,
 		Depth: seg.Contents.Depth,
 	}, nil
 }
 
 // Splice is equivalent to Concat followed by Promote
-func (mach *Machine) Splice(ctx context.Context, ss RW, segs []Segment) (*Root, error) {
+func (mach *Machine) Splice(ctx context.Context, ss RW, segs []Segment) (Root, error) {
 	seg, err := mach.Concat(ctx, ss, slices.Values(segs))
 	if err != nil {
-		return nil, err
+		return Root{}, err
 	}
 	return Promote(ctx, seg)
 }
