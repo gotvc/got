@@ -45,11 +45,7 @@ func TestUnknownIteratorFiltersTracking(t *testing.T) {
 			info, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: head})
 			require.NoError(t, err)
 
-			conn, err := wc.db.Take(ctx)
-			require.NoError(t, err)
-			defer wc.db.Put(conn)
-
-			db := porting.NewDB(conn, info.Config.Hash())
+			db := porting.NewCache(wc.db)
 			for _, p := range tt.entries {
 				require.NoError(t, db.PutInfo(ctx, porting.FileInfo{
 					Path:       p,

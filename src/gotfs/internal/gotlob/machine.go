@@ -57,8 +57,8 @@ func NewMachine(gkvop *gotkv.Machine, dop *gdat.Machine, opts ...Option) Machine
 	return o
 }
 
-func (a *Machine) CreateExtents(ctx context.Context, ds stores.RW, r io.Reader) ([]*Extent, error) {
-	var exts []*Extent
+func (a *Machine) CreateExtents(ctx context.Context, ds stores.RW, r io.Reader) ([]Extent, error) {
+	var exts []Extent
 	chunker := a.newChunker(func(data []byte) error {
 		ext, err := a.post(ctx, ds, data)
 		if err != nil {
@@ -66,7 +66,7 @@ func (a *Machine) CreateExtents(ctx context.Context, ds stores.RW, r io.Reader) 
 		}
 		metrics.AddInt(ctx, "data_in", len(data), units.Bytes)
 		metrics.AddInt(ctx, "blobs_in", 1, "blobs")
-		exts = append(exts, ext)
+		exts = append(exts, *ext)
 		return nil
 	})
 	if _, err := io.Copy(chunker, r); err != nil {

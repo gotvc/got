@@ -37,6 +37,10 @@ func newInfoKey(p string) Key {
 	}
 }
 
+func NewExtentKey(p string, endAt uint64) Key {
+	return newExtentKey(p, endAt)
+}
+
 func newExtentKey(p string, endAt uint64) Key {
 	k := newInfoKey(p)
 	k.endAt = endAt

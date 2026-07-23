@@ -1,147 +1,127 @@
 package staging
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
+	"errors"
 	"fmt"
 	"path"
 	"strings"
 
-	"go.brendoncarroll.net/exp/streams"
-	"go.brendoncarroll.net/stdctx/logctx"
+	"go.brendoncarroll.net/state/posixfs"
+	"go.etcd.io/bbolt"
 
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotfsvm"
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotwc/internal/porting"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/volumes"
 )
 
-type Operation struct {
-	Delete *DeleteOp `json:"del,omitempty"`
-	Put    *PutOp    `json:"put,omitempty"`
-}
-
-// DeleteOp deletes a path and everything beneath it
-type DeleteOp struct{}
-
-// PutOp replaces a path with a filesystem.
-type PutOp = gotfs.Root
-
+// Entry is an entry in the stage
 type Entry struct {
-	Path string    `json:"p"`
-	Op   Operation `json:"op"`
+	Path    string
+	Segment gotfs.Segment
 }
 
-// Tx is a transaction on a stage
+func (ent Entry) Key(out []byte) []byte {
+	return append(out, ent.Path...)
+}
+
+func (ent Entry) Value(out []byte) []byte {
+	return ent.Segment.Marshal(out)
+}
+
+func ParseEntry(key, value []byte) (Entry, error) {
+	ent := Entry{
+		Path: string(key),
+	}
+	if err := ent.Segment.Unmarshal(value); err != nil {
+		return Entry{}, err
+	}
+	return ent, nil
+}
+
+var (
+	bucketStage = []byte("stage")
+)
+
+// Tx is a transaction on a stage.
+// It is not safe for concurrent use.
 type Tx struct {
-	tx        volumes.Tx
-	gotkv     gotkv.Machine
-	paramHash *[32]byte
-	s         stores.RW
+	env Env
 
-	kvtx *gotkv.Tx
+	imp *porting.Importer
 }
 
-func DefaultGotKV() gotkv.Machine {
-	return gotkv.NewMachine(gotkv.Params{MeanSize: 1 << 12, MaxSize: 1 << 18})
+type Env struct {
+	Tx        *bbolt.Tx
+	VTx       volumes.Tx
+	GotFS     *gotfs.Machine
+	FS        posixfs.FS
+	Filter    func(string) bool
+	ParamHash *[32]byte
 }
 
 // New wraps a transaction to create a transaction on a Stage
 // paramHash if not-nil, causes operations to error if it does not
 // match the paramHash in the stage
-func New(kvmach *gotkv.Machine, tx volumes.Tx, paramHash *[32]byte) *Tx {
+func New(env Env) *Tx {
+	var imp *porting.Importer
+	if env.ParamHash != nil {
+		c := porting.NewCache(env.Tx)
+		ss := gotfs.RW{Metadata: env.VTx, Data: env.VTx}
+		imp = porting.NewImporter(&c, env.GotFS, ss, *env.ParamHash)
+	}
 	return &Tx{
-		tx:        tx,
-		gotkv:     *kvmach,
-		paramHash: paramHash,
-		s:         stores.NewMem(),
+		env: env,
+
+		imp: imp,
 	}
 }
 
-// setup performs idempotent initialization and should be called before
-// performing any operation.
 func (tx *Tx) setup(ctx context.Context) error {
-	if tx.kvtx != nil {
-		return nil
-	}
-	var root []byte
-	if err := tx.tx.Load(ctx, &root); err != nil {
-		return err
-	}
-	var kvroot gotkv.Root
-	var s stores.RW = tx.tx
-	if len(root) > 0 {
-		if len(root) < 32 {
-			return fmt.Errorf("too short to be stage root")
-		}
-		if tx.paramHash != nil && !bytes.Equal(tx.paramHash[:], root[:32]) {
-			return fmt.Errorf("stage paramHash must match %x vs %x", tx.paramHash[:], root[:32])
-		}
-		if err := kvroot.Unmarshal(root[32:]); err != nil {
-			return err
-		}
-	} else {
-		r, err := tx.gotkv.NewEmpty(ctx, s)
-		if err != nil {
-			// this is for the read only case
-			s = stores.NewMem()
-			r, err = tx.gotkv.NewEmpty(ctx, s)
-			if err != nil {
-				return err
-			}
-		}
-		kvroot = r
-	}
-	tx.kvtx = tx.gotkv.NewTx(s, kvroot)
-	return nil
-}
-
-func (tx *Tx) save(ctx context.Context) error {
-	if err := tx.setup(ctx); err != nil {
-		return err
-	}
-	if tx.paramHash == nil {
-		return fmt.Errorf("param has must be set to write to stage")
-	}
-	root := *tx.paramHash
-	next, err := tx.kvtx.Flush(ctx)
-	if err != nil {
-		return err
-	}
-	if err := tx.tx.Save(ctx, next.Marshal(root[:])); err != nil {
+	if _, err := tx.env.Tx.CreateBucketIfNotExists(bucketStage); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (tx *Tx) Abort(ctx context.Context) error {
-	return tx.tx.Abort(ctx)
-}
-
-func (tx *Tx) Commit(ctx context.Context) error {
-	if err := tx.save(ctx); err != nil {
-		return err
-	}
-	return tx.tx.Commit(ctx)
-}
-
-func (tx *Tx) put(ctx context.Context, p string, op Operation) error {
+func (tx *Tx) put(ctx context.Context, p string) error {
 	if err := tx.setup(ctx); err != nil {
-		return nil
+		return err
 	}
 	p = cleanPath(p)
 	if err := tx.CheckConflict(ctx, p); err != nil {
 		return err
 	}
-	val, err := json.Marshal(op)
+	b := tx.env.Tx.Bucket(bucketStage)
+	return b.Put([]byte(p), nil)
+}
+
+func (tx *Tx) Abort(ctx context.Context) error {
+	return errors.Join(tx.env.VTx.Abort(ctx), tx.env.Tx.Rollback())
+}
+
+func (tx *Tx) Commit(ctx context.Context) error {
+	// commit to volume first
+	if err := tx.env.VTx.Commit(ctx); err != nil {
+		return err
+	}
+	// then bolt iff that succeeded
+	return tx.env.Tx.Commit()
+}
+
+// Add adds all files at or beneat p in the
+func (tx *Tx) Add(ctx context.Context, p string) error {
+	p = cleanPath(p)
+	_, err := tx.imp.ImportPath(ctx, tx.env.FS, p)
 	if err != nil {
 		return err
 	}
-	return tx.kvtx.Put(ctx, []byte(p), val)
+	return tx.put(ctx, p)
 }
 
+<<<<<<< HEAD
 // Put replaces a path at p with root
 func (tx *Tx) PutRoot(ctx context.Context, p string, root gotfs.Root) error {
 	op := Operation{
@@ -161,22 +141,13 @@ func PutInfo(ctx context.Context, fsmach *gotfs.Machine, ms stores.RW, p string,
 }
 
 // Delete removes a file at p with root
+=======
+// Delete removes all files at or beneath p in the
+>>>>>>> 552ca36 (wip)
 func (tx *Tx) Delete(ctx context.Context, p string) error {
-	if err := tx.setup(ctx); err != nil {
-		return nil
-	}
 	p = cleanPath(p)
-	if err := tx.CheckConflict(ctx, p); err != nil {
-		return err
-	}
-	fo := Operation{
-		Delete: &DeleteOp{},
-	}
-	val, err := json.Marshal(fo)
-	if err != nil {
-		return err
-	}
-	return tx.kvtx.Put(ctx, []byte(p), val)
+	// TODO: delete from stage, then add path to store.
+	return tx.put(ctx, p)
 }
 
 func (tx *Tx) Discard(ctx context.Context, p string) error {
@@ -184,13 +155,15 @@ func (tx *Tx) Discard(ctx context.Context, p string) error {
 		return err
 	}
 	p = cleanPath(p)
-	if err := tx.kvtx.Delete(ctx, []byte(p)); err != nil {
+	b := tx.env.Tx.Bucket(bucketStage)
+	if err := b.Delete([]byte(p)); err != nil {
 		return err
 	}
 	// Also discard any changes to subpaths
-	return tx.ForEach(ctx, func(e Entry) error {
+	span := gotkv.PrefixSpan([]byte(p))
+	return tx.ForEach(ctx, span, func(e Entry) error {
 		if strings.HasPrefix(e.Path, p+"/") {
-			return tx.kvtx.Delete(ctx, []byte(e.Path))
+			return b.Delete([]byte(e.Path))
 		}
 		return nil
 	})
@@ -198,39 +171,39 @@ func (tx *Tx) Discard(ctx context.Context, p string) error {
 
 // Get returns the operation, if any, staged for the path p
 // If there is no operation staged Get returns (nil, nil)
-func (tx *Tx) Get(ctx context.Context, p string, dst *Operation) (bool, error) {
-	if err := tx.setup(ctx); err != nil {
-		return false, err
-	}
+func (tx *Tx) Get(ctx context.Context, p string, dst *gotfs.Segment) (bool, error) {
 	p = cleanPath(p)
-	var val []byte
-	if found, err := tx.kvtx.Get(ctx, []byte(p), &val); err != nil {
-		return false, err
-	} else if !found {
+	b := tx.env.Tx.Bucket(bucketStage)
+	if b == nil {
 		return false, nil
 	}
-	var op Operation
-	if err := json.Unmarshal(val, &op); err != nil {
+	val := b.Get([]byte(p))
+	if val == nil {
+		return false, nil
+	}
+	var seg gotfs.Segment
+	if err := seg.Unmarshal(val); err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
-func (tx *Tx) Iterate(ctx context.Context, span gotkv.Span) (*Iterator, error) {
-	if err := tx.setup(ctx); err != nil {
-		return nil, err
+func (tx *Tx) ForEach(ctx context.Context, span gotkv.Span, fn func(Entry) error) error {
+	b := tx.env.Tx.Bucket(bucketStage)
+	if b == nil {
+		return nil
 	}
-	tx.kvtx.Flush(ctx)
-	it := tx.kvtx.Iterate(ctx, span)
-	return &Iterator{it: it}, nil
-}
-
-func (tx *Tx) ForEach(ctx context.Context, fn func(Entry) error) error {
-	it, err := tx.Iterate(ctx, gotkv.TotalSpan())
-	if err != nil {
-		return err
+	c := b.Cursor()
+	for key, value := c.First(); key != nil; key, value = c.Next() {
+		ent, err := ParseEntry(key, value)
+		if err != nil {
+			return err
+		}
+		if err := fn(ent); err != nil {
+			return err
+		}
 	}
-	return streams.ForEach(ctx, it, fn)
+	return nil
 }
 
 func (tx *Tx) CheckConflict(ctx context.Context, p string) error {
@@ -243,8 +216,8 @@ func (tx *Tx) CheckConflict(ctx context.Context, p string) error {
 	for i := len(parts) - 1; i > 0; i-- {
 		conflictPath := strings.Join(parts[:i], "/")
 		k := cleanPath(conflictPath)
-		var op Operation
-		found, err := tx.Get(ctx, k, &op)
+		var seg gotfs.Segment
+		found, err := tx.Get(ctx, k, &seg)
 		if err != nil {
 			return err
 		}
@@ -252,12 +225,9 @@ func (tx *Tx) CheckConflict(ctx context.Context, p string) error {
 			return newError(p, conflictPath)
 		}
 	}
-	it, err := tx.Iterate(ctx, gotkv.PrefixSpan([]byte(p+"/")))
-	if err != nil {
-		return err
-	}
 	// check for descendents
-	if err := streams.ForEach(ctx, it, func(ent Entry) error {
+	span := gotkv.PrefixSpan([]byte(p + "/"))
+	if err := tx.ForEach(ctx, span, func(ent Entry) error {
 		return newError(p, ent.Path)
 	}); err != nil {
 		return err
@@ -267,63 +237,25 @@ func (tx *Tx) CheckConflict(ctx context.Context, p string) error {
 
 // Clear deletes all entries from the staging area
 func (tx *Tx) Clear(ctx context.Context) error {
-	if err := tx.tx.Save(ctx, []byte{}); err != nil {
+	if err := tx.env.Tx.DeleteBucket(bucketStage); err != nil {
 		return err
 	}
-	tx.kvtx = nil
-	return nil
+	_, err := tx.env.Tx.CreateBucket(bucketStage)
+	return err
 }
 
 func (tx *Tx) IsEmpty(ctx context.Context) (bool, error) {
-	it, err := tx.Iterate(ctx, gotkv.TotalSpan())
-	if err != nil {
-		return false, err
-	}
-	if err := streams.NextUnit(ctx, it, &Entry{}); err == nil {
-		return false, nil
-	} else if streams.IsEOS(err) {
-		return true, nil
-	} else {
-		return false, err
-	}
-}
-
-func (tx *Tx) CreateFunction(ctx context.Context, fsag *gotfs.Machine, ss gotfs.RW) (gotfsvm.Function, error) {
-	it, err := tx.Iterate(ctx, gotkv.TotalSpan())
-	if err != nil {
-		return gotfsvm.Function{}, err
-	}
-	vm := gotfsvm.New(fsag)
-	return vm.NewFunction(ctx, ss.Metadata, func(fb *gotfsvm.FnBuilder) (gotfsvm.Expr[gotfs.Root], error) {
-		baseExpr := fb.Input(0)
-		var segs []gotfs.Segment
-		err = streams.ForEach(ctx, it, func(ent Entry) error {
-			fileOp := ent.Op
-			p := ent.Path
-			switch {
-			case fileOp.Put != nil:
-				baseExpr = fb.MkdirAll(baseExpr, path.Dir(p), 0o755)
-				segs = append(segs, fsag.ShiftOut(gotfs.Root(*fileOp.Put).Segment(), p))
-			case fileOp.Delete != nil:
-				segs = append(segs, gotfs.Segment{
-					Span: gotfs.SpanForPath(p),
-				})
-			default:
-				logctx.Warnf(ctx, "empty op for path %q", p)
-				return nil
-			}
-			return nil
-		})
-		if err != nil {
-			return gotfsvm.Expr[gotfs.Root]{}, err
-		}
-		concatExpr := fb.ChangesOnBase(baseExpr, segs)
-		return fb.Promote(concatExpr), nil
-	})
+	b := tx.env.Tx.Bucket(bucketStage)
+	return b.Inspect().KeyN > 0, nil
 }
 
 func (tx *Tx) Store() stores.RW {
-	return tx.tx
+	return tx.env.VTx
+}
+
+// Apply applies the changes to the root and returns them.
+func (tx *Tx) Apply(ctx context.Context, s stores.RO, base gotfs.Root) (gotfs.Root, error) {
+	return gotfs.Root{}, nil
 }
 
 func cleanPath(p string) string {
@@ -333,21 +265,4 @@ func cleanPath(p string) string {
 		p = ""
 	}
 	return p
-}
-
-type Iterator struct {
-	it streams.Iterator[gotkv.Entry]
-}
-
-func (it *Iterator) Next(ctx context.Context, dsts []Entry) (int, error) {
-	dst := &dsts[0]
-	var kvent gotkv.Entry
-	if err := streams.NextUnit(ctx, it.it, &kvent); err != nil {
-		return 0, err
-	}
-	if err := json.Unmarshal(kvent.Value, &dst.Op); err != nil {
-		return 0, err
-	}
-	dst.Path = string(kvent.Key)
-	return 1, nil
 }

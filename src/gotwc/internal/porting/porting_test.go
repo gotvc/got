@@ -10,20 +10,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/gotvc/got/src/gdat"
+	"blobcache.io/blobcache/src/bcsdk"
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotwc/internal/dbmig"
-	"github.com/gotvc/got/src/gotwc/internal/migrations"
-	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
 	"github.com/gotvc/got/src/internal/gotcore"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
-	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/posixfs"
+	"go.etcd.io/bbolt"
 )
 
-type FileEntry struct {
+type testFile struct {
 	Path string
 	Mode fs.FileMode
 	Data string
@@ -33,11 +30,11 @@ func TestExport(t *testing.T) {
 	type testCase struct {
 		Name string
 		// InFS are the files
-		InFS []FileEntry
+		InFS []testFile
 		// InDB are the FileInfos in the DB before the Export
-		InDB []FileInfo
+		InDB []InfoEntry
 		// RootEntries are the entries to build into GotFS before export.
-		InGot []FileEntry
+		InGot []testFile
 		// ExportPath is the path to export from GotFS.
 		ExportPath string
 
@@ -47,10 +44,10 @@ func TestExport(t *testing.T) {
 	tests := []testCase{
 		{
 			Name: "file overwrite",
-			InFS: []FileEntry{
+			InFS: []testFile{
 				{Path: "a.txt", Mode: 0o644, Data: "untracked"},
 			},
-			InGot: []FileEntry{
+			InGot: []testFile{
 				{Path: "a.txt", Mode: 0o644, Data: "got"},
 			},
 			ExportPath: "a.txt",
@@ -61,11 +58,11 @@ func TestExport(t *testing.T) {
 		},
 		{
 			Name: "dir delete untracked child",
-			InFS: []FileEntry{
+			InFS: []testFile{
 				{Path: "dir", Mode: 0o755 | fs.ModeDir},
 				{Path: filepath.Join("dir", "untracked.txt"), Mode: 0o644, Data: "untracked"},
 			},
-			InGot: []FileEntry{
+			InGot: []testFile{
 				{Path: "dir", Mode: 0o755 | fs.ModeDir},
 			},
 			ExportPath: "dir",
@@ -76,24 +73,24 @@ func TestExport(t *testing.T) {
 		},
 		{
 			Name: "export new file",
-			InGot: []FileEntry{
+			InGot: []testFile{
 				{Path: "new.txt", Mode: 0o644, Data: "data"},
 			},
 			ExportPath: "new.txt",
 		},
 		{
 			Name: "export new dir",
-			InGot: []FileEntry{
+			InGot: []testFile{
 				{Path: "newdir", Mode: 0o755 | fs.ModeDir},
 			},
 			ExportPath: "newdir",
 		},
 		{
 			Name: "replace empty dir with file",
-			InFS: []FileEntry{
+			InFS: []testFile{
 				{Path: "swap", Mode: 0o755 | fs.ModeDir},
 			},
-			InGot: []FileEntry{
+			InGot: []testFile{
 				{Path: "swap", Mode: 0o644, Data: "file"},
 			},
 			ExportPath: "swap",
@@ -104,13 +101,13 @@ func TestExport(t *testing.T) {
 		},
 		{
 			Name: "file overwrite tracked changed",
-			InFS: []FileEntry{
+			InFS: []testFile{
 				{Path: "tracked.txt", Mode: 0o644, Data: "on disk"},
 			},
-			InDB: []FileInfo{
-				{Path: "tracked.txt", Mode: 0o644, Size: 1},
+			InDB: []InfoEntry{
+				{Path: "tracked.txt", Info: FileInfo{Mode: 0o644, Size: 1}},
 			},
-			InGot: []FileEntry{
+			InGot: []testFile{
 				{Path: "tracked.txt", Mode: 0o644, Data: "got"},
 			},
 			ExportPath: "tracked.txt",
@@ -121,14 +118,14 @@ func TestExport(t *testing.T) {
 		},
 		{
 			Name: "delete tracked changed child",
-			InFS: []FileEntry{
+			InFS: []testFile{
 				{Path: "dir", Mode: 0o755 | fs.ModeDir},
 				{Path: filepath.Join("dir", "old.txt"), Mode: 0o644, Data: "old"},
 			},
-			InDB: []FileInfo{
-				{Path: filepath.Join("dir", "old.txt"), Mode: 0o644, Size: 0},
+			InDB: []InfoEntry{
+				{Path: filepath.Join("dir", "old.txt"), Info: FileInfo{Mode: 0o644, Size: 0}},
 			},
-			InGot: []FileEntry{
+			InGot: []testFile{
 				{Path: "dir", Mode: 0o755 | fs.ModeDir},
 			},
 			ExportPath: "dir",
@@ -139,20 +136,20 @@ func TestExport(t *testing.T) {
 		},
 		{
 			Name: "tracked entry without working file",
-			InDB: []FileInfo{
-				{Path: "tracked.txt", Mode: 0o644, Size: 0},
+			InDB: []InfoEntry{
+				{Path: "tracked.txt", Info: FileInfo{Mode: 0o644, Size: 0}},
 			},
-			InGot: []FileEntry{
+			InGot: []testFile{
 				{Path: "tracked.txt", Mode: 0o644, Data: "got"},
 			},
 			ExportPath: "tracked.txt",
 		},
 		{
 			Name: "unrelated tracked entry",
-			InDB: []FileInfo{
-				{Path: "other.txt", Mode: 0o644, Size: 0},
+			InDB: []InfoEntry{
+				{Path: "other.txt", Info: FileInfo{Mode: 0o644, Size: 0}},
 			},
-			InGot: []FileEntry{
+			InGot: []testFile{
 				{Path: "target.txt", Mode: 0o644, Data: "data"},
 			},
 			ExportPath: "target.txt",
@@ -178,19 +175,22 @@ func TestExport(t *testing.T) {
 			}
 
 			cfg := gotcore.DefaultConfig(true)
-			conn, paramHash := newTestDB(t, ctx, cfg)
+			bdb := newTestDB(t, ctx, cfg)
 			mach := gotcore.GotFS(cfg)
 			s := stores.NewMem()
 			ss := gotfs.RO{s, s}
-			db := NewDB(conn, paramHash)
+			tx, err := bdb.Begin(true)
+			require.NoError(t, err)
+			defer tx.Rollback()
+			c := NewCache(tx)
 
 			for _, info := range tt.InDB {
-				require.NoError(t, db.PutInfo(ctx, info))
+				require.NoError(t, c.putInfoEntry(ctx, info))
 			}
 			root := makeGotFS(t, &mach, s, tt.InGot)
 
-			exp := NewExporter(&mach, db, fsys, func(string) bool { return true })
-			err := exp.ExportPath(ctx, ss, root, tt.ExportPath)
+			exp := NewExporter(&c, &mach, fsys, func(string) bool { return true })
+			err = exp.ExportPath(ctx, ss, root, tt.ExportPath)
 			if tt.Err == nil {
 				require.NoError(t, err)
 				return
@@ -213,13 +213,13 @@ func TestExport(t *testing.T) {
 func TestImportPath(t *testing.T) {
 	type testCase struct {
 		// FS is the contents of the file system
-		FS []FileEntry
+		FS []testFile
 		// Path is what is passed to import path
 		Path string
 	}
 	tcs := []testCase{
 		{
-			FS: []FileEntry{
+			FS: []testFile{
 				{Path: "a.txt", Mode: 0o644, Data: "one"},
 				{Path: "b.txt", Mode: 0o644, Data: "two"},
 				{Path: "c.txt", Mode: 0o644, Data: "three"},
@@ -227,7 +227,7 @@ func TestImportPath(t *testing.T) {
 			Path: "a.txt",
 		},
 		{
-			FS: []FileEntry{
+			FS: []testFile{
 				{Path: "subdir1", Mode: 0o755 | fs.ModeDir},
 				{Path: "subdir2", Mode: 0o755 | fs.ModeDir},
 				{Path: "subdir3", Mode: 0o755 | fs.ModeDir},
@@ -246,9 +246,12 @@ func TestImportPath(t *testing.T) {
 			dst := stores.NewMem()
 			cfg := gotcore.DefaultConfig(false)
 			mach := gotcore.GotFS(cfg)
-			conn, paramHash := newTestDB(t, ctx, cfg)
-			db := NewDB(conn, paramHash)
-			imp := NewImporter(&mach, db, [2]stores.RW{dst, dst})
+			bdb := newTestDB(t, ctx, cfg)
+			tx, err := bdb.Begin(true)
+			require.NoError(t, err)
+			defer tx.Rollback()
+			c := NewCache(tx)
+			imp := NewImporter(&c, &mach, gotfs.RW{Data: dst, Metadata: dst}, cfg.Hash())
 
 			// prepare files on disk
 			dir := testutil.OpenRoot(t, t.TempDir())
@@ -256,17 +259,22 @@ func TestImportPath(t *testing.T) {
 
 			// do import
 			fsys := posixfs.NewDirFS(dir.Name())
-			root, err := imp.ImportPath(ctx, fsys, tc.Path)
+			ents, err := imp.ImportPath(ctx, fsys, tc.Path)
 			require.NoError(t, err)
-			require.NoError(t, mach.Check(ctx, dst, root, func(gdat.Ref) error {
-				return nil
-			}))
+			var infos []gotfs.Entry
+			for _, ent := range ents {
+				if ent.Key.IsInfo() {
+					infos = append(infos, ent)
+					continue
+				}
+				ext := ent.Extent
+				exists, err := bcsdk.ExistsUnit(ctx, dst, ext.Ref.CID)
+				require.NoError(t, err)
+				require.True(t, exists)
+			}
 
-			it := mach.NewInfoIterator(dst, root)
-			infos, err := streams.Collect(ctx, it, len(tc.FS))
-			require.NoError(t, err)
 			for _, ent := range infos {
-				p := path.Join(tc.Path, ent.Path)
+				p := path.Join(tc.Path, ent.Path())
 				finfo, err := dir.Stat(p)
 				require.NoError(t, err)
 				require.Equal(t, finfo.Mode(), ent.Info.Mode)
@@ -275,20 +283,18 @@ func TestImportPath(t *testing.T) {
 	}
 }
 
-func newTestDB(t testing.TB, ctx context.Context, cfg gotcore.DSConfig) (*sqlutil.Conn, [32]byte) {
+func newTestDB(t testing.TB, ctx context.Context, cfg gotcore.DSConfig) *bbolt.DB {
 	t.Helper()
-	pool := sqlutil.NewTestPool(t)
-	conn, err := pool.Take(ctx)
+	path := filepath.Join(t.TempDir(), "test.db")
+	db, err := bbolt.Open(path, 0o600, &bbolt.Options{NoSync: true, NoFreelistSync: true})
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		pool.Put(conn)
+		db.Close()
 	})
-
-	require.NoError(t, migrations.EnsureAll(conn, dbmig.ListMigrations()))
-	return conn, cfg.Hash()
+	return db
 }
 
-func writeToFS(t testing.TB, dir *os.Root, ents []FileEntry) {
+func writeToFS(t testing.TB, dir *os.Root, ents []testFile) {
 	t.Helper()
 	for _, ent := range ents {
 		mode := ent.Mode & fs.ModePerm
@@ -300,7 +306,7 @@ func writeToFS(t testing.TB, dir *os.Root, ents []FileEntry) {
 	}
 }
 
-func makeGotFS(t testing.TB, fsmach *gotfs.Machine, s stores.RW, ents []FileEntry) gotfs.Root {
+func makeGotFS(t testing.TB, fsmach *gotfs.Machine, s stores.RW, ents []testFile) gotfs.Root {
 	t.Helper()
 	ctx := testutil.Context(t)
 	root, err := fsmach.NewEmpty(ctx, s, 0o755)

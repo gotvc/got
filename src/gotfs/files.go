@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 
 	"github.com/gotvc/got/src/gotfs/internal/gotlob"
 	"github.com/gotvc/got/src/internal/metrics"
@@ -20,7 +21,22 @@ func (mach *Machine) FileFromReader(ctx context.Context, ss RW, mode posixfs.Fil
 // ImportReaders creates a single file at the root from concatenating the data in rs.
 // Each reader will be imported from in parallel.
 func (mach *Machine) FileFromReaders(ctx context.Context, ss RW, mode posixfs.FileMode, rs []io.Reader) (Root, error) {
-	exts := make([][]*Extent, len(rs))
+	exts, err := mach.ExtentsFromReaders(ctx, ss, rs)
+	if err != nil {
+		return Root{}, err
+	}
+	b := mach.NewBuilder(ctx, ss)
+	if err := b.BeginFile("", 0o644); err != nil {
+		return Root{}, err
+	}
+	if err := b.writeExtents(ctx, exts); err != nil {
+		return Root{}, err
+	}
+	return b.Finish()
+}
+
+func (mach *Machine) ExtentsFromReaders(ctx context.Context, ss RW, rs []io.Reader) ([]Extent, error) {
+	exts := make([][]Extent, len(rs))
 	eg := errgroup.Group{}
 	for i, r := range rs {
 		i := i
@@ -34,18 +50,9 @@ func (mach *Machine) FileFromReaders(ctx context.Context, ss RW, mode posixfs.Fi
 		})
 	}
 	if err := eg.Wait(); err != nil {
-		return Root{}, err
+		return nil, err
 	}
-	b := mach.NewBuilder(ctx, ss)
-	if err := b.BeginFile("", 0o644); err != nil {
-		return Root{}, err
-	}
-	for i := range exts {
-		if err := b.writeExtents(ctx, exts[i]); err != nil {
-			return Root{}, err
-		}
-	}
-	return b.Finish()
+	return slices.Concat(exts...), nil
 }
 
 // CreateFile creates a file at p with data from r

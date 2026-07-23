@@ -111,13 +111,13 @@ func (b *Builder) Write(data []byte) (int, error) {
 }
 
 // CopyExtents copies multiple extents to the current object.
-func (b *Builder) CopyExtents(ctx context.Context, exts []*Extent) error {
+func (b *Builder) CopyExtents(ctx context.Context, exts []Extent) error {
 	if err := b.checkFinished(); err != nil {
 		return err
 	}
 	for i, ext := range exts {
 		isShort := i == len(exts)-1
-		if err := b.CopyExtent(ctx, ext, isShort); err != nil {
+		if err := b.CopyExtent(ctx, &ext, isShort); err != nil {
 			return err
 		}
 	}
