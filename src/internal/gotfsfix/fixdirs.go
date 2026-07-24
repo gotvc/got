@@ -15,7 +15,7 @@ import (
 
 // FixDirs rebuilds a filesystem, inserting any missing parent directories.
 func FixDirs(ctx context.Context, fsmach *gotfs.Machine, ms stores.RW, root gotfs.Root) (gotfs.Root, error) {
-	it := fsmach.NewIterator(ms, root, gotkv.TotalSpan())
+	it := fsmach.NewIterator(ms, root, "")
 	kvmach := fsmach.MetadataKV()
 	b := kvmach.NewBuilder(ms)
 
@@ -59,7 +59,7 @@ func finish(ctx context.Context, b *gotkv.Builder) (gotfs.Root, error) {
 	if err != nil {
 		return gotfs.Root{}, err
 	}
-	return gotfs.Promote(ctx, gotfs.Segment{Contents: kvr, Span: gotkv.TotalSpan()})
+	return gotfs.Promote(ctx, gotfs.Segment{Contents: kvr, Span: gotfs.TotalSpan()})
 }
 
 // ensureParents makes sure all ancestor directories of p exist in the builder,

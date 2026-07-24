@@ -140,9 +140,10 @@ type StreamWriter[T, Ref any] struct {
 	buf []byte
 	n   int
 
-	first T
-	prev  maybe.Maybe[T]
-	count uint
+	first      T
+	prev       maybe.Maybe[T]
+	count      uint64
+	totalBytes uint64
 }
 
 type StreamWriterParams[T, Ref any] struct {
@@ -233,10 +234,11 @@ func (w *StreamWriter[T, Ref]) flush(ctx context.Context, isNatural bool) error 
 	span = span.WithLowerIncl(w.first)
 	span = span.WithUpperIncl(w.prev.X)
 	if err := w.p.OnIndex(Index[T, Ref]{
-		Ref:       ref,
-		Span:      span,
-		IsNatural: isNatural,
-		Count:     w.count,
+		Ref:        ref,
+		Span:       span,
+		IsNatural:  isNatural,
+		Count:      w.count,
+		TotalBytes: uint64(w.n),
 	}); err != nil {
 		return err
 	}

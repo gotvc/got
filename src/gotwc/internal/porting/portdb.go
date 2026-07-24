@@ -1,120 +1,299 @@
 package porting
 
 import (
+	"bytes"
 	"context"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
-	"io/fs"
+	"path"
+	"sync"
+	"sync/atomic"
 
 	"github.com/gotvc/got/src/gotfs"
-	"github.com/gotvc/got/src/gotwc/internal/sqlutil"
+	"go.brendoncarroll.net/exp/sbe"
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/tai64"
-	"zombiezen.com/go/sqlite"
+	"go.etcd.io/bbolt"
 )
 
-type FileInfo struct {
-	Path       string
+// InfoEntry is a how file info is stored in the database.
+type InfoEntry struct {
+	// Path is the key for an InfoEntry
+	Path string
+
+	// Info is the value for an InfoEntry
+	Info FileInfo
+}
+
+func parseInfoEntry(k, v []byte) (ret InfoEntry, _ error) {
+	if err := ret.Info.Unmarshal(v); err != nil {
+		return ret, err
+	}
+	ret.Path = string(k)
+	return ret, nil
+}
+
+func (ient InfoEntry) Key(out []byte) []byte {
+	return append(out, ient.Path...)
+}
+
+func (ient InfoEntry) Value(out []byte) []byte {
+	// TODO: use sbe package to serialize.
+	data, _ := json.Marshal(ient.Info)
+	return append(out, data...)
+}
+
+// ExtentKey is a key in the extents table
+type ExtentKey struct {
+	Path      string
+	ParamHash [32]byte
+	EndAt     uint64
+}
+
+func (k ExtentKey) Marshal(out []byte) []byte {
+	out = append(out, []byte(k.Path)...)
+	out = append(out, k.ParamHash[:]...)
+	out = sbe.AppendUint64(out, k.EndAt)
+	return out
+}
+
+func (k *ExtentKey) Unmarshal(out []byte) error {
+	return nil
+}
+
+// ExtentValue is the value stored in the extents table
+type ExtentValue struct {
+	Extent     gotfs.Extent
 	ModifiedAt tai64.TAI64N
-	Mode       fs.FileMode
-	Size       int64
-	ByGot      bool
 }
 
-// DB stores metadata about the state of the directory and
-// any data that has been imported from it.
-type DB struct {
-	conn      *sqlutil.Conn
-	paramHash [32]byte
+type ExtentEntry struct {
+	EndAt  uint64
+	Extent gotfs.Extent
 }
 
-func NewDB(conn *sqlutil.Conn, paramHash [32]byte) *DB {
-	return &DB{
-		conn:      conn,
-		paramHash: paramHash,
+type Cache struct {
+	mu        sync.RWMutex
+	tx        *bbolt.Tx
+	doneSetup atomic.Bool
+}
+
+func NewCache(tx *bbolt.Tx) Cache {
+	return Cache{tx: tx}
+}
+
+const (
+	bucketInfos   = "infos"
+	bucketExtents = "extents"
+)
+
+func (c *Cache) ensureBuckets(tx *bbolt.Tx) error {
+	if done := c.doneSetup.Load(); done {
+		return nil
 	}
+	for _, name := range []string{bucketInfos, bucketExtents} {
+		if _, err := tx.CreateBucketIfNotExists([]byte(name)); err != nil {
+			return err
+		}
+	}
+	c.doneSetup.Store(true)
+	return nil
 }
 
-func (db *DB) PutInfo(ctx context.Context, ent FileInfo) error {
-	if ent.Path == "" {
-		return fmt.Errorf("import/export DB does not allow the root to be stored")
+// UpdateInfo updates the cached file info for a path.
+// If the file has changed in anyway, then all of the extents are invalidated.
+// It returns true if the path has changed, and will require reimport.
+func (c *Cache) UpdateInfo(ctx context.Context, p string, info FileInfo) (bool, error) {
+	p = CleanPath(p)
+	var hasChanged bool
+	if err := c.ensureBuckets(c.tx); err != nil {
+		return false, err
 	}
-	p := ent.Path
-	// replacing the info should also delete the root if it exists.
-	if err := sqlutil.Exec(db.conn, `DELETE FROM fsroots WHERE path = ? AND param_hash = ?`, p, db.paramHash[:]); err != nil {
+	b := c.tx.Bucket([]byte(bucketInfos))
+	k := []byte(p)
+
+	if val := b.Get(k); val != nil {
+		var oldInfo FileInfo
+		if err := oldInfo.Unmarshal(val); err != nil {
+			return false, err
+		}
+		if HasChanged(&oldInfo, &info) {
+			hasChanged = true
+			if err := invalidateExtents(c.tx, p); err != nil {
+				return false, err
+			}
+		} else {
+			return false, nil // nothing to do.
+		}
+	} else {
+		// no previous entry, need update
+		hasChanged = true
+	}
+	return hasChanged, b.Put(k, info.Marshal(nil))
+}
+
+func (c *Cache) putInfoEntry(ctx context.Context, ient InfoEntry) error {
+	_, err := c.UpdateInfo(ctx, ient.Path, ient.Info)
+	return err
+}
+
+// GetInfo returns the last known info about the file.
+func (c *Cache) GetInfo(ctx context.Context, p string, dst *FileInfo) (bool, error) {
+	var found bool
+	b := c.tx.Bucket([]byte(bucketInfos))
+	if b == nil {
+		return false, nil
+	}
+	val := b.Get([]byte(p))
+	found = val != nil
+	return found, dst.Unmarshal(val)
+}
+
+func (c *Cache) Delete(ctx context.Context, p string) error {
+	b := c.tx.Bucket([]byte(bucketInfos))
+	if b != nil {
+		if err := b.Delete([]byte(p)); err != nil {
+			return err
+		}
+	}
+	return invalidateExtents(c.tx, p)
+}
+
+func (c *Cache) AddExtents(ctx context.Context, p string, paramHash [32]byte, ents []gotfs.Entry) error {
+	if err := c.ensureBuckets(c.tx); err != nil {
 		return err
 	}
-	return sqlutil.Exec(db.conn, `INSERT OR REPLACE INTO dirstate (path, mode, modtime, size, by_got) VALUES (?, ?, ?, ?, ?)`, p, uint32(ent.Mode), ent.ModifiedAt.Marshal(), ent.Size, ent.ByGot)
-}
-
-func (db *DB) GetInfo(ctx context.Context, p string, dst *FileInfo) (bool, error) {
-	return sqlutil.GetOne(db.conn, dst, scanInfo, `SELECT path, modtime, mode, size, by_got FROM dirstate WHERE path = ?`, p)
-}
-
-func (db *DB) NewInfoIterator() *DBInfoIterator {
-	return NewDBInfoIterator(db.conn)
-}
-
-// Delete removes all information associated with a path.
-func (db *DB) Delete(ctx context.Context, p string) error {
-	if err := sqlutil.Exec(db.conn, `DELETE FROM dirstate WHERE path = ?`, p); err != nil {
-		return err
-	}
-	if err := sqlutil.Exec(db.conn, `DELETE FROM fsroots WHERE path = ?`, p); err != nil {
-		return err
+	b := c.tx.Bucket([]byte(bucketExtents))
+	for _, ent := range ents {
+		if ent.IsInfo() {
+			continue
+		}
+		if err := putExtent(b, p, paramHash, ent.EndAt(), ent.Extent); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (db *DB) PutFSRoot(ctx context.Context, p string, modt tai64.TAI64N, fsroot gotfs.Root) error {
-	var info FileInfo
-	if ok, err := db.GetInfo(ctx, p, &info); err != nil {
-		return err
-	} else if !ok {
-		return fmt.Errorf("cannot add file data before info has been added")
+// GetExtents gets extents for (p, paramHash) and appends them to out
+func (c *Cache) GetExtents(ctx context.Context, p string, paramHash [32]byte, out []gotfs.Entry) ([]gotfs.Entry, error) {
+	b := c.tx.Bucket([]byte(bucketExtents))
+	if b == nil {
+		return nil, fmt.Errorf("no extents for path + paramHash")
 	}
-	if info.ModifiedAt != modt {
-		return fmt.Errorf("modtime does not match")
+	prefix := extentPrefix(p, paramHash)
+	cur := b.Cursor()
+	for k, _ := cur.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = cur.Next() {
+		ee, err := parseExtentEntry(k, b.Get(k))
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, gotfs.Entry{
+			Key:   gotfs.NewExtentKey(p, ee.EndAt),
+			Value: gotfs.Value{Extent: ee.Extent},
+		})
 	}
-	return sqlutil.Exec(db.conn, `UPDATE fsroots
-		SET fsroot = ?
-		WHERE path = ? AND param_hash = ?
-	`, fsroot.Marshal(nil), p, db.paramHash[:])
+	return out, nil
 }
 
-func (db *DB) GetFSRoot(ctx context.Context, p string, dst *gotfs.Root) (bool, error) {
-	return sqlutil.GetOne(db.conn, dst, scanFSRoot, `SELECT fsroot FROM fsroots
-		WHERE path = ? AND param_hash = ?
-	`, p, db.paramHash[:])
-}
-
-// scanInfo expects:
-// 0: path
-// 1: modtime
-// 2: mode
-// 3: size
-// 4: by_got
-func scanInfo(stmt *sqlite.Stmt, dst *FileInfo) error {
-	dst.Path = stmt.ColumnText(0)
-	var modtime [8 + 4]byte
-	stmt.ColumnBytes(1, modtime[:])
-	if err := dst.ModifiedAt.UnmarshalBinary(modtime[:]); err != nil {
+func putExtent(b *bbolt.Bucket, p string, paramHash [32]byte, endAt uint64, ext gotfs.Extent) error {
+	k := extentKey(p, paramHash, endAt)
+	val, err := ext.MarshalBinary()
+	if err != nil {
 		return err
 	}
-	dst.Mode = fs.FileMode(stmt.ColumnInt64(2))
-	dst.Size = stmt.ColumnInt64(3)
-	dst.ByGot = stmt.ColumnInt64(4) != 0
+	return b.Put(k, val)
+}
+
+func parseExtentEntry(k, v []byte) (ExtentEntry, error) {
+	endAt := binary.BigEndian.Uint64(k[len(k)-8:])
+	var ext gotfs.Extent
+	if err := ext.UnmarshalBinary(v); err != nil {
+		return ExtentEntry{}, err
+	}
+	return ExtentEntry{
+		EndAt:  endAt,
+		Extent: ext,
+	}, nil
+}
+
+// NewInfoIterator returns an iterator over all tracked paths.
+func (c *Cache) NewInfoIterator() *DBInfoIterator {
+	return newDBInfoIterator(c)
+}
+
+func deleteInfo(tx *bbolt.Tx, p string) error {
+	b := tx.Bucket([]byte(bucketInfos))
+	if b == nil {
+		return nil
+	}
+	return b.Delete([]byte(p))
+}
+
+// invalidateExtents deletes all cached extents across all paramHashes.
+func invalidateExtents(tx *bbolt.Tx, p string) error {
+	b := tx.Bucket([]byte(bucketExtents))
+	if b == nil {
+		return nil // nothing to do
+	}
+	prefix := append([]byte(p), 0)
+	c := b.Cursor()
+	for k, _ := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = c.Next() {
+		if err := b.Delete(k); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func scanFSRoot(stmt *sqlite.Stmt, dst *gotfs.Root) error {
-	var buf [gotfs.RootSize]byte
-	stmt.ColumnBytes(0, buf[:])
-	return dst.Unmarshal(buf[:])
+func extentKey(p string, paramHash [32]byte, endAt uint64) []byte {
+	buf := append([]byte(p), 0)
+	buf = append(buf, paramHash[:]...)
+	buf = binary.BigEndian.AppendUint64(buf, endAt)
+	return buf
 }
 
-type DBInfoIterator = streams.SeqErr[FileInfo]
+func extentPrefix(p string, paramHash [32]byte) []byte {
+	buf := append([]byte(p), 0)
+	buf = append(buf, paramHash[:]...)
+	return buf
+}
 
-func NewDBInfoIterator(conn *sqlutil.Conn) *DBInfoIterator {
-	seq := sqlutil.Select(conn, scanInfo, `SELECT path, modtime, mode, size, by_got FROM dirstate ORDER BY path`)
+type DBInfoIterator = streams.SeqErr[InfoEntry]
+
+func newDBInfoIterator(db *Cache) *DBInfoIterator {
+	seq := func(yield func(InfoEntry, error) bool) {
+		err := func() error {
+			b := db.tx.Bucket([]byte(bucketInfos))
+			if b == nil {
+				return nil
+			}
+			c := b.Cursor()
+			for k, v := c.First(); k != nil; k, v = c.Next() {
+				var ent InfoEntry
+				ent, err := parseInfoEntry(k, v)
+				if err != nil {
+					return err
+				}
+				if !yield(ent, err) {
+					return nil
+				}
+			}
+			return nil
+		}()
+		if err != nil {
+			yield(InfoEntry{}, err)
+		}
+	}
 	return streams.NewSeqErr(seq)
+}
+
+func CleanPath(p string) string {
+	p = path.Clean(p)
+	switch p {
+	case ".", "/":
+		p = ""
+	}
+	return p
 }

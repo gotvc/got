@@ -1,9 +1,8 @@
 package gotlob
 
 import (
-	"fmt"
-
 	"github.com/gotvc/got/src/gotkv"
+	"github.com/gotvc/got/src/gotkv/gotkvdelta"
 )
 
 type (
@@ -13,11 +12,4 @@ type (
 	Span  = gotkv.Span
 )
 
-type Segment struct {
-	Root Root
-	Span Span
-}
-
-func (s Segment) String() string {
-	return fmt.Sprintf("{ %v : %v}", s.Span, s.Root.Ref.CID)
-}
+type Segment = gotkvdelta.Segment

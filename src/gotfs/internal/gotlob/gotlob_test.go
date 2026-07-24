@@ -112,7 +112,7 @@ func TestCopyExtents(t *testing.T) {
 	b := ag.NewBuilder(ctx, ms, ds)
 
 	const N = 5
-	var exts [][]*Extent
+	var exts [][]Extent
 	for i := 0; i < N; i++ {
 		exts2, err := ag.CreateExtents(ctx, ds, testutil.RandomStream(i, 10e6))
 		require.NoError(t, err)

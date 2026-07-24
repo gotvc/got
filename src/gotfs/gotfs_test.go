@@ -227,5 +227,5 @@ func makeInfoKey(p string) []byte {
 }
 
 func makeExtentKey(p string, endAt int) (out []byte) {
-	return newExtentKey(p, uint64(endAt)).Marshal(nil)
+	return NewExtentKey(p, uint64(endAt)).Marshal(nil)
 }

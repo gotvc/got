@@ -86,7 +86,7 @@ func (b *Builder) Write(data []byte) (int, error) {
 // Rechunking is avoided, but the last Extent could be short, so it must be rechunked regardless.
 // WriteExtents is useful for efficiently joining Extents from disjoint regions of a file.
 // See also: Machine.CreateExtents
-func (b *Builder) writeExtents(ctx context.Context, exts []*Extent) error {
+func (b *Builder) writeExtents(ctx context.Context, exts []Extent) error {
 	if b.IsFinished() {
 		return errBuilderIsFinished()
 	}
@@ -96,8 +96,8 @@ func (b *Builder) writeExtents(ctx context.Context, exts []*Extent) error {
 	return nil
 }
 
-func (b *Builder) copyFrom(ctx context.Context, root gotkv.Root, span gotkv.Span) error {
-	if err := b.b.CopyFrom(ctx, root, span); err != nil {
+func (b *Builder) CopyFrom(ctx context.Context, root gotkv.Root, span Span) error {
+	if err := b.b.CopyFrom(ctx, root, span.ToSpan()); err != nil {
 		return err
 	}
 	p, info, err := b.a.maxInfo(ctx, b.ms, root, span)
