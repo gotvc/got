@@ -23,7 +23,6 @@ require (
 	golang.org/x/crypto v0.46.1-0.20251210140736-7dacc380ba00
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b
 	golang.org/x/sync v0.20.0
-	zombiezen.com/go/sqlite v1.4.2
 )
 
 require (
