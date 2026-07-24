@@ -25,8 +25,8 @@ func (mach *Machine) Sync(ctx context.Context, src RO, dst WO, root Root) error 
 }
 
 // Populate adds the ID for all the metadata blobs to mdSet and all the data blobs to dataSet
-func (mach *Machine) Populate(ctx context.Context, s stores.RO, root Root, mdSet, dataSet stores.Set) error {
-	return mach.gotkv.Populate(ctx, s, root.toGotKV(), mdSet, func(ent gotkv.Entry) error {
+func (mach *Machine) Populate(ctx context.Context, s stores.RO, seg Segment, mdSet, dataSet stores.Set) error {
+	return mach.gotkv.Populate(ctx, s, seg.Contents, mdSet, func(ent gotkv.Entry) error {
 		if isExtentKey(ent.Key) {
 			ext, err := parseExtent(ent.Value)
 			if err != nil {

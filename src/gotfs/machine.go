@@ -356,6 +356,10 @@ func (s Segment) String() string {
 	return fmt.Sprintf("{ %v : %v}", s.Span, s.Contents.Ref)
 }
 
+func (s Segment) IsZero() bool {
+	return s.Contents.Ref.IsZero()
+}
+
 func (s *Segment) Marshal(out []byte) []byte {
 	out = sbe.AppendLP16(out, s.Contents.Marshal(nil))
 	out = sbe.AppendLP16(out, s.Span.Marshal(nil))

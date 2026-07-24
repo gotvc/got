@@ -31,11 +31,11 @@ func (wc *WC) DoWithStore(ctx context.Context, fn func(dst stores.RW) error) err
 }
 
 type stagingCtx struct {
-	Stage *staging.Tx
-	GotFS *gotfs.Machine
-	GotVC *gotcore.VCMach
-	Store stores.RW
-	FS    posixfs.FS
+	Stage    *staging.Tx
+	GotVC    *gotcore.VCMach
+	Store    stores.RW
+	FS       posixfs.FS
+	Exporter *porting.Exporter
 }
 
 func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error) error {
@@ -66,17 +66,13 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 	}
 	defer tx.Rollback()
 	cache := porting.NewCache(tx)
-	imp := porting.NewImporter(&cache, &fsmach, gotfs.RW{Data: stagingStore, Metadata: stagingStore}, paramHash)
 	exp := porting.NewExporter(&cache, &fsmach, fsys, filter)
 	vcmach := gotcore.GotVC(cfg)
 	if err := fn(stagingCtx{
 		Stage:    stagetx,
 		Store:    stagingStore,
-		GotFS:    &fsmach,
 		GotVC:    &vcmach,
 		FS:       fsys,
-		DB:       porting.NewCache(wc.db),
-		Importer: imp,
 		Exporter: exp,
 	}); err != nil {
 		return err
@@ -98,24 +94,23 @@ func (wc *WC) viewStaging(ctx context.Context, fn func(sctx stagingCtx) error) e
 	if err != nil {
 		return err
 	}
+	defer stagetx.Abort(ctx)
 	filtFS, filter, err := wc.getFilteredFS(ctx)
 	if err != nil {
 		return err
 	}
-	portdb := porting.NewCache(wc.db)
 	fsmach := gotcore.GotFS(info.Config)
-	exp := porting.NewExporter(&fsmach, portdb, filtFS, filter)
+	exp := porting.NewExporter(stagetx.Cache(), &fsmach, filtFS, filter)
 	stagingStore, err := wc.repo.BeginStagingTx(ctx, wc.id, false)
 	if err != nil {
 		return err
 	}
 	defer stagingStore.Abort(ctx)
 	return fn(stagingCtx{
-		GotFS:    &fsmach,
 		Stage:    stagetx,
 		Store:    stagingStore,
 		Exporter: exp,
-		DB:       portdb,
+		FS:       filtFS,
 	})
 }
 
@@ -141,42 +136,9 @@ func (wc *WC) modifyMark(ctx context.Context, fn func(gotcore.ModifyCtx) (*gotco
 // from version control
 func (wc *WC) Add(ctx context.Context, paths ...string) error {
 	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
-		stage := sctx.Stage
-		porter := sctx.Importer
 		for _, target := range paths {
-			it := porting.NewFSInfoIter(sctx.FS, target)
-			if err := streams.ForEach(ctx, it, func(ent porting.InfoEntry) error {
-				info := ent.Info
-				p := ent.Path
-				if info.Mode.IsDir() {
-					// TODO, this should set the mode on the directory
-					return nil
-				}
-				if err := stage.CheckConflict(ctx, p); err != nil {
-					return err
-				}
-				ctx, cf := metrics.Child(ctx, p)
-				defer cf()
-				exts, err := porter.ImportFile(ctx, sctx.FS, p)
-				if err != nil {
-					return err
-				}
-				stage.PutRoot(ctx, p)
-				return stage.PutExtents(ctx, p, exts)
-			}); err != nil {
+			if err := sctx.Stage.Add(ctx, sctx.FS, target); err != nil {
 				return err
-			}
-			if finfo, err := sctx.FS.Stat(target); err != nil && !posixfs.IsErrNotExist(err) {
-				return err
-			} else if err == nil && finfo.IsDir() {
-				if err := sctx.DB.PutInfo(ctx, FileInfo{
-					Path:       target,
-					Mode:       finfo.Mode(),
-					ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
-					Size:       finfo.Size(),
-				}); err != nil {
-					return err
-				}
 			}
 		}
 		return nil
@@ -188,30 +150,9 @@ func (wc *WC) Add(ctx context.Context, paths ...string) error {
 // Adding a directory will delete paths not in the working directory, and add paths in the working directory.
 func (wc *WC) Put(ctx context.Context, paths ...string) error {
 	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
-		stage := sctx.Stage
-		porter := sctx.Importer
 		for _, p := range paths {
-			ctx, cf := metrics.Child(ctx, p)
-			defer cf()
-			if err := stage.CheckConflict(ctx, p); err != nil {
+			if err := sctx.Stage.Put(ctx, sctx.FS, p); err != nil {
 				return err
-			}
-			ents, err := porter.ImportPath(ctx, sctx.FS, p)
-			if err != nil && !posixfs.IsErrNotExist(err) {
-				return err
-			}
-			if posixfs.IsErrNotExist(err) {
-				if err := stage.Delete(ctx, p); err != nil {
-					return err
-				}
-			} else {
-				root, err := sctx.GotFS.FromEntries(ctx, sctx.Store, slices.Values(ents))
-				if err != nil {
-					return err
-				}
-				if err := stage.PutRoot(ctx, p, root); err != nil {
-					return err
-				}
 			}
 		}
 		return nil
@@ -222,22 +163,13 @@ func (wc *WC) Put(ctx context.Context, paths ...string) error {
 func (wc *WC) Rm(ctx context.Context, paths ...string) error {
 	return wc.modifyStaging(ctx, func(sctx stagingCtx) error {
 		return wc.viewSnap(ctx, func(vctx *gotcore.ViewCtx) error {
-			stage := sctx.Stage
-
+			if vctx.Root == nil {
+				return fmt.Errorf("cannot delete from empty mark")
+			}
+			base := *vctx.Root
 			for _, target := range paths {
-				if _, err := sctx.FS.Stat(target); err != nil && !posixfs.IsErrNotExist(err) {
-					return err
-				} else if err == nil {
-					return fmt.Errorf("cannot stage rm, file exists at path %s", target)
-				}
-				if err := sctx.DB.Delete(ctx, target); err != nil {
-					return err
-				}
-
-				if vctx.Root == nil {
-					return fmt.Errorf("path %q not found", target)
-				}
-				if err := stage.Delete(ctx, target); err != nil {
+				ss := gotfs.RO{Metadata: sctx.Store, Data: sctx.Store}
+				if err := sctx.Stage.Delete(ctx, sctx.FS, ss, base.Payload.Snap, target); err != nil {
 					return err
 				}
 			}
@@ -312,10 +244,6 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 		if err != nil {
 			return err
 		}
-		fn, err := sctx.Stage.CreateDelta(ctx, gotfs.RW{Metadata: scratch, Data: scratch})
-		if err != nil {
-			return err
-		}
 		if err := wc.modifyMark(ctx, func(mctx gotcore.ModifyCtx) (*gotcore.Commit, error) {
 			// need to check if the config.Bases includes the current Commit, otherwise
 			// alert the user and abort.
@@ -330,15 +258,23 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 				}
 				bases = append(bases, comm)
 			}
-			ss := gotfs.RW{
-				Data:     stores.NewOverlay(mctx.Stores.FS.Data, scratch),
-				Metadata: stores.NewOverlay(mctx.Stores.FS.Metadata, scratch),
-			}
 			var fsinputs []gotfs.Root
 			for _, base := range bases {
 				fsinputs = append(fsinputs, base.Payload.Snap)
 			}
-			nextSnap, err := gotcore.Apply(ctx, &mctx.FS, ss, fn, fsinputs)
+
+			// Apply will turn this into a RW using overlay below.
+			ss := gotfs.RO{
+				Data:     mctx.Stores.FS.Data,
+				Metadata: mctx.Stores.FS.Metadata,
+			}
+			var nextFS gotfs.Root
+			var err error
+			if len(fsinputs) == 0 {
+				nextFS, err = sctx.Stage.InitialFS(ctx, ss)
+			} else {
+				nextFS, err = sctx.Stage.Apply(ctx, ss, fsinputs[0])
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -348,7 +284,7 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 				Committer:   params.Committer,
 				CommittedAt: params.CommittedAt,
 				Base:        bases,
-				Snap:        nextSnap,
+				Snap:        nextFS,
 				Notes: gotcore.CommitNotes{
 					Authors:    params.Authors,
 					AuthoredAt: params.AuthoredAt,
@@ -358,7 +294,7 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			if err != nil {
 				return nil, err
 			}
-			if err := mctx.Sync(ctx, gotcore.RO{VC: vcs, FS: ss.RO()}, next); err != nil {
+			if err := mctx.Sync(ctx, gotcore.RO{VC: vcs, FS: ss}, next); err != nil {
 				return nil, err
 			}
 			return &next, nil
@@ -387,10 +323,21 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 }
 
 type FileOperation struct {
-	Delete *staging.DeleteOp
+	Delete *DeleteOp
+	Create *CreateOp
+	Modify *ModifyOp
+}
 
-	Create *staging.PutOp
-	Modify *staging.PutOp
+type DeleteOp struct {
+	Path string
+}
+
+type CreateOp struct {
+	Path string
+}
+
+type ModifyOp struct {
+	Path string
 }
 
 func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOperation) error) error {
@@ -496,7 +443,11 @@ func (wc *WC) cleanupStagingBlobs(ctx context.Context) error {
 		return err
 	}
 	fsmach := gotfs.NewMachine(gotfs.Params{})
-	stagetx := staging.New(btx, &fsmach, tx, nil)
+	stagetx := staging.New(staging.Env{
+		Tx:    btx,
+		VolTx: tx,
+		GotFS: &fsmach,
+	})
 	if err := stagetx.ForEach(ctx, gotkv.Span{}, func(ent staging.Entry) error {
 		seg := ent.Segment
 		if !seg.IsZero() {

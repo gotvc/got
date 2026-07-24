@@ -134,7 +134,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) ([
 			return nil, err
 		}
 		defer f.Close()
-		exts, err := pr.gotfs.ExtentsFromReader(ctx, pr.ss, f)
+		exts, err := pr.gotfs.ExtentsFromReaders(ctx, pr.ss, []io.Reader{f})
 		if err != nil {
 			return nil, err
 		}

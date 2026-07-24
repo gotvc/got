@@ -295,27 +295,24 @@ func (wc *WC) SetActAs(idenName string) error {
 	})
 }
 
+// beginStageTx opens a transaction to the WC's local database.
+// paramHash must not be nil if modify == true.
 func (wc *WC) beginStageTx(ctx context.Context, paramHash *[32]byte, modify bool) (*staging.Tx, error) {
+	if paramHash == nil && modify {
+		return nil, fmt.Errorf("paramHash must be provided for modifying transaction.")
+	}
+
 	tx, err := wc.repo.BeginStagingTx(ctx, wc.id, modify)
 	if err != nil {
 		return nil, err
-	}
-	if paramHash == nil && modify {
-		return nil, fmt.Errorf("paramHash must be provided for modifying transaction.")
 	}
 	btx, err := wc.db.Begin(modify)
 	if err != nil {
 		return nil, err
 	}
-	fsys, filter, err := wc.getFilteredFS(ctx)
-	if err != nil {
-		return nil, err
-	}
 	return staging.New(staging.Env{
 		Tx:        btx,
-		VTx:       tx,
-		FS:        fsys,
-		Filter:    filter,
+		VolTx:     tx,
 		ParamHash: paramHash,
 	}), nil
 }
@@ -349,21 +346,23 @@ func (wc *WC) Export(ctx context.Context) error {
 		return nil
 	}
 	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: mname}, func(mtx *gotcore.MarkTx) error {
-		portDB := porting.NewCache(wc.db)
-		fsys, filter, err := wc.getFilteredFS(ctx)
-		if err != nil {
-			return err
-		}
-		var root gotfs.Root
-		if ok, err := mtx.LoadFS(ctx, &root); err != nil {
-			return err
-		} else if !ok {
-			logctx.Warnf(ctx, "mark does not have a commit, nothing to export")
-			return nil
-		}
-		exp := porting.NewExporter(mtx.GotFS(), portDB, fsys, filter)
-		ss := mtx.FSRO()
-		return exp.ExportPath(ctx, ss, root, "")
+		return wc.db.View(func(tx *bbolt.Tx) error {
+			fsys, filter, err := wc.getFilteredFS(ctx)
+			if err != nil {
+				return err
+			}
+			var root gotfs.Root
+			if ok, err := mtx.LoadFS(ctx, &root); err != nil {
+				return err
+			} else if !ok {
+				logctx.Warnf(ctx, "mark does not have a commit, nothing to export")
+				return nil
+			}
+			portDB := porting.NewCache(tx)
+			exp := porting.NewExporter(&portDB, mtx.GotFS(), fsys, filter)
+			ss := mtx.FSRO()
+			return exp.ExportPath(ctx, ss, root, "")
+		})
 	})
 }
 
@@ -373,21 +372,23 @@ func (wc *WC) Clobber(ctx context.Context, p string) error {
 		return nil
 	}
 	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: mname}, func(mtx *gotcore.MarkTx) error {
-		fsys, filter, err := wc.getFilteredFS(ctx)
-		if err != nil {
-			return err
-		}
-		cache := porting.NewCache(wc.d)
-		exp := porting.NewExporter(&cache, mtx.GotFS(), fsys, filter)
-		ss := mtx.FSRO()
-		var root gotfs.Root
-		if ok, err := mtx.LoadFS(ctx, &root); err != nil {
-			return err
-		} else if !ok {
-			logctx.Warnf(ctx, "mark has no commit, nothing to clobber")
-			return nil
-		}
-		return exp.Clobber(ctx, ss, root, p)
+		return wc.db.View(func(tx *bbolt.Tx) error {
+			fsys, filter, err := wc.getFilteredFS(ctx)
+			if err != nil {
+				return err
+			}
+			cache := porting.NewCache(tx)
+			exp := porting.NewExporter(&cache, mtx.GotFS(), fsys, filter)
+			ss := mtx.FSRO()
+			var root gotfs.Root
+			if ok, err := mtx.LoadFS(ctx, &root); err != nil {
+				return err
+			} else if !ok {
+				logctx.Warnf(ctx, "mark has no commit, nothing to clobber")
+				return nil
+			}
+			return exp.Clobber(ctx, ss, root, p)
+		})
 	})
 }
 
