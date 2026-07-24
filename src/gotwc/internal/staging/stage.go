@@ -8,11 +8,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
 	"path"
 	"strings"
 
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/posixfs"
+	"go.brendoncarroll.net/tai64"
 	"go.etcd.io/bbolt"
 
 	"github.com/gotvc/got/src/gotfs"
@@ -66,8 +68,11 @@ type Env struct {
 	Tx *bbolt.Tx
 	// VolTx is a transaction on the staging Volume.
 	// All filesystem content is written here.
-	VolTx     volumes.Tx
-	GotFS     *gotfs.Machine
+	VolTx volumes.Tx
+	// GotFS is the gotfs machine to use for manipulating files.
+	GotFS *gotfs.Machine
+	// ParamHash if not-nil is the hash of the parameters that affect how files are converted to blobs
+	// if nil, then the stage is read-only.
 	ParamHash *[32]byte
 }
 
@@ -93,16 +98,31 @@ func (tx *Tx) Cache() *porting.Cache {
 	return tx.c
 }
 
-func (tx *Tx) setup() error {
+// setup ensures that the needed buckets exist and that the paramHash matches the staging volume.
+func (tx *Tx) setup(ctx context.Context) error {
 	if _, err := tx.env.Tx.CreateBucketIfNotExists(bucketStage); err != nil {
 		return err
 	}
-	return nil
+	var root []byte
+	if err := tx.env.VolTx.Load(ctx, &root); err != nil {
+		return err
+	}
+	if tx.env.ParamHash == nil {
+		return nil
+	}
+	if len(root) > 0 {
+		var paramHash [32]byte
+		copy(paramHash[:], root)
+		if paramHash != *tx.env.ParamHash {
+			return fmt.Errorf("staging volume has wrong parameters %x vs. %x", paramHash, *tx.env.ParamHash)
+		}
+	}
+	return tx.env.VolTx.Save(ctx, tx.env.ParamHash[:])
 }
 
 // put adds a path to the stage.
 func (tx *Tx) put(ctx context.Context, p string) error {
-	if err := tx.setup(); err != nil {
+	if err := tx.setup(ctx); err != nil {
 		return err
 	}
 	p = cleanPath(p)
@@ -181,7 +201,7 @@ func (tx *Tx) Delete(ctx context.Context, fsys posixfs.FS, ss gotfs.RO, base got
 
 // Discard removes any changes staged for p
 func (tx *Tx) Discard(ctx context.Context, p string) error {
-	if err := tx.setup(); err != nil {
+	if err := tx.setup(ctx); err != nil {
 		return err
 	}
 	p = cleanPath(p)
@@ -191,9 +211,10 @@ func (tx *Tx) Discard(ctx context.Context, p string) error {
 	}
 	// Also discard any changes to subpaths
 	span := gotkv.PrefixSpan([]byte(p))
+	prefix := []byte(p + "/")
 	c := b.Cursor()
 	for k, _ := c.Seek([]byte(p)); k != nil; k, _ = c.Next() {
-		if !bytes.HasPrefix(k, []byte(p+"/")) || !bytes.Equal(k, []byte(p)) {
+		if !bytes.HasPrefix(k, prefix) {
 			break
 		}
 		if err := b.Delete(k); err != nil {
@@ -279,10 +300,13 @@ func (tx *Tx) Clear(ctx context.Context) error {
 	if err := tx.env.Tx.DeleteBucket(bucketStage); err != nil {
 		return err
 	}
-	_, err := tx.env.Tx.CreateBucket(bucketStage)
-	return err
+	if _, err := tx.env.Tx.CreateBucket(bucketStage); err != nil {
+		return err
+	}
+	return nil
 }
 
+// IsEmpty returns true if the stage is empty
 func (tx *Tx) IsEmpty(ctx context.Context) (bool, error) {
 	b := tx.env.Tx.Bucket(bucketStage)
 	return b.Inspect().KeyN > 0, nil
@@ -333,6 +357,66 @@ func (tx *Tx) Apply(ctx context.Context, ss gotfs.RO, base gotfs.Root) (gotfs.Ro
 		return gotfs.Root{}, err
 	}
 	return fsvmmach.Apply(ctx, s2, fn, []gotfsvm.Input{{Stores: s2.RO(), Root: base}})
+}
+
+type FileOperation struct {
+	// Delete means the file was removed.
+	Delete *DeleteOp
+	Create *CreateOp
+	Modify *ModifyOp
+}
+
+type DeleteOp struct{}
+
+type CreateOp struct {
+	// Mode fs.FileMode
+}
+
+type ModifyOp struct {
+	// Mode fs.FileMode
+}
+
+// ForEachStaged lists all of the staged changes.
+// if root is zero, then it will not be compared against.
+func (tx *Tx) ForEachStaged(ctx context.Context, ss gotfs.RO, root gotfs.Root, fn func(p string, op FileOperation) error) error {
+	return tx.ForEach(ctx, gotkv.Span{}, func(ent Entry) error {
+		var op FileOperation
+		switch {
+		case ent.Segment.IsZero():
+			// it's a delete
+			op.Delete = &DeleteOp{}
+		default:
+			md, err := tx.env.GotFS.GetInfo(ctx, ss.Metadata, root, ent.Path)
+			if err != nil && !posixfs.IsErrNotExist(err) {
+				return err
+			}
+			if md == nil {
+				op.Create = &CreateOp{}
+			} else {
+				op.Modify = &ModifyOp{}
+			}
+		}
+		return fn(ent.Path, op)
+	})
+}
+
+// DirtyFile is a file that has changed in the filesystem, but is not in the stage.
+type DirtyFile struct {
+	Path string
+
+	// If true than the file exists in the working copy.
+	Exists     bool
+	Mode       fs.FileMode
+	ModifiedAt tai64.TAI64N
+}
+
+// ForEachDirty lists all of the files which are dirty.
+func (tx *Tx) ForEachDirty(ctx context.Context, fsys posixfs.FS, ss gotfs.RO, base gotfs.Root, fn func(df DirtyFile) error) error {
+	if base.Ref.IsZero() {
+
+	}
+	// diff with base.
+	return nil
 }
 
 func cleanPath(p string) string {

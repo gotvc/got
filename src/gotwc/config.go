@@ -19,6 +19,7 @@ type Config struct {
 	// This volume will have a link to the namespace volume.
 	Repo blobcache.OID `json:"repo"`
 
+	// ID is the ID of the working copy, it is used to access the staging volume.
 	ID gotrepo.WorkingCopyID `json:"id"`
 	// SaveTo is the name of the Mark to update when a new commit is made.
 	// When it is the empty string, no marks will be updated on commit.
@@ -26,7 +27,7 @@ type Config struct {
 	// Base are refs to the previous Commits
 	// They will be the parents when the transaction is committed.
 	Base []gdat.Ref `json:"base"`
-
+	// ActAs is the name of the identity to commit as.
 	ActAs string `json:"act_as"`
 	// Tracking is a list of tracked prefixes
 	Tracking []string `json:"tracking"`

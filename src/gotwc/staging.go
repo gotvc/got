@@ -3,13 +3,11 @@ package gotwc
 import (
 	"context"
 	"fmt"
-	"io/fs"
 	"slices"
 
 	"github.com/gotvc/got/src/gdat"
 	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/gotrepo"
-	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/stdctx/logctx"
 	"go.brendoncarroll.net/tai64"
@@ -32,6 +30,7 @@ func (wc *WC) DoWithStore(ctx context.Context, fn func(dst stores.RW) error) err
 
 type stagingCtx struct {
 	Stage    *staging.Tx
+	GotFS    *gotcore.FSMach
 	GotVC    *gotcore.VCMach
 	Store    stores.RW
 	FS       posixfs.FS
@@ -72,6 +71,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		Stage:    stagetx,
 		Store:    stagingStore,
 		GotVC:    &vcmach,
+		GotFS:    &fsmach,
 		FS:       fsys,
 		Exporter: exp,
 	}); err != nil {
@@ -167,8 +167,8 @@ func (wc *WC) Rm(ctx context.Context, paths ...string) error {
 				return fmt.Errorf("cannot delete from empty mark")
 			}
 			base := *vctx.Root
+			ss := gotfs.RO{Metadata: sctx.Store, Data: sctx.Store}
 			for _, target := range paths {
-				ss := gotfs.RO{Metadata: sctx.Store, Data: sctx.Store}
 				if err := sctx.Stage.Delete(ctx, sctx.FS, ss, base.Payload.Snap, target); err != nil {
 					return err
 				}
@@ -322,111 +322,49 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 	})
 }
 
-type FileOperation struct {
-	Delete *DeleteOp
-	Create *CreateOp
-	Modify *ModifyOp
-}
-
-type DeleteOp struct {
-	Path string
-}
-
-type CreateOp struct {
-	Path string
-}
-
-type ModifyOp struct {
-	Path string
-}
+type (
+	FileOperation = staging.FileOperation
+	CreateOp      = staging.CreateOp
+	ModifyOp      = staging.ModifyOp
+	DeleteOp      = staging.DeleteOp
+)
 
 func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOperation) error) error {
 	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
 		return wc.viewMark(ctx, func(mt *gotcore.MarkTx) error {
 			// NewEmpty makes a Post which will fail because this is a read-only transaction.
-			s := stores.NewOverlay(mt.FSRO().Metadata, stores.NewMem())
 			var root gotfs.Root
 			if ok, err := mt.LoadFS(ctx, &root); err != nil {
 				return err
 			} else if !ok {
-				root2, err := sctx.GotFS.NewEmpty(ctx, s, 0o755)
-				if err != nil {
-					return err
-				}
-				root = root2
+				root = gotfs.Root{} // ensure it is zero'd
 			}
-			stage := sctx.Stage
-
-			return stage.ForEach(ctx, gotkv.Span{}, func(ent staging.Entry) error {
-				sop := ent.Op
-				var op FileOperation
-				switch {
-				case sop.Delete != nil:
-					op.Delete = sop.Delete
-				case sop.Put != nil:
-					md, err := sctx.GotFS.GetInfo(ctx, s, root, ent.Path)
-					if err != nil && !posixfs.IsErrNotExist(err) {
-						return err
-					}
-					if md == nil {
-						op.Create = sop.Put
-					} else {
-						op.Modify = sop.Put
-					}
-				}
-				return fn(ent.Path, op)
+			return sctx.Stage.ForEachStaged(ctx, mt.FSRO(), root, func(p string, op FileOperation) error {
+				return nil
 			})
 		})
 	})
 }
 
-// DirtyFile is a file that has changed in the working copy.
-type DirtyFile struct {
-	Path string
-
-	// If true than the file exists in the working copy.
-	Exists     bool
-	Mode       fs.FileMode
-	ModifiedAt tai64.TAI64N
-}
-
-type FileInfo = porting.FileInfo
+type (
+	FileInfo  = porting.FileInfo
+	DirtyFile = staging.DirtyFile
+)
 
 // ForEachDirty lists all the files which are not in either:
 //  1. the staging area
 //  2. the active branch head
 func (wc *WC) ForEachDirty(ctx context.Context, fn func(fi DirtyFile) error) error {
 	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
-		stage := sctx.Stage
-		fsys, _, err := wc.getFilteredFS(ctx)
-		if err != nil {
-			return err
-		}
-		spans, err := wc.ListSpans(ctx)
-		if err != nil {
-			return err
-		}
-		uk := wc.newUnknownIterator(sctx.DB, fsys, spans)
-		return streams.ForEach(ctx, uk, func(ukp unknownFile) error {
-			p := ukp.Path()
-			// filter staging
-			var seg gotfs.Segment
-			if found, err := stage.Get(ctx, p, &seg); err != nil {
+		ss := gotfs.RO{Metadata: sctx.Store, Data: sctx.Store}
+		return wc.viewMark(ctx, func(mt *gotcore.MarkTx) error {
+			var root gotfs.Root
+			if ok, err := mt.LoadFS(ctx, &root); err != nil {
 				return err
-			} else if found {
-				if seg.IsDelete() && !ukp.Current.Ok {
-					// File is gone, and staging deleted it, skip.
-					return nil
-				}
-				// If it is a Put operation, then it is definitely different,
-				// otherwise it would be in the database, and would have been filtered by the matching join.
+			} else if !ok {
+				root = gotfs.Root{}
 			}
-			return fn(DirtyFile{
-				Path:       p,
-				Exists:     ukp.Current.Ok,
-				Mode:       ukp.Current.X.Info.Mode,
-				ModifiedAt: ukp.Current.X.Info.ModifiedAt,
-			})
+			return sctx.Stage.ForEachDirty(ctx, sctx.FS, ss, root, fn)
 		})
 	})
 }
