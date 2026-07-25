@@ -271,7 +271,7 @@ func (tx *Tx) Add(ctx context.Context, fsys posixfs.FS, p string) error {
 		}
 		ctx, cf := metrics.Child(ctx, p)
 		defer cf()
-		ents, err := tx.imp.ImportPath(ctx, fsys, p)
+		ents, err := tx.buildStageEntriesFromFSPath(ctx, fsys, p)
 		if err != nil {
 			return err
 		}
@@ -282,11 +282,93 @@ func (tx *Tx) Add(ctx context.Context, fsys posixfs.FS, p string) error {
 // Put replaces all files at or beneath p.
 func (tx *Tx) Put(ctx context.Context, fsys posixfs.FS, p string) error {
 	p = cleanPath(p)
-	ents, err := tx.imp.ImportPath(ctx, fsys, p)
+	if _, err := fsys.Stat(p); err != nil {
+		if posixfs.IsErrNotExist(err) {
+			return tx.stagePath(ctx, p, nil)
+		}
+		return err
+	}
+	ents, err := tx.buildStageEntriesFromFSPath(ctx, fsys, p)
 	if err != nil {
 		return err
 	}
 	return tx.stagePath(ctx, p, ents)
+}
+
+func (tx *Tx) buildStageEntriesFromFSPath(ctx context.Context, fsys posixfs.FS, p string) ([]gotfs.Entry, error) {
+	ss := gotfs.RW{Metadata: tx.env.VolTx, Data: tx.env.VolTx}
+	root, err := tx.env.GotFS.NewEmpty(ctx, ss.Metadata, 0o755)
+	if err != nil {
+		return nil, err
+	}
+	var addPath func(string) error
+	addPath = func(p2 string) error {
+		finfo, err := fsys.Stat(p2)
+		if err != nil {
+			return err
+		}
+		if finfo.IsDir() {
+			root, err = tx.env.GotFS.MkdirAll(ctx, ss.Metadata, root, p2)
+			if err != nil {
+				return err
+			}
+			dirents, err := posixfs.ReadDir(fsys, p2)
+			if err != nil {
+				return err
+			}
+			sort.Slice(dirents, func(i, j int) bool {
+				return dirents[i].Name < dirents[j].Name
+			})
+			for _, dirent := range dirents {
+				if err := addPath(path.Join(p2, dirent.Name)); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		if !finfo.Mode().IsRegular() {
+			return fmt.Errorf("unsupported file mode %v at %q", finfo.Mode(), p2)
+		}
+		parent := path.Dir(p2)
+		if parent != "." && parent != "" {
+			root, err = tx.env.GotFS.MkdirAll(ctx, ss.Metadata, root, parent)
+			if err != nil {
+				return err
+			}
+		}
+		f, err := fsys.OpenFile(p2, posixfs.O_RDONLY, 0)
+		if err != nil {
+			return err
+		}
+		defer f.Close()
+		root, err = tx.env.GotFS.PutFile(ctx, ss, root, p2, f)
+		return err
+	}
+	if err := addPath(p); err != nil {
+		return nil, err
+	}
+	it := tx.env.GotFS.NewIterator(tx.env.VolTx, root, gotfs.SpanForPath(p))
+	var out []gotfs.Entry
+	for {
+		var ent gotfs.Entry
+		if err := streams.NextUnit(ctx, &it, &ent); err != nil {
+			if streams.IsEOS(err) {
+				break
+			}
+			return nil, err
+		}
+		p2 := ent.Path()
+		if ent.Key.IsInfo() {
+			k, err := gotfs.NewInfoKey(p2)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, gotfs.Entry{Key: k, Value: gotfs.Value{Info: ent.Info}})
+		} else {
+			out = append(out, gotfs.Entry{Key: gotfs.NewExtentKey(p2, ent.EndAt()), Value: gotfs.Value{Extent: ent.Extent}})
+		}
+	}
+	return out, nil
 }
 
 // Delete removes all files at or beneath p in base.
@@ -480,9 +562,30 @@ func (tx *Tx) Apply(ctx context.Context, ss gotfs.RO, base gotfs.Root) (gotfs.Ro
 	sort.Slice(changes, func(i, j int) bool {
 		return bytes.Compare(changes[i].Span.Begin, changes[j].Span.Begin) < 0
 	})
+	parentSet := map[string]struct{}{}
+	var parents []string
+	for _, change := range changes {
+		var k gotfs.Key
+		if err := k.Unmarshal(change.Span.Begin); err != nil {
+			continue
+		}
+		parent := path.Dir(k.Path())
+		if parent == "." || parent == "" {
+			continue
+		}
+		if _, exists := parentSet[parent]; exists {
+			continue
+		}
+		parentSet[parent] = struct{}{}
+		parents = append(parents, parent)
+	}
+	sort.Strings(parents)
 	fn, err := fsvmmach.NewFunction(ctx, s2.Metadata, func(fb *gotfsvm.FnBuilder) (gotfsvm.Expr[gotfs.Root], error) {
-		base := fb.Input(0)
-		return fb.Promote(fb.ChangesOnBase(base, changes)), nil
+		baseExpr := fb.Input(0)
+		for _, p := range parents {
+			baseExpr = fb.MkdirAll(baseExpr, p, 0o755)
+		}
+		return fb.Promote(fb.ChangesOnBase(baseExpr, changes)), nil
 	})
 	if err != nil {
 		return gotfs.Root{}, err

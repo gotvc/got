@@ -301,6 +301,15 @@ func (wc *WC) beginStageTx(ctx context.Context, paramHash *[32]byte, modify bool
 	if paramHash == nil && modify {
 		return nil, fmt.Errorf("paramHash must be provided for modifying transaction.")
 	}
+	branchName, err := wc.GetSaveTo()
+	if err != nil {
+		return nil, err
+	}
+	info, err := wc.repo.InspectMark(ctx, gotrepo.FQM{Name: branchName})
+	if err != nil {
+		return nil, err
+	}
+	fsmach := gotcore.GotFS(info.Config)
 
 	tx, err := wc.repo.BeginStagingTx(ctx, wc.id, modify)
 	if err != nil {
@@ -313,6 +322,7 @@ func (wc *WC) beginStageTx(ctx context.Context, paramHash *[32]byte, modify bool
 	return staging.New(staging.Env{
 		Tx:        btx,
 		VolTx:     tx,
+		GotFS:     &fsmach,
 		ParamHash: paramHash,
 	}), nil
 }

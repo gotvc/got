@@ -23,6 +23,7 @@ type Exporter struct {
 func NewExporter(c *Cache, gotfs *gotfs.Machine, fsx posixfs.FS, filter func(p string) bool) *Exporter {
 	return &Exporter{
 		gotfs:  gotfs,
+		db:     c,
 		fsx:    fsx,
 		filter: filter,
 	}

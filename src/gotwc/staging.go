@@ -46,7 +46,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 	if err != nil {
 		return err
 	}
-	fsys, filter, err := wc.getFilteredFS(ctx)
+	fsys, _, err := wc.getFilteredFS(ctx)
 	if err != nil {
 		return err
 	}
@@ -59,13 +59,6 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 	}
 	defer stagetx.Abort(ctx)
 	stagingStore := stagetx.Store()
-	tx, err := wc.db.Begin(true)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	cache := porting.NewCache(tx)
-	exp := porting.NewExporter(&cache, &fsmach, fsys, filter)
 	vcmach := gotcore.GotVC(cfg)
 	if err := fn(stagingCtx{
 		Stage:    stagetx,
@@ -73,7 +66,7 @@ func (wc *WC) modifyStaging(ctx context.Context, fn func(sctx stagingCtx) error)
 		GotVC:    &vcmach,
 		GotFS:    &fsmach,
 		FS:       fsys,
-		Exporter: exp,
+		Exporter: nil,
 	}); err != nil {
 		return err
 	}
@@ -294,7 +287,11 @@ func (wc *WC) Commit(ctx context.Context, params CommitParams) error {
 			if err != nil {
 				return nil, err
 			}
-			if err := mctx.Sync(ctx, gotcore.RO{VC: vcs, FS: ss}, next); err != nil {
+			syncFS := gotfs.RO{
+				Data:     stores.NewOverlay(ss.Data, scratch),
+				Metadata: stores.NewOverlay(ss.Metadata, scratch),
+			}
+			if err := mctx.Sync(ctx, gotcore.RO{VC: vcs, FS: syncFS}, next); err != nil {
 				return nil, err
 			}
 			return &next, nil
@@ -332,16 +329,14 @@ type (
 func (wc *WC) ForEachStaging(ctx context.Context, fn func(p string, op FileOperation) error) error {
 	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
 		return wc.viewMark(ctx, func(mt *gotcore.MarkTx) error {
-			// NewEmpty makes a Post which will fail because this is a read-only transaction.
-			var root gotfs.Root
-			if ok, err := mt.LoadFS(ctx, &root); err != nil {
+			var loaded gotfs.Root
+			var root *gotfs.Root
+			if ok, err := mt.LoadFS(ctx, &loaded); err != nil {
 				return err
-			} else if !ok {
-				root = gotfs.Root{} // ensure it is zero'd
+			} else if ok {
+				root = &loaded
 			}
-			return sctx.Stage.ForEachStaged(ctx, mt.FSRO(), root, func(p string, op FileOperation) error {
-				return nil
-			})
+			return sctx.Stage.ForEachStaged(ctx, mt.FSRO(), root, fn)
 		})
 	})
 }
