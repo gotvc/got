@@ -76,6 +76,15 @@ var statusCmd = star.Command{
 		}); err != nil {
 			return err
 		}
+		if _, err := fmt.Fprintf(bufw, "UNTRACKED:\n"); err != nil {
+			return err
+		}
+		if err := wc.ForEachUntracked(ctx, func(p string) error {
+			_, err := fmt.Fprintf(bufw, "  ? %s\n", p)
+			return err
+		}); err != nil {
+			return err
+		}
 		return bufw.Flush()
 	},
 }

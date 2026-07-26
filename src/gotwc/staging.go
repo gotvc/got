@@ -364,6 +364,23 @@ func (wc *WC) ForEachDirty(ctx context.Context, fn func(fi DirtyFile) error) err
 	})
 }
 
+// ForEachUntracked lists all untracked files in the working directory.
+func (wc *WC) ForEachUntracked(ctx context.Context, fn func(p string) error) error {
+	return wc.viewStaging(ctx, func(sctx stagingCtx) error {
+		ss := gotfs.RO{Metadata: sctx.Store, Data: sctx.Store}
+		return wc.viewMark(ctx, func(mt *gotcore.MarkTx) error {
+			var root gotfs.Root
+			var rootPtr *gotfs.Root
+			if ok, err := mt.LoadFS(ctx, &root); err != nil {
+				return err
+			} else if ok {
+				rootPtr = &root
+			}
+			return sctx.Stage.ForEachUntracked(ctx, sctx.FS, ss, rootPtr, fn)
+		})
+	})
+}
+
 // cleanupStagingBlobs removes blobs from staging areas which do not have ops that reference them.
 func (wc *WC) cleanupStagingBlobs(ctx context.Context) error {
 	tx, err := wc.repo.GCStage(ctx, wc.id)
