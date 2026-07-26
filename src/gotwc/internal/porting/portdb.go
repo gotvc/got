@@ -176,13 +176,13 @@ func (c *Cache) Delete(ctx context.Context, p string) error {
 			return err
 		}
 	}
-	if err := c.SetOwned(ctx, p, false); err != nil {
+	if err := c.SetOwned(ctx, p, nil); err != nil {
 		return err
 	}
 	return invalidateExtents(c.tx, p)
 }
 
-func (c *Cache) SetOwned(ctx context.Context, p string, yes bool) error {
+func (c *Cache) SetOwned(ctx context.Context, p string, info *FileInfo) error {
 	p = CleanPath(p)
 	if err := requireNonEmptyPath(p); err != nil {
 		return err
@@ -191,13 +191,13 @@ func (c *Cache) SetOwned(ctx context.Context, p string, yes bool) error {
 		return err
 	}
 	b := c.tx.Bucket([]byte(bucketOwned))
-	if yes {
-		return b.Put([]byte(p), []byte{1})
+	if info == nil {
+		return b.Delete([]byte(p))
 	}
-	return b.Delete([]byte(p))
+	return b.Put([]byte(p), info.Marshal(nil))
 }
 
-func (c *Cache) IsOwned(ctx context.Context, p string) (bool, error) {
+func (c *Cache) IsOwned(ctx context.Context, p string, actual FileInfo) (bool, error) {
 	p = CleanPath(p)
 	if err := requireNonEmptyPath(p); err != nil {
 		return false, err
@@ -206,7 +206,18 @@ func (c *Cache) IsOwned(ctx context.Context, p string) (bool, error) {
 	if b == nil {
 		return false, nil
 	}
-	return b.Get([]byte(p)) != nil, nil
+	data := b.Get([]byte(p))
+	if len(data) == 0 {
+		return false, nil
+	}
+	var ownedInfo FileInfo
+	if err := ownedInfo.Unmarshal(data); err != nil {
+		return false, err
+	}
+	if ownedInfo.ModifiedAt != actual.ModifiedAt {
+		return false, nil
+	}
+	return true, nil
 }
 
 func (c *Cache) DeleteOwnedPrefix(ctx context.Context, p string) error {

@@ -1,10 +1,8 @@
 package porting
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io"
 	"os"
 	"path"
 
@@ -41,7 +39,7 @@ func (pr *Exporter) ExportPath(ctx context.Context, ss gotfs.RO, root gotfs.Root
 	if gfinfo.Mode.IsDir() {
 		return pr.exportDir(ctx, ms, ds, root, p, gfinfo)
 	} else {
-		return pr.exportFile(ctx, ms, ds, root, p, gfinfo)
+		return pr.exportFile(ctx, ms, ds, root, p)
 	}
 }
 
@@ -54,7 +52,7 @@ func (pr *Exporter) ExportFile(ctx context.Context, ms, ds stores.RO, root gotfs
 	if !mode.IsRegular() {
 		return fmt.Errorf("ExportFile called for non-regular file %q: %v", p, mode)
 	}
-	return pr.exportFile(ctx, ms, ds, root, p, md)
+	return pr.exportFile(ctx, ms, ds, root, p)
 }
 
 func (pr *Exporter) Clobber(ctx context.Context, ss gotfs.RO, root gotfs.Root, p string) error {
@@ -80,7 +78,7 @@ func (pr *Exporter) Clobber(ctx context.Context, ss gotfs.RO, root gotfs.Root, p
 	if _, err := pr.db.UpdateInfo(ctx, p, info); err != nil {
 		return err
 	}
-	if err := pr.db.SetOwned(ctx, p, true); err != nil {
+	if err := pr.db.SetOwned(ctx, p, &info); err != nil {
 		return err
 	}
 	return nil
@@ -141,28 +139,20 @@ func (pr *Exporter) exportDir(ctx context.Context, ms, ds stores.RO, root gotfs.
 }
 
 // exportFile exports a known file in root
-func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.RO, root gotfs.Root, p string, ginfo *gotfs.Info) error {
+func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.RO, root gotfs.Root, p string) error {
 	// check if a file exists
 	finfo, err := stat(pr.fsx, p)
 	if err != nil && !posixfs.IsErrNotExist(err) {
 		return err
 	} else if err == nil {
-		var dbinfo FileInfo
-		found, err := pr.db.GetInfo(ctx, p, &dbinfo)
+		owned, err := pr.db.IsOwned(ctx, p, finfo)
 		if err != nil {
 			return err
 		}
-		trackedClean := found && !HasChanged(&dbinfo, &finfo)
-		if !trackedClean {
-			matches, err := pr.matchesTargetFile(ctx, ms, ds, root, p, ginfo, finfo)
-			if err != nil {
-				return err
-			}
-			if !matches {
-				return ErrWouldClobber{
-					Op:   "write",
-					Path: p,
-				}
+		if !owned {
+			return ErrWouldClobber{
+				Op:   "write",
+				Path: p,
 			}
 		}
 	}
@@ -189,85 +179,28 @@ func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.RO, root gotfs
 	if _, err := pr.db.UpdateInfo(ctx, p, nextInfo); err != nil {
 		return err
 	}
-	if err := pr.db.SetOwned(ctx, p, true); err != nil {
+	if err := pr.db.SetOwned(ctx, p, &nextInfo); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (pr *Exporter) matchesTargetFile(ctx context.Context, ms, ds stores.RO, root gotfs.Root, p string, ginfo *gotfs.Info, finfo FileInfo) (bool, error) {
-	if !finfo.Mode.IsRegular() {
-		return false, nil
-	}
-	if finfo.Mode.Perm() != ginfo.Mode.Perm() {
-		return false, nil
-	}
-	targetSize, err := pr.gotfs.SizeOfFile(ctx, ds, root, p)
-	if err != nil {
-		return false, err
-	}
-	if uint64(finfo.Size) != targetSize {
-		return false, nil
-	}
-	left, err := pr.fsx.OpenFile(p, os.O_RDONLY, 0)
-	if err != nil {
-		return false, err
-	}
-	defer left.Close()
-	right, err := pr.gotfs.NewReader(ctx, gotfs.RO{Metadata: ms, Data: ds}, root, p)
-	if err != nil {
-		return false, err
-	}
-	bufA := make([]byte, 32*1024)
-	bufB := make([]byte, 32*1024)
-	for {
-		nA, errA := io.ReadFull(left, bufA)
-		nB, errB := io.ReadFull(right, bufB)
-		if nA != nB || !bytes.Equal(bufA[:nA], bufB[:nB]) {
-			return false, nil
-		}
-		if errA == io.EOF || errA == io.ErrUnexpectedEOF {
-			if errB == io.EOF || errB == io.ErrUnexpectedEOF {
-				return true, nil
-			}
-			return false, nil
-		}
-		if errB == io.EOF || errB == io.ErrUnexpectedEOF {
-			return false, nil
-		}
-		if errA != nil {
-			return false, errA
-		}
-		if errB != nil {
-			return false, errB
-		}
-	}
-}
-
 func (pr *Exporter) deleteFile(ctx context.Context, p string) error {
-	var dbinfo FileInfo
-	if found, err := pr.db.GetInfo(ctx, p, &dbinfo); err != nil {
+	finfo, err := stat(pr.fsx, p)
+	if err != nil {
 		return err
-	} else if !found {
+	}
+	owned, err := pr.db.IsOwned(ctx, p, finfo)
+	if err != nil {
+		return err
+	}
+	if !owned {
 		return ErrWouldClobber{Op: "delete", Path: p}
-	} else if found {
-		// We know about this file, we can only delete it if
-		// it hasn't been changed since we last checked.
-		finfo, err := stat(pr.fsx, p)
-		if err != nil {
-			return err
-		}
-		if HasChanged(&finfo, &dbinfo) {
-			return ErrWouldClobber{Op: "delete", Path: p}
-		}
 	}
 	if err := pr.fsx.Remove(p); err != nil {
 		return err
 	}
-	if err := pr.db.Delete(ctx, p); err != nil {
-		return err
-	}
-	return pr.db.SetOwned(ctx, p, false)
+	return pr.db.Delete(ctx, p)
 }
 
 func (pr *Exporter) deleteDir(ctx context.Context, p string) error {

@@ -269,6 +269,12 @@ func (tx *Tx) Add(ctx context.Context, fsys posixfs.FS, p string) error {
 			// TODO, this should set the mode on the directory
 			return nil
 		}
+		if _, err := tx.c.UpdateInfo(ctx, p, info); err != nil {
+			return err
+		}
+		if err := tx.c.SetOwned(ctx, p, &info); err != nil {
+			return err
+		}
 		if err := tx.CheckConflict(ctx, p); err != nil {
 			return err
 		}
@@ -301,6 +307,9 @@ func (tx *Tx) Put(ctx context.Context, fsys posixfs.FS, p string) error {
 		if _, err := tx.c.UpdateInfo(ctx, p, finfo); err != nil {
 			return err
 		}
+		if err := tx.c.SetOwned(ctx, p, &finfo); err != nil {
+			return err
+		}
 		ents, err := tx.buildStageEntriesFromFSPath(ctx, fsys, p)
 		if err != nil {
 			return err
@@ -315,6 +324,9 @@ func (tx *Tx) Put(ctx context.Context, fsys posixfs.FS, p string) error {
 				return nil
 			}
 			if _, err := tx.c.UpdateInfo(ctx, ent.Path, ent.Info); err != nil {
+				return err
+			}
+			if err := tx.c.SetOwned(ctx, ent.Path, &ent.Info); err != nil {
 				return err
 			}
 			ents, err := tx.buildStageEntriesFromFSPath(ctx, fsys, ent.Path)
