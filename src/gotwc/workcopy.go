@@ -356,7 +356,7 @@ func (wc *WC) Export(ctx context.Context) error {
 		return nil
 	}
 	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: mname}, func(mtx *gotcore.MarkTx) error {
-		return wc.db.View(func(tx *bbolt.Tx) error {
+		return wc.db.Update(func(tx *bbolt.Tx) error {
 			fsys, filter, err := wc.getFilteredFS(ctx)
 			if err != nil {
 				return err
@@ -382,7 +382,7 @@ func (wc *WC) Clobber(ctx context.Context, p string) error {
 		return nil
 	}
 	return wc.repo.ViewMark(ctx, gotrepo.FQM{Name: mname}, func(mtx *gotcore.MarkTx) error {
-		return wc.db.View(func(tx *bbolt.Tx) error {
+		return wc.db.Update(func(tx *bbolt.Tx) error {
 			fsys, filter, err := wc.getFilteredFS(ctx)
 			if err != nil {
 				return err

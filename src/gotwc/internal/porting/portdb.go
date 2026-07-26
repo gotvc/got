@@ -79,6 +79,13 @@ type Cache struct {
 	doneSetup atomic.Bool
 }
 
+func requireNonEmptyPath(p string) error {
+	if p == "" {
+		return fmt.Errorf("path cannot be empty")
+	}
+	return nil
+}
+
 func NewCache(tx *bbolt.Tx) Cache {
 	return Cache{tx: tx}
 }
@@ -86,13 +93,14 @@ func NewCache(tx *bbolt.Tx) Cache {
 const (
 	bucketInfos   = "infos"
 	bucketExtents = "extents"
+	bucketOwned   = "owned"
 )
 
 func (c *Cache) ensureBuckets(tx *bbolt.Tx) error {
 	if done := c.doneSetup.Load(); done {
 		return nil
 	}
-	for _, name := range []string{bucketInfos, bucketExtents} {
+	for _, name := range []string{bucketInfos, bucketExtents, bucketOwned} {
 		if _, err := tx.CreateBucketIfNotExists([]byte(name)); err != nil {
 			return err
 		}
@@ -106,6 +114,9 @@ func (c *Cache) ensureBuckets(tx *bbolt.Tx) error {
 // It returns true if the path has changed, and will require reimport.
 func (c *Cache) UpdateInfo(ctx context.Context, p string, info FileInfo) (bool, error) {
 	p = CleanPath(p)
+	if err := requireNonEmptyPath(p); err != nil {
+		return false, err
+	}
 	var hasChanged bool
 	if err := c.ensureBuckets(c.tx); err != nil {
 		return false, err
@@ -140,6 +151,10 @@ func (c *Cache) putInfoEntry(ctx context.Context, ient InfoEntry) error {
 
 // GetInfo returns the last known info about the file.
 func (c *Cache) GetInfo(ctx context.Context, p string, dst *FileInfo) (bool, error) {
+	p = CleanPath(p)
+	if err := requireNonEmptyPath(p); err != nil {
+		return false, err
+	}
 	var found bool
 	b := c.tx.Bucket([]byte(bucketInfos))
 	if b == nil {
@@ -151,16 +166,73 @@ func (c *Cache) GetInfo(ctx context.Context, p string, dst *FileInfo) (bool, err
 }
 
 func (c *Cache) Delete(ctx context.Context, p string) error {
+	p = CleanPath(p)
+	if err := requireNonEmptyPath(p); err != nil {
+		return err
+	}
 	b := c.tx.Bucket([]byte(bucketInfos))
 	if b != nil {
 		if err := b.Delete([]byte(p)); err != nil {
 			return err
 		}
 	}
+	if err := c.SetOwned(ctx, p, false); err != nil {
+		return err
+	}
 	return invalidateExtents(c.tx, p)
 }
 
+func (c *Cache) SetOwned(ctx context.Context, p string, yes bool) error {
+	p = CleanPath(p)
+	if err := requireNonEmptyPath(p); err != nil {
+		return err
+	}
+	if err := c.ensureBuckets(c.tx); err != nil {
+		return err
+	}
+	b := c.tx.Bucket([]byte(bucketOwned))
+	if yes {
+		return b.Put([]byte(p), []byte{1})
+	}
+	return b.Delete([]byte(p))
+}
+
+func (c *Cache) IsOwned(ctx context.Context, p string) (bool, error) {
+	p = CleanPath(p)
+	if err := requireNonEmptyPath(p); err != nil {
+		return false, err
+	}
+	b := c.tx.Bucket([]byte(bucketOwned))
+	if b == nil {
+		return false, nil
+	}
+	return b.Get([]byte(p)) != nil, nil
+}
+
+func (c *Cache) DeleteOwnedPrefix(ctx context.Context, p string) error {
+	p = CleanPath(p)
+	if err := requireNonEmptyPath(p); err != nil {
+		return err
+	}
+	b := c.tx.Bucket([]byte(bucketOwned))
+	if b == nil {
+		return nil
+	}
+	prefix := append([]byte(p), 0)
+	cur := b.Cursor()
+	for k, _ := cur.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = cur.Next() {
+		if err := b.Delete(k); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (c *Cache) AddExtents(ctx context.Context, p string, paramHash [32]byte, ents []gotfs.Entry) error {
+	p = CleanPath(p)
+	if err := requireNonEmptyPath(p); err != nil {
+		return err
+	}
 	if err := c.ensureBuckets(c.tx); err != nil {
 		return err
 	}
@@ -178,6 +250,10 @@ func (c *Cache) AddExtents(ctx context.Context, p string, paramHash [32]byte, en
 
 // GetExtents gets extents for (p, paramHash) and appends them to out
 func (c *Cache) GetExtents(ctx context.Context, p string, paramHash [32]byte, out []gotfs.Entry) ([]gotfs.Entry, error) {
+	p = CleanPath(p)
+	if err := requireNonEmptyPath(p); err != nil {
+		return nil, err
+	}
 	b := c.tx.Bucket([]byte(bucketExtents))
 	if b == nil {
 		return nil, fmt.Errorf("no extents for path + paramHash")

@@ -28,7 +28,11 @@ func (fi *FileInfo) Marshal(out []byte) []byte {
 }
 
 func (fi *FileInfo) Unmarshal(data []byte) error {
-	return nil
+	if len(data) == 0 {
+		*fi = FileInfo{}
+		return nil
+	}
+	return json.Unmarshal(data, fi)
 }
 
 type FilePair struct {

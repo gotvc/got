@@ -229,6 +229,9 @@ func (tx *Tx) stagePath(ctx context.Context, p string, ents []gotfs.Entry) error
 		return err
 	}
 	p = cleanPath(p)
+	if p == "" {
+		return fmt.Errorf("cannot stage empty path")
+	}
 	if err := tx.CheckConflict(ctx, p); err != nil {
 		return err
 	}
@@ -282,17 +285,73 @@ func (tx *Tx) Add(ctx context.Context, fsys posixfs.FS, p string) error {
 // Put replaces all files at or beneath p.
 func (tx *Tx) Put(ctx context.Context, fsys posixfs.FS, p string) error {
 	p = cleanPath(p)
-	if _, err := fsys.Stat(p); err != nil {
+	fi, err := fsys.Stat(p)
+	if err != nil {
 		if posixfs.IsErrNotExist(err) {
+			if p == "" {
+				return nil
+			}
 			return tx.stagePath(ctx, p, nil)
 		}
 		return err
 	}
-	ents, err := tx.buildStageEntriesFromFSPath(ctx, fsys, p)
-	if err != nil {
-		return err
+	stagedFiles := map[string]struct{}{}
+	if fi.Mode().IsRegular() {
+		finfo := porting.FileInfo{Mode: fi.Mode(), ModifiedAt: tai64.FromGoTime(fi.ModTime()), Size: fi.Size()}
+		if _, err := tx.c.UpdateInfo(ctx, p, finfo); err != nil {
+			return err
+		}
+		ents, err := tx.buildStageEntriesFromFSPath(ctx, fsys, p)
+		if err != nil {
+			return err
+		}
+		if err := tx.stagePath(ctx, p, ents); err != nil {
+			return err
+		}
+		stagedFiles[p] = struct{}{}
+	} else {
+		if err := streams.ForEach(ctx, porting.NewFSInfoIter(fsys, p), func(ent porting.InfoEntry) error {
+			if ent.Info.Mode.IsDir() {
+				return nil
+			}
+			if _, err := tx.c.UpdateInfo(ctx, ent.Path, ent.Info); err != nil {
+				return err
+			}
+			ents, err := tx.buildStageEntriesFromFSPath(ctx, fsys, ent.Path)
+			if err != nil {
+				return err
+			}
+			if err := tx.stagePath(ctx, ent.Path, ents); err != nil {
+				return err
+			}
+			stagedFiles[ent.Path] = struct{}{}
+			return nil
+		}); err != nil {
+			return err
+		}
 	}
-	return tx.stagePath(ctx, p, ents)
+	prefix := p
+	if prefix != "" {
+		prefix += "/"
+	}
+	it := tx.c.NewInfoIterator()
+	return streams.ForEach(ctx, it, func(ent porting.InfoEntry) error {
+		if ent.Info.Mode.IsDir() {
+			return nil
+		}
+		if p != "" && ent.Path != p && !strings.HasPrefix(ent.Path, prefix) {
+			return nil
+		}
+		if _, ok := stagedFiles[ent.Path]; ok {
+			return nil
+		}
+		if _, err := fsys.Stat(ent.Path); err == nil {
+			return nil
+		} else if !posixfs.IsErrNotExist(err) {
+			return err
+		}
+		return tx.stagePath(ctx, ent.Path, nil)
+	})
 }
 
 func (tx *Tx) buildStageEntriesFromFSPath(ctx context.Context, fsys posixfs.FS, p string) ([]gotfs.Entry, error) {
@@ -357,16 +416,18 @@ func (tx *Tx) buildStageEntriesFromFSPath(ctx context.Context, fsys posixfs.FS, 
 			}
 			return nil, err
 		}
-		p2 := ent.Path()
-		if ent.Key.IsInfo() {
-			k, err := gotfs.NewInfoKey(p2)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, gotfs.Entry{Key: k, Value: gotfs.Value{Info: ent.Info}})
-		} else {
-			out = append(out, gotfs.Entry{Key: gotfs.NewExtentKey(p2, ent.EndAt()), Value: gotfs.Value{Extent: ent.Extent}})
+		keyData := ent.Key.Marshal(nil)
+		var keyCopy gotfs.Key
+		if err := keyCopy.Unmarshal(keyData); err != nil {
+			return nil, err
 		}
+		entryCopy := gotfs.Entry{Key: keyCopy}
+		if ent.Key.IsInfo() {
+			entryCopy.Value.Info = ent.Info
+		} else {
+			entryCopy.Value.Extent = ent.Extent
+		}
+		out = append(out, entryCopy)
 	}
 	return out, nil
 }
@@ -396,11 +457,15 @@ func (tx *Tx) Discard(ctx context.Context, p string) error {
 	if b == nil {
 		return nil
 	}
+	if p == "" {
+		return tx.Clear(ctx)
+	}
 	prefix := []byte(p + "/")
 	var deletes [][]byte
 	c := b.Cursor()
-	for k, _ := c.Seek([]byte(p)); k != nil; k, _ = c.Next() {
-		if bytes.Equal(k, []byte(p)) {
+	start := []byte(p)
+	for k, _ := c.Seek(start); k != nil; k, _ = c.Next() {
+		if bytes.Equal(k, start) {
 			deletes = append(deletes, append([]byte{}, k...))
 			continue
 		}
@@ -451,11 +516,12 @@ func (tx *Tx) ForEach(ctx context.Context, span gotkv.Span, fn func(Entry) error
 		if span.End != nil && bytes.Compare(key, span.End) >= 0 {
 			break
 		}
-		seg, err := tx.loadSegmentForPath(ctx, string(key))
+		p := string(key)
+		seg, err := tx.loadSegmentForPath(ctx, p)
 		if err != nil {
 			return err
 		}
-		ent := Entry{Path: string(key), Segment: seg}
+		ent := Entry{Path: p, Segment: seg}
 		if err := fn(ent); err != nil {
 			return err
 		}
@@ -677,9 +743,6 @@ func (tx *Tx) ForEachDirty(ctx context.Context, fsys posixfs.FS, ss gotfs.RO, ba
 		return fn(df)
 	}
 	isStaged := func(p string) bool {
-		if _, ok := staged[""]; ok {
-			return true
-		}
 		for {
 			if _, ok := staged[p]; ok {
 				return true
