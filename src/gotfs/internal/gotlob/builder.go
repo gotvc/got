@@ -117,14 +117,14 @@ func (b *Builder) CopyExtents(ctx context.Context, exts []Extent) error {
 	}
 	for i, ext := range exts {
 		isShort := i == len(exts)-1
-		if err := b.CopyExtent(ctx, &ext, isShort); err != nil {
+		if err := b.CopyExtent(ctx, ext, isShort); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (b *Builder) CopyExtent(ctx context.Context, ext *Extent, isShort bool) error {
+func (b *Builder) CopyExtent(ctx context.Context, ext Extent, isShort bool) error {
 	if prefix := b.GetPrefix(nil); prefix == nil {
 		return errors.New("CopyExtent called before SetPrefix")
 	}
@@ -144,7 +144,7 @@ func (b *Builder) CopyExtent(ctx context.Context, ext *Extent, isShort bool) err
 	offset := b.queue[li].lastOffset
 	k := make([]byte, 0, 4096)
 	k = appendKey(k, b.queue[li].key, offset)
-	return b.kvb.Put(ctx, k, MarshalExtent(ext))
+	return b.kvb.Put(ctx, k, ext.Marshal(nil))
 }
 
 func (b *Builder) Finish(ctx context.Context) (Root, error) {
@@ -194,7 +194,7 @@ func (b *Builder) handleChunk(data []byte) error {
 		}
 		offset := op.lastOffset + uint64(length)
 		k = appendKey(k[:0], op.key, offset)
-		if err := b.kvb.Put(b.ctx, k, MarshalExtent(ext2)); err != nil {
+		if err := b.kvb.Put(b.ctx, k, ext2.Marshal(nil)); err != nil {
 			return err
 		}
 		b.queue[i].lastOffset = offset
@@ -259,7 +259,7 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 		return err
 	}
 	span1 := span
-	if maxExt != nil {
+	if maxExtKey != nil {
 		span1.End = maxExtKey
 		if bytes.Compare(span1.End, span.Begin) < 0 {
 			return nil
@@ -300,7 +300,7 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 		b.setLastKey(maxEnt.Key)
 	}
 	// the last extent needs to fill the chunker
-	if maxExt != nil {
+	if maxExtKey != nil {
 		prefix, offset, err := ParseExtentKey(maxExtKey)
 		if err != nil {
 			return err
@@ -329,7 +329,7 @@ func (b *Builder) CopyFrom(ctx context.Context, root Root, span Span) error {
 	return nil
 }
 
-func (b *Builder) copyExtentAt(ctx context.Context, key []byte, ext *Extent) error {
+func (b *Builder) copyExtentAt(ctx context.Context, key []byte, ext Extent) error {
 	prefix, _, err := ParseExtentKey(key)
 	if err != nil {
 		return err
