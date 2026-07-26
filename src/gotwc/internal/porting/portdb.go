@@ -93,14 +93,14 @@ func NewCache(tx *bbolt.Tx) Cache {
 const (
 	bucketInfos   = "infos"
 	bucketExtents = "extents"
-	bucketOwned   = "owned"
+	bucketKnown   = "known"
 )
 
 func (c *Cache) ensureBuckets(tx *bbolt.Tx) error {
 	if done := c.doneSetup.Load(); done {
 		return nil
 	}
-	for _, name := range []string{bucketInfos, bucketExtents, bucketOwned} {
+	for _, name := range []string{bucketInfos, bucketExtents, bucketKnown} {
 		if _, err := tx.CreateBucketIfNotExists([]byte(name)); err != nil {
 			return err
 		}
@@ -176,13 +176,13 @@ func (c *Cache) Delete(ctx context.Context, p string) error {
 			return err
 		}
 	}
-	if err := c.SetOwned(ctx, p, nil); err != nil {
+	if err := c.SetKnown(ctx, p, nil); err != nil {
 		return err
 	}
 	return invalidateExtents(c.tx, p)
 }
 
-func (c *Cache) SetOwned(ctx context.Context, p string, info *FileInfo) error {
+func (c *Cache) SetKnown(ctx context.Context, p string, info *FileInfo) error {
 	p = CleanPath(p)
 	if err := requireNonEmptyPath(p); err != nil {
 		return err
@@ -190,19 +190,19 @@ func (c *Cache) SetOwned(ctx context.Context, p string, info *FileInfo) error {
 	if err := c.ensureBuckets(c.tx); err != nil {
 		return err
 	}
-	b := c.tx.Bucket([]byte(bucketOwned))
+	b := c.tx.Bucket([]byte(bucketKnown))
 	if info == nil {
 		return b.Delete([]byte(p))
 	}
 	return b.Put([]byte(p), info.Marshal(nil))
 }
 
-func (c *Cache) IsOwned(ctx context.Context, p string, actual FileInfo) (bool, error) {
+func (c *Cache) IsKnown(ctx context.Context, p string, actual FileInfo) (bool, error) {
 	p = CleanPath(p)
 	if err := requireNonEmptyPath(p); err != nil {
 		return false, err
 	}
-	b := c.tx.Bucket([]byte(bucketOwned))
+	b := c.tx.Bucket([]byte(bucketKnown))
 	if b == nil {
 		return false, nil
 	}
@@ -210,22 +210,22 @@ func (c *Cache) IsOwned(ctx context.Context, p string, actual FileInfo) (bool, e
 	if len(data) == 0 {
 		return false, nil
 	}
-	var ownedInfo FileInfo
-	if err := ownedInfo.Unmarshal(data); err != nil {
+	var knownInfo FileInfo
+	if err := knownInfo.Unmarshal(data); err != nil {
 		return false, err
 	}
-	if ownedInfo.ModifiedAt != actual.ModifiedAt {
+	if knownInfo.ModifiedAt != actual.ModifiedAt {
 		return false, nil
 	}
 	return true, nil
 }
 
-func (c *Cache) DeleteOwnedPrefix(ctx context.Context, p string) error {
+func (c *Cache) DeleteKnownPrefix(ctx context.Context, p string) error {
 	p = CleanPath(p)
 	if err := requireNonEmptyPath(p); err != nil {
 		return err
 	}
-	b := c.tx.Bucket([]byte(bucketOwned))
+	b := c.tx.Bucket([]byte(bucketKnown))
 	if b == nil {
 		return nil
 	}

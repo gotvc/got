@@ -78,7 +78,7 @@ func (pr *Exporter) Clobber(ctx context.Context, ss gotfs.RO, root gotfs.Root, p
 	if _, err := pr.db.UpdateInfo(ctx, p, info); err != nil {
 		return err
 	}
-	if err := pr.db.SetOwned(ctx, p, &info); err != nil {
+	if err := pr.db.SetKnown(ctx, p, &info); err != nil {
 		return err
 	}
 	return nil
@@ -145,11 +145,11 @@ func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.RO, root gotfs
 	if err != nil && !posixfs.IsErrNotExist(err) {
 		return err
 	} else if err == nil {
-		owned, err := pr.db.IsOwned(ctx, p, finfo)
+		known, err := pr.db.IsKnown(ctx, p, finfo)
 		if err != nil {
 			return err
 		}
-		if !owned {
+		if !known {
 			return ErrWouldClobber{
 				Op:   "write",
 				Path: p,
@@ -179,7 +179,7 @@ func (pr *Exporter) exportFile(ctx context.Context, ms, ds stores.RO, root gotfs
 	if _, err := pr.db.UpdateInfo(ctx, p, nextInfo); err != nil {
 		return err
 	}
-	if err := pr.db.SetOwned(ctx, p, &nextInfo); err != nil {
+	if err := pr.db.SetKnown(ctx, p, &nextInfo); err != nil {
 		return err
 	}
 	return nil
@@ -190,11 +190,11 @@ func (pr *Exporter) deleteFile(ctx context.Context, p string) error {
 	if err != nil {
 		return err
 	}
-	owned, err := pr.db.IsOwned(ctx, p, finfo)
+	known, err := pr.db.IsKnown(ctx, p, finfo)
 	if err != nil {
 		return err
 	}
-	if !owned {
+	if !known {
 		return ErrWouldClobber{Op: "delete", Path: p}
 	}
 	if err := pr.fsx.Remove(p); err != nil {
