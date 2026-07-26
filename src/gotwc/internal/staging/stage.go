@@ -31,6 +31,7 @@ import (
 type Entry struct {
 	Path    string
 	Segment gotfs.Segment
+	HasEntries bool
 }
 
 func (ent Entry) Key(out []byte) []byte {
@@ -72,8 +73,7 @@ func stageEntriesKey(p string, entryKey []byte) []byte {
 }
 
 var (
-	bucketStage        = []byte("stage")
-	bucketStageEntries = []byte("stage_entries")
+	bucketStage = []byte("stage")
 )
 
 // Tx is a transaction on a stage.
@@ -125,9 +125,6 @@ func (tx *Tx) setup(ctx context.Context) error {
 	if _, err := tx.env.Tx.CreateBucketIfNotExists(bucketStage); err != nil {
 		return err
 	}
-	if _, err := tx.env.Tx.CreateBucketIfNotExists(bucketStageEntries); err != nil {
-		return err
-	}
 	var root []byte
 	if err := tx.env.VolTx.Load(ctx, &root); err != nil {
 		return err
@@ -145,81 +142,46 @@ func (tx *Tx) setup(ctx context.Context) error {
 	return tx.env.VolTx.Save(ctx, tx.env.ParamHash[:])
 }
 
-func (tx *Tx) deleteStageEntries(ctx context.Context, p string) error {
-	b := tx.env.Tx.Bucket(bucketStageEntries)
+func (tx *Tx) stageState(ctx context.Context, p string) (staged bool, hasEntries bool, _ error) {
+	b := tx.env.Tx.Bucket(bucketStage)
 	if b == nil {
-		return nil
+		return false, false, nil
 	}
-	prefix := stageEntriesPrefix(p)
-	c := b.Cursor()
-	for k, _ := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = c.Next() {
-		if err := b.Delete(k); err != nil {
-			return err
-		}
+	if b.Get([]byte(p)) == nil {
+		return false, false, nil
 	}
-	return nil
+	hasEntries, err := tx.c.HasStagedEntries(ctx, p)
+	if err != nil {
+		return false, false, err
+	}
+	return true, hasEntries, nil
 }
 
-func (tx *Tx) replaceStageEntries(ctx context.Context, p string, ents []gotfs.Entry) error {
-	if err := tx.deleteStageEntries(ctx, p); err != nil {
-		return err
+func (tx *Tx) loadSegmentForPath(ctx context.Context, p string) (gotfs.Segment, error) {
+	ents, err := tx.c.GetStagedEntries(ctx, p, nil)
+	if err != nil {
+		return gotfs.Segment{}, err
 	}
-	b := tx.env.Tx.Bucket(bucketStageEntries)
-	if b == nil {
-		return fmt.Errorf("missing stage entries bucket")
+	if len(ents) == 0 {
+		return gotfs.Segment{Span: gotfs.SpanForPath(p)}, nil
 	}
-	type kv struct {
-		k []byte
-		v []byte
-	}
-	rows := make([]kv, 0, len(ents))
+	kvmach := tx.env.GotFS.MetadataKV()
+	kvb := kvmach.NewBuilder(tx.env.VolTx)
 	for _, ent := range ents {
 		k := ent.Key.Marshal(nil)
 		v, err := marshalStagedValue(ent)
 		if err != nil {
-			return err
-		}
-		rows = append(rows, kv{k: k, v: v})
-	}
-	sort.Slice(rows, func(i, j int) bool {
-		return bytes.Compare(rows[i].k, rows[j].k) < 0
-	})
-	for _, row := range rows {
-		if err := b.Put(stageEntriesKey(p, row.k), row.v); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (tx *Tx) loadSegmentForPath(ctx context.Context, p string) (gotfs.Segment, error) {
-	b := tx.env.Tx.Bucket(bucketStageEntries)
-	if b == nil {
-		return gotfs.Segment{}, nil
-	}
-	prefix := stageEntriesPrefix(p)
-	c := b.Cursor()
-	kvmach := tx.env.GotFS.MetadataKV()
-	kvb := kvmach.NewBuilder(tx.env.VolTx)
-	var n int
-	for k, v := c.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = c.Next() {
-		rawKey := k[len(prefix):]
-		if err := kvb.Put(ctx, rawKey, v); err != nil {
 			return gotfs.Segment{}, err
 		}
-		n++
-	}
-	if n == 0 {
-		return gotfs.Segment{Span: gotfs.SpanForPath(p)}, nil
+		if err := kvb.Put(ctx, k, v); err != nil {
+			return gotfs.Segment{}, err
+		}
 	}
 	root, err := kvb.Finish(ctx)
 	if err != nil {
 		return gotfs.Segment{}, err
 	}
-	return gotfs.Segment{
-		Contents: root,
-		Span:     gotfs.SpanForPath(p),
-	}, nil
+	return gotfs.Segment{Contents: root, Span: gotfs.SpanForPath(p)}, nil
 }
 
 // stagePath adds or replaces a path in the stage and stores its entries.
@@ -234,7 +196,7 @@ func (tx *Tx) stagePath(ctx context.Context, p string, ents []gotfs.Entry) error
 	if err := tx.CheckConflict(ctx, p); err != nil {
 		return err
 	}
-	if err := tx.replaceStageEntries(ctx, p, ents); err != nil {
+	if err := tx.c.ReplaceStagedEntries(ctx, p, ents); err != nil {
 		return err
 	}
 	b := tx.env.Tx.Bucket(bucketStage)
@@ -489,7 +451,7 @@ func (tx *Tx) Discard(ctx context.Context, p string) error {
 		if err := b.Delete(k); err != nil {
 			return err
 		}
-		if err := tx.deleteStageEntries(ctx, string(k)); err != nil {
+		if err := tx.c.DeleteStagedEntries(ctx, string(k)); err != nil {
 			return err
 		}
 	}
@@ -500,19 +462,23 @@ func (tx *Tx) Discard(ctx context.Context, p string) error {
 // If there is no operation staged Get returns (nil, nil)
 func (tx *Tx) Get(ctx context.Context, p string, dst *gotfs.Segment) (bool, error) {
 	p = cleanPath(p)
-	b := tx.env.Tx.Bucket(bucketStage)
-	if b == nil {
-		return false, nil
-	}
-	if b.Get([]byte(p)) == nil {
-		return false, nil
-	}
-	seg, err := tx.loadSegmentForPath(ctx, p)
+	staged, hasEntries, err := tx.stageState(ctx, p)
 	if err != nil {
 		return false, err
 	}
+	if !staged {
+		return false, nil
+	}
 	if dst != nil {
-		*dst = seg
+		if hasEntries {
+			seg, err := tx.loadSegmentForPath(ctx, p)
+			if err != nil {
+				return false, err
+			}
+			*dst = seg
+		} else {
+			*dst = gotfs.Segment{Span: gotfs.SpanForPath(p)}
+		}
 	}
 	return true, nil
 }
@@ -528,11 +494,11 @@ func (tx *Tx) ForEach(ctx context.Context, span gotkv.Span, fn func(Entry) error
 			break
 		}
 		p := string(key)
-		seg, err := tx.loadSegmentForPath(ctx, p)
+		_, hasEntries, err := tx.stageState(ctx, p)
 		if err != nil {
 			return err
 		}
-		ent := Entry{Path: p, Segment: seg}
+		ent := Entry{Path: p, HasEntries: hasEntries}
 		if err := fn(ent); err != nil {
 			return err
 		}
@@ -550,8 +516,7 @@ func (tx *Tx) CheckConflict(ctx context.Context, p string) error {
 	for i := len(parts) - 1; i > 0; i-- {
 		conflictPath := strings.Join(parts[:i], "/")
 		k := cleanPath(conflictPath)
-		var seg gotfs.Segment
-		found, err := tx.Get(ctx, k, &seg)
+		found, _, err := tx.stageState(ctx, k)
 		if err != nil {
 			return err
 		}
@@ -571,16 +536,19 @@ func (tx *Tx) CheckConflict(ctx context.Context, p string) error {
 
 // Clear deletes all entries from the staging area
 func (tx *Tx) Clear(ctx context.Context) error {
+	b := tx.env.Tx.Bucket(bucketStage)
+	if b != nil {
+		c := b.Cursor()
+		for k, _ := c.First(); k != nil; k, _ = c.Next() {
+			if err := tx.c.DeleteStagedEntries(ctx, string(k)); err != nil {
+				return err
+			}
+		}
+	}
 	if err := tx.env.Tx.DeleteBucket(bucketStage); err != nil {
 		return err
 	}
 	if _, err := tx.env.Tx.CreateBucket(bucketStage); err != nil {
-		return err
-	}
-	if err := tx.env.Tx.DeleteBucket(bucketStageEntries); err != nil {
-		return err
-	}
-	if _, err := tx.env.Tx.CreateBucket(bucketStageEntries); err != nil {
 		return err
 	}
 	return nil
@@ -628,7 +596,15 @@ func (tx *Tx) Apply(ctx context.Context, ss gotfs.RO, base gotfs.Root) (gotfs.Ro
 	}
 	var changes []gotfs.Segment
 	if err := tx.ForEach(ctx, gotkv.TotalSpan(), func(e Entry) error {
-		changes = append(changes, e.Segment)
+		if !e.HasEntries {
+			changes = append(changes, gotfs.Segment{Span: gotfs.SpanForPath(e.Path)})
+			return nil
+		}
+		seg, err := tx.loadSegmentForPath(ctx, e.Path)
+		if err != nil {
+			return err
+		}
+		changes = append(changes, seg)
 		return nil
 	}); err != nil {
 		return gotfs.Root{}, err
@@ -698,7 +674,7 @@ func (tx *Tx) ForEachStaged(ctx context.Context, ss gotfs.RO, base *gotfs.Root, 
 	return tx.ForEach(ctx, gotkv.Span{}, func(ent Entry) error {
 		var op FileOperation
 		switch {
-		case ent.Segment.IsZero():
+		case !ent.HasEntries:
 			// it's a delete
 			op.Delete = &DeleteOp{}
 		default:
@@ -844,13 +820,12 @@ func (tx *Tx) ForEachUntracked(ctx context.Context, fsys posixfs.FS, ss gotfs.RO
 		parts := strings.Split(p, "/")
 		for i := len(parts); i > 0; i-- {
 			p2 := strings.Join(parts[:i], "/")
-			var seg gotfs.Segment
-			found, err := tx.Get(ctx, p2, &seg)
+			found, hasEntries, err := tx.stageState(ctx, p2)
 			if err != nil {
 				return false, false, err
 			}
 			if found {
-				return true, !seg.IsZero(), nil
+				return true, hasEntries, nil
 			}
 		}
 		return false, false, nil

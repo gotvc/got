@@ -96,6 +96,16 @@ const (
 	bucketKnown   = "known"
 )
 
+var stagedExtentHash [32]byte
+
+func stagedInfoKey(p string) []byte {
+	return append([]byte{0}, []byte(p)...)
+}
+
+func isStagedInfoKey(k []byte) bool {
+	return len(k) > 0 && k[0] == 0
+}
+
 func (c *Cache) ensureBuckets(tx *bbolt.Tx) error {
 	if done := c.doneSetup.Load(); done {
 		return nil
@@ -239,6 +249,124 @@ func (c *Cache) DeleteKnownPrefix(ctx context.Context, p string) error {
 	return nil
 }
 
+func (c *Cache) deleteStagedEntries(ctx context.Context, p string) error {
+	p = CleanPath(p)
+	if err := requireNonEmptyPath(p); err != nil {
+		return err
+	}
+	bInfos := c.tx.Bucket([]byte(bucketInfos))
+	if bInfos != nil {
+		if err := bInfos.Delete(stagedInfoKey(p)); err != nil {
+			return err
+		}
+	}
+	bExt := c.tx.Bucket([]byte(bucketExtents))
+	if bExt != nil {
+		prefix := extentPrefix(p, stagedExtentHash)
+		cur := bExt.Cursor()
+		for k, _ := cur.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, _ = cur.Next() {
+			if err := bExt.Delete(k); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (c *Cache) ReplaceStagedEntries(ctx context.Context, p string, ents []gotfs.Entry) error {
+	p = CleanPath(p)
+	if err := requireNonEmptyPath(p); err != nil {
+		return err
+	}
+	if err := c.ensureBuckets(c.tx); err != nil {
+		return err
+	}
+	if err := c.deleteStagedEntries(ctx, p); err != nil {
+		return err
+	}
+	bInfos := c.tx.Bucket([]byte(bucketInfos))
+	bExt := c.tx.Bucket([]byte(bucketExtents))
+	for _, ent := range ents {
+		if ent.IsInfo() {
+			if err := bInfos.Put(stagedInfoKey(p), ent.Info.Marshal(nil)); err != nil {
+				return err
+			}
+			continue
+		}
+		if err := putExtent(bExt, p, stagedExtentHash, ent.EndAt(), ent.Extent); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *Cache) DeleteStagedEntries(ctx context.Context, p string) error {
+	p = CleanPath(p)
+	if err := requireNonEmptyPath(p); err != nil {
+		return err
+	}
+	return c.deleteStagedEntries(ctx, p)
+}
+
+func (c *Cache) HasStagedEntries(ctx context.Context, p string) (bool, error) {
+	p = CleanPath(p)
+	if err := requireNonEmptyPath(p); err != nil {
+		return false, err
+	}
+	bInfos := c.tx.Bucket([]byte(bucketInfos))
+	if bInfos != nil && bInfos.Get(stagedInfoKey(p)) != nil {
+		return true, nil
+	}
+	bExt := c.tx.Bucket([]byte(bucketExtents))
+	if bExt == nil {
+		return false, nil
+	}
+	prefix := extentPrefix(p, stagedExtentHash)
+	k, _ := bExt.Cursor().Seek(prefix)
+	return k != nil && bytes.HasPrefix(k, prefix), nil
+}
+
+func (c *Cache) GetStagedEntries(ctx context.Context, p string, out []gotfs.Entry) ([]gotfs.Entry, error) {
+	p = CleanPath(p)
+	if err := requireNonEmptyPath(p); err != nil {
+		return nil, err
+	}
+	bInfos := c.tx.Bucket([]byte(bucketInfos))
+	if bInfos != nil {
+		if data := bInfos.Get(stagedInfoKey(p)); len(data) > 0 {
+			var info gotfs.Info
+			if err := info.Unmarshal(data); err != nil {
+				return nil, err
+			}
+			k, err := gotfs.NewInfoKey(p)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, gotfs.Entry{
+				Key:   k,
+				Value: gotfs.Value{Info: info},
+			})
+		}
+	}
+	bExt := c.tx.Bucket([]byte(bucketExtents))
+	if bExt == nil {
+		return out, nil
+	}
+	prefix := extentPrefix(p, stagedExtentHash)
+	cur := bExt.Cursor()
+	for k, v := cur.Seek(prefix); k != nil && bytes.HasPrefix(k, prefix); k, v = cur.Next() {
+		ee, err := parseExtentEntry(k, v)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, gotfs.Entry{
+			Key:   gotfs.NewExtentKey(p, ee.EndAt),
+			Value: gotfs.Value{Extent: ee.Extent},
+		})
+	}
+	return out, nil
+}
+
 func (c *Cache) AddExtents(ctx context.Context, p string, paramHash [32]byte, ents []gotfs.Entry) error {
 	p = CleanPath(p)
 	if err := requireNonEmptyPath(p); err != nil {
@@ -351,15 +479,18 @@ type DBInfoIterator = streams.SeqErr[InfoEntry]
 
 func newDBInfoIterator(db *Cache) *DBInfoIterator {
 	seq := func(yield func(InfoEntry, error) bool) {
-		err := func() error {
-			b := db.tx.Bucket([]byte(bucketInfos))
-			if b == nil {
-				return nil
-			}
-			c := b.Cursor()
-			for k, v := c.First(); k != nil; k, v = c.Next() {
-				var ent InfoEntry
-				ent, err := parseInfoEntry(k, v)
+			err := func() error {
+				b := db.tx.Bucket([]byte(bucketInfos))
+				if b == nil {
+					return nil
+				}
+				c := b.Cursor()
+				for k, v := c.First(); k != nil; k, v = c.Next() {
+					if isStagedInfoKey(k) {
+						continue
+					}
+					var ent InfoEntry
+					ent, err := parseInfoEntry(k, v)
 				if err != nil {
 					return err
 				}
