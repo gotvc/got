@@ -47,7 +47,6 @@ var rootCmd = star.NewGroupedDir(
 			"scrub",
 			"iden",
 			"config",
-			"merge",
 		}},
 		{Title: "WORKING COPY & STAGING", Commands: []string{
 			"wc",

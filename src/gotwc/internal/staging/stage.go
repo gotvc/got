@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"path"
 	"sort"
@@ -767,57 +766,6 @@ func (tx *Tx) ForEachDirty(ctx context.Context, fsys posixfs.FS, ss gotfs.RO, ba
 		}
 		return false
 	}
-	fileEqual := func(p string) (bool, error) {
-		localInfo, err := fsys.Stat(p)
-		if err != nil {
-			return false, err
-		}
-		baseInfo, err := tx.env.GotFS.GetInfo(ctx, ss.Metadata, base, p)
-		if err != nil {
-			return false, err
-		}
-		if baseInfo.Mode != localInfo.Mode() {
-			return false, nil
-		}
-		if !baseInfo.Mode.IsRegular() {
-			return true, nil
-		}
-		baseSize, err := tx.env.GotFS.SizeOfFile(ctx, ss.Metadata, base, p)
-		if err != nil {
-			return false, err
-		}
-		if int64(baseSize) != localInfo.Size() {
-			return false, nil
-		}
-		localFile, err := fsys.OpenFile(p, posixfs.O_RDONLY, 0)
-		if err != nil {
-			return false, err
-		}
-		defer localFile.Close()
-		baseFile, err := tx.env.GotFS.NewReader(ctx, ss, base, p)
-		if err != nil {
-			return false, err
-		}
-		bufA := make([]byte, 32*1024)
-		bufB := make([]byte, 32*1024)
-		for {
-			nA, errA := localFile.Read(bufA)
-			nB, errB := baseFile.Read(bufB)
-			if nA != nB || !bytes.Equal(bufA[:nA], bufB[:nB]) {
-				return false, nil
-			}
-			if errA == io.EOF && errB == io.EOF {
-				return true, nil
-			}
-			if errA != nil && errA != io.EOF {
-				return false, errA
-			}
-			if errB != nil && errB != io.EOF {
-				return false, errB
-			}
-		}
-	}
-
 	it := porting.NewFSInfoIter(fsys, "")
 	if err := streams.ForEach(ctx, it, func(ent porting.InfoEntry) error {
 		if ent.Info.Mode.IsDir() {
@@ -831,11 +779,11 @@ func (tx *Tx) ForEachDirty(ctx context.Context, fsys posixfs.FS, ss gotfs.RO, ba
 		} else if !tracked {
 			return nil
 		}
-		eq, err := fileEqual(ent.Path)
+		known, err := tx.c.IsKnown(ctx, ent.Path, ent.Info)
 		if err != nil {
 			return err
 		}
-		if eq {
+		if known {
 			return nil
 		}
 		return emit(DirtyFile{
@@ -865,11 +813,15 @@ func (tx *Tx) ForEachDirty(ctx context.Context, fsys posixfs.FS, ss gotfs.RO, ba
 				}
 				return err
 			}
-			eq, err := fileEqual(p2)
+			known, err := tx.c.IsKnown(ctx, p2, porting.FileInfo{
+				Mode:       finfo.Mode(),
+				ModifiedAt: tai64.FromGoTime(finfo.ModTime()),
+				Size:       finfo.Size(),
+			})
 			if err != nil {
 				return err
 			}
-			if eq {
+			if known {
 				return nil
 			}
 			return emit(DirtyFile{

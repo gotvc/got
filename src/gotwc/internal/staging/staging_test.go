@@ -168,10 +168,10 @@ func TestForEachDirty_Table(t *testing.T) {
 
 	tcs := []TestCase{
 		{
-			Name:      "tracked_unchanged_is_clean",
+			Name:      "tracked_not_known_is_dirty",
 			BaseFiles: []testFile{{Path: "a.txt", Data: "same"}},
 			Worktree:  []testFile{{Path: "a.txt", Data: "same"}},
-			Want:      map[string]bool{},
+			Want:      map[string]bool{"a.txt": true},
 		},
 		{
 			Name:      "tracked_modified_is_dirty",
