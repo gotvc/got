@@ -1,14 +1,11 @@
 package porting
 
 import (
-	"context"
 	"encoding/json"
 	"io/fs"
-	"iter"
 	"path"
 	"strings"
 
-	"github.com/gotvc/got/src/gotfs"
 	"go.brendoncarroll.net/exp/streams"
 	"go.brendoncarroll.net/state/posixfs"
 	"go.brendoncarroll.net/tai64"
@@ -38,14 +35,6 @@ func (fi *FileInfo) Unmarshal(data []byte) error {
 type FilePair struct {
 	Path string
 	Info FileInfo
-}
-
-// GetExtents returns the extents for a file.
-// If the file has not been modified, then
-func GetExtents(ctx context.Context, db *Cache, fsys posixfs.FS, p string) iter.Seq2[gotfs.Extent, error] {
-	return func(yield func(gotfs.Extent, error) bool) {
-
-	}
 }
 
 // NewFSInfoIter iterates over all the tracked paths in the filesystem.
