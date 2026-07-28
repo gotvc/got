@@ -75,9 +75,6 @@ func (pr *Exporter) Clobber(ctx context.Context, ss gotfs.RO, root gotfs.Root, p
 	if err != nil {
 		return err
 	}
-	if _, err := pr.db.UpdateInfo(ctx, p, info); err != nil {
-		return err
-	}
 	if err := pr.db.SetKnown(ctx, p, &info); err != nil {
 		return err
 	}
