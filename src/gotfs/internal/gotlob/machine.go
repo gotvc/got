@@ -66,11 +66,7 @@ func (a *Machine) CreateExtents(ctx context.Context, ds stores.RW, r io.Reader) 
 		}
 		metrics.AddInt(ctx, "data_in", len(data), units.Bytes)
 		metrics.AddInt(ctx, "blobs_in", 1, "blobs")
-<<<<<<< HEAD
-		exts = append(exts, *ext)
-=======
 		exts = append(exts, ext)
->>>>>>> 34d8002 (gotfs+gotkv: add delta packages)
 		return nil
 	})
 	if _, err := io.Copy(chunker, r); err != nil {
@@ -97,7 +93,7 @@ func (a *Machine) SizeOf(ctx context.Context, ms stores.RO, root Root, prefix []
 func (a *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (Root, error) {
 	b := a.NewBuilder(ctx, ss[1], ss[0])
 	for _, seg := range segs {
-		if err := b.CopyFrom(ctx, seg.Contents, seg.Span); err != nil {
+		if err := b.CopyFrom(ctx, seg.Root, seg.Span); err != nil {
 			return Root{}, err
 		}
 	}
@@ -119,17 +115,6 @@ func (ag *Machine) getExtentF(ctx context.Context, ds stores.RO, ext Extent, fn 
 		}
 		return fn(data[ext.Offset : ext.Offset+ext.Length])
 	})
-}
-
-func (ag *Machine) readExtent(ctx context.Context, buf []byte, ds stores.RO, ext Extent) (int, error) {
-	n, err := ag.gdat.Read(ctx, ds, ext.Ref, buf)
-	if err != nil {
-		return 0, err
-	}
-	if err := checkExtentBounds(ext, n); err != nil {
-		return 0, err
-	}
-	return copy(buf[:], buf[ext.Offset:ext.Offset+ext.Length]), nil
 }
 
 // maxEntry finds the maximum extent entry in root within span.

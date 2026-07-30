@@ -40,7 +40,7 @@ func NewImporter(c *Cache, fsmach *gotfs.Machine, ss gotfs.RW, paramHash [32]byt
 func (pr *Importer) ImportPath(ctx context.Context, fsx posixfs.FS, p string) ([]gotfs.Entry, error) {
 	finfo, err := fsx.Stat(p)
 	if err != nil {
-		return gotfs.Root{}, err
+		return nil, err
 	}
 	if !finfo.Mode().IsDir() {
 		return pr.importFile(ctx, fsx, p)
@@ -54,7 +54,7 @@ func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, fin
 	var changes []gotfs.Segment
 	emptyDir, err := createEmptyDir(ctx, pr.gotfs, pr.ss.Metadata, finfo.Mode())
 	if err != nil {
-		return gotfs.Root{}, err
+		return nil, err
 	}
 	changes = append(changes, gotfs.Segment{
 		Span:     gotfs.Span{},
@@ -62,7 +62,7 @@ func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, fin
 	})
 	dirents, err := posixfs.ReadDir(fsx, p)
 	if err != nil {
-		return gotfs.Root{}, err
+		return nil, err
 	}
 	slices.SortFunc(dirents, func(a, b posixfs.DirEnt) int {
 		return strings.Compare(a.Name, b.Name)
@@ -75,7 +75,7 @@ func (pr *Importer) importDir(ctx context.Context, fsx posixfs.FS, p string, fin
 		p2 := path.Join(p, dirent.Name)
 		ents, err := pr.ImportPath(ctx, fsx, p2)
 		if err != nil {
-			return gotfs.Root{}, err
+			return nil, err
 		}
 		metrics.AddInt(ctx, "paths", 1, "paths")
 		retEnts = append(retEnts, ents...)
@@ -104,7 +104,7 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) ([
 		return nil, err
 	}
 	if !finfo.Mode.IsRegular() {
-		return gotfs.Root{}, fmt.Errorf("ImportFile called for non-regular file at path %q", p)
+		return nil, fmt.Errorf("ImportFile called for non-regular file at path %q", p)
 	}
 	if needUpdate, err := pr.db.UpdateInfo(ctx, p, finfo); err != nil {
 		return nil, err
@@ -131,19 +131,19 @@ func (pr *Importer) importFile(ctx context.Context, fsx posixfs.FS, p string) ([
 		// fast path for small files
 		f, err := fsx.OpenFile(p, posixfs.O_RDONLY, 0)
 		if err != nil {
-			return gotfs.Root{}, err
+			return nil, err
 		}
 		defer f.Close()
 		exts, err := pr.gotfs.ExtentsFromReaders(ctx, pr.ss, []io.Reader{f})
 		if err != nil {
-			return gotfs.Root{}, err
+			return nil, err
 		}
 		metrics.AddInt(ctx, "data_in", int(fileSize), units.Bytes)
 		ents = appendExtents(ents, p, exts)
 	} else {
 		ents2, err := importFileConcurrent(ctx, pr.gotfs, pr.ss.Metadata, pr.ss.Data, fsx, p, numWorkers)
 		if err != nil {
-			return gotfs.Root{}, err
+			return nil, err
 		}
 		ents = append(ents, ents2...)
 	}
@@ -168,7 +168,7 @@ func stat(fsys posixfs.FS, p string) (FileInfo, error) {
 func importFileConcurrent(ctx context.Context, fsag *gotfs.Machine, ms, ds stores.RW, fsx posixfs.FS, p string, numWorkers int) ([]gotfs.Entry, error) {
 	stat, err := fsx.Stat(p)
 	if err != nil {
-		return gotfs.Root{}, err
+		return nil, err
 	}
 	fileSize := stat.Size()
 	rs := make([]io.Reader, numWorkers)
@@ -176,13 +176,13 @@ func importFileConcurrent(ctx context.Context, fsag *gotfs.Machine, ms, ds store
 		start, end := divide(fileSize, numWorkers, i)
 		f, err := fsx.OpenFile(p, posixfs.O_RDONLY, 0)
 		if err != nil {
-			return gotfs.Root{}, err
+			return nil, err
 		}
 		defer f.Close()
 		if n, err := f.Seek(start, io.SeekStart); err != nil {
-			return gotfs.Root{}, err
+			return nil, err
 		} else if n != start {
-			return gotfs.Root{}, fmt.Errorf("file seeked to wrong place HAVE: %d WANT: %d", n, start)
+			return nil, fmt.Errorf("file seeked to wrong place HAVE: %d WANT: %d", n, start)
 		}
 		rs[i] = io.LimitReader(f, end-start)
 	}

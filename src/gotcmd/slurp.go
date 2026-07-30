@@ -31,11 +31,11 @@ var slurpCmd = star.Command{
 		}
 		defer f.Close()
 
-		var exts []gotfs.Extent
+		var root gotfs.Root
 		if err := wc.DoWithStore(ctx, func(st stores.RW) error {
-			fsmach := gotfs.NewMachine(gotfs.Params{})
+			fsag := gotfs.NewMachine(gotfs.Params{})
 			var err error
-			exts, err = fsmach.ExtentsFromReader(ctx, gotfs.RW{Metadata: st, Data: st}, f)
+			root, err = fsag.FileFromReader(ctx, gotfs.RW{Metadata: st, Data: st}, 0o755, f)
 			if err != nil {
 				return err
 			}
@@ -44,7 +44,7 @@ var slurpCmd = star.Command{
 			return err
 		}
 		r.Close()
-		pemData, err := json.MarshalIndent(exts, "", "  ")
+		pemData, err := json.MarshalIndent(root, "", "  ")
 		if err != nil {
 			return err
 		}
