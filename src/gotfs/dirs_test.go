@@ -5,6 +5,7 @@ import (
 	"path"
 	"testing"
 
+	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
 )
@@ -56,7 +57,7 @@ func TestMkdirAll(t *testing.T) {
 	requireChildren(t, &mach, s, x, "path/to/the", []string{"dir"})
 }
 
-func requireChildren(t *testing.T, ag *Machine, s Store, x Root, p string, expected []string) {
+func requireChildren(t *testing.T, ag *Machine, s stores.RW, x Root, p string, expected []string) {
 	ctx := testutil.Context(t)
 	var actual []string
 	err := ag.ReadDir(ctx, s, x, p, func(e DirEnt) error {

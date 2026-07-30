@@ -66,7 +66,7 @@ func (a *Machine) CreateExtents(ctx context.Context, ds stores.RW, r io.Reader) 
 		}
 		metrics.AddInt(ctx, "data_in", len(data), units.Bytes)
 		metrics.AddInt(ctx, "blobs_in", 1, "blobs")
-		exts = append(exts, *ext)
+		exts = append(exts, ext)
 		return nil
 	})
 	if _, err := io.Copy(chunker, r); err != nil {
@@ -100,12 +100,12 @@ func (a *Machine) Splice(ctx context.Context, ss [2]stores.RW, segs []Segment) (
 	return b.Finish(ctx)
 }
 
-func (ag *Machine) post(ctx context.Context, s stores.RW, data []byte) (*Extent, error) {
+func (ag *Machine) post(ctx context.Context, s stores.RW, data []byte) (Extent, error) {
 	ref, err := ag.gdat.Post(ctx, s, data)
 	if err != nil {
-		return nil, err
+		return Extent{}, err
 	}
-	return &Extent{Offset: 0, Length: uint32(len(data)), Ref: ref}, nil
+	return Extent{Offset: 0, Length: uint32(len(data)), Ref: ref}, nil
 }
 
 func (ag *Machine) getExtentF(ctx context.Context, ds stores.RO, ext Extent, fn func([]byte) error) error {
@@ -131,9 +131,6 @@ func (ag *Machine) MaxExtent(ctx context.Context, ms stores.RO, root Root, span 
 			ext, err := ParseExtent(ent.Value)
 			if err != nil {
 				return nil, Extent{}, err
-			}
-			if ent.Key == nil {
-				ent.Key = []byte{} // ensure that nil is not returned if the extent is found.
 			}
 			return ent.Key, ext, nil
 		}

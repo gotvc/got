@@ -96,8 +96,8 @@ func (b *Builder) writeExtents(ctx context.Context, exts []Extent) error {
 	return nil
 }
 
-func (b *Builder) copyFrom(ctx context.Context, root gotkv.Root, span gotkv.Span) error {
-	if err := b.b.CopyFrom(ctx, root, span); err != nil {
+func (b *Builder) CopyFrom(ctx context.Context, root gotkv.Root, span Span) error {
+	if err := b.b.CopyFrom(ctx, root, span.ToSpan()); err != nil {
 		return err
 	}
 	p, info, err := b.a.maxInfo(ctx, b.ms, root, span)
@@ -112,6 +112,10 @@ func (b *Builder) copyFrom(ctx context.Context, root gotkv.Root, span gotkv.Span
 		}
 	}
 	return nil
+}
+
+func (b *Builder) copyFromKVSpan(ctx context.Context, root gotkv.Root, span gotkv.Span) error {
+	return b.b.CopyFrom(ctx, root, span)
 }
 
 // Finish closes the builder and returns the Root to the filesystem.

@@ -24,7 +24,9 @@ import (
 
 func Context(t testing.TB) context.Context {
 	ctx := context.Background()
-	l, err := zap.NewDevelopment()
+	cfg := zap.NewProductionConfig()
+	cfg.Level = zap.NewAtomicLevelAt(zap.ErrorLevel)
+	l, err := cfg.Build()
 	require.NoError(t, err)
 	ctx = logctx.NewContext(ctx, l)
 	return ctx

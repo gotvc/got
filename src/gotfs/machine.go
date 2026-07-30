@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"go.brendoncarroll.net/exp/sbe"
 	"go.brendoncarroll.net/stdctx/logctx"
 
 	"github.com/gotvc/got/src/chunking"
@@ -156,7 +155,7 @@ func (mach *Machine) Pick(ctx context.Context, s stores.RW, root Root, p string)
 		return Root{}, err
 	}
 	x := root.toGotKV()
-	span := SpanForPath(p)
+	span := spanForPath(p)
 	if x, err = mach.deleteOutside(ctx, s, x, span); err != nil {
 		return Root{}, err
 	}
@@ -199,7 +198,7 @@ func (mach *Machine) ForEach(ctx context.Context, s stores.RO, root Root, p stri
 		}
 		return nil
 	}
-	span := SpanForPath(p)
+	span := spanForPath(p)
 	return mach.gotkv.ForEach(ctx, s, root.toGotKV(), span, fn2)
 }
 
@@ -224,21 +223,22 @@ func (mach *Machine) Graft(ctx context.Context, ss RW, root Root, p string, bran
 	if err != nil {
 		return Root{}, err
 	}
-	k := newInfoKey(p)
-	return mach.Splice(ctx, ss, []Segment{
-		{
-			Span:     gotkv.Span{Begin: nil, End: k.Marshal(nil)},
-			Contents: root2.ToGotKV(),
-		},
-		{
-			Span:     SpanForPath(p),
-			Contents: mach.addPrefix(branch, p),
-		},
-		{
-			Span:     gotkv.Span{Begin: gotkv.PrefixEnd(k.Prefix(nil)), End: nil},
-			Contents: root2.ToGotKV(),
-		},
+	branch2 := mach.addPrefix(branch, p)
+	entries := make([]gotkv.Entry, 0, branch2.Count)
+	if err := mach.gotkv.ForEach(ctx, ss.Metadata, branch2, gotkv.TotalSpan(), func(ent gotkv.Entry) error {
+		entries = append(entries, ent.Clone())
+		return nil
+	}); err != nil {
+		return Root{}, err
+	}
+	root3, err := mach.gotkv.Edit(ctx, ss.Metadata, root2.toGotKV(), gotkv.Edit{
+		Span:    spanForPath(p),
+		Entries: entries,
 	})
+	if err != nil {
+		return Root{}, err
+	}
+	return newRoot(root3), nil
 }
 
 func (mach *Machine) addPrefix(root Root, p string) gotkv.Root {
@@ -257,7 +257,7 @@ func (mach *Machine) MaxInfo(ctx context.Context, ms stores.RO, root Root, span 
 }
 
 func (mach *Machine) maxInfo(ctx context.Context, ms stores.RO, root gotkv.Root, span Span) (string, *Info, error) {
-	ent, err := mach.gotkv.MaxEntry(ctx, ms, root, span)
+	ent, err := mach.gotkv.MaxEntry(ctx, ms, root, span.ToSpan())
 	if err != nil {
 		return "", nil, err
 	}
@@ -341,6 +341,7 @@ func (mach *Machine) Check(ctx context.Context, ms stores.RO, root Root, checkDa
 	})
 }
 
+<<<<<<< HEAD
 // Segment is a contiguous subset of a GotFS instance.
 // It may not be a valid Root.
 type Segment struct {
@@ -381,6 +382,8 @@ func (s *Segment) Unmarshal(data []byte) error {
 	return s.Span.Unmarshal(spanData)
 }
 
+=======
+>>>>>>> 34d8002 (gotfs+gotkv: add delta packages)
 // ShiftOut shifts all the entries in a segment out by path.
 // A path at a/b/ in x will be at p + a/b/ in the returned segment.
 func (mach *Machine) ShiftOut(x Segment, p string) Segment {
@@ -389,25 +392,47 @@ func (mach *Machine) ShiftOut(x Segment, p string) Segment {
 		return x
 	}
 	newRoot := mach.gotkv.AddPrefix(x.Contents, prefix)
+	span := x.Span.Clone()
+	span.AddPrefix(p)
 	return Segment{
-		Span: gotkv.Span{
-			Begin: slices.Concat(prefix, x.Span.Begin),
-			End:   slices.Concat(prefix, x.Span.End),
-		},
+		Span:     span,
 		Contents: newRoot,
 	}
 }
 
-func (mach *Machine) Concat(ctx context.Context, ss RW, segs iter.Seq[Segment]) (Segment, error) {
-	b := mach.NewBuilder(ctx, ss)
+// SelectKV copies the entries in span from root into a new gotkv root.
+func (mach *Machine) SelectKV(ctx context.Context, ms stores.RW, root Root, span gotkv.Span) (gotkv.Root, error) {
+	b := mach.gotkv.NewBuilder(ms)
+	it := mach.gotkv.NewIterator(ms, root.toGotKV(), span)
+	if err := gotkv.CopyAll(ctx, b, it); err != nil {
+		return gotkv.Root{}, err
+	}
+	return b.Finish(ctx)
+}
 
+func (mach *Machine) Concat(ctx context.Context, ss RW, segs iter.Seq[Segment]) (Segment, error) {
+	return mach.ConcatErr(ctx, ss, func(yield func(Segment, error) bool) {
+		for seg := range segs {
+			if !yield(seg, nil) {
+				return
+			}
+		}
+	})
+}
+
+func (mach *Machine) ConcatErr(ctx context.Context, ss RW, segs iter.Seq2[Segment, error]) (Segment, error) {
+	b := mach.NewBuilder(ctx, ss)
 	var i int
 	var firstSeg, prevSeg Segment
-	for seg := range segs {
-		if i > 0 && bytes.Compare(prevSeg.Span.End, seg.Span.Begin) > 0 {
-			return Segment{}, fmt.Errorf("segs out of order, %d end=%q %d begin=%q", i-1, prevSeg.Span.End, i, seg.Span.Begin)
-		} else {
+	for seg, err := range segs {
+		if err != nil {
+			return Segment{}, err
+		}
+		if i == 0 {
 			firstSeg = seg
+		}
+		if i > 0 && bytes.Compare(prevSeg.Span.End.Marshal(nil), seg.Span.Begin.Marshal(nil)) > 0 {
+			return Segment{}, fmt.Errorf("segs out of order, %d end=%v %d begin=%v", i-1, prevSeg.Span.End, i, seg.Span.Begin)
 		}
 
 		var root gotkv.Root
@@ -420,7 +445,7 @@ func (mach *Machine) Concat(ctx context.Context, ss RW, segs iter.Seq[Segment]) 
 		} else {
 			root = seg.Contents
 		}
-		if err := b.copyFrom(ctx, root, seg.Span); err != nil {
+		if err := b.CopyFrom(ctx, root, seg.Span); err != nil {
 			return Segment{}, err
 		}
 		i++
@@ -430,15 +455,17 @@ func (mach *Machine) Concat(ctx context.Context, ss RW, segs iter.Seq[Segment]) 
 	if err != nil {
 		return Segment{}, err
 	}
+	span := Span{
+		Begin: firstSeg.Span.Begin.Clone(),
+		End:   prevSeg.Span.End.Clone(),
+	}
 	return Segment{
-		Span: gotkv.Span{
-			Begin: firstSeg.Span.Begin,
-			End:   prevSeg.Span.End,
-		},
+		Span:     span,
 		Contents: out.ToGotKV(),
 	}, nil
 }
 
+<<<<<<< HEAD
 // Promote promotes a segment to a Root if the segment has the correct first key.
 func Promote(ctx context.Context, seg Segment) (Root, error) {
 	var key Key
@@ -454,6 +481,8 @@ func Promote(ctx context.Context, seg Segment) (Root, error) {
 	}, nil
 }
 
+=======
+>>>>>>> 34d8002 (gotfs+gotkv: add delta packages)
 // Splice is equivalent to Concat followed by Promote
 func (mach *Machine) Splice(ctx context.Context, ss RW, segs []Segment) (Root, error) {
 	seg, err := mach.Concat(ctx, ss, slices.Values(segs))
@@ -484,4 +513,14 @@ func (mach *Machine) ExistsDir(ctx context.Context, ms stores.RO, root Root, p s
 		return false, err
 	}
 	return info.Mode.IsDir(), nil
+}
+
+func (mach *Machine) FromEntries(ctx context.Context, ms stores.RW, ents iter.Seq[Entry]) (Root, error) {
+	mdw := mach.NewMetadataWriter(ms)
+	for ent := range ents {
+		if err := mdw.Push(ctx, ent); err != nil {
+			return Root{}, err
+		}
+	}
+	return mdw.Finish(ctx)
 }

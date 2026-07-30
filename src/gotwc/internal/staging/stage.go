@@ -29,8 +29,8 @@ import (
 
 // Entry is an entry in the stage
 type Entry struct {
-	Path    string
-	Segment gotfs.Segment
+	Path       string
+	Segment    gotfs.Segment
 	HasEntries bool
 }
 
@@ -379,7 +379,7 @@ func (tx *Tx) buildStageEntriesFromFSPath(ctx context.Context, fsys posixfs.FS, 
 	if err := addPath(p); err != nil {
 		return nil, err
 	}
-	it := tx.env.GotFS.NewIterator(tx.env.VolTx, root, gotfs.SpanForPath(p))
+	it := tx.env.GotFS.NewIterator(tx.env.VolTx, root, "")
 	var out []gotfs.Entry
 	for {
 		var ent gotfs.Entry

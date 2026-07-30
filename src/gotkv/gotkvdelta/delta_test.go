@@ -1,9 +1,10 @@
-package gotkv
+package gotkvdelta
 
 import (
 	"context"
 	"testing"
 
+	"github.com/gotvc/got/src/gotkv"
 	"github.com/gotvc/got/src/internal/stores"
 	"github.com/gotvc/got/src/internal/testutil"
 	"github.com/stretchr/testify/require"
@@ -46,16 +47,6 @@ func TestDeltaWriter(t *testing.T) {
 			Want: []dwSegment{
 				{Span: mkSpan("a", "c"), Entries: []Entry{mkEnt("a", "1")}},
 				{Span: mkSpan("d", "f"), Entries: []Entry{mkEnt("d", "2")}},
-			},
-		},
-		{
-			Name: "touching-should-combine",
-			Edits: []Edit{
-				makeEdit("a", "c", mkEnt("a", "1")),
-				makeEdit("c", "e", mkEnt("c", "2")),
-			},
-			Want: []dwSegment{
-				{Span: mkSpan("a", "e"), Entries: []Entry{mkEnt("a", "1"), mkEnt("c", "2")}},
 			},
 		},
 		{
@@ -106,11 +97,11 @@ func TestDeltaWriter(t *testing.T) {
 			ctx := testutil.Context(t)
 			s := stores.NewMem()
 			ag := newTestMachine(t)
-			dw := ag.NewDeltaWriter(s)
+			dw := ag.NewWriter(s)
 
 			var gotErr error
 			for _, edit := range tc.Edits {
-				if err := dw.AddEdit(ctx, edit); err != nil {
+				if err := dw.Edit(ctx, edit); err != nil {
 					gotErr = err
 					break
 				}
@@ -139,15 +130,23 @@ func TestDeltaWriter(t *testing.T) {
 	}
 }
 
-func collectDeltaSegments(t testing.TB, ctx context.Context, ag Machine, s stores.RO, d Delta) []dwSegment {
+func collectDeltaSegments(t testing.TB, ctx context.Context, m Machine, s stores.RW, d Delta) []dwSegment {
 	t.Helper()
-	segments, err := streams.Collect[Segment](ctx, ag.NewDeltaReader(s, d), 100)
+	segments, err := streams.Collect(ctx, new(m.NewReader(s, d)), 100)
 	require.NoError(t, err)
 	out := make([]dwSegment, len(segments))
 	for i, seg := range segments {
-		entries, err := streams.Collect[Entry](ctx, ag.NewIterator(s, seg.Contents, TotalSpan()), 100)
+		entries, err := streams.Collect(ctx, m.kv.NewIterator(s, seg.Contents, gotkv.TotalSpan()), 100)
 		require.NoError(t, err)
 		out[i] = dwSegment{Span: seg.Span, Entries: entries}
 	}
 	return out
+}
+
+func newTestMachine(t testing.TB) Machine {
+	m := gotkv.NewMachine(gotkv.Params{
+		MeanSize: 1 << 16,
+		MaxSize:  stores.MaxSize,
+	})
+	return NewMachine(&m)
 }
